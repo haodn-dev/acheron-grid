@@ -10,7 +10,7 @@ An experimental, framework-independent Canvas data grid engine written in TypeSc
 - Resize observation, coalesced rendering, and explicit cleanup.
 - Single-cell selection by pointer and keyboard, with automatic scrolling.
 
-This package is a development preview, not a published release. Range selection, editing, remote data sources, and framework adapters are not implemented. Canvas cell content is not yet accessible to screen readers. Performance has not been benchmarked.
+This package is a development preview, not a published release. Range selection, remote data sources, and framework adapters are not implemented. Canvas cell content is not yet accessible to screen readers. Performance has not been benchmarked.
 
 ## Build from source
 
@@ -60,7 +60,7 @@ Give the container explicit dimensions, such as `width: 100%; height: 480px`. Mo
 
 ## API
 
-`LocalDataSource(rows, getRowId)` copies the row array and shallow-copies each row. IDs must be unique strings or finite numbers. Nested objects are not cloned. This initial source is read-only; missing properties return `undefined`, while invalid row indices throw `RangeError`.
+`LocalDataSource(rows, getRowId)` copies the row array and shallow-copies each row. IDs must be unique strings or finite numbers. Nested objects are not cloned. Use setValue(index, columnKey, value) to replace an existing field without mutating caller rows. Row IDs stay fixed at construction. Invalid indices and missing fields are rejected; missing properties return `undefined`, while invalid row indices throw `RangeError`.
 
 The `DataSource` interface exposes `getRowCount()`, `getRowId(index)`, and `getValue(index, columnKey)`. Grid dimensions use the row count at mount time; changing the row count requires remounting. Custom sources must provide synchronous values and valid counts.
 
@@ -74,6 +74,23 @@ All local rows reside in memory. Virtualization bounds cell rendering work, not 
 
 ## Selection and keyboard
 
-Click a data cell to select it and focus the viewport. Arrow keys move one cell; Home/End move to the first/last column; Ctrl/Meta+Home/End move to the first/last cell. Navigation clamps at dataset boundaries and scrolls the active cell into view. The first navigation key with no selection selects the first cell. Escape clears selection; Tab leaves the viewport normally. Shift-modified navigation, range selection and editing are not implemented.
+Click a data cell to select it and focus the viewport. Arrow keys move one cell; Home/End move to the first/last column; Ctrl/Meta+Home/End move to the first/last cell. Navigation clamps at dataset boundaries and scrolls the active cell into view. The first navigation key with no selection selects the first cell. Escape clears selection; Tab leaves the viewport normally. Shift-modified navigation and range selection are not implemented. See inline editing below.
 
 `grid.getSelection()` returns a fresh `{ rowIndex, rowId, columnIndex, columnKey }` object or `null`. Indices are zero-based. Pass `onSelectionChange(selection)` to `createGrid` to observe changes, including `null` when cleared. Callback objects are copies; selecting the same cell does not fire again. Destroy clears selection without emitting an event. Header, blank space, scrollbar and modified pointer presses do not select cells. The viewport label describes the active cell, but a complete accessible grid representation is not implemented.
+## Inline editing
+
+Set `editable: true` on a column and provide a synchronous `DataSource.setValue(index, columnKey, value)` method (`LocalDataSource` already provides it). Double-click a cell or press Enter/F2 to open the text input. Enter, Tab and blur save; Escape cancels. Edits are in memory only. Destroy discards an unfinished edit.
+
+```js
+const columns = [
+  { key: 'name', title: 'Name', editable: true },
+  { key: 'amount', title: 'Amount', editable: true, parse: text => {
+    if (!text.trim() || !Number.isFinite(Number(text))) throw new Error('Enter a finite number');
+    return Number(text);
+  } },
+];
+```
+
+Columns are read-only by default. Without a parser, only string/null/undefined values can be edited; saved values are strings. A parser can return a typed value or throw a validation error. Parser/setter errors keep the draft input open with native validation feedback. Unchanged text does not call the setter. IME composition does not commit on Enter. Keep identity columns read-only: local row IDs remain stable even if their original field value changes.
+
+After calling `dataSource.setValue(...)` outside the editor, call `grid.render()` to redraw. Writes redraw the visible viewport through the existing frame scheduler. Async writes, automatic source subscriptions, partial repaint, batch updates and undo/redo are not implemented.

@@ -19,6 +19,21 @@ test('rejects duplicate and invalid row identities', () => {
   assert.throws(() => new LocalDataSource([{}], () => NaN), TypeError);
 });
 
+test('cell mutation preserves snapshots and stable row identity, validates boundaries', () => {
+  const rows = [{ id: 'a', name: 'Ada', amount: 12 }];
+  const source = new LocalDataSource(rows, row => row.id);
+  source.setValue(0, 'name', 'Grace');
+  source.setValue(0, 'amount', 24);
+  source.setValue(0, 'id', 'changed');
+  assert.equal(source.getRowId(0), 'a');
+  assert.equal(source.getValue(0, 'name'), 'Grace');
+  assert.equal(source.getValue(0, 'amount'), 24);
+  assert.equal(rows[0].name, 'Ada');
+  for (const index of [-1, 1, 0.5, NaN]) assert.throws(() => source.setValue(index, 'name', ''), RangeError);
+  assert.throws(() => source.setValue(0, 'missing', ''), /Unknown column/);
+  assert.throws(() => source.setValue(0, '__proto__', {}), /Unknown column/);
+});
+
 test('rejects missing and non-integer row indices, including empty sources', () => {
   const source = new LocalDataSource([{ id: 1 }], row => row.id);
   for (const index of [-1, 1, 0.5, NaN]) assert.throws(() => source.getValue(index, 'id'), RangeError);

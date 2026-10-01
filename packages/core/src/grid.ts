@@ -1,7 +1,7 @@
 import type { DataSource, RowId } from './data-source.js';
 import { visibleRange } from './viewport.js';
 
-export interface Column { key: string; title: string; }
+export interface Column { key: string; title: string; editable?: boolean; parse?: (text: string) => unknown; }
 export interface CellSelection { rowIndex: number; rowId: RowId; columnIndex: number; columnKey: string; }
 export interface GridOptions {
   onSelectionChange?: (selection: CellSelection | null) => void;
@@ -14,7 +14,7 @@ export interface GridOptions {
 }
 export interface Grid { render(): void; getSelection(): CellSelection | null; destroy(): void; }
 
-/** Mount a read-only grid. The caller owns the container and its dimensions. */
+/** Mount a grid. The caller owns the container and its dimensions. */
 export function createGrid(options: GridOptions): Grid {
   const { container, dataSource } = options;
   const columns = options.columns.map(column => ({ ...column }));
@@ -33,11 +33,13 @@ export function createGrid(options: GridOptions): Grid {
   const root = doc.createElement('div');
   root.style.cssText = 'position:relative;width:100%;height:100%;overflow:hidden;background:#fff';
   const scroller = doc.createElement('div');
+  const viewportLabel = dataSource.setValue && columns.some(column => column.editable) ? 'Data grid viewport' : 'Read-only data grid viewport';
   scroller.style.cssText = `position:absolute;inset:${headerHeight}px 0 0;overflow:auto;overscroll-behavior:contain`;
   scroller.tabIndex = 0;
-  scroller.setAttribute('aria-label', 'Read-only data grid viewport');
+  scroller.setAttribute('aria-label', viewportLabel);
   const spacer = doc.createElement('div');
   spacer.style.width = `${columns.length * columnWidth}px`;
+  spacer.style.position = 'relative';
   spacer.style.height = `${rowCount * rowHeight}px`;
   scroller.append(spacer);
   const canvas = doc.createElement('canvas');
@@ -50,6 +52,61 @@ export function createGrid(options: GridOptions): Grid {
   let frame: number | undefined;
   let destroyed = false;
   let selection: CellSelection | null = null;
+  let editor: HTMLInputElement | null = null;
+
+  function finishEdit(commit: boolean): boolean {
+    if (!editor || !selection) return true;
+    if (commit) {
+      try {
+        const column = columns[selection.columnIndex]!;
+        const previous = dataSource.getValue(selection.rowIndex, column.key);
+        if (editor.value !== (previous == null ? '' : String(previous))) {
+          dataSource.setValue!(selection.rowIndex, column.key, column.parse ? column.parse(editor.value) : editor.value);
+        }
+      } catch (error) {
+        editor.setCustomValidity(error instanceof Error ? error.message : 'Unable to save cell.');
+        editor.setAttribute('aria-invalid', 'true');
+        editor.reportValidity();
+        editor.focus({ preventScroll: true });
+        return false;
+      }
+    }
+    const input = editor;
+    editor = null;
+    input.remove();
+    select(selection.rowIndex, selection.columnIndex);
+    return true;
+  }
+
+  function beginEdit(): void {
+    if (destroyed || editor || !selection || !dataSource.setValue) return;
+    const column = columns[selection.columnIndex]!;
+    if (!column.editable) return;
+    const value = dataSource.getValue(selection.rowIndex, column.key);
+    // ponytail: text values by default; typed columns provide a parser.
+    if (!column.parse && value != null && typeof value !== 'string') return;
+    editor = doc.createElement('input');
+    editor.type = 'text';
+    editor.value = value == null ? '' : String(value);
+    editor.setAttribute('aria-label', `Edit row ${selection.rowIndex + 1}, ${column.title}`);
+    editor.style.cssText = `position:absolute;box-sizing:border-box;z-index:1;border:2px solid #2563eb;background:white;font:13px system-ui;padding:0 8px;left:${selection.columnIndex * columnWidth}px;top:${selection.rowIndex * rowHeight}px;width:${columnWidth}px;height:${rowHeight}px`;
+    editor.addEventListener('input', () => {
+      editor?.setCustomValidity('');
+      editor?.removeAttribute('aria-invalid');
+    });
+    editor.addEventListener('keydown', event => {
+      event.stopPropagation();
+      if (event.isComposing || event.keyCode === 229) return;
+      if (event.key === 'Enter' || event.key === 'Escape') {
+        event.preventDefault();
+        if (finishEdit(event.key === 'Enter')) scroller.focus({ preventScroll: true });
+      } else if (event.key === 'Tab' && !finishEdit(true)) event.preventDefault();
+    });
+    editor.addEventListener('blur', () => finishEdit(true));
+    spacer.append(editor);
+    editor.focus({ preventScroll: true });
+    editor.select();
+  }
 
   function getSelection(): CellSelection | null {
     return selection ? { ...selection } : null;
@@ -66,12 +123,13 @@ export function createGrid(options: GridOptions): Grid {
     if (top < scroller.scrollTop || rowHeight > scroller.clientHeight) scroller.scrollTop = top;
     else if (top + rowHeight > scroller.scrollTop + scroller.clientHeight) scroller.scrollTop = top + rowHeight - scroller.clientHeight;
     const value = dataSource.getValue(rowIndex, selection.columnKey);
-    scroller.setAttribute('aria-label', `Read-only data grid viewport: row ${rowIndex + 1}, ${columns[columnIndex]!.title}, ${value == null ? '' : String(value)}`);
+    scroller.setAttribute('aria-label', `${viewportLabel}: row ${rowIndex + 1}, ${columns[columnIndex]!.title}, ${value == null ? '' : String(value)}`);
     render();
     if (changed) options.onSelectionChange?.(getSelection());
   }
 
   function onPointerDown(event: PointerEvent): void {
+    if (event.target === editor) return;
     if (event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
     const bounds = scroller.getBoundingClientRect();
     const x = event.clientX - bounds.left;
@@ -81,6 +139,7 @@ export function createGrid(options: GridOptions): Grid {
     const col = Math.floor((x + scroller.scrollLeft) / columnWidth);
     if (row >= rowCount || col >= columns.length) return;
     event.preventDefault();
+    if (!finishEdit(true)) return;
     scroller.focus({ preventScroll: true });
     select(row, col);
   }
@@ -89,11 +148,16 @@ export function createGrid(options: GridOptions): Grid {
     if (event.isComposing || event.altKey || event.shiftKey) return;
     const control = event.ctrlKey || event.metaKey;
     if (control && event.key !== 'Home' && event.key !== 'End') return;
+    if (event.key === 'Enter' || event.key === 'F2') {
+      beginEdit();
+      if (editor) event.preventDefault();
+      return;
+    }
     if (event.key === 'Escape') {
       if (selection) {
         event.preventDefault();
         selection = null;
-        scroller.setAttribute('aria-label', 'Read-only data grid viewport');
+        scroller.setAttribute('aria-label', viewportLabel);
         render();
         options.onSelectionChange?.(null);
       }
@@ -178,15 +242,23 @@ export function createGrid(options: GridOptions): Grid {
   scroller.addEventListener('scroll', render, { passive: true });
   scroller.addEventListener('pointerdown', onPointerDown);
   scroller.addEventListener('keydown', onKeyDown);
+  scroller.addEventListener('dblclick', onDoubleClick);
   win.addEventListener('resize', render);
   render();
+  function onDoubleClick(event: MouseEvent): void {
+    if (event.target === spacer && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) beginEdit();
+  }
   return {
     render,
     getSelection,
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      const input = editor;
+      editor = null;
+      input?.remove();
       selection = null;
+      scroller.removeEventListener('dblclick', onDoubleClick);
       scroller.removeEventListener('pointerdown', onPointerDown);
       scroller.removeEventListener('keydown', onKeyDown);
       if (frame !== undefined) win.cancelAnimationFrame(frame);

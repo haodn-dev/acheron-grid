@@ -1,5 +1,78 @@
 import { test, expect } from '@playwright/test';
 
+test('DOM editing commits, cancels, validates and follows scrolling', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid, LocalDataSource } = await import('/index.js');
+    window.source = new LocalDataSource(Array.from({ length: 100 }, (_, id) => ({ id, name: 'Ada', amount: 12 })), row => row.id);
+    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source,
+      columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true },
+        { key: 'amount', title: 'Amount', editable: true, parse: text => {
+          if (!text.trim() || !Number.isFinite(Number(text))) throw new Error('Enter a finite number');
+          return Number(text);
+        } }] });
+  });
+  const viewport = page.getByLabel(/^Data grid viewport/);
+  const input = page.getByRole('textbox');
+  await viewport.dblclick({ position: { x: 180, y: 16 } });
+  await expect(input).toHaveValue('Ada');
+  await input.fill('Grace');
+  await input.press('Enter');
+  await expect(input).toHaveCount(0);
+  expect(await page.evaluate(() => window.source.getValue(0, 'name'))).toBe('Grace');
+  await expect(viewport).toHaveAccessibleName(/Grace/);
+  await viewport.press('F2');
+  await input.fill('Discard');
+  await input.press('Escape');
+  expect(await page.evaluate(() => window.source.getValue(0, 'name'))).toBe('Grace');
+  await viewport.press('ArrowRight');
+  await viewport.press('Enter');
+  await input.fill('invalid');
+  await input.press('Enter');
+  await expect(input).toHaveAttribute('aria-invalid', 'true');
+  expect(await page.evaluate(() => window.source.getValue(0, 'amount'))).toBe(12);
+  await viewport.click({ position: { x: 180, y: 16 } });
+  expect((await page.evaluate(() => window.grid.getSelection())).columnKey).toBe('amount');
+  await input.fill('24');
+  await input.press('Enter');
+  expect(await page.evaluate(() => window.source.getValue(0, 'amount'))).toBe(24);
+  await viewport.evaluate(el => { el.scrollTop = 640; });
+  await viewport.dblclick({ position: { x: 180, y: 16 } });
+  await expect(input).toHaveAccessibleName('Edit row 21, Name');
+  const box = await input.boundingBox();
+  const bounds = await viewport.boundingBox();
+  expect(Math.abs(box.y - bounds.y)).toBeLessThan(2);
+  await input.fill('Scrolled');
+  await viewport.click({ position: { x: 20, y: 16 } });
+  expect(await page.evaluate(() => window.source.getValue(20, 'name'))).toBe('Scrolled');
+  await viewport.press('F2');
+  await expect(input).toHaveCount(0);
+  await viewport.click({ position: { x: 180, y: 16 } });
+  await viewport.press('F2');
+  await input.fill('Unsaved');
+  await input.evaluate(el => el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true })));
+  await expect(input).toHaveCount(1);
+  await input.press('Escape');
+  await viewport.click({ position: { x: 180, y: 16 } });
+  await viewport.press('F2');
+  await input.fill('Tabbed');
+  await input.press('Tab');
+  await expect(input).toHaveCount(0);
+  expect(await page.evaluate(() => window.source.getValue(20, 'name'))).toBe('Tabbed');
+  await viewport.focus();
+  await viewport.press('F2');
+  await input.fill('Rejected');
+  await page.evaluate(() => { window.source.setValue = () => { throw new Error('Write rejected'); }; });
+  await input.press('Enter');
+  await expect(input).toHaveAttribute('aria-invalid', 'true');
+  await input.press('Escape');
+  expect(await page.evaluate(() => window.source.getValue(20, 'name'))).toBe('Tabbed');
+  await viewport.press('F2');
+  await input.fill('Destroy draft');
+  await page.evaluate(() => window.grid.destroy());
+  expect(await page.evaluate(() => window.source.getValue(20, 'name'))).toBe('Tabbed');
+});
+
 test('renders only the viewport, scrolls both axes, resizes and cleans up', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));

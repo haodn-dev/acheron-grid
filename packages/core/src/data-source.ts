@@ -4,6 +4,7 @@ export interface DataSource {
   getRowCount(): number;
   getRowId(index: number): RowId;
   getValue(index: number, columnKey: string): unknown;
+  setValue?(index: number, columnKey: string, value: unknown): void;
 }
 
 /** A shallow snapshot of local rows. Nested values remain caller-owned. */
@@ -35,6 +36,13 @@ export class LocalDataSource<T extends Record<string, unknown>> implements DataS
     this.assertIndex(index);
     const row = this.rows[index]!;
     return Object.hasOwn(row, columnKey) ? row[columnKey] : undefined;
+  }
+
+  /** Replace one snapshot value; row identity remains fixed at construction. */
+  setValue(index: number, columnKey: string, value: unknown): void {
+    this.assertIndex(index);
+    if (!Object.hasOwn(this.rows[index]!, columnKey)) throw new Error(`Unknown column: ${columnKey}`);
+    this.rows[index] = Object.freeze({ ...this.rows[index]!, [columnKey]: value });
   }
 
   private assertIndex(index: number): void {
