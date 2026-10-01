@@ -10,7 +10,7 @@ The planned architecture separates the core engine from framework integrations, 
 
 The first core preview implements read-only Canvas rendering, row and column virtualization, native scrolling, and a local data source. Single-cell selection and keyboard navigation are also available. It builds to an ESM package with TypeScript declarations. The API is experimental and may change.
 
-Start with the [core package guide](packages/core/README.md) for local installation, an example, and API limitations. No package has been published. Opt-in DOM editing and synchronous local cell updates are available. Range selection, remote data sources, and framework adapters remain planned. Canvas cell content is not yet accessible to screen readers. The V1 scope below remains the target, not a list of completed features.
+Start with the [core package guide](packages/core/README.md) for local installation, an example, and API limitations. No package has been published. Opt-in DOM editing, atomic local batch updates, partial cell repaint and undo/redo are available. Range selection, remote data sources, and framework adapters remain planned. Canvas cell content is not yet accessible to screen readers. The V1 scope below remains the target, not a list of completed features.
 
 ## Design goals
 

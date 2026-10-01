@@ -1,10 +1,13 @@
 export type RowId = string | number;
+export interface CellUpdate { rowIndex: number; columnKey: string; value: unknown; }
 
 export interface DataSource {
   getRowCount(): number;
   getRowId(index: number): RowId;
   getValue(index: number, columnKey: string): unknown;
   setValue?(index: number, columnKey: string, value: unknown): void;
+  /** Synchronous, atomic: either all writes succeed or none do. */
+  setValues?(updates: readonly CellUpdate[]): void;
 }
 
 /** A shallow snapshot of local rows. Nested values remain caller-owned. */
@@ -40,9 +43,17 @@ export class LocalDataSource<T extends Record<string, unknown>> implements DataS
 
   /** Replace one snapshot value; row identity remains fixed at construction. */
   setValue(index: number, columnKey: string, value: unknown): void {
-    this.assertIndex(index);
-    if (!Object.hasOwn(this.rows[index]!, columnKey)) throw new Error(`Unknown column: ${columnKey}`);
-    this.rows[index] = Object.freeze({ ...this.rows[index]!, [columnKey]: value });
+    this.setValues([{ rowIndex: index, columnKey, value }]);
+  }
+
+  setValues(updates: readonly CellUpdate[]): void {
+    const next = new Map<number, Readonly<T>>();
+    for (const { rowIndex, columnKey, value } of updates) {
+      this.assertIndex(rowIndex);
+      if (!Object.hasOwn(this.rows[rowIndex]!, columnKey)) throw new Error(`Unknown column: ${columnKey}`);
+      next.set(rowIndex, Object.freeze({ ...(next.get(rowIndex) ?? this.rows[rowIndex]!), [columnKey]: value }));
+    }
+    for (const [index, row] of next) this.rows[index] = row;
   }
 
   private assertIndex(index: number): void {

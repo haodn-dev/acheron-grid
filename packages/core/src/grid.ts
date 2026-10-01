@@ -1,4 +1,4 @@
-import type { DataSource, RowId } from './data-source.js';
+import type { CellUpdate, DataSource, RowId } from './data-source.js';
 import { visibleRange } from './viewport.js';
 
 export interface Column { key: string; title: string; editable?: boolean; parse?: (text: string) => unknown; }
@@ -12,7 +12,14 @@ export interface GridOptions {
   columnWidth?: number;
   headerHeight?: number;
 }
-export interface Grid { render(): void; getSelection(): CellSelection | null; destroy(): void; }
+export interface Grid {
+  render(): void;
+  updateCells(updates: readonly CellUpdate[]): void;
+  undo(): boolean;
+  redo(): boolean;
+  getSelection(): CellSelection | null;
+  destroy(): void;
+}
 
 /** Mount a grid. The caller owns the container and its dimensions. */
 export function createGrid(options: GridOptions): Grid {
@@ -53,6 +60,73 @@ export function createGrid(options: GridOptions): Grid {
   let destroyed = false;
   let selection: CellSelection | null = null;
   let editor: HTMLInputElement | null = null;
+  let fullDraw = true;
+  const dirty = new Map<string, CellUpdate>();
+  type Change = CellUpdate & { previous: unknown; rowId: RowId };
+  const past: Change[][] = [];
+  const future: Change[][] = [];
+
+  function write(changes: readonly CellUpdate[]): void {
+    if (changes.length === 1 && dataSource.setValue) {
+      const change = changes[0]!;
+      dataSource.setValue(change.rowIndex, change.columnKey, change.value);
+    } else if (dataSource.setValues) dataSource.setValues(changes);
+    else throw new Error('An atomic setValues method is required for batch writes.');
+  }
+
+  function invalidate(changes: readonly CellUpdate[]): void {
+    for (const change of changes) dirty.set(JSON.stringify([change.rowIndex, change.columnKey]), change);
+    if (selection) {
+      const column = columns[selection.columnIndex]!;
+      const value = dataSource.getValue(selection.rowIndex, column.key);
+      scroller.setAttribute('aria-label', `${viewportLabel}: row ${selection.rowIndex + 1}, ${column.title}, ${value == null ? '' : String(value)}`);
+    }
+    schedule();
+  }
+
+  function updateCells(updates: readonly CellUpdate[]): void {
+    if (destroyed) throw new Error('Grid is destroyed.');
+    if (editor) throw new Error('Finish editing before updating cells.');
+    applyUpdates(updates);
+  }
+
+  function applyUpdates(updates: readonly CellUpdate[]): void {
+    const unique = new Map<string, CellUpdate>();
+    for (const update of updates) {
+      if (!Number.isSafeInteger(update.rowIndex) || update.rowIndex < 0 || update.rowIndex >= rowCount) throw new RangeError('Invalid row index.');
+      if (!columns.some(column => column.key === update.columnKey)) throw new Error(`Unknown column: ${update.columnKey}`);
+      unique.set(JSON.stringify([update.rowIndex, update.columnKey]), { ...update });
+    }
+    const changes: Change[] = [...unique.values()].map(update => ({ ...update,
+      previous: dataSource.getValue(update.rowIndex, update.columnKey), rowId: dataSource.getRowId(update.rowIndex),
+    })).filter(change => !Object.is(change.previous, change.value));
+    if (!changes.length) return;
+    write(changes);
+    past.push(changes);
+    // ponytail: keep the latest 100 commands; large values remain shallow caller-owned references.
+    if (past.length > 100) past.shift();
+    future.length = 0;
+    invalidate(changes);
+  }
+
+  function replay(redo: boolean): boolean {
+    if (destroyed || editor) return false;
+    const from = redo ? future : past;
+    const to = redo ? past : future;
+    const changes = from.at(-1);
+    if (!changes) return false;
+    for (const change of changes) {
+      if (dataSource.getRowId(change.rowIndex) !== change.rowId || !Object.is(dataSource.getValue(change.rowIndex, change.columnKey), redo ? change.previous : change.value)) {
+        throw new Error('History conflicts with external data changes.');
+      }
+    }
+    const updates = changes.map(change => ({ ...change, value: redo ? change.value : change.previous }));
+    write(updates);
+    from.pop();
+    to.push(changes);
+    invalidate(updates);
+    return true;
+  }
 
   function finishEdit(commit: boolean): boolean {
     if (!editor || !selection) return true;
@@ -61,7 +135,7 @@ export function createGrid(options: GridOptions): Grid {
         const column = columns[selection.columnIndex]!;
         const previous = dataSource.getValue(selection.rowIndex, column.key);
         if (editor.value !== (previous == null ? '' : String(previous))) {
-          dataSource.setValue!(selection.rowIndex, column.key, column.parse ? column.parse(editor.value) : editor.value);
+          applyUpdates([{ rowIndex: selection.rowIndex, columnKey: column.key, value: column.parse ? column.parse(editor.value) : editor.value }]);
         }
       } catch (error) {
         editor.setCustomValidity(error instanceof Error ? error.message : 'Unable to save cell.');
@@ -124,7 +198,7 @@ export function createGrid(options: GridOptions): Grid {
     else if (top + rowHeight > scroller.scrollTop + scroller.clientHeight) scroller.scrollTop = top + rowHeight - scroller.clientHeight;
     const value = dataSource.getValue(rowIndex, selection.columnKey);
     scroller.setAttribute('aria-label', `${viewportLabel}: row ${rowIndex + 1}, ${columns[columnIndex]!.title}, ${value == null ? '' : String(value)}`);
-    render();
+    if (changed) render();
     if (changed) options.onSelectionChange?.(getSelection());
   }
 
@@ -145,8 +219,15 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function onKeyDown(event: KeyboardEvent): void {
-    if (event.isComposing || event.altKey || event.shiftKey) return;
+    if (event.isComposing || event.altKey) return;
     const control = event.ctrlKey || event.metaKey;
+    if (control && (event.key.toLowerCase() === 'z' || (event.key.toLowerCase() === 'y' && !event.shiftKey))) {
+      event.preventDefault();
+      try { replay(event.shiftKey || event.key.toLowerCase() === 'y'); }
+      catch (error) { win.alert(error instanceof Error ? error.message : 'Unable to replay history.'); }
+      return;
+    }
+    if (event.shiftKey) return;
     if (control && event.key !== 'Home' && event.key !== 'End') return;
     if (event.key === 'Enter' || event.key === 'F2') {
       beginEdit();
@@ -183,6 +264,7 @@ export function createGrid(options: GridOptions): Grid {
     ctx.fillStyle = header ? '#edf2f7' : '#ffffff';
     ctx.fillRect(x, y, width, height);
     ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1;
     ctx.strokeRect(x + 0.5, y + 0.5, width, height);
     ctx.save();
     ctx.beginPath();
@@ -201,6 +283,31 @@ export function createGrid(options: GridOptions): Grid {
     const width = scroller.clientWidth;
     const bodyHeight = scroller.clientHeight;
     const height = Math.min(root.clientHeight, bodyHeight + headerHeight);
+    if (!fullDraw) {
+      context!.save();
+      context!.beginPath();
+      context!.rect(0, headerHeight, width, Math.max(0, height - headerHeight));
+      context!.clip();
+      for (const change of dirty.values()) {
+        const col = columns.findIndex(column => column.key === change.columnKey);
+        const x = col * columnWidth - scroller.scrollLeft;
+        const y = headerHeight + change.rowIndex * rowHeight - scroller.scrollTop;
+        if (x >= width || x + columnWidth <= 0 || y >= height || y + rowHeight <= headerHeight) continue;
+        context!.save();
+        context!.beginPath();
+        context!.rect(x, y, columnWidth, rowHeight);
+        context!.clip();
+        const value = dataSource.getValue(change.rowIndex, change.columnKey);
+        cell(value == null ? '' : String(value), x, y, columnWidth, rowHeight, false);
+        context!.restore();
+      }
+      drawSelection();
+      context!.restore();
+      dirty.clear();
+      return;
+    }
+    fullDraw = false;
+    dirty.clear();
     const ratio = win.devicePixelRatio || 1;
     canvas.width = Math.max(0, Math.round(width * ratio));
     canvas.height = Math.max(0, Math.round(height * ratio));
@@ -221,6 +328,19 @@ export function createGrid(options: GridOptions): Grid {
           headerHeight + row * rowHeight - scroller.scrollTop, columnWidth, rowHeight, false);
       }
     }
+    drawSelection();
+    context!.restore();
+    context!.save();
+    context!.beginPath();
+    context!.rect(0, 0, width, headerHeight);
+    context!.clip();
+    for (let col = cols.start; col < cols.end; col++) {
+      cell(columns[col]!.title, col * columnWidth - scroller.scrollLeft, 0, columnWidth, headerHeight, true);
+    }
+    context!.restore();
+  }
+
+  function drawSelection(): void {
     if (selection) {
       context!.strokeStyle = '#2563eb';
       context!.lineWidth = 2;
@@ -228,13 +348,13 @@ export function createGrid(options: GridOptions): Grid {
         headerHeight + selection.rowIndex * rowHeight - scroller.scrollTop + 1,
         Math.max(0, columnWidth - 2), Math.max(0, rowHeight - 2));
     }
-    context!.restore();
-    for (let col = cols.start; col < cols.end; col++) {
-      cell(columns[col]!.title, col * columnWidth - scroller.scrollLeft, 0, columnWidth, headerHeight, true);
-    }
   }
 
   function render(): void {
+    fullDraw = true;
+    schedule();
+  }
+  function schedule(): void {
     if (!destroyed && frame === undefined) frame = win.requestAnimationFrame(draw);
   }
   const observer = new ResizeObserver(render);
@@ -250,10 +370,15 @@ export function createGrid(options: GridOptions): Grid {
   }
   return {
     render,
+    updateCells,
+    undo: () => replay(false),
+    redo: () => replay(true),
     getSelection,
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      dirty.clear();
+      past.length = future.length = 0;
       const input = editor;
       editor = null;
       input?.remove();

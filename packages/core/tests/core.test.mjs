@@ -59,3 +59,16 @@ test('viewport work stays bounded for a million rows', () => {
   assert.ok(end - start <= 24);
   assert.ok(start > 400_000);
 });
+
+test('local batch writes validate all cells before committing, last duplicate wins', () => {
+  const rows = [{ id: 1, name: 'Ada', amount: 12 }, { id: 2, name: 'Grace', amount: 24 }];
+  const source = new LocalDataSource(rows, row => row.id);
+  assert.throws(() => source.setValues([{ rowIndex: 0, columnKey: 'name', value: 'Lost' },
+    { rowIndex: 1, columnKey: 'missing', value: 0 }]), /Unknown column/);
+  assert.equal(source.getValue(0, 'name'), 'Ada');
+  source.setValues([{ rowIndex: 0, columnKey: 'name', value: 'First' },
+    { rowIndex: 0, columnKey: 'amount', value: 99 }, { rowIndex: 0, columnKey: 'name', value: 'Final' }]);
+  assert.equal(source.getValue(0, 'name'), 'Final');
+  assert.equal(source.getValue(0, 'amount'), 99);
+  assert.equal(rows[0].name, 'Ada');
+});

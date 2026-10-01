@@ -1,5 +1,133 @@
 import { test, expect } from '@playwright/test';
 
+test('batch commands repaint only dirty cells and undo/redo atomically', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid, LocalDataSource } = await import('/index.js');
+    window.source = new LocalDataSource(Array.from({ length: 100 }, (_, id) => ({ id, name: 'Ada', team: 'Design' })), row => row.id);
+    const getValue = window.source.getValue.bind(window.source);
+    window.reads = [];
+    window.source.getValue = (row, key) => { window.reads.push([row, key]); return getValue(row, key); };
+    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source,
+      columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true }, { key: 'team', title: 'Team' }] });
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  const result = await page.evaluate(async () => {
+    const canvas = document.querySelector('canvas');
+    const context = canvas.getContext('2d');
+    const header = [...context.getImageData(0, 0, canvas.width, 30 * devicePixelRatio).data];
+    window.grid.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'First' },
+      { rowIndex: 0, columnKey: 'name', value: 'Grace' }, { rowIndex: 1, columnKey: 'team', value: 'Ops' },
+      { rowIndex: 99, columnKey: 'name', value: 'Hidden' }]);
+    window.reads = [];
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    const reads = [...window.reads];
+    const sameHeader = JSON.stringify(header) === JSON.stringify([...context.getImageData(0, 0, canvas.width, 30 * devicePixelRatio).data]);
+    const partial = [...context.getImageData(0, 0, canvas.width, canvas.height).data];
+    window.grid.render();
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    const full = [...context.getImageData(0, 0, canvas.width, canvas.height).data];
+    return { reads, sameHeader, samePixels: JSON.stringify(partial) === JSON.stringify(full) };
+  });
+  expect(result.reads).toEqual([[0, 'name'], [1, 'team']]);
+  expect(result.sameHeader).toBe(true);
+  expect(result.samePixels).toBe(true);
+  const viewport = page.getByLabel(/^Data grid viewport/);
+  await viewport.focus();
+  await viewport.press('Control+z');
+  expect(await page.evaluate(() => [window.source.getValue(0, 'name'), window.source.getValue(1, 'team'), window.source.getValue(99, 'name')])).toEqual(['Ada', 'Design', 'Ada']);
+  await viewport.press('Control+Shift+z');
+  expect(await page.evaluate(() => window.source.getValue(0, 'name'))).toBe('Grace');
+  expect(await page.evaluate(() => {
+    window.grid.undo();
+    window.grid.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Ada' }]);
+    return window.grid.redo();
+  })).toBe(true);
+  const failures = await page.evaluate(() => {
+    const before = window.source.getValue(0, 'name');
+    let invalid = false;
+    try { window.grid.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Lost' }, { rowIndex: 100, columnKey: 'team', value: '' }]); }
+    catch { invalid = window.source.getValue(0, 'name') === before; }
+    window.source.setValue(0, 'name', 'External');
+    let conflict = false;
+    try { window.grid.undo(); } catch (error) { conflict = /conflict/.test(error.message); }
+    window.source.setValue(0, 'name', before);
+    const retry = window.grid.undo();
+    window.grid.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Branch' }]);
+    return { invalid, conflict, retry, redo: window.grid.redo() };
+  });
+  expect(failures).toEqual({ invalid: true, conflict: true, retry: true, redo: false });
+  await viewport.click({ position: { x: 180, y: 16 } });
+  await viewport.press('F2');
+  await page.getByRole('textbox').fill('Editor command');
+  await page.getByRole('textbox').press('Enter');
+  await viewport.press('Control+z');
+  expect(await page.evaluate(() => window.source.getValue(0, 'name'))).toBe('Branch');
+  await viewport.press('Control+y');
+  expect(await page.evaluate(() => window.source.getValue(0, 'name'))).toBe('Editor command');
+  const redraw = await page.evaluate(async () => {
+    const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve));
+    await nextFrame();
+    window.grid.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'A' }]);
+    window.grid.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'B' }]);
+    window.reads = [];
+    await nextFrame();
+    const coalesced = [...window.reads];
+    const canvas = document.querySelector('canvas');
+    const pixels = () => JSON.stringify([...canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data]);
+    const selectedPartial = pixels();
+    window.grid.render();
+    await nextFrame();
+    const sameSelection = selectedPartial === pixels();
+    const viewport = document.querySelector('[tabindex]');
+    viewport.scrollTop = 640;
+    viewport.dispatchEvent(new Event('scroll'));
+    window.grid.updateCells([{ rowIndex: 20, columnKey: 'name', value: 'Scrolled update' }]);
+    await nextFrame();
+    const scrolled = pixels();
+    window.grid.render();
+    await nextFrame();
+    return { coalesced, sameSelection, sameScroll: scrolled === pixels() };
+  });
+  expect(redraw).toEqual({ coalesced: [[0, 'name']], sameSelection: true, sameScroll: true });
+});
+
+test('history preserves failed writes, rejects unsafe custom batches and caps retention', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const { createGrid, LocalDataSource } = await import('/index.js');
+    const source = new LocalDataSource([{ id: 1, name: 'Ada', team: 'Design' }], row => row.id);
+    const grid = createGrid({ container: document.querySelector('#grid'), dataSource: source,
+      columns: [{ key: 'name', title: 'Name' }, { key: 'team', title: 'Team' }] });
+    const setter = source.setValues.bind(source);
+    source.setValues = () => { throw new Error('Rejected'); };
+    let failed = false;
+    try { grid.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Grace' }, { rowIndex: 0, columnKey: 'team', value: 'Ops' }]); } catch { failed = true; }
+    const noHistory = !grid.undo();
+    source.setValues = setter;
+    grid.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Grace' }, { rowIndex: 0, columnKey: 'team', value: 'Ops' }]);
+    source.setValues = () => { throw new Error('Rejected'); };
+    try { grid.undo(); } catch {}
+    const kept = source.getValue(0, 'name') === 'Grace';
+    source.setValues = setter;
+    const retried = grid.undo();
+    for (let i = 0; i < 101; i++) grid.updateCells([{ rowIndex: 0, columnKey: 'name', value: String(i) }]);
+    let count = 0;
+    while (grid.undo()) count++;
+    const oldest = source.getValue(0, 'name');
+    grid.destroy();
+    let destroyed = false;
+    try { grid.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Lost' }]); } catch { destroyed = true; }
+    const custom = { getRowCount: () => 1, getRowId: () => 1, getValue: () => 'original', setValue: () => { throw new Error('Should not write'); } };
+    const second = createGrid({ container: document.querySelector('#grid'), columns: [{ key: 'name', title: 'Name' }, { key: 'team', title: 'Team' }], dataSource: custom });
+    let atomic = false;
+    try { second.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'x' }, { rowIndex: 0, columnKey: 'team', value: 'y' }]); } catch (error) { atomic = /atomic/.test(error.message); }
+    second.destroy();
+    return { failed, noHistory, kept, retried, count, oldest, destroyed, atomic };
+  });
+  expect(result).toEqual({ failed: true, noHistory: true, kept: true, retried: true, count: 100, oldest: '0', destroyed: true, atomic: true });
+});
+
 test('DOM editing commits, cancels, validates and follows scrolling', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
