@@ -1,8 +1,10 @@
-import type { DataSource } from './data-source.js';
+import type { DataSource, RowId } from './data-source.js';
 import { visibleRange } from './viewport.js';
 
 export interface Column { key: string; title: string; }
+export interface CellSelection { rowIndex: number; rowId: RowId; columnIndex: number; columnKey: string; }
 export interface GridOptions {
+  onSelectionChange?: (selection: CellSelection | null) => void;
   container: HTMLElement;
   columns: readonly Column[];
   dataSource: DataSource;
@@ -10,7 +12,7 @@ export interface GridOptions {
   columnWidth?: number;
   headerHeight?: number;
 }
-export interface Grid { render(): void; destroy(): void; }
+export interface Grid { render(): void; getSelection(): CellSelection | null; destroy(): void; }
 
 /** Mount a read-only grid. The caller owns the container and its dimensions. */
 export function createGrid(options: GridOptions): Grid {
@@ -47,6 +49,70 @@ export function createGrid(options: GridOptions): Grid {
   container.append(root);
   let frame: number | undefined;
   let destroyed = false;
+  let selection: CellSelection | null = null;
+
+  function getSelection(): CellSelection | null {
+    return selection ? { ...selection } : null;
+  }
+
+  function select(rowIndex: number, columnIndex: number): void {
+    if (destroyed || rowCount === 0 || columns.length === 0) return;
+    const changed = selection?.rowIndex !== rowIndex || selection?.columnIndex !== columnIndex;
+    selection = { rowIndex, rowId: dataSource.getRowId(rowIndex), columnIndex, columnKey: columns[columnIndex]!.key };
+    const left = columnIndex * columnWidth;
+    const top = rowIndex * rowHeight;
+    if (left < scroller.scrollLeft || columnWidth > scroller.clientWidth) scroller.scrollLeft = left;
+    else if (left + columnWidth > scroller.scrollLeft + scroller.clientWidth) scroller.scrollLeft = left + columnWidth - scroller.clientWidth;
+    if (top < scroller.scrollTop || rowHeight > scroller.clientHeight) scroller.scrollTop = top;
+    else if (top + rowHeight > scroller.scrollTop + scroller.clientHeight) scroller.scrollTop = top + rowHeight - scroller.clientHeight;
+    const value = dataSource.getValue(rowIndex, selection.columnKey);
+    scroller.setAttribute('aria-label', `Read-only data grid viewport: row ${rowIndex + 1}, ${columns[columnIndex]!.title}, ${value == null ? '' : String(value)}`);
+    render();
+    if (changed) options.onSelectionChange?.(getSelection());
+  }
+
+  function onPointerDown(event: PointerEvent): void {
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+    const bounds = scroller.getBoundingClientRect();
+    const x = event.clientX - bounds.left;
+    const y = event.clientY - bounds.top;
+    if (x < 0 || y < 0 || x >= scroller.clientWidth || y >= scroller.clientHeight) return;
+    const row = Math.floor((y + scroller.scrollTop) / rowHeight);
+    const col = Math.floor((x + scroller.scrollLeft) / columnWidth);
+    if (row >= rowCount || col >= columns.length) return;
+    event.preventDefault();
+    scroller.focus({ preventScroll: true });
+    select(row, col);
+  }
+
+  function onKeyDown(event: KeyboardEvent): void {
+    if (event.isComposing || event.altKey || event.shiftKey) return;
+    const control = event.ctrlKey || event.metaKey;
+    if (control && event.key !== 'Home' && event.key !== 'End') return;
+    if (event.key === 'Escape') {
+      if (selection) {
+        event.preventDefault();
+        selection = null;
+        scroller.setAttribute('aria-label', 'Read-only data grid viewport');
+        render();
+        options.onSelectionChange?.(null);
+      }
+      return;
+    }
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key) || !rowCount || !columns.length) return;
+    event.preventDefault();
+    let row = selection?.rowIndex ?? 0;
+    let col = selection?.columnIndex ?? 0;
+    if (selection) {
+      if (event.key === 'ArrowUp') row--;
+      if (event.key === 'ArrowDown') row++;
+      if (event.key === 'ArrowLeft') col--;
+      if (event.key === 'ArrowRight') col++;
+      if (event.key === 'Home') { col = 0; if (control) row = 0; }
+      if (event.key === 'End') { col = columns.length - 1; if (control) row = rowCount - 1; }
+    }
+    select(Math.max(0, Math.min(rowCount - 1, row)), Math.max(0, Math.min(columns.length - 1, col)));
+  }
 
   function cell(text: string, x: number, y: number, width: number, height: number, header: boolean): void {
     const ctx = context!;
@@ -91,6 +157,13 @@ export function createGrid(options: GridOptions): Grid {
           headerHeight + row * rowHeight - scroller.scrollTop, columnWidth, rowHeight, false);
       }
     }
+    if (selection) {
+      context!.strokeStyle = '#2563eb';
+      context!.lineWidth = 2;
+      context!.strokeRect(selection.columnIndex * columnWidth - scroller.scrollLeft + 1,
+        headerHeight + selection.rowIndex * rowHeight - scroller.scrollTop + 1,
+        Math.max(0, columnWidth - 2), Math.max(0, rowHeight - 2));
+    }
     context!.restore();
     for (let col = cols.start; col < cols.end; col++) {
       cell(columns[col]!.title, col * columnWidth - scroller.scrollLeft, 0, columnWidth, headerHeight, true);
@@ -103,13 +176,19 @@ export function createGrid(options: GridOptions): Grid {
   const observer = new ResizeObserver(render);
   observer.observe(root);
   scroller.addEventListener('scroll', render, { passive: true });
+  scroller.addEventListener('pointerdown', onPointerDown);
+  scroller.addEventListener('keydown', onKeyDown);
   win.addEventListener('resize', render);
   render();
   return {
     render,
+    getSelection,
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      selection = null;
+      scroller.removeEventListener('pointerdown', onPointerDown);
+      scroller.removeEventListener('keydown', onKeyDown);
       if (frame !== undefined) win.cancelAnimationFrame(frame);
       observer.disconnect();
       scroller.removeEventListener('scroll', render);

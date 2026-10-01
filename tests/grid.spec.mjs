@@ -46,3 +46,86 @@ test('empty and invalid grids are safe', async ({ page }) => {
   });
   expect(result).toBe(true);
 });
+
+test('single cell selection, navigation, scrolling and cleanup', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/index.js');
+    window.changes = [];
+    window.grid = createGrid({
+      container: document.querySelector('#grid'),
+      columns: Array.from({ length: 20 }, (_, i) => ({ key: `c${i}`, title: `Column ${i}` })),
+      dataSource: { getRowCount: () => 100, getRowId: i => `row-${i}`, getValue: (i, key) => `${i}:${key}` },
+      onSelectionChange: selection => { window.changes.push(selection); if (selection) selection.rowIndex = -1; },
+    });
+  });
+  const viewport = page.getByLabel(/^Read-only data grid viewport/);
+  const selection = () => page.evaluate(() => window.grid.getSelection());
+  await viewport.click({ position: { x: 180, y: 48 } });
+  expect(await selection()).toEqual({ rowIndex: 1, rowId: 'row-1', columnIndex: 1, columnKey: 'c1' });
+  await viewport.click({ position: { x: 180, y: 48 } });
+  expect(await page.evaluate(() => window.changes.length)).toBe(1);
+  await expect(viewport).toBeFocused();
+  await expect.poll(() => page.locator('canvas').evaluate(canvas => {
+    const ratio = devicePixelRatio;
+    return [...canvas.getContext('2d').getImageData(161 * ratio, 80 * ratio, 1, 1).data];
+  })).toEqual([37, 99, 235, 255]);
+  await page.keyboard.press('ArrowRight');
+  expect((await selection()).columnIndex).toBe(2);
+  await page.keyboard.press('Control+End');
+  expect(await selection()).toEqual({ rowIndex: 99, rowId: 'row-99', columnIndex: 19, columnKey: 'c19' });
+  expect(await viewport.evaluate(el => el.scrollTop > 0 && el.scrollLeft > 0)).toBe(true);
+  await page.keyboard.press('ArrowDown');
+  expect((await selection()).rowIndex).toBe(99);
+  await viewport.evaluate(el => { el.scrollTop = 640; el.scrollLeft = 800; });
+  await viewport.click({ position: { x: 20, y: 16 } });
+  expect(await selection()).toEqual({ rowIndex: 20, rowId: 'row-20', columnIndex: 5, columnKey: 'c5' });
+  await page.keyboard.press('Home');
+  expect((await selection()).columnIndex).toBe(0);
+  await page.keyboard.press('End');
+  expect((await selection()).columnIndex).toBe(19);
+  await page.keyboard.press('Control+Home');
+  expect((await selection()).rowIndex).toBe(0);
+  await page.keyboard.press('ArrowUp');
+  expect((await selection()).rowIndex).toBe(0);
+  await page.keyboard.press('Escape');
+  expect(await selection()).toBeNull();
+  await page.keyboard.press('ArrowDown');
+  expect((await selection()).rowIndex).toBe(0);
+  await page.evaluate(() => { const copy = window.grid.getSelection(); copy.columnIndex = 99; });
+  expect((await selection()).columnIndex).toBe(0);
+  await page.evaluate(() => {
+    window.oldViewport = document.querySelector('[tabindex]');
+    window.grid.destroy();
+    window.oldViewport.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+  });
+  expect(await selection()).toBeNull();
+});
+
+test('ignores header, blank space, modified keys and empty data', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid, LocalDataSource } = await import('/index.js');
+    window.grid = createGrid({ container: document.querySelector('#grid'), columns: [{ key: 'name', title: 'Name' }], dataSource: new LocalDataSource([{ id: 1, name: 'Ada' }], row => row.id) });
+    const button = document.createElement('button'); button.textContent = 'After grid'; document.body.append(button);
+  });
+  const viewport = page.getByLabel(/^Read-only data grid viewport/);
+  const bounds = await viewport.boundingBox();
+  await page.mouse.click(bounds.x + 20, bounds.y - 15);
+  await viewport.click({ position: { x: 300, y: 100 } });
+  expect(await page.evaluate(() => window.grid.getSelection())).toBeNull();
+  await viewport.focus();
+  await page.keyboard.press('Shift+ArrowDown');
+  expect(await page.evaluate(() => window.grid.getSelection())).toBeNull();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'After grid' })).toBeFocused();
+  await page.evaluate(async () => {
+    window.grid.destroy();
+    const { createGrid, LocalDataSource } = await import('/index.js');
+    window.grid = createGrid({ container: document.querySelector('#grid'), columns: [], dataSource: new LocalDataSource([], () => 0) });
+  });
+  await viewport.click({ position: { x: 20, y: 20 } });
+  await viewport.focus();
+  await page.keyboard.press('ArrowDown');
+  expect(await page.evaluate(() => window.grid.getSelection())).toBeNull();
+});
