@@ -2,43 +2,44 @@
 
 > Spreadsheet UX. Data-grid semantics. Canvas performance.
 
-Acheron Grid Engine hướng đến một thư viện Data Grid viết bằng TypeScript thuần, sử dụng Canvas để hiển thị dữ liệu và cung cấp trải nghiệm chọn, điều hướng, chỉnh sửa giống spreadsheet. Core được thiết kế độc lập framework, với định hướng sử dụng trong vanilla JavaScript, React và Vue.
+Acheron Grid Engine is an early-stage project to build a framework-independent, Canvas-based data grid engine in TypeScript. Its focus is the rendering, interaction, and data primitives developers need to build editable grids for the web, with spreadsheet-style selection and keyboard navigation.
 
-## Trạng thái hiện tại
+The planned architecture separates the core engine from framework integrations, with direct use in vanilla JavaScript and dedicated adapters for React and Vue.
 
-Dự án đang ở giai đoạn khởi tạo repository. Hiện chỉ có cấu trúc thư mục và tài liệu giới thiệu; chưa có engine chạy được, public API, adapter, build tooling hay benchmark.
+## Project status
 
-Chưa có package để cài đặt hoặc ví dụ để chạy. Hướng dẫn cài đặt và sử dụng sẽ được bổ sung khi có triển khai thực tế.
+The repository currently contains the initial project structure. The engine, public API, and framework adapters have not been implemented, and no installable package or runnable demo is available yet.
 
-## Định hướng thiết kế
+The capabilities described below are planned. Installation instructions, API documentation, and examples will be added as implementations become available.
 
-Các nội dung dưới đây là định hướng, chưa phải khả năng đã triển khai:
+## Design goals
 
-- Canvas hiển thị dữ liệu; DOM phục vụ editor, menu, overlay và accessibility.
-- Virtualization theo hàng và cột để giới hạn việc render trong vùng nhìn thấy.
-- Mô hình dữ liệu dựa trên `rowId`, `columnKey` và value; hỗ trợ DataSource local và remote.
-- Cập nhật từng phần và batch updates để hạn chế render lại không cần thiết.
-- Core độc lập framework; React và Vue tích hợp qua adapter.
+- **Canvas rendering:** draw grid content on Canvas, with DOM elements for editors, menus, overlays, and accessibility support.
+- **Viewport-based rendering:** virtualize both rows and columns to keep rendering work focused on visible data.
+- **Framework-independent core:** keep rendering, interaction, and data handling in plain TypeScript, with framework integration handled by adapters.
+- **Explicit data identity:** address data through row IDs and column keys, with data sources for local and remotely loaded records.
+- **Incremental updates:** support targeted invalidation and batched changes to avoid unnecessary redraws.
+- **Extensibility:** provide custom cell renderers, editors, themes, and plugin APIs.
 
-## Phạm vi dự kiến của V1
+Performance targets have not yet been validated by benchmarks.
 
-- Selection, multi-range và điều hướng bằng bàn phím.
-- Inline editing, clipboard và undo/redo.
-- Resize hàng/cột, frozen panes và virtualization.
-- Custom renderer/editor, themes và API mở rộng.
-- Local/async DataSource, vanilla API và React/Vue adapters.
+## Planned V1 scope
 
-Formula engine, charts, pivot tables, workbook/multiple sheets, tương thích tính toán Excel và collaboration thời gian thực nằm ngoài phạm vi V1.
+| Area | Planned capabilities |
+| --- | --- |
+| Rendering and layout | Row and column virtualization, resizing, frozen panes |
+| Interaction | Cell and range selection, multiple ranges, keyboard navigation |
+| Editing | Inline editors, clipboard operations, undo and redo |
+| Data | Local and asynchronous data sources, partial updates, batched updates |
+| Customization | Custom renderers and editors, basic themes |
+| Integration | Vanilla JavaScript API, React and Vue adapters |
 
-Hiệu năng là mục tiêu thiết kế; hiện chưa có kết quả benchmark để công bố khả năng xử lý dữ liệu hoặc tốc độ render.
+V1 focuses on displaying and editing tabular application data. Formula evaluation, charts, pivot tables, multi-sheet workbooks, Excel calculation compatibility, and real-time collaboration are outside its scope.
 
-## Cấu trúc repository
+## Repository structure
 
-- [`packages/core/`](packages/core/README.md): vị trí dự kiến cho core TypeScript; hiện chưa có implementation.
-- Adapters, examples, themes và benchmarks sẽ được bổ sung khi triển khai.
-
-Laravel không phải dependency của engine.
+[`packages/core/`](packages/core/README.md) is reserved for the TypeScript engine. It currently contains a placeholder README. Framework adapters, examples, themes, and benchmarks will be added as development progresses.
 
 ## License
 
-Dự án hướng đến mã nguồn mở nhưng chưa chọn license và chưa có file `LICENSE`. Repository công khai không thay thế cho giấy phép sử dụng hoặc phân phối mã nguồn. Thông tin license sẽ được cập nhật trước khi phát hành thư viện.
+A license has not yet been selected. Licensing information will be added before the first library release.
