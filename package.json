@@ -1,0 +1,21 @@
+{
+  "name": "acheron-grid-engine",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @acheron-grid/core",
+    "typecheck": "npm run typecheck --workspace @acheron-grid/core",
+    "test": "npm run build && node --test packages/core/tests/*.test.mjs",
+    "test:browser": "npm run build && playwright test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "typescript": "~5.9.3"
+  }
+}

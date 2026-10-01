@@ -8,9 +8,9 @@ The planned architecture separates the core engine from framework integrations, 
 
 ## Project status
 
-The repository currently contains the initial project structure. The engine, public API, and framework adapters have not been implemented, and no installable package or runnable demo is available yet.
+The first core preview implements read-only Canvas rendering, row and column virtualization, native scrolling, and a local data source. It builds to an ESM package with TypeScript declarations. The API is experimental and may change.
 
-The capabilities described below are planned. Installation instructions, API documentation, and examples will be added as implementations become available.
+Start with the [core package guide](packages/core/README.md) for local installation, an example, and API limitations. No package has been published. Selection, editing, remote data sources, and framework adapters remain planned. Canvas cell content is not yet accessible to screen readers. The V1 scope below remains the target, not a list of completed features.
 
 ## Design goals
 
@@ -38,7 +38,11 @@ V1 focuses on displaying and editing tabular application data. Formula evaluatio
 
 ## Repository structure
 
-[`packages/core/`](packages/core/README.md) is reserved for the TypeScript engine. It currently contains a placeholder README. Framework adapters, examples, themes, and benchmarks will be added as development progresses.
+[`packages/core/`](packages/core/README.md) contains the TypeScript engine and unit tests. Browser integration tests live in `tests/`. Framework adapters, standalone examples, themes, and benchmarks remain planned.
+
+## Development
+
+Use Node.js 22 or later. Run `npm ci`, then `npm run build`. Check types with `npm run typecheck` and run unit tests with `npm test`. For browser tests, install Chromium with `npx playwright install chromium` and run `npm run test:browser`.
 
 ## License
 

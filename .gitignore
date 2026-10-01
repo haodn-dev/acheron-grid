@@ -14,3 +14,6 @@ Thumbs.db
 # Internal planning and development history belong to the private workspace.
 /docs/
 /worklog/
+
+/test-results/
+/playwright-report/
