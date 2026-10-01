@@ -9,3 +9,11 @@ Each feature must have a dedicated internal specification. Update its final Chan
 Keep public usage documentation accurate and distinguish proposed APIs, implementation and verified behavior. Public documentation must be explicitly intended for consumers; internal worklogs remain private.
 
 Use short-lived feat/, fix/ or docs/ branches. Run relevant checks once build tooling exists. Do not publish packages or choose a license without an agreed release/license decision.
+
+## Development responsibilities and language
+
+Implement engine code, adapters, tests, examples and public usage documentation here. Write the public README and usage documentation in professional English for external users and developers.
+
+Keep internal specifications, architecture decisions, roadmap and worklogs in the companion private workspace, in Vietnamese. Change its Laravel application only for integration or demo work; do not duplicate the engine there. Once an engine package exists, the demo should consume it; local dependency linking is not yet configured.
+
+For engine features, update the internal specification, implement and verify here, then record the actual engine commit hash in the private worklog. Working across both repositories does not mean implementing a feature twice.
