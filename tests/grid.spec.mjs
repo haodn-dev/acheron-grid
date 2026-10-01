@@ -1,5 +1,120 @@
 import { test, expect } from '@playwright/test';
 
+test('range selection supports drag, Shift navigation, normalized bounds and clipboard events', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid, LocalDataSource } = await import('/index.js');
+    window.source = new LocalDataSource(Array.from({ length: 30 }, (_, id) => ({ id, name: `Name ${id}`, team: `Team ${id}` })), row => row.id);
+    window.ranges = [];
+    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source,
+      columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true }, { key: 'team', title: 'Team', editable: true }],
+      onSelectionRangeChange: range => { window.ranges.push(range ? { ...range } : null); if (range) range.startRow = -1; } });
+  });
+  const viewport = page.getByLabel(/^Data grid viewport/);
+  const bounds = await viewport.boundingBox();
+  await page.mouse.move(bounds.x + 180, bounds.y + 16);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + 340, bounds.y + 48, { steps: 4 });
+  await page.mouse.up();
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toEqual({ startRow: 0, endRow: 1, startColumn: 1, endColumn: 2 });
+  expect(await page.evaluate(() => window.grid.copySelection())).toBe('Name 0\tTeam 0\r\nName 1\tTeam 1');
+  await viewport.press('Shift+ArrowUp');
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toEqual({ startRow: 0, endRow: 0, startColumn: 1, endColumn: 2 });
+  await viewport.press('Shift+ArrowLeft');
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toEqual({ startRow: 0, endRow: 0, startColumn: 1, endColumn: 1 });
+  await viewport.click({ position: { x: 340, y: 80 } });
+  await viewport.click({ position: { x: 180, y: 16 }, modifiers: ['Shift'] });
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toEqual({ startRow: 0, endRow: 2, startColumn: 1, endColumn: 2 });
+  await page.evaluate(() => { const range = window.grid.getSelectionRange(); range.endRow = 999; });
+  expect((await page.evaluate(() => window.grid.getSelectionRange())).endRow).toBe(2);
+  const events = await viewport.evaluate(el => {
+    const copied = new DataTransfer();
+    const copy = new ClipboardEvent('copy', { clipboardData: copied, bubbles: true, cancelable: true });
+    el.dispatchEvent(copy);
+    const pasted = new DataTransfer();
+    pasted.setData('text/plain', 'Grace\tOps\r\nAda\tDesign\r\n');
+    const paste = new ClipboardEvent('paste', { clipboardData: pasted, bubbles: true, cancelable: true });
+    el.dispatchEvent(paste);
+    return { copy: copy.defaultPrevented, text: copied.getData('text/plain'), paste: paste.defaultPrevented };
+  });
+  expect(events).toEqual({ copy: true, text: 'Name 0\tTeam 0\r\nName 1\tTeam 1\r\nName 2\tTeam 2', paste: true });
+  expect(await page.evaluate(() => [window.source.getValue(0, 'name'), window.source.getValue(1, 'team')])).toEqual(['Grace', 'Design']);
+  await viewport.press('Control+z');
+  expect(await page.evaluate(() => [window.source.getValue(0, 'name'), window.source.getValue(1, 'team')])).toEqual(['Name 0', 'Team 1']);
+  await viewport.press('ArrowRight');
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toEqual({ startRow: 0, endRow: 0, startColumn: 2, endColumn: 2 });
+  await viewport.press('Escape');
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toBeNull();
+  expect(await page.evaluate(() => window.ranges.at(-1))).toBeNull();
+  await viewport.evaluate(el => { el.scrollTop = 320; });
+  await viewport.click({ position: { x: 180, y: 16 } });
+  await viewport.press('Shift+ArrowDown');
+  expect(await page.evaluate(() => window.grid.copySelection())).toBe('Name 10\r\nName 11');
+  await viewport.press('Control+Shift+End');
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toEqual({ startRow: 10, endRow: 29, startColumn: 1, endColumn: 2 });
+  await viewport.press('Control+Shift+Home');
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toEqual({ startRow: 0, endRow: 10, startColumn: 0, endColumn: 1 });
+  await viewport.press('Control+Home');
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toEqual({ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 });
+  await page.evaluate(() => window.grid.destroy());
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toBeNull();
+});
+
+test('paste validates the whole rectangle, preserves data on errors and leaves editor clipboard native', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid, LocalDataSource } = await import('/index.js');
+    window.source = new LocalDataSource([{ id: 1, name: 'Ada', amount: 12 }, { id: 2, name: 'Grace', amount: 24 }], row => row.id);
+    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source,
+      columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true },
+        { key: 'amount', title: 'Amount', editable: true, parse: text => {
+          if (!text.trim() || !Number.isFinite(Number(text))) throw new Error('Invalid amount');
+          return Number(text);
+        } }] });
+  });
+  const viewport = page.getByLabel(/^Data grid viewport/);
+  await viewport.click({ position: { x: 180, y: 16 } });
+  expect(await page.evaluate(() => {
+    let failures = 0;
+    for (const text of ['Changed\tinvalid', 'Changed\t1\textra', 'Changed\nSecond\nThird', 'a\tb\nc', '"unfinished']) {
+      try { window.grid.paste(text); } catch { failures++; }
+    }
+    return { failures, value: window.source.getValue(0, 'name'), history: window.grid.undo() };
+  })).toEqual({ failures: 5, value: 'Ada', history: false });
+  await page.evaluate(() => window.grid.paste('"Ada\tLovelace"\t42\r\n"Grace\nHopper"\t0'));
+  expect(await page.evaluate(() => [window.source.getValue(0, 'name'), window.source.getValue(0, 'amount'), window.source.getValue(1, 'name')])).toEqual(['Ada\tLovelace', 42, 'Grace\nHopper']);
+  await viewport.press('Control+z');
+  await viewport.click({ position: { x: 20, y: 16 } });
+  expect(await page.evaluate(() => { try { window.grid.paste('3'); } catch (error) { return /read-only/.test(error.message); } return false; })).toBe(true);
+  await viewport.click({ position: { x: 180, y: 16 } });
+  await viewport.press('F2');
+  expect(await page.getByRole('textbox').evaluate(el => {
+    const data = new DataTransfer(); data.setData('text/plain', 'Native');
+    const paste = new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true });
+    const copy = new ClipboardEvent('copy', { clipboardData: data, bubbles: true, cancelable: true });
+    el.dispatchEvent(paste); el.dispatchEvent(copy);
+    return { paste: paste.defaultPrevented, copy: copy.defaultPrevented };
+  })).toEqual({ paste: false, copy: false });
+  await page.getByRole('textbox').press('Escape');
+  await viewport.evaluate(el => {
+    const html = new DataTransfer(); html.setData('text/html', '<b>Ignored</b>');
+    const event = new ClipboardEvent('paste', { clipboardData: html, bubbles: true, cancelable: true });
+    el.dispatchEvent(event);
+    window.htmlIgnored = !event.defaultPrevented;
+  });
+  expect(await page.evaluate(() => window.htmlIgnored)).toBe(true);
+  expect(await page.evaluate(async () => {
+    window.grid.destroy();
+    const { createGrid } = await import('/index.js');
+    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source,
+      columns: [{ key: 'id', title: 'ID', editable: true }] });
+    const viewport = document.querySelector('[tabindex]');
+    viewport.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    try { window.grid.paste('3'); } catch (error) { return /parser/.test(error.message) && window.source.getValue(0, 'id') === 1; }
+    return false;
+  })).toBe(true);
+});
+
 test('batch commands repaint only dirty cells and undo/redo atomically', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
@@ -316,7 +431,7 @@ test('ignores header, blank space, modified keys and empty data', async ({ page 
   await viewport.click({ position: { x: 300, y: 100 } });
   expect(await page.evaluate(() => window.grid.getSelection())).toBeNull();
   await viewport.focus();
-  await page.keyboard.press('Shift+ArrowDown');
+  await page.keyboard.press('Alt+ArrowDown');
   expect(await page.evaluate(() => window.grid.getSelection())).toBeNull();
   await page.keyboard.press('Tab');
   await expect(page.getByRole('button', { name: 'After grid' })).toBeFocused();

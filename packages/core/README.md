@@ -10,7 +10,7 @@ An experimental, framework-independent Canvas data grid engine written in TypeSc
 - Resize observation, coalesced rendering, and explicit cleanup.
 - Single-cell selection by pointer and keyboard, with automatic scrolling.
 
-This package is a development preview, not a published release. Range selection, remote data sources, and framework adapters are not implemented. Canvas cell content is not yet accessible to screen readers. Performance has not been benchmarked.
+This package is a development preview, not a published release. Multi-range selection, remote data sources, and framework adapters are not implemented. Canvas cell content is not yet accessible to screen readers. Performance has not been benchmarked.
 
 ## Build from source
 
@@ -64,7 +64,7 @@ Give the container explicit dimensions, such as `width: 100%; height: 480px`. Mo
 
 The `DataSource` interface exposes `getRowCount()`, `getRowId(index)`, and `getValue(index, columnKey)`. Grid dimensions use the row count at mount time; changing the row count requires remounting. Custom sources must provide synchronous values and valid counts.
 
-`createGrid(options)` returns `render()`, `updateCells(updates)`, `undo()`, `redo()`, `getSelection()` and `destroy()`. `render()` schedules a viewport redraw, coalesced into the next animation frame. `destroy()` removes only the grid's own DOM and releases its listeners and observer; repeated calls are safe. Calls to `render()` after destruction do nothing.
+`createGrid(options)` returns `render()`, `updateCells(updates)`, `undo()`, `redo()`, `getSelection()`, `getSelectionRange()`, `copySelection()`, `paste(text)` and `destroy()`. `render()` schedules a viewport redraw, coalesced into the next animation frame. `destroy()` removes only the grid's own DOM and releases its listeners and observer; repeated calls are safe. Calls to `render()` after destruction do nothing.
 
 Column keys must be unique. All cell dimensions must be positive finite numbers. Values are rendered as plain text using `String(value)`; `null` and `undefined` display as empty cells.
 
@@ -74,9 +74,9 @@ All local rows reside in memory. Virtualization bounds cell rendering work, not 
 
 ## Selection and keyboard
 
-Click a data cell to select it and focus the viewport. Arrow keys move one cell; Home/End move to the first/last column; Ctrl/Meta+Home/End move to the first/last cell. Navigation clamps at dataset boundaries and scrolls the active cell into view. The first navigation key with no selection selects the first cell. Escape clears selection; Tab leaves the viewport normally. Shift-modified navigation and range selection are not implemented. See inline editing below.
+Click a data cell to select it and focus the viewport. Arrow keys move one cell; Home/End move to the first/last column; Ctrl/Meta+Home/End move to the first/last cell. Navigation clamps at dataset boundaries and scrolls the active cell into view. The first navigation key with no selection selects the first cell. Escape clears selection; Tab leaves the viewport normally. Shift-modified navigation extends a rectangular range. See range selection and clipboard below.
 
-`grid.getSelection()` returns a fresh `{ rowIndex, rowId, columnIndex, columnKey }` object or `null`. Indices are zero-based. Pass `onSelectionChange(selection)` to `createGrid` to observe changes, including `null` when cleared. Callback objects are copies; selecting the same cell does not fire again. Destroy clears selection without emitting an event. Header, blank space, scrollbar and modified pointer presses do not select cells. The viewport label describes the active cell, but a complete accessible grid representation is not implemented.
+`grid.getSelection()` returns a fresh `{ rowIndex, rowId, columnIndex, columnKey }` object or `null`. Indices are zero-based. Pass `onSelectionChange(selection)` to `createGrid` to observe changes, including `null` when cleared. Callback objects are copies; selecting the same cell does not fire again. Destroy clears selection without emitting an event. Header, blank space, scrollbar and Ctrl/Meta/Alt-modified pointer presses do not select cells; Shift-click extends the range. The viewport label describes the active cell, but a complete accessible grid representation is not implemented.
 ## Inline editing
 
 Set `editable: true` on a column and provide a synchronous `DataSource.setValue(index, columnKey, value)` method (`LocalDataSource` already provides it). Double-click a cell or press Enter/F2 to open the text input. Enter, Tab and blur save; Escape cancels. Edits are in memory only. Destroy discards an unfinished edit.
@@ -115,3 +115,20 @@ The grid retains the latest 100 commands, with shallow old/new value references.
 When the viewport has focus, Ctrl/Cmd+Z undoes and Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y redoes. The DOM editor keeps native text undo. `updateCells` throws while editing or after destruction; undo/redo return `false` while editing, after destruction or when the stack is empty. Destroy releases both history stacks.
 
 Value commands coalesce dirty cells into one animation frame. Offscreen changes are read when scrolled into view. Scroll, resize, selection changes and explicit `render()` request a full viewport redraw. Layout commands, async history and persistent history are not implemented.
+
+## Range selection and clipboard
+
+Drag with a mouse/pen, Shift-click, or use Shift+Arrow/Home/End to extend a rectangular range from its anchor. Ctrl/Cmd+Shift+Home/End extends to the first/last grid cell. Ordinary clicks or navigation collapse the range; Escape clears it. Dragging captures the pointer and clamps to viewport/data bounds. Stationary edge auto-scroll, touch range dragging and multiple ranges are not implemented.
+
+`getSelection()` still returns the active endpoint. `getSelectionRange()` returns a fresh normalized `{ startRow, endRow, startColumn, endColumn }` object or `null`; bounds are zero-based and inclusive. `onSelectionRangeChange(range)` receives a copy when bounds change, or `null` on clear. The grid draws both the outer range and active-cell borders. Editing changes the active cell while keeping the range.
+
+```js
+const text = grid.copySelection(); // TSV; does not access the system clipboard
+grid.paste('Grace\tOperations\r\nAda\tDesign'); // one undoable command
+```
+
+Native copy/paste events support Ctrl/Cmd+C/V on the focused viewport without Clipboard API permissions. The text editor keeps native clipboard behavior. Copy exports values only, with null/undefined as empty text. TSV quotes tabs/newlines/quotes and doubles embedded quotes. Paste accepts quoted multiline TSV with tab and CRLF/LF/CR separators; one trailing row separator is ignored. Ragged rows and malformed quotes are rejected.
+
+Paste starts at the selected range's top-left cell and uses the clipboard rectangle's dimensions. It does not tile/fill the selection, add rows or skip read-only columns. Every destination must be within bounds and `editable`; values pass through column parsers. Non-string existing values require a parser. All values are validated before the atomic write, so parser/bounds/read-only failures leave data/history unchanged. Multi-cell paste requires an atomic source `setValues` implementation.
+
+Clipboard work is limited to 100,000 cells and 10,000,000 UTF-16 code units per payload. Over-limit transfers throw `RangeError`. Copy/paste APIs throw while editing or after destruction; no selection yields empty copy/no-op paste. Event errors use native alerts. HTML-only clipboard, cut and formula processing are not supported. Actual OS clipboard and spreadsheet interoperability have not been verified; browser tests exercise native event handlers with controlled `DataTransfer` payloads.

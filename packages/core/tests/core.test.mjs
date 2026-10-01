@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { LocalDataSource } from '../dist/index.js';
 import { visibleRange } from '../dist/viewport.js';
+import { decodeTsv, encodeTsv, clipboardCellLimit, clipboardTextLimit } from '../dist/tsv.js';
 
 test('local rows preserve identity and snapshot top-level values', () => {
   const rows = [{ id: 'a', amount: 12 }, { id: 'b', amount: 24 }];
@@ -71,4 +72,19 @@ test('local batch writes validate all cells before committing, last duplicate wi
   assert.equal(source.getValue(0, 'name'), 'Final');
   assert.equal(source.getValue(0, 'amount'), 99);
   assert.equal(rows[0].name, 'Ada');
+});
+
+test('TSV round-trips quoted tabs, multiline values, quotes and empty fields', () => {
+  const rows = [['Ada\tLovelace', 'a\r\nb', '"quote"', ''], ['雪', '', 'plain', '\n']];
+  assert.deepEqual(decodeTsv(encodeTsv(rows)), rows);
+  assert.deepEqual(decodeTsv('a\tb\r\nc\td\r\n'), [['a', 'b'], ['c', 'd']]);
+  assert.deepEqual(decodeTsv('a\tb\nc\td'), [['a', 'b'], ['c', 'd']]);
+  assert.deepEqual(decodeTsv(''), [['']]);
+  assert.deepEqual(decodeTsv('a\t'), [['a', '']]);
+  assert.deepEqual(decodeTsv('""'), [['']]);
+  assert.throws(() => decodeTsv('"unfinished'), /Unterminated/);
+  assert.throws(() => decodeTsv('"closed"tail'), /Unexpected/);
+  assert.throws(() => decodeTsv('a\tb\nc'), /equal widths/);
+  assert.throws(() => decodeTsv('x'.repeat(clipboardTextLimit + 1)), RangeError);
+  assert.throws(() => decodeTsv('\t'.repeat(clipboardCellLimit)), RangeError);
 });
