@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+*.log
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+.codex/
+.DS_Store
+Thumbs.db
+# Internal planning and development history belong to the private workspace.
+/docs/
+/worklog/
