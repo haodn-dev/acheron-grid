@@ -1255,3 +1255,43 @@ test('configured select and boolean checkbox share parser validation, locks, his
     try { createGrid({ container: document.querySelector('#grid'), dataSource: window.source, columns: [{ key: 'approved', title: 'Approved', editable: true }], columnEditors: { approved: { type: 'checkbox' } } }); } catch (e) { return { message: e.message, roots: document.querySelectorAll('#grid > div').length }; }
   })).toEqual({ message: 'Checkbox columns require a boolean parser.', roots: 0 });
 });
+
+
+test('image cells load once per visible URL, repaint on load, contain/clip and release late callbacks', async ({ page }) => {
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  let pending; let later; let requests = 0;
+  await page.route('**/slow.svg', route => { requests++; pending = route; });
+  await page.route('**/later.svg', route => { later = route; });
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.labels = []; const fillText = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function(text, ...args) { window.labels.push(text); return fillText.call(this, text, ...args); };
+    window.blueImage = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="20"><rect width="10" height="20" fill="blue"/></svg>');
+    window.source = new LocalDataSource(Array.from({ length: 100 }, (_, id) => ({ id, avatar: id < 2 ? '/slow.svg' : id === 2 ? 'javascript:alert(1)' : window.blueImage, name: 'Ada' })), row => row.id);
+    window.grid = createGrid({ container: document.querySelector('#grid'), frozenRows: 1, frozenColumns: 1, imageColumns: ['avatar'],
+      columns: [{ key: 'id', title: 'ID' }, { key: 'avatar', title: 'Avatar' }, { key: 'name', title: 'Name', editable: true }], dataSource: window.source });
+  });
+  await expect.poll(() => !!pending).toBe(true); await expect.poll(() => page.evaluate(() => window.labels.includes('Loading…') && window.labels.includes('Image unavailable'))).toBe(true);
+  expect(requests).toBe(1); expect(await page.locator('img').count()).toBe(0);
+  const pixel = (x, y) => page.locator('canvas').evaluate((canvas, [x, y]) => Array.from(canvas.getContext('2d').getImageData(x, y, 1, 1).data), [x, y]);
+  const red = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="20"><rect width="10" height="20" fill="red"/></svg>';
+  const viewport = page.getByLabel(/^Data grid viewport/);
+  await viewport.click({ position: { x: 340, y: 16 }, button: 'right' });
+  await pending.fulfill({ contentType: 'image/svg+xml', body: red });
+  await expect.poll(() => pixel(240, 52)).toEqual([255, 0, 0, 255]); expect(await pixel(220, 52)).toEqual([255, 255, 255, 255]);
+  await expect(page.getByRole('menu', { name: 'Cell actions' })).toBeVisible(); await page.getByRole('menu').press('Escape');
+  await page.evaluate(() => window.grid.setRowHeight(0, 64)); await expect.poll(() => pixel(240, 68)).toEqual([255, 0, 0, 255]);
+  await viewport.evaluate(el => { el.scrollTop = 500; }); await expect.poll(() => pixel(240, 68)).toEqual([255, 0, 0, 255]);
+  expect(await page.evaluate(async () => {
+    window.grid.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Dirty' }]);
+    const next = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await next(); const partial = document.querySelector('canvas').toDataURL(); window.grid.render(); await next(); return partial === document.querySelector('canvas').toDataURL();
+  })).toBe(true);
+  await page.evaluate(() => window.grid.updateCells([{ rowIndex: 0, columnKey: 'avatar', value: window.blueImage }]));
+  await expect.poll(() => pixel(240, 68)).toEqual([0, 0, 255, 255]);
+  await page.evaluate(() => window.grid.updateCells([{ rowIndex: 0, columnKey: 'avatar', value: '/later.svg' }]));
+  await expect.poll(() => !!later).toBe(true); await page.evaluate(() => window.grid.destroy());
+  await later.fulfill({ contentType: 'image/svg+xml', body: red });
+  await expect(page.locator('canvas')).toHaveCount(0); expect(errors).toEqual([]);
+});

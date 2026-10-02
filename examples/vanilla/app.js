@@ -1,13 +1,16 @@
 import { createGrid } from '@acheron-grid/canvas';
 import { LocalDataSource } from '@acheron-grid/core';
 
+const avatars = ['#0f766e', '#2563eb', '#7c3aed'].map(color => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect width="48" height="48" rx="10" fill="${color}"/><circle cx="24" cy="17" r="8" fill="white"/><path d="M10 42c0-16 28-16 28 0" fill="white"/></svg>`));
+
 const columns = [{ key: 'id', title: 'Record ID' }, { key: 'name', title: 'Name', editable: true, parse: text => { if (!text.trim()) throw new Error('Name is required.'); return text; } },
   { key: 'status', title: 'Status', editable: true, parse: text => { if (!['Review', 'Active'].includes(text)) throw new Error('Invalid status.'); return text; } },
   { key: 'approved', title: 'Approved', editable: true, parse: text => { if (!['true', 'false'].includes(text)) throw new Error('Invalid boolean.'); return text === 'true'; } },
-  ...Array.from({ length: 4 }, (_, index) => ({ key: `metric${index}`, title: `Metric ${index + 1}` }))];
+  { key: 'avatar', title: 'Avatar' },
+  ...Array.from({ length: 3 }, (_, index) => ({ key: `metric${index}`, title: `Metric ${index + 1}` }))];
 const source = new LocalDataSource(Array.from({ length: 10_000 }, (_, index) => ({
-  id: `AG-${String(index + 1).padStart(5, '0')}`, name: `Record ${index + 1}`, status: index % 4 === 0 ? 'Review' : 'Active', approved: index % 3 === 0,
-  ...Object.fromEntries(Array.from({ length: 4 }, (_, metric) => [`metric${metric}`, (index + 1) * (metric + 1)])),
+  id: `AG-${String(index + 1).padStart(5, '0')}`, name: `Record ${index + 1}`, status: index % 4 === 0 ? 'Review' : 'Active', approved: index % 3 === 0, avatar: avatars[index % avatars.length],
+  ...Object.fromEntries(Array.from({ length: 3 }, (_, metric) => [`metric${metric}`, (index + 1) * (metric + 1)])),
 })), row => row.id);
 const activity = document.querySelector('#activity');
 const appearance = document.querySelector('#appearance');
@@ -30,6 +33,7 @@ function mount() {
         activity.textContent = `Frozen: ${event.rows} row(s), ${event.columns} column(s).`;
       }
     },
+    imageColumns: ['avatar'],
     columnEditors: { status: { type: 'select', values: ['Review', 'Active'] }, approved: { type: 'checkbox' } },
     renderCell: (ctx, cell) => {
       if (cell.columnKey !== 'status') return false;
@@ -39,6 +43,7 @@ function mount() {
       ctx.fillText(String(cell.value), cell.x + 18, cell.y + cell.height / 2); return true;
     },
   });
+  grid.setColumnWidth(3, 100); grid.setColumnWidth(4, 80);
 }
 appearance.addEventListener('change', () => { mount(); activity.textContent = 'View reset. Edited values remain; selection and undo history cleared.'; });
 frozen.addEventListener('change', () => {

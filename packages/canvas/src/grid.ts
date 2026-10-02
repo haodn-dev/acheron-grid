@@ -34,6 +34,7 @@ export interface GridTheme {
 export type ColumnEditor = { readonly type: 'select'; readonly values: readonly string[] } | { readonly type: 'checkbox' };
 export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 'resolveCellPermission' | 'onEvent' | 'allowLockChanges' | 'frozenRows' | 'frozenColumns'> {
   theme?: Partial<GridTheme>;
+  imageColumns?: readonly string[];
   columnEditors?: Readonly<Record<string, ColumnEditor>>;
   multilineEditor?: boolean;
   wrapText?: boolean;
@@ -106,6 +107,11 @@ export function createGrid(options: GridOptions): Grid {
     } else render();
   } });
   const { columns, rowCount, rows: rowAxis, columnsLayout: columnAxis } = engine;
+  if (options.imageColumns !== undefined && !Array.isArray(options.imageColumns)) throw new TypeError('Image columns must be column keys.');
+  const imageColumns = new Set(options.imageColumns ?? []);
+  for (const key of imageColumns) if (!columns.some(column => column.key === key)) throw new TypeError('Unknown image column.');
+  const imageCache = new Map<string, { image: HTMLImageElement; state: 'loading' | 'ready' | 'error' }>();
+  const visibleImages = new Set<string>();
   const columnEditors = new Map<string, ColumnEditor>();
   for (const [key, config] of Object.entries(options.columnEditors ?? {})) {
     const column = columns.find(column => column.key === key);
@@ -540,7 +546,7 @@ export function createGrid(options: GridOptions): Grid {
 
   function invalidate(changes: readonly { rowIndex: number; columnKey: string }[]): void {
     const selection = engine.getSelection();
-    for (const change of changes) dirty.set(JSON.stringify([change.rowIndex, change.columnKey]), change);
+    for (const change of changes) { dirty.set(JSON.stringify([change.rowIndex, change.columnKey]), change); if (imageColumns.has(change.columnKey)) fullDraw = true; }
     if (selection) {
       const column = columns[selection.columnIndex]!;
       const value = engine.getValue(selection.rowIndex, column.key);
@@ -864,6 +870,7 @@ export function createGrid(options: GridOptions): Grid {
       ctx.fillStyle = theme.background;
       ctx.fillRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
     }
+    if (!header && imageColumns.has(columns[columnIndex]!.key)) { imageCell(value, x, y, width, height); highlightSearch(x, y, width, height, rowIndex, columnIndex); return; }
     if (!header && columnEditors.get(columns[columnIndex]!.key)?.type === 'checkbox' && typeof value === 'boolean') {
       const size = Math.max(0, Math.min(16, width - 20, height - 8)); const left = x + 10; const top = y + (height - size) / 2;
       ctx.save(); ctx.strokeStyle = theme.textColor; ctx.lineWidth = 1;
@@ -897,6 +904,43 @@ export function createGrid(options: GridOptions): Grid {
     } else ctx.fillText(text, x + 10, y + height / 2);
     ctx.restore();
     if (!header) highlightSearch(x, y, width, height, rowIndex, columnIndex);
+  }
+
+  function imageCell(value: unknown, x: number, y: number, width: number, height: number): void {
+    if (value == null || value === '') return;
+    let item: { image: HTMLImageElement; state: 'loading' | 'ready' | 'error' } | undefined;
+    try {
+      if (typeof value !== 'string') throw new TypeError('Image URL must be a string.');
+      const url = new win.URL(value, doc.baseURI);
+      if (!['http:', 'https:', 'blob:', 'data:'].includes(url.protocol) || (url.protocol === 'data:' && !/^data:image\//i.test(value))) throw new TypeError('Unsupported image URL.');
+      const src = url.href;
+      visibleImages.add(src); item = imageCache.get(src);
+      if (!item) {
+        const image = doc.createElement('img');
+        const record = { image, state: 'loading' as 'loading' | 'ready' | 'error' };
+        imageCache.set(src, record); item = record;
+        image.crossOrigin = 'anonymous'; image.referrerPolicy = 'no-referrer'; image.decoding = 'async';
+        const loaded = (state: 'ready' | 'error') => {
+          if (destroyed || imageCache.get(src) !== record) return;
+          record.state = state; fullDraw = true; schedule();
+        };
+        image.onload = () => loaded(image.naturalWidth && image.naturalHeight ? 'ready' : 'error');
+        image.onerror = () => loaded('error');
+        image.src = src;
+      }
+    } catch { /* Invalid URLs use the same unavailable state as failed image loads. */ }
+    const ctx = context!;
+    ctx.save(); ctx.beginPath(); ctx.rect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2)); ctx.clip();
+    if (item?.state === 'ready') {
+      const image = item.image;
+      const ratio = Math.max(0, Math.min((width - 16) / image.naturalWidth, (height - 8) / image.naturalHeight));
+      const w = image.naturalWidth * ratio; const h = image.naturalHeight * ratio;
+      if (ratio > 0) ctx.drawImage(image, x + (width - w) / 2, y + (height - h) / 2, w, h);
+    } else {
+      ctx.font = theme.font; ctx.fillStyle = theme.textColor; ctx.textBaseline = 'middle';
+      ctx.fillText(item?.state === 'loading' ? 'Loading…' : 'Image unavailable', x + 8, y + height / 2);
+    }
+    ctx.restore(); ctx.beginPath();
   }
 
   function highlightSearch(x: number, y: number, width: number, height: number, row: number, col: number): void {
@@ -974,6 +1018,7 @@ export function createGrid(options: GridOptions): Grid {
       return;
     }
     fullDraw = false;
+    visibleImages.clear();
     dirty.clear();
     const ratio = win.devicePixelRatio || 1;
     const height = Math.min(root.clientHeight, view.height + headerHeight);
@@ -1009,6 +1054,13 @@ export function createGrid(options: GridOptions): Grid {
       context!.clip();
       for (let col = band.start; col < band.end; col++) cell(columns[col]!.title, columnAxis.position(col) + band.offset, 0, columnAxis.size(col), headerHeight, true);
       context!.restore();
+    }
+    releaseUnusedImages();
+  }
+
+  function releaseUnusedImages(): void {
+    for (const [src, record] of imageCache) if (!visibleImages.has(src)) {
+      record.image.onload = record.image.onerror = null; imageCache.delete(src);
     }
   }
 
@@ -1102,6 +1154,7 @@ export function createGrid(options: GridOptions): Grid {
       closeMenu();
       if (searchTimer !== undefined) win.clearTimeout(searchTimer);
       searchMatches.clear();
+      visibleImages.clear(); releaseUnusedImages();
       root.removeEventListener('keydown', searchShortcut, true);
       sizeDialog?.remove();
       sizeDialog = null;
