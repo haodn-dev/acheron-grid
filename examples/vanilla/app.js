@@ -44,4 +44,5 @@ for (const action of ['undo', 'redo']) document.querySelector(`#${action}`).addE
   try { if (!grid[action]()) activity.textContent = `Nothing to ${action}.`; }
   catch (error) { activity.textContent = error instanceof Error ? error.message : 'Action failed.'; }
 });
+document.querySelector('#find').addEventListener('click', () => grid.openSearch());
 mount();

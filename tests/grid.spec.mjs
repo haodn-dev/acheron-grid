@@ -1107,3 +1107,40 @@ test('multiline overlay grows, preserves invalid drafts, inserts newlines and sa
     return partial === document.querySelector('canvas').toDataURL();
   })).toBe(true);
 });
+
+
+test('grid search counts selectable local matches, reveals panes, wraps navigation and refreshes after edits', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.source = new LocalDataSource(Array.from({ length: 100 }, (_, id) => ({ id, name: id === 0 || id === 99 || id === 5 ? 'Needle' : 'Other', team: id === 99 ? 'NEEDLE' : 'Ops' })), row => row.id);
+    window.grid = createGrid({ container: document.querySelector('#grid'), frozenRows: 1, frozenColumns: 1,
+      resolveCellPermission: cell => cell.rowIndex === 5 ? { selectable: false } : undefined,
+      columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true, parse: text => { if (!text) throw new Error('Required'); return text; } }, { key: 'team', title: 'Team' }], dataSource: window.source });
+  });
+  const viewport = page.getByLabel(/^Data grid viewport/); await viewport.focus(); await viewport.press('Control+f');
+  const search = page.getByRole('search', { name: 'Find in grid' }); const input = search.getByRole('searchbox');
+  await input.fill('needle'); await expect(search.getByRole('status')).toHaveText('1 of 3');
+  expect(await page.evaluate(() => window.grid.getSelection())).toMatchObject({ rowIndex: 0, columnIndex: 1 });
+  await input.press('Enter'); await expect(search.getByRole('status')).toHaveText('2 of 3');
+  expect(await page.evaluate(() => window.grid.getSelection())).toMatchObject({ rowIndex: 99, columnIndex: 1 });
+  expect(await viewport.evaluate(el => el.scrollTop)).toBeGreaterThan(2000);
+  await search.getByRole('button', { name: 'Next match' }).click(); await expect(search.getByRole('status')).toHaveText('3 of 3');
+  await input.press('Enter'); await expect(search.getByRole('status')).toHaveText('1 of 3');
+  await input.press('Shift+Enter'); await expect(search.getByRole('status')).toHaveText('3 of 3');
+  await page.evaluate(() => window.grid.updateCells([{ rowIndex: 99, columnKey: 'team', value: 'Ops' }]));
+  await expect(search.getByRole('status')).toHaveText('1 of 2');
+  const pixels = await page.evaluate(async () => {
+    const next = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await next(); const partial = document.querySelector('canvas').toDataURL(); window.grid.render(); await next();
+    return partial === document.querySelector('canvas').toDataURL();
+  }); expect(pixels).toBe(true);
+  await input.fill('missing'); await expect(search.getByRole('status')).toHaveText('No matches'); await expect(search.getByRole('button', { name: 'Next match' })).toBeDisabled();
+  await input.press('Escape'); await expect(search).toBeHidden(); await expect(viewport).toBeFocused();
+  await viewport.press('Control+Home'); await viewport.press('ArrowRight'); await viewport.press('F2');
+  const editor = page.getByRole('textbox'); await editor.fill(''); await editor.press('Control+f');
+  await expect(editor).toBeVisible(); await expect(page.getByRole('alert')).toHaveText('Required'); await expect(search).toBeHidden();
+  await editor.press('Escape'); await viewport.press('Meta+f'); await expect(search).toBeVisible();
+  await input.fill('Needle'); await expect(search.getByRole('status')).toHaveText('1 of 2');
+  await page.evaluate(() => window.grid.destroy()); await expect(search).toHaveCount(0);
+});

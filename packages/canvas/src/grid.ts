@@ -49,6 +49,7 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
 }
 export interface Grid {
   render(): void;
+  openSearch(): void;
   updateCells(updates: readonly CellUpdate[]): void;
   undo(): boolean;
   redo(): boolean;
@@ -88,7 +89,7 @@ export function createGrid(options: GridOptions): Grid {
     ...(options.frozenRows === undefined ? {} : { frozenRows: options.frozenRows }),
     ...(options.frozenColumns === undefined ? {} : { frozenColumns: options.frozenColumns }),
     onInvalidate(change) {
-    if (change.type === 'cells') invalidate(change.cells);
+    if (change.type === 'cells') { invalidate(change.cells); if (!searchBar.hidden) refreshSearch(); }
     else if (change.type === 'layout') {
       spacer.style.width = String(columnAxis.position(columns.length)) + 'px';
       spacer.style.height = String(rowAxis.position(rowCount)) + 'px';
@@ -104,7 +105,7 @@ export function createGrid(options: GridOptions): Grid {
   scroller.style.cssText = `position:absolute;inset:${headerHeight}px 0 0;overflow:auto;overscroll-behavior:contain`;
   scroller.tabIndex = 0;
   scroller.setAttribute('aria-label', viewportLabel);
-  scroller.setAttribute('aria-keyshortcuts', 'Shift+F8');
+  scroller.setAttribute('aria-keyshortcuts', 'Shift+F8 Control+f Meta+f');
   const spacer = doc.createElement('div');
   spacer.style.width = `${columnAxis.position(columns.length)}px`;
   spacer.style.position = 'relative';
@@ -148,6 +149,107 @@ export function createGrid(options: GridOptions): Grid {
   selectionStatus.setAttribute('role', 'status');
   selectionStatus.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap';
   root.append(selectionStatus);
+
+  const searchBar = doc.createElement('div');
+  searchBar.hidden = true;
+  searchBar.setAttribute('role', 'search');
+  searchBar.setAttribute('aria-label', 'Find in grid');
+  searchBar.style.cssText = 'position:absolute;top:4px;right:20px;max-width:calc(100% - 24px);z-index:4;padding:6px;border:1px solid var(--acheron-grid-line-color);border-radius:6px;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);box-shadow:0 4px 12px #0f172a26';
+  const searchInput = doc.createElement('input');
+  searchInput.type = 'search';
+  searchInput.setAttribute('aria-label', 'Find in grid');
+  searchInput.style.cssText = 'width:140px;max-width:35vw;padding:4px;font:inherit';
+  const searchStatus = doc.createElement('span');
+  searchStatus.setAttribute('role', 'status');
+  searchStatus.style.cssText = 'display:inline-block;padding:0 8px';
+  const searchPrevious = doc.createElement('button');
+  const searchNext = doc.createElement('button');
+  const searchClose = doc.createElement('button');
+  for (const [button, label, text] of [[searchPrevious, 'Previous match', '↑'], [searchNext, 'Next match', '↓'], [searchClose, 'Close search', '×']] as const) {
+    button.type = 'button'; button.textContent = text; button.setAttribute('aria-label', label);
+    button.style.cssText = 'padding:4px 8px;margin-left:2px;font:inherit;color:inherit;background:var(--acheron-background);border:1px solid var(--acheron-grid-line-color);border-radius:3px';
+  }
+  searchBar.append(searchInput, searchStatus, searchPrevious, searchNext, searchClose);
+  root.append(searchBar);
+  const searchMatches = new Set<number>();
+  let searchCurrent = -1;
+  let searchTimer: number | undefined;
+
+  function updateSearchStatus(): void {
+    let ordinal = 0;
+    for (const index of searchMatches) { ordinal++; if (index === searchCurrent) break; }
+    searchStatus.textContent = searchMatches.size ? `${ordinal} of ${searchMatches.size}` : searchInput.value ? 'No matches' : 'Find text';
+    searchPrevious.disabled = searchNext.disabled = !searchMatches.size;
+  }
+
+  function refreshSearch(navigate = false): void {
+    if (searchTimer !== undefined) win.clearTimeout(searchTimer);
+    searchTimer = undefined;
+    if (destroyed || searchBar.hidden) return;
+    searchMatches.clear();
+    const query = searchInput.value.toLocaleLowerCase();
+    try {
+      if (query) for (let row = 0; row < rowCount; row++) for (let col = 0; col < columns.length; col++) {
+        const value = engine.getValue(row, columns[col]!.key);
+        if (value != null && String(value).toLocaleLowerCase().includes(query) && engine.getCellPermission(row, col).selectable) searchMatches.add(row * columns.length + col);
+      }
+      if (!searchMatches.has(searchCurrent)) searchCurrent = searchMatches.values().next().value ?? -1;
+      updateSearchStatus();
+      if (navigate && searchCurrent >= 0) select(Math.floor(searchCurrent / columns.length), searchCurrent % columns.length);
+    } catch (error) {
+      searchMatches.clear(); searchCurrent = -1;
+      searchPrevious.disabled = searchNext.disabled = true;
+      searchStatus.textContent = error instanceof Error ? error.message : 'Search failed.';
+    }
+    render();
+  }
+
+  function moveSearch(backward = false): void {
+    if (!finishEdit(true)) return;
+    const pending = searchTimer !== undefined;
+    refreshSearch(pending);
+    if (!searchMatches.size || (pending && !backward)) return;
+    let next = backward ? [...searchMatches].at(-1)! : searchMatches.values().next().value!;
+    for (const index of searchMatches) {
+      if (backward && index < searchCurrent) next = index;
+      if (!backward && index > searchCurrent) { next = index; break; }
+    }
+    searchCurrent = next;
+    select(Math.floor(next / columns.length), next % columns.length);
+    updateSearchStatus(); render();
+  }
+
+  function openSearch(): void {
+    if (destroyed || !finishEdit(true)) return;
+    closeMenu(); endResize(); searchBar.hidden = false;
+    refreshSearch(); searchInput.focus({ preventScroll: true }); searchInput.select();
+  }
+
+  function closeSearch(): void {
+    if (searchTimer !== undefined) win.clearTimeout(searchTimer);
+    searchTimer = undefined; searchBar.hidden = true; searchMatches.clear(); searchCurrent = -1;
+    render(); scroller.focus({ preventScroll: true });
+  }
+
+  function searchShortcut(event: KeyboardEvent): void {
+    if (!event.isComposing && (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'f') {
+      event.preventDefault(); event.stopPropagation(); openSearch();
+    }
+  }
+  searchInput.addEventListener('input', () => {
+    if (searchTimer !== undefined) win.clearTimeout(searchTimer);
+    searchCurrent = -1;
+    searchTimer = win.setTimeout(() => refreshSearch(true), 150);
+  });
+  searchBar.addEventListener('keydown', event => {
+    if (event.isComposing) return;
+    if (event.key === 'Escape') { event.preventDefault(); closeSearch(); }
+    if (event.key === 'Enter') { event.preventDefault(); moveSearch(event.shiftKey); }
+    event.stopPropagation();
+  });
+  searchPrevious.addEventListener('click', () => moveSearch(true));
+  searchNext.addEventListener('click', () => moveSearch());
+  searchClose.addEventListener('click', closeSearch);
 
   function announceSelection(): void {
     const selection = engine.getSelection();
@@ -689,7 +791,7 @@ export function createGrid(options: GridOptions): Grid {
         ctx.restore();
         ctx.beginPath();
       }
-      if (handled) return;
+      if (handled) { highlightSearch(x, y, width, height, rowIndex, columnIndex); return; }
       ctx.clearRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
       ctx.fillStyle = theme.background;
       ctx.fillRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
@@ -717,6 +819,13 @@ export function createGrid(options: GridOptions): Grid {
       if (top + lineHeight <= y + height) ctx.fillText(line, x + 10, top);
     } else ctx.fillText(text, x + 10, y + height / 2);
     ctx.restore();
+    if (!header) highlightSearch(x, y, width, height, rowIndex, columnIndex);
+  }
+
+  function highlightSearch(x: number, y: number, width: number, height: number, row: number, col: number): void {
+    if (!searchMatches.has(row * columns.length + col)) return;
+    context!.save(); context!.strokeStyle = '#d97706'; context!.lineWidth = 2;
+    context!.strokeRect(x + 3, y + 3, Math.max(0, width - 6), Math.max(0, height - 6)); context!.restore();
   }
 
   function viewport() {
@@ -866,6 +975,7 @@ export function createGrid(options: GridOptions): Grid {
   scroller.addEventListener('scroll', render, { passive: true });
   scroller.addEventListener('pointerdown', onPointerDown);
   scroller.addEventListener('contextmenu', onContextMenu);
+  root.addEventListener('keydown', searchShortcut, true);
   root.addEventListener('pointerdown', onHeaderPointerDown, true);
   root.addEventListener('keydown', cancelResizeKey, true);
   root.addEventListener('pointermove', onHeaderPointerMove);
@@ -888,7 +998,8 @@ export function createGrid(options: GridOptions): Grid {
     if (event.target !== editor && cell && selection?.rowIndex === cell.row && selection.columnIndex === cell.col && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) beginEdit();
   }
   return {
-    render,
+    render: () => { if (!searchBar.hidden) refreshSearch(); else render(); },
+    openSearch,
     updateCells,
     undo: () => replay(false),
     redo: () => replay(true),
@@ -905,6 +1016,9 @@ export function createGrid(options: GridOptions): Grid {
       engine.destroy();
       destroyed = true;
       closeMenu();
+      if (searchTimer !== undefined) win.clearTimeout(searchTimer);
+      searchMatches.clear();
+      root.removeEventListener('keydown', searchShortcut, true);
       sizeDialog?.remove();
       sizeDialog = null;
       endResize();

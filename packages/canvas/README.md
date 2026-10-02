@@ -250,3 +250,9 @@ Drag within 8px of a column header edge for a vertical guide, or within the firs
 Set `multilineEditor: true` to use an expanding textarea instead of the default input. It grows with its contents within the edited cell's viewport pane, preserving frozen panes and header boundaries. Scrolling the anchor cell offscreen hides the overlay while retaining its draft. Custom factories still take precedence; their textareas use the same growth and keyboard handling.
 
 Set `wrapText: true` to draw text on multiple lines within existing cell bounds. Both options default to `false`. Wrapping respects explicit newlines and available width; row heights do not change automatically. Resize rows to show more lines. Custom renderers retain control of their content. These settings apply to the grid at construction; per-column wrapping and async validation remain unsupported.
+
+## Find in grid
+
+Call `grid.openSearch()` or press Ctrl/Cmd+F while focused inside the grid. Search is case-insensitive literal substring matching of raw values converted to strings, in row/column order. It searches local synchronous values, excluding cells denied selection; it does not filter rows or search column titles. Enter/Shift+Enter and the next/previous buttons wrap around matches. The count and amber outlines identify matches; the active result is selected and revealed using the existing pane geometry. Escape or Close search removes outlines and returns focus to the viewport, preserving selection.
+
+An invalid editor draft blocks opening search. Search refreshes after grid commands; call `grid.render()` after external data/policy changes. Query input is debounced by 150ms. The scan costs O(rows × columns) per query/navigation, with O(matches) temporary coordinates; it is intended for modest local datasets, not remote/lazy sources or huge datasets. Search errors appear in the search status, without modifying data. There is no regex, replacement, server search or search index.
