@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { createGridEngine, LocalDataSource } from '@acheron-grid/core';
+import { createGridEngine, LocalDataSource, LocalDataView } from '@acheron-grid/core';
 
 function fixture(options = {}) {
   const source = new LocalDataSource([{ id: 1, name: 'Ada', score: 1 }, { id: 2, name: 'Grace', score: 2 }], row => row.id);
@@ -465,4 +465,39 @@ test('million-row column formatting retains one sparse target and reads no sourc
   engine.format([{ scope: 'column', columnIndex: 0 }], { background: '#123456' }); assert.deepEqual(engine.getFormat(999_999, 0), { background: '#123456' });
   assert.equal(events.at(-1).changes.length, 1); assert.equal(reads, 0); assert.equal(identities, 0);
   engine.undo(); assert.deepEqual(engine.getFormat(999_999, 0), {}); engine.redo(); assert.equal(engine.getFormat(0, 0).background, '#123456');
+});
+
+
+test('scope ranges are atomic, sparse and respect endpoint selection permissions', () => {
+  const events = []; let reads = 0;
+  const engine = createGridEngine({ columns: [{ key: 'a', title: 'A' }, { key: 'b', title: 'B' }],
+    dataSource: { getRowCount: () => 1_000_000, getRowId: row => row, getValue: () => { reads++; return ''; } },
+    resolveCellPermission: cell => cell.rowIndex === 4 ? { selectable: false } : undefined, onEvent: event => events.push(event) });
+  const range = { startRow: 0, endRow: 999999, startColumn: 1, endColumn: 1 };
+  assert.equal(engine.selectRange(range), true); range.endRow = 5;
+  assert.deepEqual(engine.getSelectionRange(), { ...range, endRow: 999999 });
+  assert.equal(events.length, 1); assert.equal(reads, 0);
+  assert.equal(engine.selectRange({ startRow: 0, endRow: 4, startColumn: 0, endColumn: 1 }), false);
+  assert.equal(engine.getSelectionRange().endRow, 999999);
+  assert.throws(() => engine.selectRange({ startRow: 2, endRow: 1, startColumn: 0, endColumn: 1 }), RangeError);
+  assert.equal(events.length, 1); engine.destroy();
+});
+
+test('local views combine filters, stable numeric sorting and mapped atomic writes', () => {
+  const source = new LocalDataSource([{ id: 'a', score: 10, team: 'Design' }, { id: 'b', score: 2, team: 'design' }, { id: 'c', score: null, team: '' }, { id: 'd', score: 2, team: 'Ops' }], row => row.id);
+  const view = new LocalDataView(source, { sort: { columnKey: 'score', direction: 'asc' }, filters: [{ columnKey: 'team', query: 'DES', operator: 'contains' }] });
+  assert.equal(view.getRowCount(), 2); assert.equal(view.getRowId(0), 'b'); assert.equal(view.getRowId(1), 'a');
+  view.setValues([{ rowIndex: 0, columnKey: 'score', value: 9 }, { rowIndex: 1, columnKey: 'score', value: 3 }]);
+  assert.equal(source.getValue(1, 'score'), 9); assert.equal(source.getValue(0, 'score'), 3);
+  assert.equal(view.getRowId(0), 'b'); // reapply is explicit, so a mounted view keeps row identity
+  const sorted = new LocalDataView(source, { sort: { columnKey: 'score', direction: 'desc' } });
+  assert.deepEqual(Array.from({ length: 4 }, (_, index) => sorted.getRowId(index)), ['b', 'a', 'd', 'c']);
+  assert.equal(new LocalDataView(source, { filters: [{ columnKey: 'team', query: '', operator: 'empty' }] }).getRowId(0), 'c');
+  assert.equal(new LocalDataView(source, { filters: [{ columnKey: 'team', query: '', operator: 'not-empty' }, { columnKey: 'score', query: '2', operator: 'equals' }] }).getRowId(0), 'd');
+  assert.throws(() => view.setValues([{ rowIndex: 0, columnKey: 'score', value: 12 }, { rowIndex: 99, columnKey: 'score', value: 5 }]), RangeError);
+  assert.equal(source.getValue(1, 'score'), 9);
+  assert.throws(() => new LocalDataView(source, { sort: { columnKey: 'score', direction: 'bad' } }), TypeError);
+  assert.throws(() => new LocalDataView(source, { filters: [{ columnKey: 'team', query: '', operator: 'bad' }] }), TypeError);
+  const readonly = new LocalDataView({ getRowCount: () => 1, getRowId: () => 0, getValue: () => 'x' });
+  assert.equal(readonly.setValue, undefined); assert.equal(readonly.setValues, undefined);
 });

@@ -267,6 +267,24 @@ export function createGridEngine(options: GridEngineOptions) {
     return changed || rangeChanged || rangesChanged;
   }
 
+  function selectRange(range: SelectionRange): boolean {
+    assertAlive();
+    const { startRow, endRow, startColumn, endColumn } = range;
+    for (const [value, limit] of [[startRow, rowCount], [endRow, rowCount], [startColumn, columns.length], [endColumn, columns.length]]) {
+      if (!Number.isSafeInteger(value) || value! < 0 || value! >= limit!) throw new RangeError('Invalid selection range.');
+    }
+    if (startRow > endRow || startColumn > endColumn) throw new RangeError('Invalid selection range order.');
+    if (!getCellPermission(startRow, startColumn).selectable || !getCellPermission(endRow, endColumn).selectable) return false;
+    const previous = JSON.stringify(getSelectionRanges());
+    const changed = selection?.rowIndex !== startRow || selection?.columnIndex !== startColumn;
+    selection = { rowIndex: startRow, rowId: dataSource.getRowId(startRow), columnIndex: startColumn, columnKey: columns[startColumn]!.key };
+    anchor = { rowIndex: endRow, rowId: dataSource.getRowId(endRow), columnIndex: endColumn, columnKey: columns[endColumn]!.key };
+    retainedRanges.length = 0;
+    const rangeChanged = previous !== JSON.stringify(getSelectionRanges());
+    if (changed || rangeChanged) notifySelection(changed, rangeChanged);
+    return changed || rangeChanged;
+  }
+
   function notifySelection(changed: boolean, rangeChanged: boolean): void {
     const endpoint = getSelection();
     const range = getSelectionRange();
@@ -448,6 +466,7 @@ export function createGridEngine(options: GridEngineOptions) {
     getValue: (row: number, key: string): unknown => dataSource.getValue(row, key),
     getSelection, getSelectionRange, getSelectionRanges, getCellPermission, canEdit, canPaste,
     select: (row: number, col: number, extend = false) => command(() => select(row, col, extend)),
+    selectRange: (range: SelectionRange) => command(() => selectRange(range)),
     addSelection: (row: number, col: number) => command(() => select(row, col, false, true)),
     clearSelection: () => command(clearSelection),
     editCell: (row: number, col: number, text: string) => command(() => editCell(row, col, text)),

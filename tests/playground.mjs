@@ -26,3 +26,25 @@ test('vanilla app edits, replays and remounts without Laravel or duplicated grid
   expect((await request.post('/')).status()).toBe(405);
   expect(errors).toEqual([]);
 });
+
+
+test('column menus apply local sort and combined filters, map edits, and recover an empty view', async ({ page }) => {
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  const viewport = page.getByRole('grid'); const cell = page.getByRole('gridcell');
+  const header = async (x = 240) => { const bounds = await viewport.boundingBox(); await page.mouse.click(bounds.x + x, bounds.y - 18, { button: 'right' }); };
+  await header(); await page.getByRole('menuitem', { name: 'Sort descending…', exact: true }).click();
+  await page.getByRole('button', { name: 'Apply view', exact: true }).click();
+  await viewport.press('ArrowRight'); await viewport.press('ArrowRight'); await expect(cell).toHaveText('Name: Record 10000');
+  await viewport.press('F2'); await page.getByRole('textbox', { name: 'Edit row 1, Name' }).fill('Mapped edit'); await page.getByRole('textbox', { name: 'Edit row 1, Name' }).press('Enter');
+  await header(); await page.getByRole('menuitem', { name: 'Filter column…', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Filter condition' }).selectOption('equals'); await page.getByRole('searchbox', { name: 'Contains text' }).fill('Mapped edit');
+  await page.getByRole('button', { name: 'Apply view', exact: true }).click(); await expect(viewport).toHaveAttribute('aria-rowcount', '1');
+  await header(400); await page.getByRole('menuitem', { name: 'Filter column…', exact: true }).click();
+  await page.getByRole('searchbox', { name: 'Contains text' }).fill('no-match'); await page.getByRole('button', { name: 'Apply view', exact: true }).click();
+  await expect(viewport).toHaveAttribute('aria-rowcount', '0'); await expect(viewport).toBeFocused();
+  await header(); await page.getByRole('menuitem', { name: 'Clear sort and filters…', exact: true }).click();
+  await page.getByRole('button', { name: 'Apply view', exact: true }).click(); await expect(viewport).toHaveAttribute('aria-rowcount', '10000');
+  await viewport.press('Control+End'); await expect(cell).toHaveText('Metric 3: 30000'); await viewport.press('Home'); await viewport.press('ArrowRight'); await expect(cell).toHaveText('Name: Mapped edit');
+  expect(errors).toEqual([]);
+});

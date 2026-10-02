@@ -564,7 +564,7 @@ test('single cell selection, navigation, scrolling and cleanup', async ({ page }
   expect(await selection()).toBeNull();
 });
 
-test('ignores header, blank space, modified keys and empty data', async ({ page }) => {
+test('header selects a column while blank space, modified keys and empty data remain safe', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
     const { createGrid } = await import('/canvas/index.js');
@@ -575,6 +575,8 @@ test('ignores header, blank space, modified keys and empty data', async ({ page 
   const viewport = page.getByLabel(/^Read-only data grid viewport/);
   const bounds = await viewport.boundingBox();
   await page.mouse.click(bounds.x + 20, bounds.y - 15);
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toEqual({ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 });
+  await viewport.press('Escape');
   await viewport.click({ position: { x: 300, y: 100 } });
   expect(await page.evaluate(() => window.grid.getSelection())).toBeNull();
   await viewport.focus();
@@ -1399,7 +1401,7 @@ test('active-cell ARIA mirror follows selection, history, locks and focus with b
 });
 
 
-test('state badges and hover distinguish scoped locks, permissions and frozen boundaries', async ({ page }) => {
+test('state icons and hover distinguish scoped locks, permissions and frozen boundaries', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
     const { createGrid } = await import('/canvas/index.js');
@@ -1436,4 +1438,35 @@ test('state badges and hover distinguish scoped locks, permissions and frozen bo
   await page.mouse.move(bounds.x + 240, bounds.y - 18); await expect(root).toHaveAttribute('title', '');
   await page.mouse.move(bounds.x + 240, bounds.y + 48); await expect(root).toHaveAttribute('title', 'Cell disabled by permissions');
   await page.mouse.move(bounds.x + 160, bounds.y - 18); await expect(root).toHaveAttribute('title', 'Drag the column boundary to resize width');
+});
+
+
+test('whole axes select through headers, row edge and keyboard with continuous freeze overlays', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.grid = createGrid({ container: document.querySelector('#grid'), frozenRows: 1, frozenColumns: 1,
+      columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true }],
+      dataSource: new LocalDataSource(Array.from({ length: 100 }, (_, id) => ({ id, name: 'Ada' })), row => row.id) });
+    window.prevented = false;
+    document.querySelector('#grid canvas').parentElement.addEventListener('contextmenu', event => { window.prevented = event.defaultPrevented; });
+  });
+  const viewport = page.getByRole('grid'); const bounds = await viewport.boundingBox();
+  await page.mouse.click(bounds.x + 240, bounds.y - 18);
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toEqual({ startRow: 0, endRow: 99, startColumn: 1, endColumn: 1 });
+  await viewport.press('Shift+Space');
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toEqual({ startRow: 0, endRow: 0, startColumn: 0, endColumn: 1 });
+  await viewport.press('Control+Space');
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toEqual({ startRow: 0, endRow: 99, startColumn: 0, endColumn: 0 });
+  await viewport.click({ position: { x: 5, y: 80 } });
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toEqual({ startRow: 2, endRow: 2, startColumn: 0, endColumn: 1 });
+  await page.mouse.click(bounds.x + 240, bounds.y - 18, { button: 'right' });
+  await expect(page.getByRole('menu', { name: 'Column actions' })).toBeVisible();
+  expect(await page.evaluate(() => window.prevented)).toBe(true);
+  await page.getByRole('menu').press('Escape');
+  const vertical = page.locator('[data-grid-freeze-line="column"]'); const horizontal = page.locator('[data-grid-freeze-line="row"]');
+  await expect(vertical).toBeVisible(); await expect(horizontal).toBeVisible();
+  expect(await vertical.evaluate(el => [el.style.top, el.style.height])).toEqual(['0px', `${await viewport.evaluate(el => el.clientHeight) + 36}px`]);
+  expect(await horizontal.evaluate(el => el.style.width)).toBe(`${await viewport.evaluate(el => el.clientWidth)}px`);
+  await page.evaluate(() => window.grid.setFrozen(0, 0)); await expect(vertical).toBeHidden(); await expect(horizontal).toBeHidden();
 });

@@ -62,3 +62,54 @@ export class LocalDataSource<T extends Record<string, unknown>> implements DataS
     }
   }
 }
+
+
+export interface LocalViewOptions {
+  readonly sort?: { readonly columnKey: string; readonly direction: 'asc' | 'desc' };
+  readonly filters?: readonly { readonly columnKey: string; readonly query: string; readonly operator?: 'contains' | 'equals' | 'not-empty' | 'empty' }[];
+}
+
+/** An immutable local row projection. Build a new view to reapply sorting/filtering after edits. */
+export class LocalDataView implements DataSource {
+  private readonly indices: number[];
+  readonly setValue?: (index: number, key: string, value: unknown) => void;
+  readonly setValues?: (updates: readonly CellUpdate[]) => void;
+
+  constructor(private readonly source: DataSource, options: LocalViewOptions = {}) {
+    const count = source.getRowCount();
+    if (!Number.isSafeInteger(count) || count < 0) throw new RangeError('Invalid local row count.');
+    const filters = options.filters ?? [];
+    if (!Array.isArray(filters) || filters.some(filter => !filter || typeof filter.columnKey !== 'string' || !filter.columnKey || typeof filter.query !== 'string' || (filter.operator !== undefined && !['contains', 'equals', 'not-empty', 'empty'].includes(filter.operator)))) throw new TypeError('Invalid local filters.');
+    const sort = options.sort;
+    if (sort && (typeof sort.columnKey !== 'string' || !sort.columnKey || !['asc', 'desc'].includes(sort.direction))) throw new TypeError('Invalid local sort.');
+    this.indices = Array.from({ length: count }, (_, index) => index).filter(index => filters.every(filter => {
+      const value = source.getValue(index, filter.columnKey);
+      const empty = value == null || value === '';
+      if (filter.operator === 'empty') return empty;
+      if (filter.operator === 'not-empty') return !empty;
+      if (filter.query === '') return true;
+      if (empty) return false;
+      const text = String(value).toLocaleLowerCase(); const query = filter.query.toLocaleLowerCase();
+      return filter.operator === 'equals' ? text === query : text.includes(query);
+    }));
+    if (sort) {
+      const values = new Map(this.indices.map(index => [index, source.getValue(index, sort.columnKey)]));
+      const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+      this.indices.sort((a, b) => {
+        const left = values.get(a); const right = values.get(b);
+        if (left == null || right == null) return left == null ? (right == null ? a - b : 1) : -1;
+        const order = typeof left === 'number' && typeof right === 'number' ? left - right : collator.compare(String(left), String(right));
+        return (sort.direction === 'asc' ? order : -order) || a - b;
+      });
+    }
+    if (source.setValue) this.setValue = (index, key, value) => source.setValue!(this.sourceIndex(index), key, value);
+    if (source.setValues) this.setValues = updates => source.setValues!(updates.map(update => ({ ...update, rowIndex: this.sourceIndex(update.rowIndex) })));
+  }
+  private sourceIndex(index: number): number {
+    if (!Number.isSafeInteger(index) || index < 0 || index >= this.indices.length) throw new RangeError('Invalid view row index.');
+    return this.indices[index]!;
+  }
+  getRowCount(): number { return this.indices.length; }
+  getRowId(index: number): RowId { return this.source.getRowId(this.sourceIndex(index)); }
+  getValue(index: number, columnKey: string): unknown { return this.source.getValue(this.sourceIndex(index), columnKey); }
+}

@@ -1,5 +1,5 @@
 import { createGrid } from '@acheron-grid/canvas';
-import { LocalDataSource } from '@acheron-grid/core';
+import { LocalDataSource, LocalDataView } from '@acheron-grid/core';
 
 const avatars = ['#0f766e', '#2563eb', '#7c3aed'].map(color => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect width="48" height="48" rx="10" fill="${color}"/><circle cx="24" cy="17" r="8" fill="white"/><path d="M10 42c0-16 28-16 28 0" fill="white"/></svg>`));
 
@@ -17,12 +17,15 @@ const appearance = document.querySelector('#appearance');
 const frozen = document.querySelector('#frozen');
 const formattingLock = document.querySelector('#formatting-lock');
 let grid;
+let view = {};
 
-function mount() {
+function mount(next = view) {
+  const viewSource = new LocalDataView(source, next);
   grid?.destroy();
+  view = next;
   document.querySelector('#range-count').textContent = '0 ranges selected';
-  grid = createGrid({ container: document.querySelector('#grid'), columns, dataSource: source, multilineEditor: true, wrapText: true,
-    frozenRows: frozen.checked ? 1 : 0, frozenColumns: frozen.checked ? 1 : 0,
+  grid = createGrid({ container: document.querySelector('#grid'), columns, dataSource: viewSource, view, onViewChange: next => { mount(next); document.querySelector('#grid [role="grid"]').focus({ preventScroll: true }); activity.textContent = `New view applied. Values remain; selection, locks, colors and undo history reset.`; }, multilineEditor: true, wrapText: true,
+    frozenRows: frozen.checked ? Math.min(1, viewSource.getRowCount()) : 0, frozenColumns: frozen.checked ? 1 : 0,
     theme: appearance.value === 'teal' ? { headerBackground: '#e0f2f1', headerTextColor: '#115e59', selectionColor: '#0f766e' } : {},
     resolveCellPermission: () => formattingLock.checked ? { formatting: false } : undefined,
     onSelectionRangesChange: ranges => { document.querySelector('#range-count').textContent = `${ranges.length} ranges selected`; },
