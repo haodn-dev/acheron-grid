@@ -71,7 +71,7 @@ State and history commit before renderer invalidation, then the domain event. Fa
 
 ## Frozen panes and viewport geometry
 
-Set construction options `frozenRows` / `frozenColumns` to safe integers from zero to the row/column count (default zero). They freeze leading data rows/left columns; the header is separate. Counts are readonly; changing them requires remounting. Resize still updates sparse sizes. Prefixes larger than the viewport are clipped, with no scrolling area on that dimension; they are not reduced automatically.
+Set construction options `frozenRows` / `frozenColumns` to safe integers from zero to the row/column count (default zero). They freeze leading data rows/left columns; the header is separate. Readonly getters expose current counts; `engine.setFrozen(rows, columns)` changes them atomically after validating both arguments. Resize still updates sparse sizes. Prefixes larger than the viewport are clipped, with no scrolling area on that dimension; they are not reduced automatically.
 
 `engine.getViewport({ width, height, scrollLeft, scrollTop })` takes body client dimensions excluding header/scrollbars. All inputs must be finite and nonnegative; offsets clamp to dataset bounds. The readonly `ViewportLayout` contains normalized offsets, clipped frozen extents and at most four nonempty `regions`. Each region has `clip`, end-exclusive `rows`/`columns`, and `offsetX/offsetY` translations for axis positions.
 
@@ -80,3 +80,7 @@ Set construction options `frozenRows` / `frozenColumns` to safe integers from ze
 ## Multiple-range clipboard
 
 Copy/paste require a single rectangle; multiple ranges throw before reading/writing clipboard cells, and `canPaste()` returns false. Editing and history operate on the active cell/data, preserving the range list. Clear/destroy discard all ranges. Selectable permission still checks only target endpoints.
+
+## Runtime frozen changes
+
+Runtime frozen changes preserve values, selection/ranges and data undo history. No-op/invalid changes emit nothing; changes emit `freeze:change` with `previousRows`, `previousColumns`, `rows` and `columns`, after layout invalidation. Canvas setters throw while editing or destroyed. The cell menu freezes prefixes through the clicked row/column, both through the cell, or unfreezes rows/columns/table. Menu freeze actions are disabled if the requested prefix would consume the viewport; the API still allows all-frozen layouts. These actions do not lock editing.

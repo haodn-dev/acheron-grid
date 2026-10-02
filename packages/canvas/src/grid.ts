@@ -50,6 +50,9 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
 export interface Grid {
   render(): void;
   openSearch(): void;
+  readonly frozenRows: number;
+  readonly frozenColumns: number;
+  setFrozen(rows: number, columns: number): void;
   updateCells(updates: readonly CellUpdate[]): void;
   undo(): boolean;
   redo(): boolean;
@@ -294,6 +297,12 @@ export function createGrid(options: GridOptions): Grid {
     input.focus(); input.select();
   }
 
+  function setFrozen(rows: number, columns: number): void {
+    if (destroyed) throw new Error('Grid is destroyed.');
+    if (editor) throw new Error('Finish editing before changing frozen panes.');
+    engine.setFrozen(rows, columns);
+  }
+
   function resizeAxis(axis: typeof rowAxis, index: number, size: number): void {
     if (destroyed) throw new Error('Grid is destroyed.');
     if (editor) throw new Error('Finish editing before resizing cells.');
@@ -353,6 +362,14 @@ export function createGrid(options: GridOptions): Grid {
     item('Edit cell', engine.canEdit(selection.rowIndex, selection.columnIndex), beginEdit);
     item('Undo', engine.canUndo(), () => { replay(false); });
     item('Redo', engine.canRedo(), () => { replay(true); });
+    const rowsFit = rowAxis.position(row + 1) < scroller.clientHeight;
+    const columnsFit = columnAxis.position(col + 1) < scroller.clientWidth;
+    item('Freeze rows through this row', rowsFit && engine.frozenRows !== row + 1, () => setFrozen(row + 1, engine.frozenColumns));
+    item('Freeze columns through this column', columnsFit && engine.frozenColumns !== col + 1, () => setFrozen(engine.frozenRows, col + 1));
+    item('Freeze through this cell', rowsFit && columnsFit && (engine.frozenRows !== row + 1 || engine.frozenColumns !== col + 1), () => setFrozen(row + 1, col + 1));
+    item('Unfreeze rows', engine.frozenRows > 0, () => setFrozen(0, engine.frozenColumns));
+    item('Unfreeze columns', engine.frozenColumns > 0, () => setFrozen(engine.frozenRows, 0));
+    item('Unfreeze table', engine.frozenRows > 0 || engine.frozenColumns > 0, () => setFrozen(0, 0));
     item('Resize column…', true, () => openSizeDialog('Column width', columnAxis.size(col), size => resizeAxis(columnAxis, col, size)));
     item('Resize row…', true, () => openSizeDialog('Row height', rowAxis.size(row), size => resizeAxis(rowAxis, row, size)));
     popup.addEventListener('keydown', event => {
@@ -1000,6 +1017,9 @@ export function createGrid(options: GridOptions): Grid {
   return {
     render: () => { if (!searchBar.hidden) refreshSearch(); else render(); },
     openSearch,
+    get frozenRows() { return engine.frozenRows; },
+    get frozenColumns() { return engine.frozenColumns; },
+    setFrozen,
     updateCells,
     undo: () => replay(false),
     redo: () => replay(true),

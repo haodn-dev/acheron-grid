@@ -383,3 +383,23 @@ test('multi-range state stays sparse, immutable and rejects ambiguous clipboard 
   engine.clearSelection(); assert.deepEqual(engine.getSelectionRanges(), []); assert.deepEqual(events.at(-1).ranges, []);
   engine.addSelection(0, 0); engine.destroy(); assert.deepEqual(engine.getSelectionRanges(), []);
 });
+
+
+test('dynamic frozen prefixes validate atomically, preserve data history and update numeric geometry', () => {
+  const events = []; const { engine, source, changes } = fixture({ onEvent: event => events.push(event) });
+  engine.select(0, 0); engine.addSelection(1, 1); engine.editCell(1, 1, '4');
+  const ranges = engine.getSelectionRanges(); engine.setFrozen(1, 1);
+  assert.equal(engine.frozenRows, 1); assert.equal(engine.frozenColumns, 1);
+  assert.deepEqual(engine.getSelectionRanges(), ranges); assert.equal(source.getValue(1, 'score'), 4);
+  assert.deepEqual(events.at(-1), { type: 'freeze:change', previousRows: 0, previousColumns: 0, rows: 1, columns: 1 });
+  assert.ok(Object.isFrozen(events.at(-1))); assert.deepEqual(changes.at(-1), { type: 'layout' });
+  const view = engine.getViewport({ width: 200, height: 40, scrollLeft: 100, scrollTop: 20 });
+  assert.deepEqual(view.hitTest(20, 16), { row: 0, col: 0 });
+  assert.deepEqual(view.hitTest(180, 36), { row: 1, col: 1 });
+  const eventCount = events.length; engine.setFrozen(1, 1); assert.equal(events.length, eventCount);
+  for (const args of [[-1, 0], [0, 3], [3, 0], [0.5, 1], [1, NaN]]) assert.throws(() => engine.setFrozen(...args), RangeError);
+  assert.equal(engine.frozenRows, 1); assert.equal(engine.frozenColumns, 1); assert.equal(events.length, eventCount);
+  assert.equal(engine.undo(), true); assert.equal(source.getValue(1, 'score'), 2); assert.equal(engine.frozenRows, 1);
+  engine.setFrozen(0, 0); assert.equal(engine.getViewport({ width: 200, height: 40, scrollLeft: 100, scrollTop: 20 }).regions.length, 1);
+  engine.destroy(); assert.throws(() => engine.setFrozen(1, 1), /destroyed/);
+});

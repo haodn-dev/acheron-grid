@@ -1144,3 +1144,41 @@ test('grid search counts selectable local matches, reveals panes, wraps navigati
   await input.fill('Needle'); await expect(search.getByRole('status')).toHaveText('1 of 2');
   await page.evaluate(() => window.grid.destroy()); await expect(search).toHaveCount(0);
 });
+
+
+test('right-click freeze/unfreeze changes pane geometry without remounting or clearing data history', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.events = [];
+    window.source = new LocalDataSource(Array.from({ length: 100 }, (_, id) => ({ id, name: `Name ${id}`, team: 'Ops' })), row => row.id);
+    window.grid = createGrid({ container: document.querySelector('#grid'), columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true }, { key: 'team', title: 'Team' }], dataSource: window.source, onEvent: event => window.events.push(event) });
+    window.grid.updateCells([{ rowIndex: 1, columnKey: 'name', value: 'Edited' }]);
+  });
+  const viewport = page.getByLabel(/^Data grid viewport/);
+  await viewport.click({ position: { x: 180, y: 48 }, button: 'right' });
+  await page.getByRole('menuitem', { name: 'Freeze through this cell', exact: true }).click();
+  expect(await page.evaluate(() => [window.grid.frozenRows, window.grid.frozenColumns])).toEqual([2, 2]);
+  expect(await page.evaluate(() => window.events.filter(e => e.type === 'freeze:change').length)).toBe(1);
+  await viewport.evaluate(el => { el.scrollTop = 1000; }); await viewport.click({ position: { x: 180, y: 48 } });
+  expect(await page.evaluate(() => window.grid.getSelection())).toMatchObject({ rowIndex: 1, columnIndex: 1 });
+  await viewport.press('F2'); const editor = page.getByRole('textbox'); await expect(editor).toHaveValue('Edited');
+  expect(await page.evaluate(() => { try { window.grid.setFrozen(0, 0); } catch (e) { return e.message; } })).toMatch(/Finish editing/);
+  await editor.press('Escape'); await viewport.press('Control+z'); expect(await page.evaluate(() => window.source.getValue(1, 'name'))).toBe('Name 1');
+  await viewport.click({ position: { x: 180, y: 48 }, button: 'right' }); await page.getByRole('menuitem', { name: 'Unfreeze rows', exact: true }).click();
+  expect(await page.evaluate(() => [window.grid.frozenRows, window.grid.frozenColumns])).toEqual([0, 2]);
+  await viewport.click({ position: { x: 180, y: 48 }, button: 'right' });
+  await expect(page.getByRole('menuitem', { name: 'Freeze rows through this row', exact: true })).toBeDisabled();
+  await page.getByRole('menuitem', { name: 'Unfreeze table', exact: true }).click();
+  expect(await page.evaluate(() => [window.grid.frozenRows, window.grid.frozenColumns])).toEqual([0, 0]);
+  await viewport.press('Control+Home'); await viewport.click({ position: { x: 180, y: 48 }, button: 'right' });
+  await page.getByRole('menuitem', { name: 'Freeze columns through this column', exact: true }).click();
+  expect(await page.evaluate(() => [window.grid.frozenRows, window.grid.frozenColumns])).toEqual([0, 2]);
+  expect(await page.locator('canvas').count()).toBe(1);
+  expect(await page.evaluate(async () => {
+    window.grid.updateCells([{ rowIndex: 1, columnKey: 'name', value: 'Dirty' }]);
+    const next = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await next(); const partial = document.querySelector('canvas').toDataURL(); window.grid.render(); await next();
+    return partial === document.querySelector('canvas').toDataURL();
+  })).toBe(true);
+});

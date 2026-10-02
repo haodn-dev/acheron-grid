@@ -6,4 +6,5 @@ export type GridEvent =
   | { readonly type: 'cell:change'; readonly source: GridChangeSource;
       readonly changes: readonly Readonly<CellUpdate & { rowId: RowId; previous: unknown }>[] }
   | { readonly type: 'selection:change'; readonly selection: Readonly<CellSelection> | null; readonly range: Readonly<SelectionRange> | null; readonly ranges: readonly Readonly<SelectionRange>[] }
+  | { readonly type: 'freeze:change'; readonly previousRows: number; readonly previousColumns: number; readonly rows: number; readonly columns: number }
   | { readonly type: 'column:resize' | 'row:resize'; readonly index: number; readonly previous: number; readonly size: number };

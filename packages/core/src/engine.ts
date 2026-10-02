@@ -40,8 +40,8 @@ export function createGridEngine(options: GridEngineOptions) {
   const columnIndices = new Map(columns.map((column, index) => [column.key, index]));
   const rowCount = dataSource.getRowCount();
   if (!Number.isSafeInteger(rowCount) || rowCount < 0) throw new RangeError('Invalid row count.');
-  const frozenRows = options.frozenRows ?? 0;
-  const frozenColumns = options.frozenColumns ?? 0;
+  let frozenRows = options.frozenRows ?? 0;
+  let frozenColumns = options.frozenColumns ?? 0;
   for (const [count, limit] of [[frozenRows, rowCount], [frozenColumns, columns.length]] as const) {
     if (!Number.isSafeInteger(count) || count < 0 || count > limit) throw new RangeError('Invalid frozen row or column count.');
   }
@@ -290,6 +290,15 @@ export function createGridEngine(options: GridEngineOptions) {
     if (previous !== size) notify({ type: 'layout' }, Object.freeze({ type: axis === rowAxis ? 'row:resize' : 'column:resize', index, previous, size }));
   }
 
+  function setFrozen(rows: number, columnCount: number): void {
+    assertAlive();
+    if (!Number.isSafeInteger(rows) || rows < 0 || rows > rowCount || !Number.isSafeInteger(columnCount) || columnCount < 0 || columnCount > columns.length) throw new RangeError('Invalid frozen row or column count.');
+    if (rows === frozenRows && columnCount === frozenColumns) return;
+    const previousRows = frozenRows; const previousColumns = frozenColumns;
+    frozenRows = rows; frozenColumns = columnCount;
+    notify({ type: 'layout' }, Object.freeze({ type: 'freeze:change', previousRows, previousColumns, rows, columns: columnCount }));
+  }
+
   function axisView(axis: GridAxis) {
     return Object.freeze({
       size: (index: number) => axis.size(index),
@@ -300,7 +309,7 @@ export function createGridEngine(options: GridEngineOptions) {
   }
 
   return Object.freeze({
-    columns, rowCount, frozenRows, frozenColumns,
+    columns, rowCount, get frozenRows() { return frozenRows; }, get frozenColumns() { return frozenColumns; },
     getViewport: (viewport: ViewportOptions) => { assertAlive(); return createViewport(rowAxis, columnAxis, frozenRows, frozenColumns, viewport); },
     rows: axisView(rowAxis), columnsLayout: axisView(columnAxis),
     getValue: (row: number, key: string): unknown => dataSource.getValue(row, key),
@@ -314,6 +323,7 @@ export function createGridEngine(options: GridEngineOptions) {
     undo: () => command(() => replay(false)), redo: () => command(() => replay(true)),
     canUndo: () => !destroyed && past.length > 0,
     canRedo: () => !destroyed && future.length > 0,
+    setFrozen: (rows: number, columns: number) => command(() => setFrozen(rows, columns)),
     setColumnWidth: (index: number, size: number) => command(() => resize(columnAxis, index, size)),
     setRowHeight: (index: number, size: number) => command(() => resize(rowAxis, index, size)),
     destroy: () => command(() => {

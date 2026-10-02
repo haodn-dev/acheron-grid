@@ -20,7 +20,14 @@ function mount() {
     frozenRows: frozen.checked ? 1 : 0, frozenColumns: frozen.checked ? 1 : 0,
     theme: appearance.value === 'teal' ? { headerBackground: '#e0f2f1', headerTextColor: '#115e59', selectionColor: '#0f766e' } : {},
     onSelectionRangesChange: ranges => { document.querySelector('#range-count').textContent = `${ranges.length} ranges selected`; },
-    onEvent: event => { if (event.type === 'cell:change') activity.textContent = `${event.source}: ${event.changes.length} cell(s) changed. Values stay in this tab.`; },
+    onEvent: event => {
+      if (event.type === 'cell:change') activity.textContent = `${event.source}: ${event.changes.length} cell(s) changed. Values stay in this tab.`;
+      if (event.type === 'freeze:change') {
+        frozen.checked = event.rows === 1 && event.columns === 1;
+        frozen.indeterminate = !frozen.checked && (event.rows > 0 || event.columns > 0);
+        activity.textContent = `Frozen: ${event.rows} row(s), ${event.columns} column(s).`;
+      }
+    },
     createEditor: (cell, doc) => {
       if (cell.columnKey !== 'status') return null;
       const select = doc.createElement('select');
@@ -38,7 +45,11 @@ function mount() {
     },
   });
 }
-for (const control of [appearance, frozen]) control.addEventListener('change', () => { mount(); activity.textContent = 'View reset. Edited values remain; selection and undo history cleared.'; });
+appearance.addEventListener('change', () => { mount(); activity.textContent = 'View reset. Edited values remain; selection and undo history cleared.'; });
+frozen.addEventListener('change', () => {
+  try { grid.setFrozen(frozen.checked ? 1 : 0, frozen.checked ? 1 : 0); }
+  catch (error) { frozen.checked = grid.frozenRows === 1 && grid.frozenColumns === 1; activity.textContent = error instanceof Error ? error.message : 'Freeze failed.'; }
+});
 document.querySelector('#reset').addEventListener('click', () => { mount(); activity.textContent = 'View reset. Edited values remain; selection and undo history cleared.'; });
 for (const action of ['undo', 'redo']) document.querySelector(`#${action}`).addEventListener('click', () => {
   try { if (!grid[action]()) activity.textContent = `Nothing to ${action}.`; }
