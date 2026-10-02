@@ -1341,3 +1341,59 @@ test('format dialog colors multiple ranges, preserves value history and applies 
   await page.getByRole('menu').press('Escape'); await page.evaluate(() => window.grid.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Value write still allowed' }]));
   expect(await page.evaluate(() => window.source.getValue(0, 'name'))).toBe('Value write still allowed');
 });
+
+
+test('active-cell ARIA mirror follows selection, history, locks and focus with bounded DOM', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    const values = new Map();
+    window.grid = createGrid({ container: document.querySelector('#grid'), frozenRows: 1, frozenColumns: 1,
+      columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true }],
+      dataSource: { getRowCount: () => 1_000_000, getRowId: row => row,
+        getValue: (row, key) => values.get(`${row}:${key}`) ?? (key === 'id' ? row : `Record ${row}`),
+        setValue: (row, key, value) => values.set(`${row}:${key}`, value) } });
+    const other = document.createElement('div'); other.id = 'other'; other.style.cssText = 'width:200px;height:100px'; document.body.append(other);
+    window.otherGrid = createGrid({ container: other, columns: [{ key: 'x', title: 'Other' }],
+      dataSource: { getRowCount: () => 0, getRowId: row => row, getValue: () => null } });
+  });
+  const viewport = page.locator('#grid [role="grid"]');
+  const cell = viewport.getByRole('gridcell');
+  await expect(viewport).toHaveAttribute('aria-rowcount', '1000000');
+  await expect(viewport).toHaveAttribute('aria-colcount', '2');
+  await expect(viewport).toHaveAttribute('aria-multiselectable', 'true');
+  await expect(cell).toHaveCount(0);
+  await viewport.press('ArrowRight');
+  await expect(cell).toHaveText('ID: 0');
+  await expect(cell).toHaveAttribute('aria-readonly', 'true');
+  await expect(viewport).toHaveAttribute('aria-activedescendant', await cell.getAttribute('id'));
+  await expect(viewport).toBeFocused();
+  await viewport.press('ArrowRight');
+  await expect(cell).toHaveText('Name: Record 0');
+  await expect(cell).toHaveAttribute('aria-colindex', '2');
+  await expect(cell).toHaveAttribute('aria-readonly', 'false');
+  await viewport.press('F2');
+  const editor = page.getByRole('textbox');
+  await expect(editor).toBeFocused();
+  await editor.fill('Accessible'); await editor.press('Enter');
+  await expect(cell).toHaveText('Name: Accessible');
+  await expect(viewport).toBeFocused();
+  await viewport.press('Control+z'); await expect(cell).toHaveText('Name: Record 0');
+  await viewport.press('Control+y'); await expect(cell).toHaveText('Name: Accessible');
+  await page.evaluate(() => window.grid.setLocked({ scope: 'cell', rowIndex: 0, columnIndex: 1 }, true));
+  await expect(cell).toHaveAttribute('aria-readonly', 'true');
+  await page.evaluate(() => window.grid.setLocked({ scope: 'cell', rowIndex: 0, columnIndex: 1 }, false));
+  await viewport.press('Shift+ArrowDown');
+  await expect(viewport.getByRole('row')).toHaveAttribute('aria-rowindex', '2');
+  await expect(cell).toHaveAttribute('aria-selected', 'true');
+  await viewport.press('Control+End');
+  await expect(viewport.getByRole('row')).toHaveAttribute('aria-rowindex', '1000000');
+  await expect(cell).toHaveText('Name: Record 999999');
+  await expect(page.locator('[role="gridcell"]')).toHaveCount(2); // one owned cell per mount, including the empty hidden mirror
+  expect(await page.locator('[role="gridcell"]').evaluateAll(cells => new Set(cells.map(cell => cell.id)).size)).toBe(2);
+  await viewport.press('Escape');
+  await expect(viewport).not.toHaveAttribute('aria-activedescendant');
+  await expect(cell).toHaveCount(0);
+  await page.evaluate(() => { window.grid.destroy(); window.otherGrid.destroy(); });
+  await expect(page.locator('[role="grid"]')).toHaveCount(0);
+});

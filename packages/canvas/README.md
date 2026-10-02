@@ -13,7 +13,7 @@ An experimental Canvas browser renderer for the headless @acheron-grid/core engi
 - Optional color and font theme shared by Canvas and editor/menu/dialog surfaces.
 - Single-cell, rectangular and multiple-range selection by pointer and keyboard, with automatic scrolling.
 
-This package is a development preview, not a published release. Remote data sources and framework adapters are not implemented. Canvas cell content is not yet accessible to screen readers. A headless render-callback benchmark is available; end-to-end frame rate has not been verified.
+This package is a development preview, not a published release. Remote data sources and framework adapters are not implemented. The active cell has a bounded ARIA grid mirror; full screen-reader coverage has not been verified. A headless render-callback benchmark is available; end-to-end frame rate has not been verified.
 
 ## Build from source
 
@@ -288,3 +288,9 @@ Right-click → **Format cells…** opens the native color dialog. Choose select
 Canvas exposes core `format(targets, patch)`, `canFormat(targets)`, and `getFormat(row, col)`; see the [core formatting contract](../core/README.md#sparse-cell-formatting). Set `permissions: { formatting: false }`, column permissions, or a resolver veto to disable formatting in the menu, API and history, independently of editing. Existing colors remain visible. The demo admin checkbox illustrates this host policy; it is not server authorization.
 
 Default text, checkbox strokes, cell backgrounds and native editor colors use effective styles. Custom renderers receive frozen `cell.format` and decide how to apply content colors; their paint may override the cell background. Color changes repaint the viewport, while value updates retain dirty-cell drawing. Headers retain the theme. Only colors are supported; fonts, borders, formatting clipboard and persistence remain outside this preview.
+
+## Active-cell accessibility
+
+The focusable viewport exposes `role="grid"`, total data row/column counts and multi-selection support. A single visually hidden row/gridcell mirrors the active cell, with one-based row/column indices, column title, raw value, selected and read-only state. `aria-activedescendant` references that owned cell while keyboard focus remains on the viewport. Native editors retain their own focus/validation; Escape clears the mirror, and destroy removes it. IDs are unique across mounts. No per-dataset DOM tree is created.
+
+Selection, value edits/undo/redo, locks and `grid.render()` refresh this mirror. It retains the active cell when scrolled offscreen; application-owned value/permission changes require `grid.render()`. This adds bounded active-cell reads, rather than scanning the dataset. Images/custom paint still expose raw values; no inferred image alt text or custom visual descriptions are provided. Selection status announces range count but does not mirror every selected cell. Browser semantics are tested; NVDA/JAWS/VoiceOver announcements and complete browse-mode row/header traversal remain unverified. The approach follows [W3C grid and focus guidance](https://www.w3.org/WAI/ARIA/apg/patterns/grid/).

@@ -2,6 +2,7 @@ import { createGridEngine } from '@acheron-grid/core';
 import type { CellUpdate, DataSource, Column, CellSelection, SelectionRange, CellPermission, CellLockTarget, CellFormatTarget, CellFormat, CellFormatPatch, GridEngineOptions, ViewportRegion } from '@acheron-grid/core';
 
 let editorId = 0;
+let gridId = 0;
 
 export type { Column, CellSelection, SelectionRange, CellLockTarget, CellFormatTarget, CellFormat, CellFormatPatch } from '@acheron-grid/core';
 export interface CellRenderInfo {
@@ -137,11 +138,25 @@ export function createGrid(options: GridOptions): Grid {
   scroller.tabIndex = 0;
   scroller.setAttribute('aria-label', viewportLabel);
   scroller.setAttribute('aria-keyshortcuts', 'Shift+F8 Control+f Meta+f');
+  scroller.setAttribute('role', 'grid');
+  scroller.setAttribute('aria-rowcount', String(rowCount));
+  scroller.setAttribute('aria-colcount', String(columns.length));
+  scroller.setAttribute('aria-multiselectable', 'true');
+  const activeRow = doc.createElement('div');
+  activeRow.setAttribute('role', 'row');
+  activeRow.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);pointer-events:none';
+  activeRow.hidden = true;
+  const activeCell = doc.createElement('div');
+  activeCell.id = `acheron-active-cell-${++gridId}`;
+  activeCell.setAttribute('role', 'gridcell');
+  activeCell.setAttribute('aria-selected', 'true');
+  activeRow.append(activeCell);
   const spacer = doc.createElement('div');
+  spacer.setAttribute('aria-hidden', 'true');
   spacer.style.width = `${columnAxis.position(columns.length)}px`;
   spacer.style.position = 'relative';
   spacer.style.height = `${rowAxis.position(rowCount)}px`;
-  scroller.append(spacer);
+  scroller.append(spacer, activeRow);
   const canvas = doc.createElement('canvas');
   canvas.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none';
   canvas.setAttribute('aria-hidden', 'true');
@@ -610,11 +625,7 @@ export function createGrid(options: GridOptions): Grid {
   function invalidate(changes: readonly { rowIndex: number; columnKey: string }[]): void {
     const selection = engine.getSelection();
     for (const change of changes) { dirty.set(JSON.stringify([change.rowIndex, change.columnKey]), change); if (imageColumns.has(change.columnKey)) fullDraw = true; }
-    if (selection) {
-      const column = columns[selection.columnIndex]!;
-      const value = engine.getValue(selection.rowIndex, column.key);
-      scroller.setAttribute('aria-label', `${viewportLabel}: row ${selection.rowIndex + 1}, ${column.title}, ${value == null ? '' : String(value)}`);
-    }
+    if (selection && changes.some(change => change.rowIndex === selection.rowIndex && change.columnKey === selection.columnKey)) syncAccessibleCell();
     schedule();
   }
 
@@ -785,8 +796,6 @@ export function createGrid(options: GridOptions): Grid {
         else if (top + rowAxis.size(rowIndex) > view.scrollTop + view.height) scroller.scrollTop = top + rowAxis.size(rowIndex) - view.height;
       }
     }
-    const value = engine.getValue(rowIndex, selection.columnKey);
-    scroller.setAttribute('aria-label', `${viewportLabel}: row ${rowIndex + 1}, ${columns[columnIndex]!.title}, ${value == null ? '' : String(value)}`);
     if (changed) options.onSelectionChange?.(getSelection());
     if (rangeChanged) options.onSelectionRangeChange?.(getSelectionRange());
     if (previousRanges !== JSON.stringify(getSelectionRanges())) options.onSelectionRangesChange?.(getSelectionRanges());
@@ -1158,7 +1167,33 @@ export function createGrid(options: GridOptions): Grid {
     }
   }
 
+  function syncAccessibleCell(): void {
+    const selection = engine.getSelection();
+    activeRow.hidden = !selection;
+    if (!selection) {
+      activeCell.textContent = '';
+      activeRow.removeAttribute('aria-rowindex');
+      activeCell.removeAttribute('aria-colindex');
+      activeCell.removeAttribute('aria-readonly');
+      scroller.removeAttribute('aria-activedescendant');
+      scroller.setAttribute('aria-label', viewportLabel);
+      return;
+    }
+    const value = engine.getValue(selection.rowIndex, selection.columnKey);
+    const text = value == null ? '' : String(value);
+    const title = columns[selection.columnIndex]!.title;
+    activeRow.setAttribute('aria-rowindex', String(selection.rowIndex + 1));
+    activeCell.setAttribute('aria-colindex', String(selection.columnIndex + 1));
+    activeCell.setAttribute('aria-readonly', String(!engine.canEdit(selection.rowIndex, selection.columnIndex)));
+    const content = `${title}: ${text}`;
+    if (activeCell.textContent !== content) activeCell.textContent = content;
+    scroller.setAttribute('aria-activedescendant', activeCell.id);
+    scroller.setAttribute('aria-label', `${viewportLabel}: row ${selection.rowIndex + 1}, ${title}, ${text}`);
+  }
+
   function render(): void {
+    if (destroyed) return;
+    syncAccessibleCell();
     endResize();
     positionEditor();
     closeMenu();
