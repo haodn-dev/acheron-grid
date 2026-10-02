@@ -31,8 +31,10 @@ export interface GridTheme {
   font: string;
   headerFont: string;
 }
+export type ColumnEditor = { readonly type: 'select'; readonly values: readonly string[] } | { readonly type: 'checkbox' };
 export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 'resolveCellPermission' | 'onEvent' | 'allowLockChanges' | 'frozenRows' | 'frozenColumns'> {
   theme?: Partial<GridTheme>;
+  columnEditors?: Readonly<Record<string, ColumnEditor>>;
   multilineEditor?: boolean;
   wrapText?: boolean;
   renderCell?: CellRenderer;
@@ -104,6 +106,18 @@ export function createGrid(options: GridOptions): Grid {
     } else render();
   } });
   const { columns, rowCount, rows: rowAxis, columnsLayout: columnAxis } = engine;
+  const columnEditors = new Map<string, ColumnEditor>();
+  for (const [key, config] of Object.entries(options.columnEditors ?? {})) {
+    const column = columns.find(column => column.key === key);
+    if (!column || !config || !['select', 'checkbox'].includes(config.type)) throw new TypeError('Invalid column editor configuration.');
+    if (config.type === 'select') {
+      if (!Array.isArray(config.values) || !config.values.length || config.values.some(value => typeof value !== 'string' || !value) || new Set(config.values).size !== config.values.length) throw new TypeError('Select values must be nonempty unique strings.');
+      columnEditors.set(key, Object.freeze({ type: 'select', values: Object.freeze([...config.values]) }));
+    } else {
+      if (column.editable && typeof column.parse !== 'function') throw new TypeError('Checkbox columns require a boolean parser.');
+      columnEditors.set(key, Object.freeze({ type: 'checkbox' }));
+    }
+  }
   const root = doc.createElement('div');
   root.style.cssText = 'position:relative;width:100%;height:100%;overflow:hidden;background:var(--acheron-background)';
   for (const [key, value] of Object.entries(theme)) root.style.setProperty('--acheron-' + key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase()), value);
@@ -552,7 +566,7 @@ export function createGrid(options: GridOptions): Grid {
     if (commit) {
       try {
         if (!editor.checkValidity()) throw new Error(editor.validationMessage);
-        engine.editCell(selection.rowIndex, selection.columnIndex, editor.value);
+        engine.editCell(selection.rowIndex, selection.columnIndex, editor instanceof win.HTMLInputElement && editor.type === 'checkbox' ? String(editor.checked) : editor.value);
       } catch (error) {
         editor.setCustomValidity(error instanceof Error ? error.message : 'Unable to save cell.');
         editor.setAttribute('aria-invalid', 'true');
@@ -583,7 +597,15 @@ export function createGrid(options: GridOptions): Grid {
       if (custom && (custom.ownerDocument !== doc || custom.parentNode || !['INPUT', 'SELECT', 'TEXTAREA'].includes(custom.tagName))) {
         throw new Error('Cell editor must be a detached input, select or textarea from the grid document.');
       }
-      editor = custom ?? doc.createElement(options.multilineEditor ? 'textarea' : 'input');
+      const configured = columnEditors.get(column.key);
+      if (!custom && configured?.type === 'select') {
+        const select = doc.createElement('select');
+        for (const value of configured.values) { const option = doc.createElement('option'); option.value = option.textContent = value; select.append(option); }
+        select.required = true; editor = select;
+      } else if (!custom && configured?.type === 'checkbox') {
+        if (typeof value !== 'boolean') throw new TypeError('Checkbox cells require boolean values.');
+        const checkbox = doc.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = value; editor = checkbox;
+      } else editor = custom ?? doc.createElement(options.multilineEditor ? 'textarea' : 'input');
       if (!custom) editor.value = value == null ? '' : String(value);
     } catch (error) {
       actionError.textContent = error instanceof Error ? error.message : 'Unable to create cell editor.';
@@ -727,6 +749,15 @@ export function createGrid(options: GridOptions): Grid {
       actionError.style.display = 'block';
       return;
     }
+    if (!event.ctrlKey && !event.metaKey && !event.shiftKey && columnEditors.get(columns[cell.col]!.key)?.type === 'checkbox') {
+      const rect = viewport().cellRect(cell.row, cell.col); const bounds = scroller.getBoundingClientRect();
+      const x = event.clientX - bounds.left - rect.x; const y = event.clientY - bounds.top - rect.y;
+      if (x >= 8 && x <= 28 && Math.abs(y - rect.height / 2) <= 10 && engine.canEdit(cell.row, cell.col)) {
+        beginEdit();
+        if (editor instanceof win.HTMLInputElement && editor.type === 'checkbox') { editor.checked = !editor.checked; if (finishEdit(true)) scroller.focus({ preventScroll: true }); }
+        return;
+      }
+    }
     if (event.pointerType !== 'touch') {
       dragPointer = event.pointerId;
       scroller.setPointerCapture(event.pointerId);
@@ -832,6 +863,15 @@ export function createGrid(options: GridOptions): Grid {
       ctx.clearRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
       ctx.fillStyle = theme.background;
       ctx.fillRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
+    }
+    if (!header && columnEditors.get(columns[columnIndex]!.key)?.type === 'checkbox' && typeof value === 'boolean') {
+      const size = Math.max(0, Math.min(16, width - 20, height - 8)); const left = x + 10; const top = y + (height - size) / 2;
+      ctx.save(); ctx.strokeStyle = theme.textColor; ctx.lineWidth = 1;
+      if (size > 0) {
+        ctx.strokeRect(left + .5, top + .5, size - 1, size - 1);
+        if (value) { ctx.beginPath(); ctx.moveTo(left + size * .2, top + size * .5); ctx.lineTo(left + size * .45, top + size * .75); ctx.lineTo(left + size * .8, top + size * .25); ctx.lineWidth = 2; ctx.stroke(); }
+      }
+      ctx.restore(); highlightSearch(x, y, width, height, rowIndex, columnIndex); return;
     }
     ctx.save();
     ctx.beginPath();
@@ -1032,6 +1072,7 @@ export function createGrid(options: GridOptions): Grid {
   function onDoubleClick(event: MouseEvent): void {
     const cell = pointerCell(event);
     const selection = engine.getSelection();
+    if (cell && columnEditors.get(columns[cell.col]!.key)?.type === 'checkbox') return;
     if (event.target !== editor && cell && selection?.rowIndex === cell.row && selection.columnIndex === cell.col && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) beginEdit();
   }
   return {

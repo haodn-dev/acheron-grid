@@ -1215,3 +1215,43 @@ test('lock menus guard edits and APIs, retain copy, show scope unlock and honor 
   await viewport.click({ position: { x: 180, y: 16 }, button: 'right' }); await expect(page.getByRole('menuitem', { name: 'Lock table', exact: true })).toBeDisabled();
   expect(await page.evaluate(() => { try { window.grid.setLocked({ scope: 'table' }, true); } catch (e) { return e.message; } })).toMatch(/disabled/);
 });
+
+
+test('configured select and boolean checkbox share parser validation, locks, history and partial paint', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.source = new LocalDataSource([{ id: 0, status: 'Active', approved: true }, { id: 1, status: 'Review', approved: false }, { id: 2, status: 'Active', approved: true }], row => row.id);
+    const values = ['Active', 'Review'];
+    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source,
+      columns: [{ key: 'id', title: 'ID' }, { key: 'status', title: 'Status', editable: true, parse: text => { if (!['Active', 'Review'].includes(text)) throw new Error('Invalid status'); return text; } },
+        { key: 'approved', title: 'Approved', editable: true, parse: text => { if (!['true', 'false'].includes(text)) throw new Error('Invalid boolean'); return text === 'true'; } }],
+      columnEditors: { status: { type: 'select', values }, approved: { type: 'checkbox' } }, resolveCellPermission: c => c.rowIndex === 1 ? { writable: false } : undefined });
+    values.push('Unexpected');
+  });
+  const viewport = page.getByLabel(/^Data grid viewport/); await viewport.click({ position: { x: 180, y: 16 } }); await viewport.press('F2');
+  const select = page.getByRole('combobox'); expect(await select.locator('option').allTextContents()).toEqual(['Active', 'Review']);
+  await select.selectOption('Review'); await select.press('Enter'); expect(await page.evaluate(() => window.source.getValue(0, 'status'))).toBe('Review');
+  await viewport.click({ position: { x: 334, y: 16 } }); expect(await page.evaluate(() => window.source.getValue(0, 'approved'))).toBe(false);
+  await viewport.press('Control+z'); expect(await page.evaluate(() => window.source.getValue(0, 'approved'))).toBe(true);
+  await viewport.press('Control+y'); expect(await page.evaluate(() => window.source.getValue(0, 'approved'))).toBe(false);
+  await viewport.press('F2'); const checkbox = page.getByRole('checkbox'); await expect(checkbox).not.toBeChecked(); await checkbox.check(); await checkbox.press('Enter');
+  expect(await page.evaluate(() => window.source.getValue(0, 'approved'))).toBe(true);
+  await viewport.click({ position: { x: 334, y: 48 } }); await viewport.press('F2'); await expect(checkbox).toHaveCount(0);
+  expect(await page.evaluate(() => window.source.getValue(1, 'approved'))).toBe(false);
+  await page.evaluate(() => window.grid.setLocked({ scope: 'column', columnIndex: 2 }, true));
+  await viewport.click({ position: { x: 334, y: 80 } }); expect(await page.evaluate(() => window.source.getValue(2, 'approved'))).toBe(true);
+  expect(await page.evaluate(() => window.grid.copySelection())).toBe('true');
+  expect(await page.evaluate(async () => {
+    window.grid.setLocked({ scope: 'column', columnIndex: 2 }, false); window.grid.updateCells([{ rowIndex: 2, columnKey: 'approved', value: false }]);
+    const next = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await next(); const partial = document.querySelector('canvas').toDataURL(); window.grid.render(); await next(); return partial === document.querySelector('canvas').toDataURL();
+  })).toBe(true);
+  await viewport.click({ position: { x: 180, y: 16 } });
+  expect(await page.evaluate(() => { try { window.grid.paste('Bogus'); } catch (e) { return e.message; } })).toBe('Invalid status');
+  expect(await page.evaluate(() => window.source.getValue(0, 'status'))).toBe('Review');
+  expect(await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); window.grid.destroy();
+    try { createGrid({ container: document.querySelector('#grid'), dataSource: window.source, columns: [{ key: 'approved', title: 'Approved', editable: true }], columnEditors: { approved: { type: 'checkbox' } } }); } catch (e) { return { message: e.message, roots: document.querySelectorAll('#grid > div').length }; }
+  })).toEqual({ message: 'Checkbox columns require a boolean parser.', roots: 0 });
+});

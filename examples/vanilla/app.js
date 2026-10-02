@@ -2,11 +2,12 @@ import { createGrid } from '@acheron-grid/canvas';
 import { LocalDataSource } from '@acheron-grid/core';
 
 const columns = [{ key: 'id', title: 'Record ID' }, { key: 'name', title: 'Name', editable: true, parse: text => { if (!text.trim()) throw new Error('Name is required.'); return text; } },
-  { key: 'status', title: 'Status', editable: true },
-  ...Array.from({ length: 5 }, (_, index) => ({ key: `metric${index}`, title: `Metric ${index + 1}` }))];
+  { key: 'status', title: 'Status', editable: true, parse: text => { if (!['Review', 'Active'].includes(text)) throw new Error('Invalid status.'); return text; } },
+  { key: 'approved', title: 'Approved', editable: true, parse: text => { if (!['true', 'false'].includes(text)) throw new Error('Invalid boolean.'); return text === 'true'; } },
+  ...Array.from({ length: 4 }, (_, index) => ({ key: `metric${index}`, title: `Metric ${index + 1}` }))];
 const source = new LocalDataSource(Array.from({ length: 10_000 }, (_, index) => ({
-  id: `AG-${String(index + 1).padStart(5, '0')}`, name: `Record ${index + 1}`, status: index % 4 === 0 ? 'Review' : 'Active',
-  ...Object.fromEntries(Array.from({ length: 5 }, (_, metric) => [`metric${metric}`, (index + 1) * (metric + 1)])),
+  id: `AG-${String(index + 1).padStart(5, '0')}`, name: `Record ${index + 1}`, status: index % 4 === 0 ? 'Review' : 'Active', approved: index % 3 === 0,
+  ...Object.fromEntries(Array.from({ length: 4 }, (_, metric) => [`metric${metric}`, (index + 1) * (metric + 1)])),
 })), row => row.id);
 const activity = document.querySelector('#activity');
 const appearance = document.querySelector('#appearance');
@@ -29,14 +30,7 @@ function mount() {
         activity.textContent = `Frozen: ${event.rows} row(s), ${event.columns} column(s).`;
       }
     },
-    createEditor: (cell, doc) => {
-      if (cell.columnKey !== 'status') return null;
-      const select = doc.createElement('select');
-      for (const value of ['Review', 'Active']) {
-        const option = doc.createElement('option'); option.value = option.textContent = value; select.append(option);
-      }
-      select.value = String(cell.value); select.required = true; return select;
-    },
+    columnEditors: { status: { type: 'select', values: ['Review', 'Active'] }, approved: { type: 'checkbox' } },
     renderCell: (ctx, cell) => {
       if (cell.columnKey !== 'status') return false;
       const review = cell.value === 'Review';
