@@ -8,6 +8,7 @@ An experimental Canvas browser renderer for the headless @acheron-grid/core engi
 - Row and column virtualization, native scrolling, and a pinned column header.
 - A local data source with unique row IDs and shallow row snapshots.
 - Resize observation, coalesced rendering, and explicit cleanup.
+- Optional custom cell drawing with clipping, fallback and partial repaint support.
 - Single-cell selection by pointer and keyboard, with automatic scrolling.
 
 This package is a development preview, not a published release. Multi-range selection, remote data sources, and framework adapters are not implemented. Canvas cell content is not yet accessible to screen readers. A headless render-callback benchmark is available; end-to-end frame rate has not been verified.
@@ -22,6 +23,25 @@ npm run build
 ```
 
 The package exports ESM JavaScript and TypeScript declarations from `dist/`. Its only runtime dependency is @acheron-grid/core.
+
+## Custom cell drawing
+
+Pass `renderCell(context, cell)` to `createGrid`. Return `true` to replace the default body text, or `false` to draw the default text. Headers, grid lines and selection remain owned by the grid.
+
+```ts
+renderCell: (ctx, cell) => {
+  if (cell.columnKey !== 'status') return false;
+  ctx.fillStyle = cell.value === 'Review' ? '#92400e' : '#166534';
+  ctx.font = '600 12px system-ui';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(cell.value ?? ''), cell.x + 10, cell.y + cell.height / 2);
+  return true;
+}
+```
+
+`CellRenderer` and `CellRenderInfo` are exported types. The shallow-frozen metadata contains raw `value`, `rowIndex`, `rowId`, `columnIndex`, `columnKey`, and `x`, `y`, `width`, `height` in CSS pixels relative to the Canvas, including the header offset. Values are not deep-frozen. Each invocation is clipped to the cell interior and its visible pane; context state is saved and restored. Set your own font, color and alignment. Keep any additional `save()`/`restore()` calls balanced and never resize the Canvas or mutate the grid/data source from the callback.
+
+Only visible body cells are passed to the synchronous callback. Partial updates call it only for dirty visible cells; scrolling, resizing and `grid.render()` redraw visible content. External drawing state changes require `grid.render()`. A thrown callback error is logged and the default text is drawn; marks from a callback returning `false` or throwing are cleared. Drawing is a trusted extension, not a sandbox. Custom drawing does not change editing, clipboard values, permissions or screen-reader support. Core remains independent of Canvas.
 
 ## Usage
 

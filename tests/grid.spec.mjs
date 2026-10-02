@@ -779,3 +779,87 @@ test('frozen viewport reads stay bounded even when the entire dataset is frozen'
   expect(result.offscreen).toBe(1);
   expect(result.selection).toMatchObject({ rowIndex: 0, columnIndex: 0 });
 });
+
+test('custom renderer keeps raw metadata, clipping, fallback and partial pixels across frozen panes', async ({ page }) => {
+  await page.goto('/');
+  const errors = [];
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  const result = await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
+    const raw = { label: 'Raw object' };
+    const source = new LocalDataSource(Array.from({ length: 1000 }, (_, id) => ({ id: `row-${id}`, custom: raw, plain: 'Default', broken: 'Fallback' })), row => row.id);
+    const calls = [];
+    const columns = [{ key: 'custom', title: 'Custom' }, { key: 'plain', title: 'Plain' }, { key: 'broken', title: 'Broken' }];
+    const grid = createGrid({ container: document.querySelector('#grid'), columns, dataSource: source,
+      frozenRows: 1, frozenColumns: 1, renderCell(ctx, cell) {
+        calls.push({ ...cell, same: cell.value === raw, frozen: Object.isFrozen(cell) });
+        if (cell.columnKey === 'custom') {
+          ctx.fillStyle = cell.value === raw ? '#ff0000' : '#00ff00';
+          ctx.fillRect(-10000, -10000, 20000, 20000);
+          ctx.translate(9000, 9000);
+          return true;
+        }
+        ctx.fillStyle = '#0000ff';
+        ctx.fillRect(-10000, -10000, 20000, 20000);
+        ctx.globalAlpha = 0;
+        if (cell.columnKey === 'broken') throw new Error('Expected renderer failure');
+        return false;
+      } });
+    const next = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await next();
+    const canvas = document.querySelector('canvas');
+    const ctx = canvas.getContext('2d');
+    const pixel = (x, y) => [...ctx.getImageData(x, y, 1, 1).data];
+    const first = calls.find(cell => cell.rowIndex === 0 && cell.columnIndex === 0);
+    const initial = { red: pixel(20, 50), plain: pixel(200, 50), broken: pixel(360, 50), header: pixel(20, 10) };
+    const baseline = canvas.toDataURL();
+    const initialCount = calls.length;
+    grid.destroy();
+    const defaultGrid = createGrid({ container: document.querySelector('#grid'), columns, dataSource: source, frozenRows: 1, frozenColumns: 1,
+      renderCell(ctx, cell) {
+        if (cell.columnKey !== 'custom') return false;
+        ctx.fillStyle = '#ff0000'; ctx.fillRect(cell.x + 1, cell.y + 1, cell.width - 2, cell.height - 2); return true;
+      } });
+    await next();
+    const fallbackMatches = baseline === document.querySelector('canvas').toDataURL();
+    defaultGrid.destroy();
+    calls.length = 0;
+    const updatedGrid = createGrid({ container: document.querySelector('#grid'), columns, dataSource: source, frozenRows: 1, frozenColumns: 1,
+      renderCell(ctx, cell) {
+        calls.push(cell);
+        if (cell.columnKey !== 'custom') return false;
+        ctx.fillStyle = cell.value === raw ? '#ff0000' : '#00ff00';
+        ctx.fillRect(-10000, -10000, 20000, 20000); return true;
+      } });
+    await next();
+    calls.length = 0;
+    updatedGrid.updateCells([{ rowIndex: 0, columnKey: 'custom', value: 'Changed' }]);
+    await next();
+    const partialCount = calls.length;
+    const partial = document.querySelector('canvas').toDataURL();
+    updatedGrid.render(); await next();
+    const partialMatches = partial === document.querySelector('canvas').toDataURL();
+    calls.length = 0;
+    updatedGrid.updateCells([{ rowIndex: 999, columnKey: 'custom', value: 'Offscreen' }]); await next();
+    const offscreenCount = calls.length;
+    const scroller = document.querySelector('[aria-label="Read-only data grid viewport"]');
+    scroller.scrollTop = 320; scroller.scrollLeft = 80; await next();
+    const afterScroll = calls.map(cell => ({ rowIndex: cell.rowIndex, columnIndex: cell.columnIndex, x: cell.x, y: cell.y }));
+    updatedGrid.destroy();
+    return { first, initial, initialCount, fallbackMatches, partialCount, partialMatches, offscreenCount, afterScroll };
+  });
+  expect(result.first).toMatchObject({ rowId: 'row-0', columnKey: 'custom', value: { label: 'Raw object' }, same: true, frozen: true, x: 0, y: 36, width: 160, height: 32 });
+  expect(result.initial.red).toEqual([255, 0, 0, 255]);
+  expect(result.initial.plain).not.toEqual([0, 0, 255, 255]);
+  expect(result.initial.broken).not.toEqual([0, 0, 255, 255]);
+  expect(result.initial.header).not.toEqual([255, 0, 0, 255]);
+  expect(result.initialCount).toBeLessThan(100);
+  expect(result.fallbackMatches).toBe(true);
+  expect(result.partialCount).toBe(1);
+  expect(result.partialMatches).toBe(true);
+  expect(result.offscreenCount).toBe(0);
+  expect(result.afterScroll.some(cell => cell.rowIndex === 0 && cell.y === 36)).toBe(true);
+  expect(result.afterScroll.some(cell => cell.rowIndex > 0 && cell.columnIndex === 0 && cell.x === 0)).toBe(true);
+  expect(errors.some(error => error.includes('Cell renderer failed.'))).toBe(true);
+});

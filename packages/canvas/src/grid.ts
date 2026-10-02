@@ -2,7 +2,20 @@ import { createGridEngine } from '@acheron-grid/core';
 import type { CellUpdate, DataSource, Column, CellSelection, SelectionRange, CellPermission, GridEngineOptions, ViewportRegion } from '@acheron-grid/core';
 
 export type { Column, CellSelection, SelectionRange } from '@acheron-grid/core';
+export interface CellRenderInfo {
+  readonly value: unknown;
+  readonly rowIndex: number;
+  readonly rowId: string | number;
+  readonly columnIndex: number;
+  readonly columnKey: string;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+export type CellRenderer = (context: CanvasRenderingContext2D, cell: CellRenderInfo) => boolean;
 export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 'resolveCellPermission' | 'onEvent' | 'frozenRows' | 'frozenColumns'> {
+  renderCell?: CellRenderer;
   onSelectionChange?: (selection: CellSelection | null) => void;
   onSelectionRangeChange?: (range: SelectionRange | null) => void;
   container: HTMLElement;
@@ -467,13 +480,32 @@ export function createGrid(options: GridOptions): Grid {
     select(Math.max(0, Math.min(rowCount - 1, row)), Math.max(0, Math.min(columns.length - 1, col)), event.shiftKey);
   }
 
-  function cell(text: string, x: number, y: number, width: number, height: number, header: boolean): void {
+  function cell(value: unknown, x: number, y: number, width: number, height: number, header: boolean, rowIndex = 0, columnIndex = 0): void {
     const ctx = context!;
     ctx.fillStyle = header ? '#edf2f7' : '#ffffff';
     ctx.fillRect(x, y, width, height);
     ctx.strokeStyle = '#e2e8f0';
     ctx.lineWidth = 1;
     ctx.strokeRect(x + 0.5, y + 0.5, width, height);
+    if (!header && options.renderCell) {
+      let handled = false;
+      ctx.save();
+      try {
+        ctx.beginPath();
+        ctx.rect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
+        ctx.clip();
+        handled = options.renderCell(ctx, Object.freeze({ value, rowIndex, rowId: dataSource.getRowId(rowIndex),
+          columnIndex, columnKey: columns[columnIndex]!.key, x, y, width, height }));
+      } catch (error) {
+        win.console.error('Cell renderer failed.', error);
+      } finally {
+        ctx.restore();
+        ctx.beginPath();
+      }
+      if (handled) return;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
+    }
     ctx.save();
     ctx.beginPath();
     ctx.rect(x + 8, y, Math.max(0, width - 16), height);
@@ -481,7 +513,7 @@ export function createGrid(options: GridOptions): Grid {
     ctx.fillStyle = header ? '#334155' : '#0f172a';
     ctx.font = `${header ? '600' : '400'} 13px system-ui, sans-serif`;
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, x + 10, y + height / 2);
+    ctx.fillText(value == null ? '' : String(value), x + 10, y + height / 2);
     ctx.restore();
   }
 
@@ -529,7 +561,7 @@ export function createGrid(options: GridOptions): Grid {
         context!.rect(rect.x, headerHeight + rect.y, rect.width, rect.height);
         context!.clip();
         const value = engine.getValue(change.rowIndex, change.columnKey);
-        cell(value == null ? '' : String(value), rect.x, headerHeight + rect.y, rect.width, rect.height, false);
+        cell(value, rect.x, headerHeight + rect.y, rect.width, rect.height, false, change.rowIndex, col);
         context!.restore();
       }
       drawSelection(view.regions);
@@ -552,8 +584,8 @@ export function createGrid(options: GridOptions): Grid {
       for (let row = region.rows.start; row < region.rows.end; row++) {
         for (let col = region.columns.start; col < region.columns.end; col++) {
           const value = engine.getValue(row, columns[col]!.key);
-          cell(value == null ? '' : String(value), columnAxis.position(col) + region.offsetX,
-            headerHeight + rowAxis.position(row) + region.offsetY, columnAxis.size(col), rowAxis.size(row), false);
+          cell(value, columnAxis.position(col) + region.offsetX,
+            headerHeight + rowAxis.position(row) + region.offsetY, columnAxis.size(col), rowAxis.size(row), false, row, col);
         }
       }
       context!.restore();
