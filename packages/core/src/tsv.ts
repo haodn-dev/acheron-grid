@@ -1,4 +1,4 @@
-// ponytail: cap clipboard work at 100,000 cells / 10M UTF-16 code units; streaming for larger transfers.
+// cap clipboard work at 100,000 cells / 10M UTF-16 code units; streaming for larger transfers.
 export const clipboardCellLimit = 100_000;
 export const clipboardTextLimit = 10_000_000;
 

@@ -17,3 +17,9 @@ Implement engine code, adapters, tests, examples and public usage documentation 
 Keep internal specifications, architecture decisions, roadmap and worklogs in the companion private workspace, in Vietnamese. Change its Laravel application only for integration or demo work; do not duplicate the engine there. The demo consumes the built core package through a local file dependency. Build the engine before building or running the demo; do not copy engine source.
 
 For engine features, update the internal specification, implement and verify here, then record the actual engine commit hash in the private worklog. Working across both repositories does not mean implementing a feature twice.
+
+## Source comments and architecture
+
+Do not put AI agent, plugin or workflow names in source comments. Comments should explain technical reasons, invariants, limitations and performance assumptions.
+
+Read the private workspace's docs/architecture/core-constitution.md before substantive engine changes. Treat headless core, one controlled mutation pipeline, independent capability permissions, sparse coordinate-based state, virtualization and stable public contracts as architectural direction. The current browser-bound implementation has not completed that separation. For significant redesigns, inspect and report the smallest proposed design before implementing; preserve working behavior and avoid unrelated rewrites.

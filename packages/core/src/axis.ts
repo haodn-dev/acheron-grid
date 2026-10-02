@@ -45,7 +45,7 @@ export class GridAxis {
     if (!Number.isFinite(this.position(this.count) - this.size(index) + size)) throw new RangeError('Axis dimensions overflow.');
     if (size === this.defaultSize) this.overrides.delete(index);
     else this.overrides.set(index, size);
-    // ponytail: rebuild sparse prefix deltas on resize; a tree if frequent bulk resizing needs it.
+    // rebuild sparse prefix deltas on resize; a tree if frequent bulk resizing needs it.
     this.keys = [...this.overrides.keys()].sort((a, b) => a - b);
     let delta = 0;
     this.deltas = this.keys.map(key => delta += this.overrides.get(key)! - this.defaultSize);

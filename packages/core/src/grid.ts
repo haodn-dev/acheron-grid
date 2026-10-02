@@ -278,7 +278,7 @@ export function createGrid(options: GridOptions): Grid {
     if (!changes.length) return;
     write(changes);
     past.push(changes);
-    // ponytail: keep the latest 100 commands; large values remain shallow caller-owned references.
+    // keep the latest 100 commands; large values remain shallow caller-owned references.
     if (past.length > 100) past.shift();
     future.length = 0;
     invalidate(changes);
@@ -332,7 +332,7 @@ export function createGrid(options: GridOptions): Grid {
     const column = columns[selection.columnIndex]!;
     if (!column.editable) return;
     const value = dataSource.getValue(selection.rowIndex, column.key);
-    // ponytail: text values by default; typed columns provide a parser.
+    // text values by default; typed columns provide a parser.
     if (!column.parse && value != null && typeof value !== 'string') return;
     editor = doc.createElement('input');
     editor.type = 'text';
@@ -479,7 +479,7 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function onPointerMove(event: PointerEvent): void {
-    // ponytail: drag extends on pointer movement; a frame loop would enable stationary edge auto-scroll.
+    // drag extends on pointer movement; a frame loop would enable stationary edge auto-scroll.
     if (event.pointerId !== dragPointer) return;
     const cell = pointerCell(event, true);
     if (cell) select(cell.row, cell.col, true);
