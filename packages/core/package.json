@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Framework-independent Canvas data grid engine",
+  "description": "Headless TypeScript data grid engine",
   "files": [
     "dist",
     "README.md"
@@ -19,7 +19,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.headless.json && tsc -p tsconfig.json",
+    "build": "node scripts/clean-browser-output.mjs && tsc -p tsconfig.headless.json && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.headless.json",
     "dev": "tsc -p tsconfig.json --watch"
   }

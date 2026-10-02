@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test('headless Canvas callback cost: one million rows and one thousand columns', async ({ page }) => {
   await page.goto('/');
   const result = await page.evaluate(async () => {
-    const { createGrid } = await import('/index.js');
+    const { createGrid } = await import('/canvas/index.js');
     let reads = 0;
     const samples = [];
     const values = new Map();

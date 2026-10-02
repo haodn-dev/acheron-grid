@@ -14,7 +14,7 @@ Use short-lived feat/, fix/ or docs/ branches. Run relevant checks once build to
 
 Implement engine code, adapters, tests, examples and public usage documentation here. Write the public README and usage documentation in professional English for external users and developers.
 
-Keep internal specifications, architecture decisions, roadmap and worklogs in the companion private workspace, in Vietnamese. Change its Laravel application only for integration or demo work; do not duplicate the engine there. The demo consumes the built core package through a local file dependency. Build the engine before building or running the demo; do not copy engine source.
+Keep internal specifications, architecture decisions, roadmap and worklogs in the companion private workspace, in Vietnamese. Change its Laravel application only for integration or demo work; do not duplicate the engine there. The demo consumes built core and Canvas packages through local file dependencies. Build core before Canvas, then build/run the demo; do not copy engine source.
 
 For engine features, update the internal specification, implement and verify here, then record the actual engine commit hash in the private worklog. Working across both repositories does not mean implementing a feature twice.
 
@@ -22,4 +22,4 @@ For engine features, update the internal specification, implement and verify her
 
 Do not put AI agent, plugin or workflow names in source comments. Comments should explain technical reasons, invariants, limitations and performance assumptions.
 
-Read the private workspace's docs/architecture/core-constitution.md before substantive engine changes. Treat headless core, one controlled mutation pipeline, independent capability permissions, sparse coordinate-based state, virtualization and stable public contracts as architectural direction. The current browser-bound implementation has not completed that separation. For significant redesigns, inspect and report the smallest proposed design before implementing; preserve working behavior and avoid unrelated rewrites.
+Read the private workspace's docs/architecture/core-constitution.md before substantive engine changes. Treat headless core, one controlled mutation pipeline, independent capability permissions, sparse coordinate-based state, virtualization and stable public contracts as architectural direction. Core root is now headless; browser rendering/interaction lives in @acheron-grid/canvas and depends only on public core. Keep that dependency direction. For significant redesigns, inspect and report the smallest proposed design before implementing; preserve working behavior and avoid unrelated rewrites.

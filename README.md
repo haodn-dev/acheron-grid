@@ -10,9 +10,9 @@ The planned architecture separates the core engine from framework integrations, 
 
 The first core preview implements read-only Canvas rendering, row and column virtualization, native scrolling, and a local data source. Single-cell selection and keyboard navigation are also available. It builds to an ESM package with TypeScript declarations. The API is experimental and may change.
 
-Start with the [core package guide](packages/core/README.md) for local installation, an example, and API limitations. No package has been published. Opt-in DOM editing, atomic local batch updates, partial cell repaint and undo/redo are available. Rectangular selection, TSV copy/paste, individual row/column resize and a built-in context menu are available. Multiple ranges, remote data sources and framework adapters remain planned. Canvas cell content is not yet accessible to screen readers. The V1 scope below remains the target, not a list of completed features.
+Start with the [Canvas browser guide](packages/canvas/README.md) or [headless core guide](packages/core/README.md) for local installation, an example, and API limitations. No package has been published. Opt-in DOM editing, atomic local batch updates, partial cell repaint and undo/redo are available. Rectangular selection, TSV copy/paste, individual row/column resize and a built-in context menu are available. Multiple ranges, remote data sources and framework adapters remain planned. Canvas cell content is not yet accessible to screen readers. The V1 scope below remains the target, not a list of completed features.
 
-The experimental `@acheron-grid/core/headless` entry runs selection, layout, editing, clipboard and history without browser globals. The Canvas grid uses this same domain engine. The root entry still provides the compatible browser `createGrid` API; separate browser packaging remains in progress.
+@acheron-grid/core runs selection, layout, editing, clipboard and history without browser globals. @acheron-grid/canvas provides createGrid and depends on the public core entry. The earlier core/headless subpath remains supported; browser imports now use the Canvas package.
 
 ## Design goals
 
@@ -40,7 +40,7 @@ V1 focuses on displaying and editing tabular application data. Formula evaluatio
 
 ## Repository structure
 
-[`packages/core/`](packages/core/README.md) contains the TypeScript engine and unit tests. Browser integration tests live in `tests/`. Framework adapters, standalone examples and themes remain planned. The core includes a headless render-callback benchmark.
+[`packages/core/`](packages/core/README.md) contains the headless engine and unit tests; [packages/canvas](packages/canvas/README.md) contains browser rendering and interactions. Browser integration tests live in `tests/`. Framework adapters, standalone examples and themes remain planned. The Canvas preview includes a render-callback benchmark in headless Chromium.
 
 ## Development
 

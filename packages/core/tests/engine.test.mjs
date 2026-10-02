@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { createGridEngine, LocalDataSource } from '@acheron-grid/core/headless';
+import { createGridEngine, LocalDataSource } from '@acheron-grid/core';
 
 function fixture(options = {}) {
   const source = new LocalDataSource([{ id: 1, name: 'Ada', score: 1 }, { id: 2, name: 'Grace', score: 2 }], row => row.id);

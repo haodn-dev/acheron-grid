@@ -3,7 +3,8 @@ import { test, expect } from '@playwright/test';
 test('individual resize keeps hit tests, editor, scrolling and partial pixels aligned', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
-    const { createGrid, LocalDataSource } = await import('/index.js');
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
     window.source = new LocalDataSource(Array.from({ length: 100 }, (_, id) => ({ id, name: 'Ada', team: 'Design' })), row => row.id);
     window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source,
       columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true }, { key: 'team', title: 'Team', editable: true }] });
@@ -61,7 +62,8 @@ test('individual resize keeps hit tests, editor, scrolling and partial pixels al
 test('context menu preserves ranges, invokes shared actions, supports keyboard and closes safely', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
-    const { createGrid, LocalDataSource } = await import('/index.js');
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
     window.source = new LocalDataSource([{ id: 1, name: 'Ada', team: 'Design' }, { id: 2, name: 'Grace', team: 'Ops' }], row => row.id);
     window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source,
       columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true }, { key: 'team', title: 'Team', editable: true }] });
@@ -141,7 +143,8 @@ test('context menu preserves ranges, invokes shared actions, supports keyboard a
 test('range selection supports drag, Shift navigation, normalized bounds and clipboard events', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
-    const { createGrid, LocalDataSource } = await import('/index.js');
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
     window.source = new LocalDataSource(Array.from({ length: 30 }, (_, id) => ({ id, name: `Name ${id}`, team: `Team ${id}` })), row => row.id);
     window.ranges = [];
     window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source,
@@ -201,7 +204,8 @@ test('range selection supports drag, Shift navigation, normalized bounds and cli
 test('paste validates the whole rectangle, preserves data on errors and leaves editor clipboard native', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
-    const { createGrid, LocalDataSource } = await import('/index.js');
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
     window.source = new LocalDataSource([{ id: 1, name: 'Ada', amount: 12 }, { id: 2, name: 'Grace', amount: 24 }], row => row.id);
     window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source,
       columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true },
@@ -243,7 +247,7 @@ test('paste validates the whole rectangle, preserves data on errors and leaves e
   expect(await page.evaluate(() => window.htmlIgnored)).toBe(true);
   expect(await page.evaluate(async () => {
     window.grid.destroy();
-    const { createGrid } = await import('/index.js');
+    const { createGrid } = await import('/canvas/index.js');
     window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source,
       columns: [{ key: 'id', title: 'ID', editable: true }] });
     const viewport = document.querySelector('[tabindex]');
@@ -256,7 +260,8 @@ test('paste validates the whole rectangle, preserves data on errors and leaves e
 test('batch commands repaint only dirty cells and undo/redo atomically', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
-    const { createGrid, LocalDataSource } = await import('/index.js');
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
     window.source = new LocalDataSource(Array.from({ length: 100 }, (_, id) => ({ id, name: 'Ada', team: 'Design' })), row => row.id);
     const getValue = window.source.getValue.bind(window.source);
     window.reads = [];
@@ -348,7 +353,8 @@ test('batch commands repaint only dirty cells and undo/redo atomically', async (
 test('history preserves failed writes, rejects unsafe custom batches and caps retention', async ({ page }) => {
   await page.goto('/');
   const result = await page.evaluate(async () => {
-    const { createGrid, LocalDataSource } = await import('/index.js');
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
     const source = new LocalDataSource([{ id: 1, name: 'Ada', team: 'Design' }], row => row.id);
     const grid = createGrid({ container: document.querySelector('#grid'), dataSource: source,
       columns: [{ key: 'name', title: 'Name' }, { key: 'team', title: 'Team' }] });
@@ -384,7 +390,8 @@ test('history preserves failed writes, rejects unsafe custom batches and caps re
 test('DOM editing commits, cancels, validates and follows scrolling', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
-    const { createGrid, LocalDataSource } = await import('/index.js');
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
     window.source = new LocalDataSource(Array.from({ length: 100 }, (_, id) => ({ id, name: 'Ada', amount: 12 })), row => row.id);
     window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source,
       columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true },
@@ -459,7 +466,7 @@ test('renders only the viewport, scrolls both axes, resizes and cleans up', asyn
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/');
   await page.evaluate(async () => {
-    const { createGrid } = await import('/index.js');
+    const { createGrid } = await import('/canvas/index.js');
     window.reads = [];
     window.grid = createGrid({
       container: document.querySelector('#grid'),
@@ -489,7 +496,8 @@ test('renders only the viewport, scrolls both axes, resizes and cleans up', asyn
 test('empty and invalid grids are safe', async ({ page }) => {
   await page.goto('/');
   const result = await page.evaluate(async () => {
-    const { createGrid, LocalDataSource } = await import('/index.js');
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
     const container = document.querySelector('#grid');
     const dataSource = new LocalDataSource([], () => 0);
     const empty = createGrid({ container, columns: [], dataSource });
@@ -504,7 +512,7 @@ test('empty and invalid grids are safe', async ({ page }) => {
 test('single cell selection, navigation, scrolling and cleanup', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
-    const { createGrid } = await import('/index.js');
+    const { createGrid } = await import('/canvas/index.js');
     window.changes = [];
     window.grid = createGrid({
       container: document.querySelector('#grid'),
@@ -559,7 +567,8 @@ test('single cell selection, navigation, scrolling and cleanup', async ({ page }
 test('ignores header, blank space, modified keys and empty data', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
-    const { createGrid, LocalDataSource } = await import('/index.js');
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
     window.grid = createGrid({ container: document.querySelector('#grid'), columns: [{ key: 'name', title: 'Name' }], dataSource: new LocalDataSource([{ id: 1, name: 'Ada' }], row => row.id) });
     const button = document.createElement('button'); button.textContent = 'After grid'; document.body.append(button);
   });
@@ -575,7 +584,8 @@ test('ignores header, blank space, modified keys and empty data', async ({ page 
   await expect(page.getByRole('button', { name: 'After grid' })).toBeFocused();
   await page.evaluate(async () => {
     window.grid.destroy();
-    const { createGrid, LocalDataSource } = await import('/index.js');
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
     window.grid = createGrid({ container: document.querySelector('#grid'), columns: [], dataSource: new LocalDataSource([], () => 0) });
   });
   await viewport.click({ position: { x: 20, y: 20 } });

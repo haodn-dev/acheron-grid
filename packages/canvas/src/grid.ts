@@ -1,8 +1,7 @@
-import type { CellUpdate, DataSource } from './data-source.js';
-import type { Column, CellSelection, SelectionRange } from './types.js';
-import { createGridEngine } from './engine.js';
+import { createGridEngine } from '@acheron-grid/core';
+import type { CellUpdate, DataSource, Column, CellSelection, SelectionRange } from '@acheron-grid/core';
 
-export type { Column, CellSelection, SelectionRange } from './types.js';
+export type { Column, CellSelection, SelectionRange } from '@acheron-grid/core';
 export interface GridOptions {
   onSelectionChange?: (selection: CellSelection | null) => void;
   onSelectionRangeChange?: (range: SelectionRange | null) => void;

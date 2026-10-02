@@ -1,18 +1,10 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "lib": [
-      "ES2022"
-    ],
-    "types": [],
-    "noEmit": true,
-    "noImplicitOverride": true,
-    "exactOptionalPropertyTypes": true,
-    "noFallthroughCasesInSwitch": true,
-    "noImplicitReturns": true,
-    "useUnknownInCatchVariables": true
+    "noEmit": true
   },
   "include": [
+    "src/index.ts",
     "src/headless.ts"
   ]
 }

@@ -1,0 +1,25 @@
+{
+  "name": "@acheron-grid/canvas",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Canvas browser renderer for Acheron Grid",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "dependencies": {
+    "@acheron-grid/core": "0.0.0"
+  }
+}
