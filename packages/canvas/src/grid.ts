@@ -1,6 +1,8 @@
 import { createGridEngine } from '@acheron-grid/core';
 import type { CellUpdate, DataSource, Column, CellSelection, SelectionRange, CellPermission, GridEngineOptions, ViewportRegion } from '@acheron-grid/core';
 
+let editorId = 0;
+
 export type { Column, CellSelection, SelectionRange } from '@acheron-grid/core';
 export interface CellRenderInfo {
   readonly value: unknown;
@@ -31,6 +33,8 @@ export interface GridTheme {
 }
 export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 'resolveCellPermission' | 'onEvent' | 'frozenRows' | 'frozenColumns'> {
   theme?: Partial<GridTheme>;
+  multilineEditor?: boolean;
+  wrapText?: boolean;
   renderCell?: CellRenderer;
   createEditor?: CellEditorFactory;
   onSelectionChange?: (selection: CellSelection | null) => void;
@@ -135,6 +139,11 @@ export function createGrid(options: GridOptions): Grid {
   actionError.setAttribute('role', 'alert');
   actionError.style.cssText = 'display:none;position:absolute;bottom:20px;left:12px;right:24px;z-index:2;padding:10px;background:#fff1f2;color:#9f1239;border:1px solid #fda4af;border-radius:6px;font:13px system-ui';
   root.append(actionError);
+  const editorError = doc.createElement('div');
+  editorError.id = `acheron-editor-error-${++editorId}`;
+  editorError.setAttribute('role', 'alert');
+  editorError.style.cssText = 'display:none;position:absolute;pointer-events:none;z-index:3;padding:8px;border:1px solid #fda4af;border-radius:4px;background:#fff1f2;color:#9f1239;font:13px system-ui';
+  root.append(editorError);
   const selectionStatus = doc.createElement('div');
   selectionStatus.setAttribute('role', 'status');
   selectionStatus.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap';
@@ -405,7 +414,9 @@ export function createGrid(options: GridOptions): Grid {
       } catch (error) {
         editor.setCustomValidity(error instanceof Error ? error.message : 'Unable to save cell.');
         editor.setAttribute('aria-invalid', 'true');
-        editor.reportValidity();
+        editorError.textContent = error instanceof Error ? error.message : 'Unable to save cell.';
+        editorError.style.display = 'block';
+        positionEditor();
         editor.focus({ preventScroll: true });
         return false;
       }
@@ -413,6 +424,8 @@ export function createGrid(options: GridOptions): Grid {
     const input = editor;
     editor = null;
     input.remove();
+    editorError.style.display = 'none';
+    editorError.textContent = '';
     editorPane.style.width = editorPane.style.height = '0px';
     select(selection.rowIndex, selection.columnIndex, true);
     return true;
@@ -428,7 +441,7 @@ export function createGrid(options: GridOptions): Grid {
       if (custom && (custom.ownerDocument !== doc || custom.parentNode || !['INPUT', 'SELECT', 'TEXTAREA'].includes(custom.tagName))) {
         throw new Error('Cell editor must be a detached input, select or textarea from the grid document.');
       }
-      editor = custom ?? doc.createElement('input');
+      editor = custom ?? doc.createElement(options.multilineEditor ? 'textarea' : 'input');
       if (!custom) editor.value = value == null ? '' : String(value);
     } catch (error) {
       actionError.textContent = error instanceof Error ? error.message : 'Unable to create cell editor.';
@@ -437,10 +450,14 @@ export function createGrid(options: GridOptions): Grid {
     }
     actionError.style.display = 'none';
     editor.setAttribute('aria-label', `Edit row ${selection.rowIndex + 1}, ${column.title}`);
+    editor.setAttribute('aria-errormessage', editorError.id);
     editor.style.cssText = 'position:absolute;box-sizing:border-box;pointer-events:auto;border:2px solid var(--acheron-selection-color);background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);padding:0 8px';
+    if (editor instanceof win.HTMLTextAreaElement) editor.style.resize = 'none';
     const clearValidation = () => {
       editor?.setCustomValidity('');
       editor?.removeAttribute('aria-invalid');
+      editorError.style.display = 'none';
+      positionEditor();
     };
     editor.addEventListener('input', clearValidation);
     editor.addEventListener('change', clearValidation);
@@ -448,6 +465,22 @@ export function createGrid(options: GridOptions): Grid {
       if (!(event instanceof win.KeyboardEvent)) return;
       event.stopPropagation();
       if (event.isComposing || event.keyCode === 229) return;
+      if (editor instanceof win.HTMLTextAreaElement && event.key === 'Enter' && (event.altKey || event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        editor.setRangeText('\n', editor.selectionStart, editor.selectionEnd, 'end');
+        editor.dispatchEvent(new win.Event('input', { bubbles: true }));
+        return;
+      }
+      if (editor instanceof win.HTMLTextAreaElement && event.key === 'Tab') {
+        event.preventDefault();
+        const current = engine.getSelection()!;
+        if (finishEdit(true)) {
+          const position = Math.max(0, Math.min(rowCount * columns.length - 1, current.rowIndex * columns.length + current.columnIndex + (event.shiftKey ? -1 : 1)));
+          select(Math.floor(position / columns.length), position % columns.length);
+          scroller.focus({ preventScroll: true });
+        }
+        return;
+      }
       if (event.key === 'Enter' || event.key === 'Escape') {
         event.preventDefault();
         if (finishEdit(event.key === 'Enter')) scroller.focus({ preventScroll: true });
@@ -665,7 +698,21 @@ export function createGrid(options: GridOptions): Grid {
     ctx.fillStyle = header ? theme.headerTextColor : theme.textColor;
     ctx.font = header ? theme.headerFont : theme.font;
     ctx.textBaseline = 'middle';
-    ctx.fillText(value == null ? '' : String(value), x + 10, y + height / 2);
+    const text = value == null ? '' : String(value);
+    if (!header && options.wrapText) {
+      ctx.textBaseline = 'top';
+      const metrics = ctx.measureText('M');
+      const lineHeight = Math.ceil(metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent) || 18;
+      let line = ''; let top = y + 4;
+      for (const character of text) {
+        if (top + lineHeight > y + height) break;
+        if (character === '\n' || (line && ctx.measureText(line + character).width > Math.max(0, width - 20))) {
+          ctx.fillText(line, x + 10, top); top += lineHeight; line = '';
+        }
+        if (character !== '\n') line += character;
+      }
+      if (top + lineHeight <= y + height) ctx.fillText(line, x + 10, top);
+    } else ctx.fillText(text, x + 10, y + height / 2);
     ctx.restore();
   }
 
@@ -686,6 +733,23 @@ export function createGrid(options: GridOptions): Grid {
     editor.style.top = `${rect.y - clip.y}px`;
     editor.style.width = `${rect.width}px`;
     editor.style.height = `${rect.height}px`;
+    const hidden = rect.x + rect.width <= clip.x || rect.x >= clip.x + clip.width || rect.y + rect.height <= clip.y || rect.y >= clip.y + clip.height;
+    editorPane.style.clipPath = hidden ? 'inset(100%)' : '';
+    if (editor instanceof win.HTMLTextAreaElement) {
+      context!.save(); context!.font = theme.font;
+      let width = rect.width;
+      for (const line of editor.value.split('\n')) width = Math.max(width, context!.measureText(line).width + 24);
+      context!.restore();
+      editor.style.width = `${Math.min(width, Math.max(1, clip.width - Math.max(0, rect.x - clip.x)))}px`;
+      editor.style.height = '0px';
+      editor.style.height = `${Math.min(Math.max(rect.height, editor.scrollHeight + 4), Math.max(1, clip.height - Math.max(0, rect.y - clip.y)))}px`;
+    }
+    if (editorError.style.display !== 'none') {
+      editorError.style.maxWidth = `${clip.width}px`;
+      editorError.style.visibility = hidden ? 'hidden' : 'visible';
+      editorError.style.left = `${Math.max(clip.x, Math.min(rect.x, clip.x + clip.width - editorError.offsetWidth))}px`;
+      editorError.style.top = `${headerHeight + Math.max(clip.y, Math.min(rect.y + editor.offsetHeight + 4, clip.y + clip.height - editorError.offsetHeight))}px`;
+    }
   }
 
   function clipRegion(region: ViewportRegion): void {

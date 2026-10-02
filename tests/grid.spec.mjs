@@ -1068,3 +1068,42 @@ test('resize guides defer row/column geometry until release and Escape/cancel pr
   await page.evaluate(() => document.querySelector('[data-grid-resize-guide]').parentElement.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true })));
   await page.mouse.up(); expect(await viewport.evaluate(el => el.firstChild.style.height)).toBe('992px'); await expect(guide).toBeHidden();
 });
+
+
+test('multiline overlay grows, preserves invalid drafts, inserts newlines and saves before Tab navigation', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.source = new LocalDataSource(Array.from({ length: 50 }, (_, id) => ({ id, name: 'Ada', team: 'Ops' })), row => row.id);
+    window.grid = createGrid({ container: document.querySelector('#grid'), frozenColumns: 1, multilineEditor: true, wrapText: true,
+      columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true, parse: text => { if (!text.trim()) throw new Error('Name is required.'); return text; } }, { key: 'team', title: 'Team', editable: true }], dataSource: window.source });
+  });
+  const viewport = page.getByLabel(/^Data grid viewport/);
+  await viewport.click({ position: { x: 180, y: 16 } }); await viewport.press('F2');
+  const editor = page.getByRole('textbox');
+  await editor.fill('A long description that expands beyond the original cell width.');
+  expect(await editor.evaluate(el => el.offsetWidth)).toBeGreaterThan(160);
+  await editor.press('End'); await editor.press('Alt+Enter'); await editor.press('Control+Enter');
+  expect(await editor.inputValue()).toContain('\n\n'); expect(await editor.evaluate(el => el.offsetHeight)).toBeGreaterThan(32);
+  await editor.fill(''); await editor.press('Enter');
+  await expect(page.getByRole('alert')).toHaveText('Name is required.'); await expect(editor).toHaveAttribute('aria-invalid', 'true');
+  expect(await page.evaluate(() => window.source.getValue(0, 'name'))).toBe('Ada');
+  await editor.fill('First line\nSecond line'); await expect(page.getByRole('alert')).toHaveCount(0);
+  await editor.press('Tab'); await expect(editor).toHaveCount(0);
+  expect(await page.evaluate(() => window.source.getValue(0, 'name'))).toBe('First line\nSecond line');
+  expect(await page.evaluate(() => window.grid.getSelection().columnIndex)).toBe(2);
+  await viewport.press('F2'); await editor.fill('Discard'); await editor.press('Escape');
+  expect(await page.evaluate(() => window.source.getValue(0, 'team'))).toBe('Ops');
+  await viewport.press('Control+z'); expect(await page.evaluate(() => window.source.getValue(0, 'name'))).toBe('Ada');
+  await viewport.press('Control+y'); expect(await page.evaluate(() => window.source.getValue(0, 'name'))).toBe('First line\nSecond line');
+  await viewport.click({ position: { x: 180, y: 16 } }); await viewport.press('F2'); await editor.fill('Preserved draft');
+  await viewport.evaluate(el => { el.scrollTop = 700; });
+  await expect(editor).toHaveValue('Preserved draft'); expect(await editor.evaluate(el => el.parentElement.style.clipPath)).toBe('inset(100%)');
+  await viewport.evaluate(el => { el.scrollTop = 0; }); await expect(editor).toBeVisible(); await editor.press('Escape');
+  expect(await page.evaluate(async () => {
+    window.grid.setRowHeight(0, 96); window.grid.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Wrapped text\nSecond line' }]);
+    const next = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await next(); const partial = document.querySelector('canvas').toDataURL(); window.grid.render(); await next();
+    return partial === document.querySelector('canvas').toDataURL();
+  })).toBe(true);
+});

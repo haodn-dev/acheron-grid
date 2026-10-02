@@ -47,7 +47,7 @@ Only visible body cells are passed to the synchronous callback. Partial updates 
 
 ## Custom native editors
 
-Pass `createEditor(cell, document)` to return a fresh, detached `input`, `select` or `textarea` created with the supplied document. Return `null` to use the default text input. `CellEditor`, `CellEditorInfo` and `CellEditorFactory` are exported types. Metadata is shallow-frozen and contains the current selection coordinates/identity plus the raw value.
+Pass `createEditor(cell, document)` to return a fresh, detached `input`, `select` or `textarea` created with the supplied document. Return `null` to use the default editor. `CellEditor`, `CellEditorInfo` and `CellEditorFactory` are exported types. Metadata is shallow-frozen and contains the current selection coordinates/identity plus the raw value.
 
 ```ts
 createEditor: (cell, doc) => {
@@ -66,7 +66,7 @@ createEditor: (cell, doc) => {
 
 The factory initializes the control's value, options, type and constraints. The grid owns its accessible label, positioning, styles, focus and removal. Only one editor is mounted; its overlay follows the cell's pane and clips during scrolling. Native validation runs before the shared edit command; `Column.parse` still receives the control's string value. Non-string values require a parser. Current permissions are checked at commit, with the same events/history/partial repaint as text editing.
 
-Enter commits (including textarea), Escape cancels, Tab/blur commits, and IME composition does not commit. Failed validation/parser/write keeps the draft with `aria-invalid`; input/change clears the error for retry. Native control keys and clipboard stay in the editor. Factory errors or invalid/attached/foreign-document elements produce an alert without mounting an editor. Destroy removes the editor and discards its draft. Factories must not mutate grid/source or install external listeners requiring cleanup; composite widgets, framework components, async validation and custom lifecycle callbacks are not supported.
+Enter commits, Escape cancels, and blur commits; IME composition does not commit. Textareas accept Alt/Ctrl/Cmd+Enter for a newline; Tab/Shift+Tab save and move to the next/previous cell. Other controls retain native Tab behavior. Failed validation/parser/write keeps the draft with `aria-invalid` and an associated inline alert; input/change clears the error for retry. Native control keys and clipboard stay in the editor. Factory errors or invalid/attached/foreign-document elements produce an alert without mounting an editor. Destroy removes the editor and discards its draft. Factories must not mutate grid/source or install external listeners requiring cleanup; composite widgets, framework components, async validation and custom lifecycle callbacks are not supported.
 
 ## Usage
 
@@ -133,7 +133,7 @@ Column keys must be unique. All cell dimensions must be positive finite numbers.
 
 ## Limits
 
-All local rows reside in memory. Virtualization bounds cell rendering work, not data storage. Native scrolling is subject to browser scroll-size limits, so this preview does not guarantee arbitrary dataset dimensions. Custom renderers and editors are not implemented.
+All local rows reside in memory. Virtualization bounds cell rendering work, not data storage. Native scrolling is subject to browser scroll-size limits, so this preview does not guarantee arbitrary dataset dimensions. Composite editors and asynchronous editor lifecycle are not implemented.
 
 ## Selection and keyboard
 
@@ -154,7 +154,7 @@ const columns = [
 ];
 ```
 
-Columns are read-only by default. Without a parser, only string/null/undefined values can be edited; saved values are strings. A parser can return a typed value or throw a validation error. Parser/setter errors keep the draft input open with native validation feedback. Unchanged text does not call the setter. IME composition does not commit on Enter. Keep identity columns read-only: local row IDs remain stable even if their original field value changes.
+Columns are read-only by default. Without a parser, only string/null/undefined values can be edited; saved values are strings. A parser can return a typed value or throw a validation error. Parser/setter errors keep the draft input open with an inline validation alert. Unchanged text does not call the setter. IME composition does not commit on Enter. Keep identity columns read-only: local row IDs remain stable even if their original field value changes.
 
 After calling `dataSource.setValue(...)` outside the editor, call `grid.render()` to redraw. Grid commands repaint only changed cells in the viewport through the existing frame scheduler. Async writes and automatic source subscriptions are not implemented.
 
@@ -244,3 +244,9 @@ The viewport exposes Shift+F8 via `aria-keyshortcuts` and announces active posit
 ## Resize preview
 
 Drag within 8px of a column header edge for a vertical guide, or within the leftmost 10px of the viewport near a row edge for a horizontal guide. Sizes stay unchanged during dragging. Release applies one resize command; Escape, pointer cancellation, capture loss, viewport/layout redraw or destroy discard the draft. Column/row drafts clamp to 24–1000px. The guide follows the theme selection color and stays within the viewport. Selection is preserved. Numeric resize dialogs and programmatic size APIs still apply immediately; no layout undo history is added.
+
+## Multiline editing and wrapping
+
+Set `multilineEditor: true` to use an expanding textarea instead of the default input. It grows with its contents within the edited cell's viewport pane, preserving frozen panes and header boundaries. Scrolling the anchor cell offscreen hides the overlay while retaining its draft. Custom factories still take precedence; their textareas use the same growth and keyboard handling.
+
+Set `wrapText: true` to draw text on multiple lines within existing cell bounds. Both options default to `false`. Wrapping respects explicit newlines and available width; row heights do not change automatically. Resize rows to show more lines. Custom renderers retain control of their content. These settings apply to the grid at construction; per-column wrapping and async validation remain unsupported.

@@ -1,7 +1,7 @@
 import { createGrid } from '@acheron-grid/canvas';
 import { LocalDataSource } from '@acheron-grid/core';
 
-const columns = [{ key: 'id', title: 'Record ID' }, { key: 'name', title: 'Name', editable: true },
+const columns = [{ key: 'id', title: 'Record ID' }, { key: 'name', title: 'Name', editable: true, parse: text => { if (!text.trim()) throw new Error('Name is required.'); return text; } },
   { key: 'status', title: 'Status', editable: true },
   ...Array.from({ length: 5 }, (_, index) => ({ key: `metric${index}`, title: `Metric ${index + 1}` }))];
 const source = new LocalDataSource(Array.from({ length: 10_000 }, (_, index) => ({
@@ -16,7 +16,7 @@ let grid;
 function mount() {
   grid?.destroy();
   document.querySelector('#range-count').textContent = '0 ranges selected';
-  grid = createGrid({ container: document.querySelector('#grid'), columns, dataSource: source,
+  grid = createGrid({ container: document.querySelector('#grid'), columns, dataSource: source, multilineEditor: true, wrapText: true,
     frozenRows: frozen.checked ? 1 : 0, frozenColumns: frozen.checked ? 1 : 0,
     theme: appearance.value === 'teal' ? { headerBackground: '#e0f2f1', headerTextColor: '#115e59', selectionColor: '#0f766e' } : {},
     onSelectionRangesChange: ranges => { document.querySelector('#range-count').textContent = `${ranges.length} ranges selected`; },
