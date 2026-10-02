@@ -357,3 +357,29 @@ test('zero-frozen, empty and fractional-size viewport queries preserve coordinat
   assert.equal(blank.hitTest(0, 0), null);
   assert.equal(blank.scrollTop, 0);
 });
+
+test('multi-range state stays sparse, immutable and rejects ambiguous clipboard operations', () => {
+  const events = [];
+  const { engine, source } = fixture({ onEvent: event => events.push(event), resolveCellPermission: cell => cell.rowIndex === 1 && cell.columnIndex === 1 ? { selectable: false } : undefined });
+  engine.select(0, 0); engine.select(1, 0, true);
+  assert.equal(engine.addSelection(0, 1), true);
+  assert.deepEqual(engine.getSelectionRanges(), [
+    { startRow: 0, endRow: 1, startColumn: 0, endColumn: 0 },
+    { startRow: 0, endRow: 0, startColumn: 1, endColumn: 1 },
+  ]);
+  assert.deepEqual(engine.getSelectionRange(), engine.getSelectionRanges()[1]);
+  const copied = engine.getSelectionRanges(); copied[0].endRow = 999; copied.pop();
+  assert.equal(engine.getSelectionRanges().length, 2); assert.equal(engine.getSelectionRanges()[0].endRow, 1);
+  const event = events.at(-1); assert.ok(Object.isFrozen(event.ranges)); assert.ok(event.ranges.every(Object.isFrozen));
+  assert.throws(() => engine.copySelection(), /single selection range/);
+  assert.throws(() => engine.paste('10'), /single selection range/);
+  assert.equal(engine.canPaste(), false); assert.equal(source.getValue(0, 'score'), 1);
+  assert.equal(engine.addSelection(1, 1), false); assert.equal(events.at(-1), event);
+  assert.throws(() => engine.addSelection(9, 0), RangeError); assert.deepEqual(engine.getSelectionRanges(), event.ranges);
+  engine.editCell(0, 1, '3'); engine.undo(); engine.redo(); assert.equal(engine.getSelectionRanges().length, 2);
+  engine.select(0, 1); assert.equal(engine.getSelectionRanges().length, 1); assert.equal(engine.copySelection(), '3');
+  for (let i = 1; i < 128; i++) engine.addSelection(0, 0);
+  const atLimit = engine.getSelectionRanges(); assert.throws(() => engine.addSelection(0, 0), /128 ranges/); assert.deepEqual(engine.getSelectionRanges(), atLimit);
+  engine.clearSelection(); assert.deepEqual(engine.getSelectionRanges(), []); assert.deepEqual(events.at(-1).ranges, []);
+  engine.addSelection(0, 0); engine.destroy(); assert.deepEqual(engine.getSelectionRanges(), []);
+});

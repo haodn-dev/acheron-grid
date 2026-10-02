@@ -11,9 +11,9 @@ An experimental Canvas browser renderer for the headless @acheron-grid/core engi
 - Optional custom cell drawing with clipping, fallback and partial repaint support.
 - Custom native cell editors: input, select or textarea.
 - Optional color and font theme shared by Canvas and editor/menu/dialog surfaces.
-- Single-cell selection by pointer and keyboard, with automatic scrolling.
+- Single-cell, rectangular and multiple-range selection by pointer and keyboard, with automatic scrolling.
 
-This package is a development preview, not a published release. Multi-range selection, remote data sources, and framework adapters are not implemented. Canvas cell content is not yet accessible to screen readers. A headless render-callback benchmark is available; end-to-end frame rate has not been verified.
+This package is a development preview, not a published release. Remote data sources and framework adapters are not implemented. Canvas cell content is not yet accessible to screen readers. A headless render-callback benchmark is available; end-to-end frame rate has not been verified.
 
 ## Build from source
 
@@ -232,3 +232,11 @@ Pass `frozenRows: 1, frozenColumns: 1` to `createGrid` to keep the first data ro
 Canvas uses one native scroller and one Canvas, clipping the corner/top/left/body regions. Sparse resize, dirty-cell updates, selection/range borders and hit testing use the [core viewport contract](../core/README.md#frozen-panes-and-viewport-geometry). Keyboard navigation reveals only non-frozen dimensions in the remaining scrollable area. Non-selectable targets retain selection as before. Right-click/keyboard menu and header-edge resize target the visible cell/column, including at the frozen seam.
 
 The single DOM editor uses a clipped overlay following its pane. A frozen editor stays fixed on that dimension; a scrolling editor cannot cover a frozen pane. Scrolling the edited cell offscreen clips the input while preserving its draft/focus, without committing or cancelling it. Commit still rechecks permissions. Frozen counts/resize are outside data history. Right/bottom freezing, dynamic freeze actions and layout history are not implemented. Native browser scroll-size and accessibility limitations remain.
+
+## Multiple selection ranges
+
+Ctrl/Cmd+click retains previous rectangles and starts a new active range. Shift/click/drag and Shift navigation extend the active range. Shift+F8 arms the next unshifted click/navigation to add a range; press it again or Escape to cancel that mode. This supports keyboard addition, for example Shift+F8 then Ctrl+End and Shift+ArrowLeft. Plain click/navigation replaces the selection; Escape clears all ranges. Overlapping rectangles are kept separately, with a maximum of 128.
+
+`getSelectionRanges()` returns copies, active range last; `getSelectionRange()` remains the active rectangle. `onSelectionRangesChange` receives copies when the list changes. Existing single-range/cell callbacks retain their semantics; domain `selection:change` now also carries a frozen `ranges` array. Editing preserves all ranges and changes the active cell. Right-click inside the active rectangle preserves the set; outside it selects a new single cell. Copy/paste are disabled for multiple ranges, and their APIs reject the operation before cell reads/writes. Borders use the same frozen-pane clips and partial repaint path; partial updates redraw borders only inside dirty cells, including translucent colors.
+
+The viewport exposes Shift+F8 via `aria-keyshortcuts` and announces active position, range count and pending-add mode through a polite status region. This is focused interaction support; Canvas cells still have no accessible grid tree, and screen-reader coverage is not complete.

@@ -34,6 +34,7 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
   renderCell?: CellRenderer;
   createEditor?: CellEditorFactory;
   onSelectionChange?: (selection: CellSelection | null) => void;
+  onSelectionRangesChange?: (ranges: readonly SelectionRange[]) => void;
   onSelectionRangeChange?: (range: SelectionRange | null) => void;
   container: HTMLElement;
   columns: readonly Column[];
@@ -50,6 +51,7 @@ export interface Grid {
   getCellPermission(rowIndex: number, columnIndex: number): CellPermission;
   getSelection(): CellSelection | null;
   getSelectionRange(): SelectionRange | null;
+  getSelectionRanges(): SelectionRange[];
   copySelection(): string;
   paste(text: string): void;
   setColumnWidth(index: number, width: number): void;
@@ -98,6 +100,7 @@ export function createGrid(options: GridOptions): Grid {
   scroller.style.cssText = `position:absolute;inset:${headerHeight}px 0 0;overflow:auto;overscroll-behavior:contain`;
   scroller.tabIndex = 0;
   scroller.setAttribute('aria-label', viewportLabel);
+  scroller.setAttribute('aria-keyshortcuts', 'Shift+F8');
   const spacer = doc.createElement('div');
   spacer.style.width = `${columnAxis.position(columns.length)}px`;
   spacer.style.position = 'relative';
@@ -113,6 +116,7 @@ export function createGrid(options: GridOptions): Grid {
   let frame: number | undefined;
   let destroyed = false;
   let dragPointer: number | null = null;
+  let addNextSelection = false;
   let editor: CellEditor | null = null;
   const editorPane = doc.createElement('div');
   editorPane.style.cssText = 'position:absolute;overflow:hidden;pointer-events:none;z-index:1';
@@ -126,6 +130,15 @@ export function createGrid(options: GridOptions): Grid {
   actionError.setAttribute('role', 'alert');
   actionError.style.cssText = 'display:none;position:absolute;bottom:20px;left:12px;right:24px;z-index:2;padding:10px;background:#fff1f2;color:#9f1239;border:1px solid #fda4af;border-radius:6px;font:13px system-ui';
   root.append(actionError);
+  const selectionStatus = doc.createElement('div');
+  selectionStatus.setAttribute('role', 'status');
+  selectionStatus.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap';
+  root.append(selectionStatus);
+
+  function announceSelection(): void {
+    const selection = engine.getSelection();
+    selectionStatus.textContent = `${selection ? `Row ${selection.rowIndex + 1}, ${columns[selection.columnIndex]!.title}. ${getSelectionRanges().length} selected range(s).` : 'Selection cleared.'}${addNextSelection ? ' Next click or navigation adds a range.' : ''}`;
+  }
 
   function openSizeDialog(label: string, current: number, apply: (size: number) => void): void {
     const dialog = doc.createElement('dialog');
@@ -195,7 +208,7 @@ export function createGrid(options: GridOptions): Grid {
     const style = doc.createElement('style');
     style.textContent = '.acheron-context-menu button{display:block;width:100%;padding:8px 10px;border:0;border-radius:4px;background:transparent;text-align:left;color:inherit;font:inherit;cursor:pointer}.acheron-context-menu button:hover:not(:disabled),.acheron-context-menu button:focus-visible{background:var(--acheron-header-background);outline:2px solid var(--acheron-selection-color)}.acheron-context-menu button:disabled{opacity:.45;cursor:default}';
     popup.append(style);
-    const fingerprint = JSON.stringify(getSelectionRange());
+    const fingerprint = JSON.stringify(getSelectionRanges());
     function item(label: string, enabled: boolean, action: () => void | Promise<void>): void {
       const button = doc.createElement('button');
       button.type = 'button';
@@ -215,10 +228,10 @@ export function createGrid(options: GridOptions): Grid {
       });
       popup.append(button);
     }
-    item('Copy', engine.getCellPermission(selection.rowIndex, selection.columnIndex).copyable && !!win.navigator.clipboard?.writeText, () => win.navigator.clipboard.writeText(copySelection()));
+    item('Copy', getSelectionRanges().length === 1 && engine.getCellPermission(selection.rowIndex, selection.columnIndex).copyable && !!win.navigator.clipboard?.writeText, () => win.navigator.clipboard.writeText(copySelection()));
     item('Paste', !!win.navigator.clipboard?.readText && engine.canPaste(), async () => {
       const text = await win.navigator.clipboard.readText();
-      if (destroyed || fingerprint !== JSON.stringify(getSelectionRange())) throw new Error('Selection changed before paste. Try again.');
+      if (destroyed || fingerprint !== JSON.stringify(getSelectionRanges())) throw new Error('Selection changed before paste. Try again.');
       paste(text);
     });
     item('Edit cell', engine.canEdit(selection.rowIndex, selection.columnIndex), beginEdit);
@@ -376,6 +389,7 @@ export function createGrid(options: GridOptions): Grid {
 
   const getSelection = engine.getSelection;
   const getSelectionRange = engine.getSelectionRange;
+  const getSelectionRanges = engine.getSelectionRanges;
 
   function copySelection(): string {
     if (destroyed) throw new Error('Grid is destroyed.');
@@ -405,13 +419,16 @@ export function createGrid(options: GridOptions): Grid {
     catch (error) { win.alert(error instanceof Error ? error.message : 'Unable to paste cells.'); }
   }
 
-  function select(rowIndex: number, columnIndex: number, extend = false, reveal = true): void {
+  function select(rowIndex: number, columnIndex: number, extend = false, reveal = true, add = false): void {
     if (destroyed || rowCount === 0 || columns.length === 0) return;
     const previous = engine.getSelection();
     const changed = previous?.rowIndex !== rowIndex || previous?.columnIndex !== columnIndex;
     const previousRange = JSON.stringify(getSelectionRange());
-    if (!engine.select(rowIndex, columnIndex, extend)) return;
+    const previousRanges = JSON.stringify(getSelectionRanges());
+    if (!(add ? engine.addSelection(rowIndex, columnIndex) : engine.select(rowIndex, columnIndex, extend))) return;
     const selection = engine.getSelection()!;
+    if (add) addNextSelection = false;
+    announceSelection();
     const rangeChanged = previousRange !== JSON.stringify(getSelectionRange());
     if (reveal) {
       const view = viewport();
@@ -430,6 +447,7 @@ export function createGrid(options: GridOptions): Grid {
     scroller.setAttribute('aria-label', `${viewportLabel}: row ${rowIndex + 1}, ${columns[columnIndex]!.title}, ${value == null ? '' : String(value)}`);
     if (changed) options.onSelectionChange?.(getSelection());
     if (rangeChanged) options.onSelectionRangeChange?.(getSelectionRange());
+    if (previousRanges !== JSON.stringify(getSelectionRanges())) options.onSelectionRangesChange?.(getSelectionRanges());
   }
 
   function pointerCell(event: MouseEvent, clamp = false): { row: number; col: number } | null {
@@ -448,14 +466,19 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function onPointerDown(event: PointerEvent): void {
-    if (event.target === editor || event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.target === editor || event.button !== 0 || event.altKey) return;
     const cell = pointerCell(event);
     if (!cell) return;
     event.preventDefault();
     if (!finishEdit(true)) return;
     if (!engine.getCellPermission(cell.row, cell.col).selectable) return;
     scroller.focus({ preventScroll: true });
-    select(cell.row, cell.col, event.shiftKey);
+    try { select(cell.row, cell.col, event.shiftKey, true, !event.shiftKey && (event.ctrlKey || event.metaKey || addNextSelection)); }
+    catch (error) {
+      actionError.textContent = error instanceof Error ? error.message : 'Unable to add selection.';
+      actionError.style.display = 'block';
+      return;
+    }
     if (event.pointerType !== 'touch') {
       dragPointer = event.pointerId;
       scroller.setPointerCapture(event.pointerId);
@@ -483,6 +506,12 @@ export function createGrid(options: GridOptions): Grid {
     }
     if (event.isComposing || event.altKey) return;
     const control = event.ctrlKey || event.metaKey;
+    if (event.key === 'F8' && event.shiftKey && !control) {
+      event.preventDefault();
+      addNextSelection = !addNextSelection;
+      announceSelection();
+      return;
+    }
     if (control && (event.key.toLowerCase() === 'z' || (event.key.toLowerCase() === 'y' && !event.shiftKey))) {
       event.preventDefault();
       try { replay(event.shiftKey || event.key.toLowerCase() === 'y'); }
@@ -497,13 +526,16 @@ export function createGrid(options: GridOptions): Grid {
       return;
     }
     if (event.key === 'Escape') {
+      addNextSelection = false;
       if (selection) {
         event.preventDefault();
         engine.clearSelection();
         scroller.setAttribute('aria-label', viewportLabel);
         options.onSelectionChange?.(null);
         options.onSelectionRangeChange?.(null);
+        options.onSelectionRangesChange?.([]);
       }
+      announceSelection();
       return;
     }
     if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key) || !rowCount || !columns.length) return;
@@ -518,7 +550,11 @@ export function createGrid(options: GridOptions): Grid {
       if (event.key === 'Home') { col = 0; if (control) row = 0; }
       if (event.key === 'End') { col = columns.length - 1; if (control) row = rowCount - 1; }
     }
-    select(Math.max(0, Math.min(rowCount - 1, row)), Math.max(0, Math.min(columns.length - 1, col)), event.shiftKey);
+    try { select(Math.max(0, Math.min(rowCount - 1, row)), Math.max(0, Math.min(columns.length - 1, col)), event.shiftKey, true, addNextSelection && !event.shiftKey); }
+    catch (error) {
+      actionError.textContent = error instanceof Error ? error.message : 'Unable to add selection.';
+      actionError.style.display = 'block';
+    }
   }
 
   function cell(value: unknown, x: number, y: number, width: number, height: number, header: boolean, rowIndex = 0, columnIndex = 0): void {
@@ -605,9 +641,9 @@ export function createGrid(options: GridOptions): Grid {
         context!.clip();
         const value = engine.getValue(change.rowIndex, change.columnKey);
         cell(value, rect.x, headerHeight + rect.y, rect.width, rect.height, false, change.rowIndex, col);
+        drawSelection(view.regions);
         context!.restore();
       }
-      drawSelection(view.regions);
       dirty.clear();
       return;
     }
@@ -652,18 +688,18 @@ export function createGrid(options: GridOptions): Grid {
 
   function drawSelection(regions: readonly ViewportRegion[]): void {
     const selection = engine.getSelection();
-    const range = getSelectionRange();
-    if (!selection || !range) return;
+    const ranges = getSelectionRanges();
+    if (!selection || !ranges.length) return;
     for (const region of regions) {
       context!.save();
       clipRegion(region);
       context!.strokeStyle = theme.selectionColor;
       context!.lineWidth = 2;
-      context!.strokeRect(columnAxis.position(range.startColumn) + region.offsetX + 1,
+      for (const range of ranges) context!.strokeRect(columnAxis.position(range.startColumn) + region.offsetX + 1,
         headerHeight + rowAxis.position(range.startRow) + region.offsetY + 1,
         Math.max(0, columnAxis.position(range.endColumn + 1) - columnAxis.position(range.startColumn) - 2),
         Math.max(0, rowAxis.position(range.endRow + 1) - rowAxis.position(range.startRow) - 2));
-      if (range.startRow !== range.endRow || range.startColumn !== range.endColumn) {
+      if (ranges.length > 1 || ranges[0]!.startRow !== ranges[0]!.endRow || ranges[0]!.startColumn !== ranges[0]!.endColumn) {
         // The active cell belongs to only one pane; never project it into another.
         if (selection.rowIndex >= region.rows.start && selection.rowIndex < region.rows.end && selection.columnIndex >= region.columns.start && selection.columnIndex < region.columns.end) {
           context!.strokeRect(columnAxis.position(selection.columnIndex) + region.offsetX + 1,
@@ -717,6 +753,7 @@ export function createGrid(options: GridOptions): Grid {
     getCellPermission: engine.getCellPermission,
     getSelection,
     getSelectionRange,
+    getSelectionRanges,
     copySelection,
     paste,
     setColumnWidth: (index, width) => resizeAxis(columnAxis, index, width),

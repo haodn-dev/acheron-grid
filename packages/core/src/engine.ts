@@ -56,6 +56,7 @@ export function createGridEngine(options: GridEngineOptions) {
   let onInvalidate = options.onInvalidate;
   let selection: CellSelection | null = null;
   let anchor: CellSelection | null = null;
+  const retainedRanges: SelectionRange[] = [];
   type Change = CellUpdate & { previous: unknown; rowId: RowId };
   const past: Change[][] = [];
   const future: Change[][] = [];
@@ -162,10 +163,20 @@ export function createGridEngine(options: GridEngineOptions) {
       startColumn: Math.min(anchor.columnIndex, selection.columnIndex), endColumn: Math.max(anchor.columnIndex, selection.columnIndex) };
   }
 
+  function getSelectionRanges(): SelectionRange[] {
+    const range = getSelectionRange();
+    return range ? [...retainedRanges.map(range => ({ ...range })), range] : [];
+  }
+
+  function requireSingleRange(): void {
+    if (retainedRanges.length) throw new Error('Copy and paste require a single selection range.');
+  }
+
   function copySelection(): string {
     assertAlive();
     const range = getSelectionRange();
     if (!range) return '';
+    requireSingleRange();
     if ((range.endRow - range.startRow + 1) * (range.endColumn - range.startColumn + 1) > clipboardCellLimit) throw new RangeError('Selection has too many cells.');
     const rows: string[][] = [];
     let length = 0;
@@ -190,6 +201,7 @@ export function createGridEngine(options: GridEngineOptions) {
     assertAlive();
     const range = getSelectionRange();
     if (!range) return;
+    requireSingleRange();
     const rows = decodeTsv(text);
     const height = rows.length;
     const width = rows[0]!.length;
@@ -211,30 +223,40 @@ export function createGridEngine(options: GridEngineOptions) {
     applyUpdates(updates, 'paste');
   }
 
-  function select(rowIndex: number, columnIndex: number, extend = false): boolean {
+  function select(rowIndex: number, columnIndex: number, extend = false, add = false): boolean {
     assertAlive();
     if (!Number.isSafeInteger(rowIndex) || rowIndex < 0 || rowIndex >= rowCount || !Number.isSafeInteger(columnIndex) || columnIndex < 0 || columnIndex >= columns.length) throw new RangeError('Invalid cell position.');
     if (!getCellPermission(rowIndex, columnIndex).selectable) return false;
+    if (add && extend) throw new Error('Adding and extending a selection are separate operations.');
+    if (add && selection && retainedRanges.length >= 127) throw new RangeError('Selection supports at most 128 ranges.');
+    const nextSelection = { rowIndex, rowId: dataSource.getRowId(rowIndex), columnIndex, columnKey: columns[columnIndex]!.key };
+    const previousRanges = JSON.stringify(getSelectionRanges());
+    const previous = getSelectionRange();
+    if (add && previous) retainedRanges.push(previous);
+    else if (!extend) retainedRanges.length = 0;
     const changed = selection?.rowIndex !== rowIndex || selection?.columnIndex !== columnIndex;
     const previousRange = JSON.stringify(getSelectionRange());
-    selection = { rowIndex, rowId: dataSource.getRowId(rowIndex), columnIndex, columnKey: columns[columnIndex]!.key };
+    selection = nextSelection;
     if (!extend || !anchor) anchor = { ...selection };
     const rangeChanged = previousRange !== JSON.stringify(getSelectionRange());
-    if (changed || rangeChanged) notifySelection(changed, rangeChanged);
-    return changed || rangeChanged;
+    const rangesChanged = previousRanges !== JSON.stringify(getSelectionRanges());
+    if (changed || rangeChanged || rangesChanged) notifySelection(changed, rangeChanged || rangesChanged);
+    return changed || rangeChanged || rangesChanged;
   }
 
   function notifySelection(changed: boolean, rangeChanged: boolean): void {
     const endpoint = getSelection();
     const range = getSelectionRange();
     notify({ type: 'selection', changed, rangeChanged }, Object.freeze({ type: 'selection:change',
-      selection: endpoint ? Object.freeze(endpoint) : null, range: range ? Object.freeze(range) : null }));
+      selection: endpoint ? Object.freeze(endpoint) : null, range: range ? Object.freeze(range) : null,
+      ranges: Object.freeze(getSelectionRanges().map(range => Object.freeze(range))) }));
   }
 
   function clearSelection(): void {
     assertAlive();
     if (!selection) return;
     selection = anchor = null;
+    retainedRanges.length = 0;
     notifySelection(true, true);
   }
 
@@ -248,7 +270,7 @@ export function createGridEngine(options: GridEngineOptions) {
 
   function canPaste(): boolean {
     const range = getSelectionRange();
-    return !destroyed && !!range && !!(dataSource.setValue || dataSource.setValues) && getCellPermission(range.startRow, range.startColumn).pasteable;
+    return !destroyed && !retainedRanges.length && !!range && !!(dataSource.setValue || dataSource.setValues) && getCellPermission(range.startRow, range.startColumn).pasteable;
   }
 
   function editCell(rowIndex: number, columnIndex: number, text: string): void {
@@ -282,8 +304,9 @@ export function createGridEngine(options: GridEngineOptions) {
     getViewport: (viewport: ViewportOptions) => { assertAlive(); return createViewport(rowAxis, columnAxis, frozenRows, frozenColumns, viewport); },
     rows: axisView(rowAxis), columnsLayout: axisView(columnAxis),
     getValue: (row: number, key: string): unknown => dataSource.getValue(row, key),
-    getSelection, getSelectionRange, getCellPermission, canEdit, canPaste,
+    getSelection, getSelectionRange, getSelectionRanges, getCellPermission, canEdit, canPaste,
     select: (row: number, col: number, extend = false) => command(() => select(row, col, extend)),
+    addSelection: (row: number, col: number) => command(() => select(row, col, false, true)),
     clearSelection: () => command(clearSelection),
     editCell: (row: number, col: number, text: string) => command(() => editCell(row, col, text)),
     updateCells: (updates: readonly CellUpdate[]) => command(() => applyUpdates(updates)),
@@ -301,6 +324,7 @@ export function createGridEngine(options: GridEngineOptions) {
       resolver = undefined;
       past.length = future.length = 0;
       selection = anchor = null;
+      retainedRanges.length = 0;
     }),
   });
 }

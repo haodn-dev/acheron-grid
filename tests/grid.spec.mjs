@@ -983,3 +983,55 @@ test('themes isolate mounts and keep editor/menu styles and translucent partial 
   await page.getByRole('menuitem', { name: 'Resize column…' }).click();
   expect(await page.getByRole('dialog').evaluate(el => getComputedStyle(el).color)).toBe('rgb(17, 34, 51)');
 });
+
+test('Ctrl/Meta adds ranges across panes, edits active cell, guards clipboard and preserves partial pixels', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
+    window.ranges = []; window.events = [];
+    window.source = new LocalDataSource(Array.from({ length: 100 }, (_, id) => ({ id, name: 'Ada', team: 'Ops' })), row => row.id);
+    window.grid = createGrid({ container: document.querySelector('#grid'), columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true }, { key: 'team', title: 'Team', editable: true }], dataSource: window.source,
+      frozenRows: 1, frozenColumns: 1, theme: { selectionColor: 'rgba(0, 128, 128, .5)' },
+      onSelectionRangesChange: ranges => window.ranges.push(ranges), onEvent: event => window.events.push(event) });
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => {}, readText: async () => 'Changed' } });
+  });
+  const viewport = page.getByLabel(/^Data grid viewport/);
+  await viewport.click({ position: { x: 20, y: 16 } });
+  await viewport.click({ position: { x: 180, y: 80 }, modifiers: ['Control'] });
+  await viewport.press('Shift+ArrowRight');
+  expect(await page.evaluate(() => window.grid.getSelectionRanges())).toEqual([
+    { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 },
+    { startRow: 2, endRow: 2, startColumn: 1, endColumn: 2 },
+  ]);
+  await viewport.click({ position: { x: 180, y: 144 }, modifiers: ['Meta'] });
+  expect(await page.evaluate(() => window.grid.getSelectionRanges().length)).toBe(3);
+  await viewport.press('F2'); const input = page.getByRole('textbox'); await input.fill('Edited'); await input.press('Enter');
+  expect(await page.evaluate(() => window.grid.getSelectionRanges().length)).toBe(3);
+  expect(await page.evaluate(() => window.source.getValue(4, 'name'))).toBe('Edited');
+  await viewport.click({ position: { x: 180, y: 144 }, button: 'right' });
+  await expect(page.getByRole('menuitem', { name: 'Copy', exact: true })).toBeDisabled();
+  await expect(page.getByRole('menuitem', { name: 'Paste', exact: true })).toBeDisabled();
+  await page.getByRole('menu').press('Escape');
+  const result = await page.evaluate(async () => {
+    let denied = 0;
+    for (const action of [() => window.grid.copySelection(), () => window.grid.paste('Unexpected')]) { try { action(); } catch { denied++; } }
+    window.grid.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Dirty' }, { rowIndex: 2, columnKey: 'team', value: 'Dirty' }, { rowIndex: 4, columnKey: 'name', value: 'Dirty' }]);
+    const next = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await next(); const partial = document.querySelector('canvas').toDataURL(); window.grid.render(); await next();
+    return { denied, match: partial === document.querySelector('canvas').toDataURL(), callback: window.ranges.at(-1), event: window.events.filter(event => event.type === 'selection:change').at(-1).ranges };
+  });
+  expect(result.denied).toBe(2); expect(result.match).toBe(true); expect(result.callback).toEqual(result.event);
+  await viewport.press('ArrowDown'); expect(await page.evaluate(() => window.grid.getSelectionRanges().length)).toBe(1);
+  await viewport.press('Escape'); expect(await page.evaluate(() => window.grid.getSelectionRanges())).toEqual([]);
+  await viewport.press('Control+Home'); await viewport.press('Shift+F8');
+  await expect(page.getByRole('status')).toContainText('Next click or navigation adds a range.');
+  await viewport.press('Control+End'); await viewport.press('Shift+ArrowLeft');
+  expect(await page.evaluate(() => window.grid.getSelectionRanges())).toEqual([
+    { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 },
+    { startRow: 99, endRow: 99, startColumn: 1, endColumn: 2 },
+  ]);
+  await expect(page.getByRole('status')).toContainText('2 selected range(s).');
+  await expect(page.getByRole('status')).not.toContainText('Next click');
+  await viewport.press('Escape'); await expect(page.getByRole('status')).toHaveText('Selection cleared.');
+});
