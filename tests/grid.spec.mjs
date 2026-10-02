@@ -1,5 +1,143 @@
 import { test, expect } from '@playwright/test';
 
+test('individual resize keeps hit tests, editor, scrolling and partial pixels aligned', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid, LocalDataSource } = await import('/index.js');
+    window.source = new LocalDataSource(Array.from({ length: 100 }, (_, id) => ({ id, name: 'Ada', team: 'Design' })), row => row.id);
+    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source,
+      columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true }, { key: 'team', title: 'Team', editable: true }] });
+    window.grid.setColumnWidth(0, 240);
+    window.grid.setColumnWidth(1, 200);
+    window.grid.setRowHeight(0, 64);
+    window.grid.setRowHeight(1, 48);
+  });
+  const viewport = page.getByLabel(/^Data grid viewport/);
+  await viewport.click({ position: { x: 250, y: 70 } });
+  expect(await page.evaluate(() => window.grid.getSelection())).toMatchObject({ rowIndex: 1, columnIndex: 1 });
+  await viewport.press('F2');
+  const input = page.getByRole('textbox');
+  expect(await input.evaluate(el => ({ left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight }))).toEqual({ left: 240, top: 64, width: 200, height: 48 });
+  await input.fill('Resized');
+  await input.press('Enter');
+  const pixels = await page.evaluate(async () => {
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    window.grid.updateCells([{ rowIndex: 1, columnKey: 'name', value: 'Partial' }]);
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    const canvas = document.querySelector('canvas');
+    const image = () => [...canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data];
+    const partial = image();
+    window.grid.render();
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    return JSON.stringify(partial) === JSON.stringify(image());
+  });
+  expect(pixels).toBe(true);
+  await viewport.evaluate(el => { el.scrollTop = 400; });
+  await viewport.click({ position: { x: 250, y: 16 } });
+  expect(await page.evaluate(() => window.grid.getSelection())).toMatchObject({ rowIndex: 11, columnIndex: 1 });
+  await viewport.press('Control+Home');
+  const bounds = await viewport.boundingBox();
+  await page.mouse.move(bounds.x + 240, bounds.y - 18);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + 280, bounds.y - 18, { steps: 3 });
+  await page.mouse.up();
+  await viewport.click({ position: { x: 290, y: 16 } });
+  await viewport.press('F2');
+  expect(await input.evaluate(el => el.offsetLeft)).toBe(280);
+  await input.press('Escape');
+  expect(await page.evaluate(() => {
+    let failures = 0;
+    for (const call of [() => window.grid.setRowHeight(-1, 40), () => window.grid.setColumnWidth(0, 0)]) {
+      try { call(); } catch { failures++; }
+    }
+    return failures;
+  })).toBe(2);
+  const edgeY = await viewport.evaluate(el => el.clientHeight - 2);
+  await viewport.click({ position: { x: 290, y: edgeY }, button: 'right' });
+  await expect(page.getByRole('menu', { name: 'Cell actions' })).toBeVisible();
+  expect(await viewport.evaluate(el => el.scrollTop)).toBe(0);
+});
+
+test('context menu preserves ranges, invokes shared actions, supports keyboard and closes safely', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid, LocalDataSource } = await import('/index.js');
+    window.source = new LocalDataSource([{ id: 1, name: 'Ada', team: 'Design' }, { id: 2, name: 'Grace', team: 'Ops' }], row => row.id);
+    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source,
+      columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true }, { key: 'team', title: 'Team', editable: true }] });
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      writeText: async text => { window.copied = text; }, readText: async () => 'Pasted\tTeam\r\nSecond\tOps',
+    } });
+  });
+  const viewport = page.getByLabel(/^Data grid viewport/);
+  const menu = page.getByRole('menu', { name: 'Cell actions' });
+  await viewport.click({ position: { x: 180, y: 16 } });
+  await viewport.click({ position: { x: 340, y: 48 }, modifiers: ['Shift'] });
+  await viewport.click({ position: { x: 180, y: 16 }, button: 'right' });
+  await expect(menu).toBeVisible();
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toEqual({ startRow: 0, endRow: 1, startColumn: 1, endColumn: 2 });
+  await expect(page.getByRole('menuitem', { name: 'Undo', exact: true })).toBeDisabled();
+  await page.getByRole('menuitem', { name: 'Copy', exact: true }).click();
+  expect(await page.evaluate(() => window.copied)).toBe('Ada\tDesign\r\nGrace\tOps');
+  await expect(menu).toHaveCount(0);
+  await viewport.press('Shift+F10');
+  await expect(menu).toBeVisible();
+  await page.getByRole('menuitem', { name: 'Paste', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.source.getValue(0, 'name'))).toBe('Pasted');
+  await viewport.press('Shift+F10');
+  await page.getByRole('menuitem', { name: 'Undo', exact: true }).click();
+  expect(await page.evaluate(() => window.source.getValue(0, 'name'))).toBe('Ada');
+  await viewport.click({ position: { x: 20, y: 16 }, button: 'right' });
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toEqual({ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 });
+  await expect(page.getByRole('menuitem', { name: 'Edit cell', exact: true })).toBeDisabled();
+  await page.getByRole('menuitem', { name: 'Copy', exact: true }).press('End');
+  await expect(page.getByRole('menuitem', { name: 'Resize row…', exact: true })).toBeFocused();
+  await page.getByRole('menuitem', { name: 'Resize row…', exact: true }).press('Escape');
+  await expect(menu).toHaveCount(0);
+  await expect(viewport).toBeFocused();
+  await viewport.click({ position: { x: 180, y: 16 }, button: 'right' });
+  await page.getByRole('menuitem', { name: 'Resize column…', exact: true }).click();
+  await page.getByRole('spinbutton', { name: 'Column width (px)' }).fill('200');
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await viewport.click({ position: { x: 180, y: 16 }, button: 'right' });
+  await page.getByRole('menuitem', { name: 'Resize row…', exact: true }).click();
+  await page.getByRole('spinbutton', { name: 'Row height (px)' }).fill('48');
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await viewport.click({ position: { x: 180, y: 16 }, button: 'right' });
+  await page.getByRole('menuitem', { name: 'Edit cell', exact: true }).click();
+  expect(await page.getByRole('textbox').evaluate(el => ({ width: el.offsetWidth, height: el.offsetHeight }))).toEqual({ width: 200, height: 48 });
+  const native = await page.getByRole('textbox').evaluate(el => {
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    el.dispatchEvent(event); return !event.defaultPrevented;
+  });
+  expect(native).toBe(true);
+  await page.getByRole('textbox').press('Escape');
+  await page.evaluate(() => { navigator.clipboard.readText = async () => { throw new Error('Clipboard denied'); }; });
+  await viewport.click({ position: { x: 180, y: 16 }, button: 'right' });
+  await page.getByRole('menuitem', { name: 'Paste', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Clipboard denied');
+  expect(await page.evaluate(() => window.source.getValue(0, 'name'))).toBe('Ada');
+  await page.evaluate(() => { navigator.clipboard.readText = () => new Promise(resolve => { window.resolvePaste = resolve; }); });
+  await viewport.click({ position: { x: 180, y: 16 }, button: 'right' });
+  await page.getByRole('menuitem', { name: 'Paste', exact: true }).click();
+  await viewport.click({ position: { x: 380, y: 16 } });
+  await page.evaluate(() => window.resolvePaste('Lost'));
+  await expect(page.getByRole('alert')).toContainText('Selection changed');
+  expect(await page.evaluate(() => window.source.getValue(0, 'team'))).toBe('Design');
+  await viewport.click({ position: { x: 180, y: 16 }, button: 'right' });
+  await page.getByRole('menuitem', { name: 'Resize row…', exact: true }).click();
+  await page.getByRole('spinbutton', { name: 'Row height (px)' }).fill('0');
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Row height', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await viewport.click({ position: { x: 180, y: 16 }, button: 'right' });
+  await page.locator('#existing').click();
+  await expect(menu).not.toBeVisible();
+  await viewport.click({ position: { x: 180, y: 16 }, button: 'right' });
+  await page.evaluate(() => window.grid.destroy());
+  await expect(menu).toHaveCount(0);
+});
+
 test('range selection supports drag, Shift navigation, normalized bounds and clipboard events', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {

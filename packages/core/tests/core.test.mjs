@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { LocalDataSource } from '../dist/index.js';
 import { visibleRange } from '../dist/viewport.js';
+import { GridAxis } from '../dist/axis.js';
 import { decodeTsv, encodeTsv, clipboardCellLimit, clipboardTextLimit } from '../dist/tsv.js';
 
 test('local rows preserve identity and snapshot top-level values', () => {
@@ -87,4 +88,26 @@ test('TSV round-trips quoted tabs, multiline values, quotes and empty fields', (
   assert.throws(() => decodeTsv('a\tb\nc'), /equal widths/);
   assert.throws(() => decodeTsv('x'.repeat(clipboardTextLimit + 1)), RangeError);
   assert.throws(() => decodeTsv('\t'.repeat(clipboardCellLimit)), RangeError);
+});
+
+test('sparse axis geometry matches variable-size boundaries and a million rows', () => {
+  const axis = new GridAxis(6, 32);
+  axis.setSize(0, 64);
+  axis.setSize(3, 16);
+  assert.deepEqual(Array.from({ length: 7 }, (_, i) => axis.position(i)), [0, 64, 96, 128, 144, 176, 208]);
+  assert.equal(axis.indexAt(63), 0);
+  assert.equal(axis.indexAt(64), 1);
+  assert.deepEqual(axis.range(64, 64), { start: 1, end: 3 });
+  assert.deepEqual(axis.range(127, 18), { start: 2, end: 5 });
+  assert.deepEqual(axis.range(500, 100), { start: 6, end: 6 });
+  axis.setSize(0, 32);
+  assert.equal(axis.position(6), 176);
+  for (const [index, size] of [[-1, 32], [6, 32], [0.5, 32], [0, 0], [0, NaN], [0, Infinity]]) assert.throws(() => axis.setSize(index, size), RangeError);
+  assert.equal(axis.position(6), 176);
+  const large = new GridAxis(1_000_000, 32);
+  large.setSize(500_000, 64);
+  assert.equal(large.position(1_000_000), 32_000_032);
+  assert.equal(large.indexAt(16_000_063), 500_000);
+  assert.equal(large.indexAt(16_000_064), 500_001);
+  assert.deepEqual(new GridAxis(0, 32).range(0, 100), { start: 0, end: 0 });
 });

@@ -10,7 +10,7 @@ The planned architecture separates the core engine from framework integrations, 
 
 The first core preview implements read-only Canvas rendering, row and column virtualization, native scrolling, and a local data source. Single-cell selection and keyboard navigation are also available. It builds to an ESM package with TypeScript declarations. The API is experimental and may change.
 
-Start with the [core package guide](packages/core/README.md) for local installation, an example, and API limitations. No package has been published. Opt-in DOM editing, atomic local batch updates, partial cell repaint and undo/redo are available. Rectangular selection and TSV copy/paste are available. Multiple ranges, remote data sources and framework adapters remain planned. Canvas cell content is not yet accessible to screen readers. The V1 scope below remains the target, not a list of completed features.
+Start with the [core package guide](packages/core/README.md) for local installation, an example, and API limitations. No package has been published. Opt-in DOM editing, atomic local batch updates, partial cell repaint and undo/redo are available. Rectangular selection, TSV copy/paste, individual row/column resize and a built-in context menu are available. Multiple ranges, remote data sources and framework adapters remain planned. Canvas cell content is not yet accessible to screen readers. The V1 scope below remains the target, not a list of completed features.
 
 ## Design goals
 
@@ -21,7 +21,7 @@ Start with the [core package guide](packages/core/README.md) for local installat
 - **Incremental updates:** support targeted invalidation and batched changes to avoid unnecessary redraws.
 - **Extensibility:** provide custom cell renderers, editors, themes, and plugin APIs.
 
-Performance targets have not yet been validated by benchmarks.
+A reproducible headless Canvas callback benchmark is available via npm run benchmark. End-to-end frame rate and memory targets remain unverified.
 
 ## Planned V1 scope
 
@@ -38,7 +38,7 @@ V1 focuses on displaying and editing tabular application data. Formula evaluatio
 
 ## Repository structure
 
-[`packages/core/`](packages/core/README.md) contains the TypeScript engine and unit tests. Browser integration tests live in `tests/`. Framework adapters, standalone examples, themes, and benchmarks remain planned.
+[`packages/core/`](packages/core/README.md) contains the TypeScript engine and unit tests. Browser integration tests live in `tests/`. Framework adapters, standalone examples and themes remain planned. The core includes a headless render-callback benchmark.
 
 ## Development
 

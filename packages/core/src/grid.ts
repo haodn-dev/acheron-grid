@@ -1,5 +1,5 @@
 import type { CellUpdate, DataSource, RowId } from './data-source.js';
-import { visibleRange } from './viewport.js';
+import { GridAxis } from './axis.js';
 import { clipboardCellLimit, clipboardTextLimit, decodeTsv, encodeTsv } from './tsv.js';
 
 export interface Column { key: string; title: string; editable?: boolean; parse?: (text: string) => unknown; }
@@ -24,6 +24,8 @@ export interface Grid {
   getSelectionRange(): SelectionRange | null;
   copySelection(): string;
   paste(text: string): void;
+  setColumnWidth(index: number, width: number): void;
+  setRowHeight(index: number, height: number): void;
   destroy(): void;
 }
 
@@ -41,6 +43,8 @@ export function createGrid(options: GridOptions): Grid {
   const rowCount = dataSource.getRowCount();
   if (!Number.isSafeInteger(rowCount) || rowCount < 0) throw new RangeError('Invalid row count.');
   if (!Number.isFinite(rowCount * rowHeight) || !Number.isFinite(columns.length * columnWidth)) throw new RangeError('Grid dimensions overflow.');
+  const rowAxis = new GridAxis(rowCount, rowHeight);
+  const columnAxis = new GridAxis(columns.length, columnWidth);
   const doc = container.ownerDocument;
   const win = doc.defaultView!;
   const root = doc.createElement('div');
@@ -73,6 +77,169 @@ export function createGrid(options: GridOptions): Grid {
   type Change = CellUpdate & { previous: unknown; rowId: RowId };
   const past: Change[][] = [];
   const future: Change[][] = [];
+  let menu: HTMLDivElement | null = null;
+  let sizeDialog: HTMLDialogElement | null = null;
+  let resizing: { pointerId: number; column: number; x: number; width: number } | null = null;
+  const actionError = doc.createElement('div');
+  actionError.setAttribute('role', 'alert');
+  actionError.style.cssText = 'display:none;position:absolute;bottom:20px;left:12px;right:24px;z-index:2;padding:10px;background:#fff1f2;color:#9f1239;border:1px solid #fda4af;border-radius:6px;font:13px system-ui';
+  root.append(actionError);
+
+  function openSizeDialog(label: string, current: number, apply: (size: number) => void): void {
+    const dialog = doc.createElement('dialog');
+    sizeDialog?.remove();
+    sizeDialog = dialog;
+    dialog.setAttribute('aria-label', label);
+    dialog.style.cssText = 'padding:20px;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 8px 24px #0f172a26;color:#0f172a;font:14px system-ui';
+    const form = doc.createElement('form');
+    const fieldLabel = doc.createElement('label');
+    fieldLabel.textContent = `${label} (px) `;
+    const input = doc.createElement('input');
+    input.type = 'number'; input.min = '1'; input.step = 'any'; input.required = true;
+    input.value = String(current);
+    input.style.cssText = 'width:100px;padding:6px;margin:0 0 16px 8px';
+    fieldLabel.append(input);
+    const save = doc.createElement('button');
+    save.type = 'submit'; save.textContent = 'Apply';
+    const cancel = doc.createElement('button');
+    cancel.type = 'button'; cancel.textContent = 'Cancel';
+    for (const button of [save, cancel]) button.style.cssText = 'padding:6px 14px;margin-right:8px';
+    cancel.addEventListener('click', () => dialog.close());
+    input.addEventListener('input', () => input.setCustomValidity(''));
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      try { apply(input.valueAsNumber); dialog.close(); }
+      catch (error) { input.setCustomValidity(error instanceof Error ? error.message : 'Invalid size.'); input.reportValidity(); }
+    });
+    form.append(fieldLabel, doc.createElement('br'), save, cancel);
+    dialog.append(form);
+    dialog.addEventListener('close', () => {
+      dialog.remove();
+      if (sizeDialog === dialog) sizeDialog = null;
+      if (!destroyed) scroller.focus({ preventScroll: true });
+    });
+    root.append(dialog);
+    dialog.showModal();
+    input.focus(); input.select();
+  }
+
+  function resizeAxis(axis: GridAxis, index: number, size: number): void {
+    if (destroyed) throw new Error('Grid is destroyed.');
+    if (editor) throw new Error('Finish editing before resizing cells.');
+    axis.setSize(index, size);
+    spacer.style.width = `${columnAxis.position(columns.length)}px`;
+    spacer.style.height = `${rowAxis.position(rowCount)}px`;
+    render();
+  }
+
+  function closeMenu(focus = false): void {
+    menu?.remove();
+    menu = null;
+    if (focus && !destroyed) scroller.focus({ preventScroll: true });
+  }
+
+  function openMenu(row: number, col: number, x: number, y: number): void {
+    closeMenu();
+    const range = getSelectionRange();
+    if (!range || row < range.startRow || row > range.endRow || col < range.startColumn || col > range.endColumn) select(row, col, false, false);
+    if (destroyed) return;
+    const popup = doc.createElement('div');
+    menu = popup;
+    popup.popover = 'auto';
+    popup.setAttribute('role', 'menu');
+    popup.setAttribute('aria-label', 'Cell actions');
+    popup.className = 'acheron-context-menu';
+    popup.style.cssText = 'position:fixed;margin:0;padding:6px;min-width:200px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 8px 24px #0f172a26;background:white;color:#0f172a;font:13px system-ui';
+    const style = doc.createElement('style');
+    style.textContent = '.acheron-context-menu button{display:block;width:100%;padding:8px 10px;border:0;border-radius:4px;background:transparent;text-align:left;color:inherit;font:inherit;cursor:pointer}.acheron-context-menu button:hover:not(:disabled),.acheron-context-menu button:focus-visible{background:#eff6ff;outline:2px solid #2563eb}.acheron-context-menu button:disabled{opacity:.45;cursor:default}';
+    popup.append(style);
+    const fingerprint = JSON.stringify(getSelectionRange());
+    function item(label: string, enabled: boolean, action: () => void | Promise<void>): void {
+      const button = doc.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.setAttribute('role', 'menuitem');
+      button.disabled = !enabled;
+      button.addEventListener('click', async () => {
+        closeMenu(true);
+        actionError.style.display = 'none';
+        try { await action(); }
+        catch (error) {
+          if (!destroyed) {
+            actionError.textContent = `${error instanceof Error ? error.message : 'Action failed.'}${label === 'Copy' || label === 'Paste' ? ' Use Ctrl/Cmd+C or Ctrl/Cmd+V if the browser blocks menu clipboard access.' : ''}`;
+            actionError.style.display = 'block';
+          }
+        }
+      });
+      popup.append(button);
+    }
+    item('Copy', !!win.navigator.clipboard?.writeText, () => win.navigator.clipboard.writeText(copySelection()));
+    item('Paste', !!win.navigator.clipboard?.readText && !!(dataSource.setValue || dataSource.setValues) && !!columns[getSelectionRange()!.startColumn]!.editable, async () => {
+      const text = await win.navigator.clipboard.readText();
+      if (destroyed || fingerprint !== JSON.stringify(getSelectionRange())) throw new Error('Selection changed before paste. Try again.');
+      paste(text);
+    });
+    item('Edit cell', !!dataSource.setValue && !!columns[selection!.columnIndex]!.editable && (columns[selection!.columnIndex]!.parse !== undefined || dataSource.getValue(selection!.rowIndex, selection!.columnKey) == null || typeof dataSource.getValue(selection!.rowIndex, selection!.columnKey) === 'string'), beginEdit);
+    item('Undo', past.length > 0, () => { replay(false); });
+    item('Redo', future.length > 0, () => { replay(true); });
+    item('Resize column…', true, () => openSizeDialog('Column width', columnAxis.size(col), size => resizeAxis(columnAxis, col, size)));
+    item('Resize row…', true, () => openSizeDialog('Row height', rowAxis.size(row), size => resizeAxis(rowAxis, row, size)));
+    popup.addEventListener('keydown', event => {
+      const buttons = Array.from(popup.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));
+      const index = buttons.indexOf(doc.activeElement as HTMLButtonElement);
+      if (event.key === 'Escape' || event.key === 'Tab') { event.preventDefault(); closeMenu(true); }
+      else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+        event.preventDefault();
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+        buttons[next]?.focus();
+      }
+      event.stopPropagation();
+    });
+    root.append(popup);
+    popup.showPopover();
+    popup.style.left = `${Math.max(8, Math.min(x, win.innerWidth - popup.offsetWidth - 8))}px`;
+    popup.style.top = `${Math.max(8, Math.min(y, win.innerHeight - popup.offsetHeight - 8))}px`;
+    popup.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+  }
+
+  function onContextMenu(event: MouseEvent): void {
+    if (event.target === editor) return;
+    const cell = pointerCell(event);
+    if (!cell) return;
+    event.preventDefault();
+    if (!finishEdit(true)) return;
+    openMenu(cell.row, cell.col, event.clientX, event.clientY);
+  }
+
+  function columnEdge(event: PointerEvent): number | null {
+    const bounds = root.getBoundingClientRect();
+    const x = event.clientX - bounds.left;
+    const y = event.clientY - bounds.top;
+    if (x < 0 || x >= scroller.clientWidth || y < 0 || y >= headerHeight || !columns.length) return null;
+    const offset = x + scroller.scrollLeft;
+    const col = columnAxis.indexAt(offset);
+    if (col < columns.length && Math.abs(columnAxis.position(col + 1) - offset) <= 5) return col;
+    if (col > 0 && Math.abs(columnAxis.position(col) - offset) <= 5) return col - 1;
+    return null;
+  }
+
+  function onHeaderPointerDown(event: PointerEvent): void {
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+    const column = columnEdge(event);
+    if (column === null) return;
+    event.preventDefault();
+    if (!finishEdit(true)) return;
+    closeMenu();
+    resizing = { pointerId: event.pointerId, column, x: event.clientX, width: columnAxis.size(column) };
+    root.setPointerCapture(event.pointerId);
+  }
+
+  function onHeaderPointerMove(event: PointerEvent): void {
+    root.style.cursor = resizing || columnEdge(event) !== null ? 'col-resize' : '';
+    if (resizing?.pointerId === event.pointerId) resizeAxis(columnAxis, resizing.column, Math.max(24, Math.min(1000, resizing.width + event.clientX - resizing.x)));
+  }
+
+  function endResize(): void { resizing = null; root.style.cursor = ''; }
 
   function write(changes: readonly CellUpdate[]): void {
     if (changes.length === 1 && dataSource.setValue) {
@@ -171,7 +338,7 @@ export function createGrid(options: GridOptions): Grid {
     editor.type = 'text';
     editor.value = value == null ? '' : String(value);
     editor.setAttribute('aria-label', `Edit row ${selection.rowIndex + 1}, ${column.title}`);
-    editor.style.cssText = `position:absolute;box-sizing:border-box;z-index:1;border:2px solid #2563eb;background:white;font:13px system-ui;padding:0 8px;left:${selection.columnIndex * columnWidth}px;top:${selection.rowIndex * rowHeight}px;width:${columnWidth}px;height:${rowHeight}px`;
+    editor.style.cssText = `position:absolute;box-sizing:border-box;z-index:1;border:2px solid #2563eb;background:white;font:13px system-ui;padding:0 8px;left:${columnAxis.position(selection.columnIndex)}px;top:${rowAxis.position(selection.rowIndex)}px;width:${columnAxis.size(selection.columnIndex)}px;height:${rowAxis.size(selection.rowIndex)}px`;
     editor.addEventListener('input', () => {
       editor?.setCustomValidity('');
       editor?.removeAttribute('aria-invalid');
@@ -262,19 +429,21 @@ export function createGrid(options: GridOptions): Grid {
     catch (error) { win.alert(error instanceof Error ? error.message : 'Unable to paste cells.'); }
   }
 
-  function select(rowIndex: number, columnIndex: number, extend = false): void {
+  function select(rowIndex: number, columnIndex: number, extend = false, reveal = true): void {
     if (destroyed || rowCount === 0 || columns.length === 0) return;
     const changed = selection?.rowIndex !== rowIndex || selection?.columnIndex !== columnIndex;
     const previousRange = JSON.stringify(getSelectionRange());
     selection = { rowIndex, rowId: dataSource.getRowId(rowIndex), columnIndex, columnKey: columns[columnIndex]!.key };
     if (!extend || !anchor) anchor = { ...selection };
     const rangeChanged = previousRange !== JSON.stringify(getSelectionRange());
-    const left = columnIndex * columnWidth;
-    const top = rowIndex * rowHeight;
-    if (left < scroller.scrollLeft || columnWidth > scroller.clientWidth) scroller.scrollLeft = left;
-    else if (left + columnWidth > scroller.scrollLeft + scroller.clientWidth) scroller.scrollLeft = left + columnWidth - scroller.clientWidth;
-    if (top < scroller.scrollTop || rowHeight > scroller.clientHeight) scroller.scrollTop = top;
-    else if (top + rowHeight > scroller.scrollTop + scroller.clientHeight) scroller.scrollTop = top + rowHeight - scroller.clientHeight;
+    const left = columnAxis.position(columnIndex);
+    const top = rowAxis.position(rowIndex);
+    if (reveal) {
+      if (left < scroller.scrollLeft || columnAxis.size(columnIndex) > scroller.clientWidth) scroller.scrollLeft = left;
+      else if (left + columnAxis.size(columnIndex) > scroller.scrollLeft + scroller.clientWidth) scroller.scrollLeft = left + columnAxis.size(columnIndex) - scroller.clientWidth;
+      if (top < scroller.scrollTop || rowAxis.size(rowIndex) > scroller.clientHeight) scroller.scrollTop = top;
+      else if (top + rowAxis.size(rowIndex) > scroller.scrollTop + scroller.clientHeight) scroller.scrollTop = top + rowAxis.size(rowIndex) - scroller.clientHeight;
+    }
     const value = dataSource.getValue(rowIndex, selection.columnKey);
     scroller.setAttribute('aria-label', `${viewportLabel}: row ${rowIndex + 1}, ${columns[columnIndex]!.title}, ${value == null ? '' : String(value)}`);
     if (changed || rangeChanged) render();
@@ -289,8 +458,8 @@ export function createGrid(options: GridOptions): Grid {
     let y = event.clientY - bounds.top;
     if (clamp) { x = Math.max(0, Math.min(scroller.clientWidth - 1, x)); y = Math.max(0, Math.min(scroller.clientHeight - 1, y)); }
     if (x < 0 || y < 0 || x >= scroller.clientWidth || y >= scroller.clientHeight) return null;
-    const row = Math.floor((y + scroller.scrollTop) / rowHeight);
-    const col = Math.floor((x + scroller.scrollLeft) / columnWidth);
+    const row = rowAxis.indexAt(y + scroller.scrollTop);
+    const col = columnAxis.indexAt(x + scroller.scrollLeft);
     if (!clamp && (row >= rowCount || col >= columns.length)) return null;
     return { row: Math.min(rowCount - 1, row), col: Math.min(columns.length - 1, col) };
   }
@@ -319,6 +488,13 @@ export function createGrid(options: GridOptions): Grid {
   function onPointerEnd(): void { dragPointer = null; }
 
   function onKeyDown(event: KeyboardEvent): void {
+    if ((event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) && selection) {
+      event.preventDefault();
+      const bounds = scroller.getBoundingClientRect();
+      openMenu(selection.rowIndex, selection.columnIndex, bounds.left + columnAxis.position(selection.columnIndex) - scroller.scrollLeft,
+        bounds.top + rowAxis.position(selection.rowIndex + 1) - scroller.scrollTop);
+      return;
+    }
     if (event.isComposing || event.altKey) return;
     const control = event.ctrlKey || event.metaKey;
     if (control && (event.key.toLowerCase() === 'z' || (event.key.toLowerCase() === 'y' && !event.shiftKey))) {
@@ -392,15 +568,15 @@ export function createGrid(options: GridOptions): Grid {
       context!.clip();
       for (const change of dirty.values()) {
         const col = columns.findIndex(column => column.key === change.columnKey);
-        const x = col * columnWidth - scroller.scrollLeft;
-        const y = headerHeight + change.rowIndex * rowHeight - scroller.scrollTop;
-        if (x >= width || x + columnWidth <= 0 || y >= height || y + rowHeight <= headerHeight) continue;
+        const x = columnAxis.position(col) - scroller.scrollLeft;
+        const y = headerHeight + rowAxis.position(change.rowIndex) - scroller.scrollTop;
+        if (x >= width || x + columnAxis.size(col) <= 0 || y >= height || y + rowAxis.size(change.rowIndex) <= headerHeight) continue;
         context!.save();
         context!.beginPath();
-        context!.rect(x, y, columnWidth, rowHeight);
+        context!.rect(x, y, columnAxis.size(col), rowAxis.size(change.rowIndex));
         context!.clip();
         const value = dataSource.getValue(change.rowIndex, change.columnKey);
-        cell(value == null ? '' : String(value), x, y, columnWidth, rowHeight, false);
+        cell(value == null ? '' : String(value), x, y, columnAxis.size(col), rowAxis.size(change.rowIndex), false);
         context!.restore();
       }
       drawSelection();
@@ -417,8 +593,8 @@ export function createGrid(options: GridOptions): Grid {
     canvas.style.height = `${height}px`;
     context!.setTransform(ratio, 0, 0, ratio, 0, 0);
     context!.clearRect(0, 0, width, height);
-    const rows = visibleRange(rowCount, rowHeight, scroller.scrollTop, bodyHeight);
-    const cols = visibleRange(columns.length, columnWidth, scroller.scrollLeft, width);
+    const rows = rowAxis.range(scroller.scrollTop, bodyHeight);
+    const cols = columnAxis.range(scroller.scrollLeft, width);
     context!.save();
     context!.beginPath();
     context!.rect(0, headerHeight, width, Math.max(0, height - headerHeight));
@@ -426,8 +602,8 @@ export function createGrid(options: GridOptions): Grid {
     for (let row = rows.start; row < rows.end; row++) {
       for (let col = cols.start; col < cols.end; col++) {
         const value = dataSource.getValue(row, columns[col]!.key);
-        cell(value == null ? '' : String(value), col * columnWidth - scroller.scrollLeft,
-          headerHeight + row * rowHeight - scroller.scrollTop, columnWidth, rowHeight, false);
+        cell(value == null ? '' : String(value), columnAxis.position(col) - scroller.scrollLeft,
+          headerHeight + rowAxis.position(row) - scroller.scrollTop, columnAxis.size(col), rowAxis.size(row), false);
       }
     }
     drawSelection();
@@ -437,7 +613,7 @@ export function createGrid(options: GridOptions): Grid {
     context!.rect(0, 0, width, headerHeight);
     context!.clip();
     for (let col = cols.start; col < cols.end; col++) {
-      cell(columns[col]!.title, col * columnWidth - scroller.scrollLeft, 0, columnWidth, headerHeight, true);
+      cell(columns[col]!.title, columnAxis.position(col) - scroller.scrollLeft, 0, columnAxis.size(col), headerHeight, true);
     }
     context!.restore();
   }
@@ -447,18 +623,19 @@ export function createGrid(options: GridOptions): Grid {
       const range = getSelectionRange()!;
       context!.strokeStyle = '#2563eb';
       context!.lineWidth = 2;
-      context!.strokeRect(range.startColumn * columnWidth - scroller.scrollLeft + 1,
-        headerHeight + range.startRow * rowHeight - scroller.scrollTop + 1,
-        Math.max(0, (range.endColumn - range.startColumn + 1) * columnWidth - 2),
-        Math.max(0, (range.endRow - range.startRow + 1) * rowHeight - 2));
+      context!.strokeRect(columnAxis.position(range.startColumn) - scroller.scrollLeft + 1,
+        headerHeight + rowAxis.position(range.startRow) - scroller.scrollTop + 1,
+        Math.max(0, (columnAxis.position(range.endColumn + 1) - columnAxis.position(range.startColumn)) - 2),
+        Math.max(0, (rowAxis.position(range.endRow + 1) - rowAxis.position(range.startRow)) - 2));
       if (range.startRow === range.endRow && range.startColumn === range.endColumn) return;
-      context!.strokeRect(selection.columnIndex * columnWidth - scroller.scrollLeft + 1,
-        headerHeight + selection.rowIndex * rowHeight - scroller.scrollTop + 1,
-        Math.max(0, columnWidth - 2), Math.max(0, rowHeight - 2));
+      context!.strokeRect(columnAxis.position(selection.columnIndex) - scroller.scrollLeft + 1,
+        headerHeight + rowAxis.position(selection.rowIndex) - scroller.scrollTop + 1,
+        Math.max(0, columnAxis.size(selection.columnIndex) - 2), Math.max(0, rowAxis.size(selection.rowIndex) - 2));
     }
   }
 
   function render(): void {
+    closeMenu();
     fullDraw = true;
     schedule();
   }
@@ -469,6 +646,12 @@ export function createGrid(options: GridOptions): Grid {
   observer.observe(root);
   scroller.addEventListener('scroll', render, { passive: true });
   scroller.addEventListener('pointerdown', onPointerDown);
+  scroller.addEventListener('contextmenu', onContextMenu);
+  root.addEventListener('pointerdown', onHeaderPointerDown);
+  root.addEventListener('pointermove', onHeaderPointerMove);
+  root.addEventListener('pointerup', endResize);
+  root.addEventListener('pointercancel', endResize);
+  root.addEventListener('lostpointercapture', endResize);
   scroller.addEventListener('pointermove', onPointerMove);
   scroller.addEventListener('pointerup', onPointerEnd);
   scroller.addEventListener('pointercancel', onPointerEnd);
@@ -491,9 +674,21 @@ export function createGrid(options: GridOptions): Grid {
     getSelectionRange,
     copySelection,
     paste,
+    setColumnWidth: (index, width) => resizeAxis(columnAxis, index, width),
+    setRowHeight: (index, height) => resizeAxis(rowAxis, index, height),
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      closeMenu();
+      sizeDialog?.remove();
+      sizeDialog = null;
+      endResize();
+      root.removeEventListener('pointerdown', onHeaderPointerDown);
+      root.removeEventListener('pointermove', onHeaderPointerMove);
+      root.removeEventListener('pointerup', endResize);
+      root.removeEventListener('pointercancel', endResize);
+      root.removeEventListener('lostpointercapture', endResize);
+      scroller.removeEventListener('contextmenu', onContextMenu);
       dirty.clear();
       past.length = future.length = 0;
       const input = editor;

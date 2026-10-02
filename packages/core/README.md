@@ -4,13 +4,13 @@ An experimental, framework-independent Canvas data grid engine written in TypeSc
 
 ## Current capabilities
 
-- Read-only Canvas rendering with fixed row heights and column widths.
+- Canvas rendering with default sizes and individual row/column size overrides.
 - Row and column virtualization, native scrolling, and a pinned column header.
 - A local data source with unique row IDs and shallow row snapshots.
 - Resize observation, coalesced rendering, and explicit cleanup.
 - Single-cell selection by pointer and keyboard, with automatic scrolling.
 
-This package is a development preview, not a published release. Multi-range selection, remote data sources, and framework adapters are not implemented. Canvas cell content is not yet accessible to screen readers. Performance has not been benchmarked.
+This package is a development preview, not a published release. Multi-range selection, remote data sources, and framework adapters are not implemented. Canvas cell content is not yet accessible to screen readers. A headless render-callback benchmark is available; end-to-end frame rate has not been verified.
 
 ## Build from source
 
@@ -114,7 +114,7 @@ The grid retains the latest 100 commands, with shallow old/new value references.
 
 When the viewport has focus, Ctrl/Cmd+Z undoes and Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y redoes. The DOM editor keeps native text undo. `updateCells` throws while editing or after destruction; undo/redo return `false` while editing, after destruction or when the stack is empty. Destroy releases both history stacks.
 
-Value commands coalesce dirty cells into one animation frame. Offscreen changes are read when scrolled into view. Scroll, resize, selection changes and explicit `render()` request a full viewport redraw. Layout commands, async history and persistent history are not implemented.
+Value commands coalesce dirty cells into one animation frame. Offscreen changes are read when scrolled into view. Scroll, resize, selection changes and explicit `render()` request a full viewport redraw. Undoable layout commands, async history and persistent history are not implemented.
 
 ## Range selection and clipboard
 
@@ -132,3 +132,26 @@ Native copy/paste events support Ctrl/Cmd+C/V on the focused viewport without Cl
 Paste starts at the selected range's top-left cell and uses the clipboard rectangle's dimensions. It does not tile/fill the selection, add rows or skip read-only columns. Every destination must be within bounds and `editable`; values pass through column parsers. Non-string existing values require a parser. All values are validated before the atomic write, so parser/bounds/read-only failures leave data/history unchanged. Multi-cell paste requires an atomic source `setValues` implementation.
 
 Clipboard work is limited to 100,000 cells and 10,000,000 UTF-16 code units per payload. Over-limit transfers throw `RangeError`. Copy/paste APIs throw while editing or after destruction; no selection yields empty copy/no-op paste. Event errors use native alerts. HTML-only clipboard, cut and formula processing are not supported. Actual OS clipboard and spreadsheet interoperability have not been verified; browser tests exercise native event handlers with controlled `DataTransfer` payloads.
+
+## Row/column resize and context menu
+
+```js
+grid.setColumnWidth(1, 240);
+grid.setRowHeight(0, 48);
+```
+
+Sizes are finite positive CSS pixel values; indices are zero-based integers. Invalid indices/sizes are rejected before layout changes. Calls throw while editing or after destruction. Sizes default to `columnWidth`/`rowHeight`, with sparse per-index overrides; rows do not require a size array. Resizing updates scroll dimensions and fully redraws, keeping hit testing, editor placement and selection aligned. Layout changes are in memory and are outside data undo/redo.
+
+Drag within 5 CSS pixels of a header edge to resize that column (24–1000px). Right-click a cell and choose **Resize column…** or **Resize row…** for a native DOM dialog with a labeled number input, Apply and Cancel. The dialog accepts sizes of at least 1px. Row-edge dragging, row gutters, auto-fit and persisted layout are not implemented.
+
+The built-in cell menu also provides **Copy**, **Paste**, **Edit cell**, **Undo** and **Redo**. Right-clicking within the range preserves it and its active endpoint; right-clicking elsewhere selects that cell without scrolling. Resize targets the clicked cell, while Edit targets the active cell. Header, blank space and editor inputs retain the browser's context menu.
+
+Shift+F10 or the ContextMenu key opens the menu for the active cell. Arrow keys, Home and End navigate enabled items; Enter/Space activates. Escape/Tab returns focus to the viewport. Outside clicks, scrolling, resizing and destruction dismiss the menu. The popover stays inside the browser window.
+
+Menu Copy/Paste calls `navigator.clipboard` only from the clicked action and requires browser support, a secure context and any required browser permission. It does not read the clipboard when opening the menu. Errors are shown in an accessible message with a keyboard-shortcut fallback. An async paste is rejected if its target range changes before the clipboard read finishes. Ctrl/Cmd+C/V on the grid and native editor clipboard remain available. Custom menu items are not implemented.
+
+## Render-callback benchmark
+
+Run `npm run benchmark` from the engine root. The installed Playwright runner measures callbacks that draw a viewport of a lazy 1,000,000-row × 1,000-column source, including sparse resize overrides, scrolling and partial updates. JSON output reports sample counts, median/P95 callback time and maximum source cell reads. The fixture uses a 640×360 CSS pixel grid.
+
+This measures synchronous JavaScript/Canvas callback cost in headless Chromium. It does not measure deferred rasterization, compositor/GPU work, end-to-end FPS or peak memory, and does not claim 60 FPS on other hardware or browsers.
