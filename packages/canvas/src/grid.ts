@@ -82,6 +82,15 @@ export interface Grid {
   destroy(): void;
 }
 
+
+// Lucide SVG assets; see ../LICENSE.lucide for attribution and license terms.
+const stateIconSvg = {
+  "lock": "<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <rect width=\"18\" height=\"11\" x=\"3\" y=\"11\" rx=\"2\" ry=\"2\" />\n  <path d=\"M7 11V7a5 5 0 0 1 10 0v4\" />\n</svg>\n",
+  "arrow-up": "<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"m5 12 7-7 7 7\" />\n  <path d=\"M12 19V5\" />\n</svg>\n",
+  "arrow-down": "<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M12 5v14\" />\n  <path d=\"m19 12-7 7-7-7\" />\n</svg>\n",
+  "funnel": "<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z\" />\n</svg>\n"
+} as const;
+
 /** Mount a grid. The caller owns the container and its dimensions. */
 export function createGrid(options: GridOptions): Grid {
   const { container, dataSource } = options;
@@ -171,6 +180,18 @@ export function createGrid(options: GridOptions): Grid {
   container.append(root);
   let frame: number | undefined;
   let destroyed = false;
+  const stateIcons = Object.fromEntries(Object.entries(stateIconSvg).map(([name, svg]) => {
+    const image = doc.createElement('img');
+    image.onload = () => { if (!destroyed) { fullDraw = true; schedule(); } };
+    const color = theme.headerTextColor.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    image.src = `data:image/svg+xml,${encodeURIComponent(svg.replace('currentColor', color))}`;
+    return [name, image];
+  }));
+  function stateIcon(name: keyof typeof stateIconSvg, x: number, y: number): void {
+    const image = stateIcons[name]!;
+    if (image.complete && image.naturalWidth) context!.drawImage(image, x, y, 16, 16);
+  }
+
   let dragPointer: number | null = null;
   let addNextSelection = false;
   let editor: CellEditor | null = null;
@@ -1062,13 +1083,11 @@ export function createGrid(options: GridOptions): Grid {
       ctx.globalAlpha = .1; ctx.fillStyle = theme.selectionColor; ctx.fillRect(x, y, width, height); ctx.globalAlpha = 1;
     }
     if (header) {
-      ctx.fillStyle = theme.headerTextColor; ctx.strokeStyle = theme.headerTextColor; ctx.lineWidth = 1.2;
       if (options.view?.sort?.columnKey === columns[columnIndex]!.key) {
-        const top = options.view.sort.direction === 'asc' ? y + 10 : y + 16; const base = options.view.sort.direction === 'asc' ? y + 16 : y + 10;
-        ctx.beginPath(); ctx.moveTo(x + width - 28, top); ctx.lineTo(x + width - 32, base); ctx.lineTo(x + width - 24, base); ctx.closePath(); ctx.fill();
+        stateIcon(options.view.sort.direction === 'asc' ? 'arrow-up' : 'arrow-down', x + width - 36, y + (height - 16) / 2);
       }
       if (options.view?.filters?.some(filter => filter.columnKey === columns[columnIndex]!.key)) {
-        const left = x + width - 45; ctx.beginPath(); ctx.moveTo(left, y + 10); ctx.lineTo(left + 9, y + 10); ctx.lineTo(left + 6, y + 15); ctx.lineTo(left + 6, y + 20); ctx.lineTo(left + 3, y + 18); ctx.lineTo(left + 3, y + 15); ctx.closePath(); ctx.stroke();
+        stateIcon('funnel', x + width - 54, y + (height - 16) / 2);
       }
     }
     if (labels.some(label => label.includes('disabled'))) {
@@ -1079,10 +1098,9 @@ export function createGrid(options: GridOptions): Grid {
     const locked = header ? labels.some(label => label.endsWith('locked'))
       : engine.isLocked({ scope: 'cell', rowIndex, columnIndex }) || (leading && labels.includes('Row locked'));
     if (locked && width >= 24 && height >= 20) {
-      const left = x + width - 15; const top = y + 4;
-      ctx.fillStyle = theme.background; ctx.fillRect(left - 2, top - 1, 14, 15);
-      ctx.strokeStyle = theme.headerTextColor; ctx.lineWidth = 1.2;
-      ctx.strokeRect(left, top + 6, 9, 7); ctx.beginPath(); ctx.arc(left + 4.5, top + 6, 3, Math.PI, 0); ctx.stroke();
+      const left = x + width - 18; const top = y + 4;
+      ctx.fillStyle = header ? theme.headerBackground : theme.background; ctx.fillRect(left - 1, top - 1, 18, 18);
+      stateIcon('lock', left, top);
     }
     ctx.restore();
   }
@@ -1446,6 +1464,7 @@ export function createGrid(options: GridOptions): Grid {
       if (destroyed) return;
       engine.destroy();
       destroyed = true;
+      for (const image of Object.values(stateIcons)) image.onload = null;
       closeMenu();
       if (searchTimer !== undefined) win.clearTimeout(searchTimer);
       searchMatches.clear();
