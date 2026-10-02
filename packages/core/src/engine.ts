@@ -1,5 +1,5 @@
 import type { CellUpdate, DataSource, RowId } from './data-source.js';
-import type { Column, CellSelection, SelectionRange, CellLockTarget } from './types.js';
+import type { Column, CellSelection, SelectionRange, CellLockTarget, CellFormatTarget, CellFormat, CellFormatPatch } from './types.js';
 import { resolvePermissions } from './permissions.js';
 import type { CellPermission, CellPermissionPolicy, CellPermissionResolver } from './permissions.js';
 import type { GridEvent, GridChangeSource } from './events.js';
@@ -65,8 +65,15 @@ export function createGridEngine(options: GridEngineOptions) {
   let anchor: CellSelection | null = null;
   const retainedRanges: SelectionRange[] = [];
   type Change = CellUpdate & { previous: unknown; rowId: RowId };
-  const past: Change[][] = [];
-  const future: Change[][] = [];
+  type FormatEntry = { target: Readonly<CellFormatTarget>; bounds: Readonly<SelectionRange>; patch: Readonly<CellFormatPatch>; orders: Readonly<{ background?: number; textColor?: number }>; order: number };
+  type FormatChange = { key: string; previous: FormatEntry | undefined; value: FormatEntry | undefined };
+  type HistoryCommand = { kind: 'values'; changes: Change[] } | { kind: 'format'; changes: FormatChange[] };
+  const past: HistoryCommand[] = [];
+  const future: HistoryCommand[] = [];
+  const formats = new Map<string, FormatEntry>();
+  let orderedFormats: FormatEntry[] = [];
+  let formatOrder = 0;
+  const emptyFormat: Readonly<CellFormat> = Object.freeze({});
 
   function assertAlive(): void {
     if (destroyed) throw new Error('Grid is destroyed.');
@@ -133,7 +140,7 @@ export function createGridEngine(options: GridEngineOptions) {
     if (!changes.length) return;
     for (const change of changes) requirePermission(change.rowIndex, columnIndices.get(change.columnKey)!, 'writable');
     write(changes);
-    past.push(changes);
+    past.push({ kind: 'values', changes });
     // keep the latest 100 commands; large values remain shallow caller-owned references.
     if (past.length > 100) past.shift();
     future.length = 0;
@@ -144,8 +151,17 @@ export function createGridEngine(options: GridEngineOptions) {
     if (destroyed) return false;
     const from = redo ? future : past;
     const to = redo ? past : future;
-    const changes = from.at(-1);
-    if (!changes) return false;
+    const entry = from.at(-1);
+    if (!entry) return false;
+    if (entry.kind === 'format') {
+      for (const change of entry.changes) {
+        if (formats.get(change.key) !== (redo ? change.previous : change.value)) throw new Error('Formatting history conflicts with external changes.');
+        requireFormatPermission((change.value ?? change.previous)!.bounds);
+      }
+      const changes = entry.changes.map(change => ({ ...change, previous: redo ? change.previous : change.value, value: redo ? change.value : change.previous }));
+      writeFormats(changes); from.pop(); to.push(entry); notifyFormats(changes, redo ? 'redo' : 'undo'); return true;
+    }
+    const changes = entry.changes;
     for (const change of changes) {
       if (dataSource.getRowId(change.rowIndex) !== change.rowId || !Object.is(dataSource.getValue(change.rowIndex, change.columnKey), redo ? change.previous : change.value)) {
         throw new Error('History conflicts with external data changes.');
@@ -155,7 +171,7 @@ export function createGridEngine(options: GridEngineOptions) {
     const updates = changes.map(change => ({ ...change, previous: redo ? change.previous : change.value, value: redo ? change.value : change.previous }));
     write(updates);
     from.pop();
-    to.push(changes);
+    to.push(entry);
     notifyCells(updates, redo ? 'redo' : 'undo');
     return true;
   }
@@ -297,6 +313,90 @@ export function createGridEngine(options: GridEngineOptions) {
     if (previous !== size) notify({ type: 'layout' }, Object.freeze({ type: axis === rowAxis ? 'row:resize' : 'column:resize', index, previous, size }));
   }
 
+  function formatBounds(target: CellFormatTarget): SelectionRange {
+    if (target.scope !== 'range') {
+      validateLockTarget(target);
+      return { startRow: target.scope === 'row' || target.scope === 'cell' ? target.rowIndex : 0,
+        endRow: target.scope === 'row' || target.scope === 'cell' ? target.rowIndex : rowCount - 1,
+        startColumn: target.scope === 'column' || target.scope === 'cell' ? target.columnIndex : 0,
+        endColumn: target.scope === 'column' || target.scope === 'cell' ? target.columnIndex : columns.length - 1 };
+    }
+    const range = target.range;
+    if (!range || ![range.startRow, range.endRow, range.startColumn, range.endColumn].every(Number.isSafeInteger) || range.startRow < 0 || range.endRow < range.startRow || range.endRow >= rowCount || range.startColumn < 0 || range.endColumn < range.startColumn || range.endColumn >= columns.length) throw new RangeError('Invalid formatting range.');
+    return { startRow: range.startRow, endRow: range.endRow, startColumn: range.startColumn, endColumn: range.endColumn };
+  }
+
+  function requireFormatPermission(bounds: SelectionRange): void {
+    if (permissions?.formatting === false) throw new Error('Cell does not permit formatting.');
+    if (!resolver) {
+      for (let col = bounds.startColumn; col <= bounds.endColumn; col++) if (!resolvePermissions(columns[col]!.editable ?? false, permissions, columns[col]!.permissions).formatting) throw new Error('Cell does not permit formatting.');
+    } else for (let row = bounds.startRow; row <= bounds.endRow; row++) for (let col = bounds.startColumn; col <= bounds.endColumn; col++) requirePermission(row, col, 'formatting');
+  }
+
+  function canFormat(targets: readonly CellFormatTarget[]): boolean {
+    if (destroyed) return false;
+    const bounds = targets.map(formatBounds);
+    try { for (const range of bounds) requireFormatPermission(range); return bounds.length > 0; } catch { return false; }
+  }
+
+  function getFormat(rowIndex: number, columnIndex: number): Readonly<CellFormat> {
+    assertAlive(); validateLockTarget({ scope: 'cell', rowIndex, columnIndex });
+    if (!orderedFormats.length) return emptyFormat;
+    const result: { background?: string; textColor?: string } = {};
+    const orders = { background: 0, textColor: 0 };
+    // Scan sparse overlays; index regions if large formatting sets become costly.
+    for (const entry of orderedFormats) {
+      const range = entry.bounds;
+      if (rowIndex < range.startRow || rowIndex > range.endRow || columnIndex < range.startColumn || columnIndex > range.endColumn) continue;
+      for (const key of ['background', 'textColor'] as const) {
+        if ((entry.orders[key] ?? 0) <= orders[key]) continue;
+        orders[key] = entry.orders[key]!;
+        const value = entry.patch[key];
+        if (value === null) delete result[key]; else if (value !== undefined) result[key] = value;
+      }
+    }
+    return Object.freeze(result);
+  }
+
+  function writeFormats(changes: readonly FormatChange[]): void {
+    for (const change of changes) { if (change.value) formats.set(change.key, change.value); else formats.delete(change.key); }
+    orderedFormats = [...formats.values()].sort((a, b) => a.order - b.order);
+  }
+
+  function notifyFormats(changes: readonly FormatChange[], source: 'api' | 'undo' | 'redo'): void {
+    notify({ type: 'layout' }, Object.freeze({ type: 'format:change', source, changes: Object.freeze(changes.map(change => Object.freeze({ target: (change.value ?? change.previous)!.target, previous: change.previous?.patch ?? null, value: change.value?.patch ?? null }))) }));
+  }
+
+  function format(targets: readonly CellFormatTarget[], patch: CellFormatPatch | null): void {
+    assertAlive();
+    if (patch !== null) {
+      if (!patch || typeof patch !== 'object') throw new TypeError('Invalid formatting patch.');
+      patch = Object.freeze({ ...patch });
+      for (const [key, value] of Object.entries(patch)) if (!['background', 'textColor'].includes(key) || (value !== null && (typeof value !== 'string' || !/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(value)))) throw new TypeError('Formatting colors must be hex colors or null.');
+      if (!Object.keys(patch).length) return;
+    }
+    const unique = new Map<string, { target: CellFormatTarget; bounds: SelectionRange }>();
+    for (const target of targets) {
+      const bounds = formatBounds(target);
+      if (bounds.endRow < bounds.startRow || bounds.endColumn < bounds.startColumn) continue;
+      const snapshot = Object.freeze(target.scope === 'range' ? { scope: 'range' as const, range: Object.freeze({ ...bounds }) } : { ...target });
+      unique.set(JSON.stringify([target.scope, bounds.startRow, bounds.endRow, bounds.startColumn, bounds.endColumn]), { target: snapshot, bounds });
+    }
+    for (const entry of unique.values()) requireFormatPermission(entry.bounds);
+    const changes: FormatChange[] = [];
+    for (const [key, entry] of unique) {
+      const previous = formats.get(key);
+      const nextPatch = patch === null ? undefined : Object.freeze({ ...previous?.patch, ...patch });
+      if ((!previous && !nextPatch) || (previous && previous === orderedFormats.at(-1) && JSON.stringify(previous.patch) === JSON.stringify(nextPatch))) continue;
+      const orders = { ...previous?.orders };
+      if (patch) for (const key of ['background', 'textColor'] as const) if (patch[key] !== undefined) orders[key] = ++formatOrder;
+      changes.push({ key, previous, value: nextPatch ? { ...entry, bounds: Object.freeze(entry.bounds), patch: nextPatch, orders: Object.freeze(orders), order: formatOrder } : undefined });
+    }
+    if (!changes.length) return;
+    writeFormats(changes); past.push({ kind: 'format', changes }); if (past.length > 100) past.shift(); future.length = 0;
+    notifyFormats(changes, 'api');
+  }
+
   function validateLockTarget(target: CellLockTarget): void {
     if (!target || !['table', 'row', 'column', 'cell'].includes(target.scope)) throw new TypeError('Invalid lock scope.');
     if ((target.scope === 'row' || target.scope === 'cell') && (!Number.isSafeInteger(target.rowIndex) || target.rowIndex < 0 || target.rowIndex >= rowCount)) throw new RangeError('Invalid lock row.');
@@ -356,6 +456,8 @@ export function createGridEngine(options: GridEngineOptions) {
     undo: () => command(() => replay(false)), redo: () => command(() => replay(true)),
     canUndo: () => !destroyed && past.length > 0,
     canRedo: () => !destroyed && future.length > 0,
+    getFormat, canFormat: (targets: readonly CellFormatTarget[]) => query(() => canFormat(targets)),
+    format: (targets: readonly CellFormatTarget[], patch: CellFormatPatch | null) => command(() => format(targets, patch)),
     isLocked, canManageLocks: () => !destroyed && allowLockChanges,
     setLocked: (target: CellLockTarget, locked: boolean) => command(() => setLocked(target, locked)),
     setFrozen: (rows: number, columns: number) => command(() => setFrozen(rows, columns)),
@@ -370,6 +472,7 @@ export function createGridEngine(options: GridEngineOptions) {
       past.length = future.length = 0;
       selection = anchor = null;
       retainedRanges.length = 0;
+      formats.clear(); orderedFormats.length = 0;
       lockedRows.clear(); lockedColumns.clear(); lockedCells.clear(); tableLocked = false;
     }),
   });

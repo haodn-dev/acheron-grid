@@ -83,7 +83,7 @@ theme: {
 }
 ```
 
-Each grid snapshots its theme independently. Canvas cells, headers, lines and selection use the theme; native editor, menu and resize-dialog surfaces inherit matching CSS variables scoped to that grid. Native browser control chrome and semantic error alerts keep their own appearance. Custom renderers own their drawing colors/fonts. Transparent backgrounds are supported: dirty cell repaint clears old pixels before drawing. Theme changes after construction have no effect; runtime switching, automatic dark mode, theme presets and per-cell styles are not provided. Theme fonts do not resize rows/columns; configure geometry separately.
+Each grid snapshots its theme independently. Canvas cells, headers, lines and selection use the theme; native editor, menu and resize-dialog surfaces inherit matching CSS variables scoped to that grid. Native browser control chrome and semantic error alerts keep their own appearance. Custom renderers own their drawing colors/fonts. Transparent backgrounds are supported: dirty cell repaint clears old pixels before drawing. Theme changes after construction have no effect; runtime switching, automatic dark mode, theme presets are not provided. Use the formatting API for local per-cell colors. Theme fonts do not resize rows/columns; configure geometry separately.
 
 ### Mounting a grid
 
@@ -267,7 +267,7 @@ Runtime frozen changes preserve values, selection/ranges and data undo history. 
 
 Locks use sparse sets and preserve selection and data undo history, but are themselves outside history and disappear on destroy/remount. API/edit/paste/undo/redo all enforce current locks. `lock:change` carries a frozen `target` and `locked`, after layout invalidation; no-op/invalid requests emit nothing. Canvas setters throw while editing or destroyed. Right-click provides Lock/Unlock actions and indicates when the cell is read-only.
 
-Host policies retain their false veto after unlock. Set `allowLockChanges: false` at construction to disable management in the API/menu; `canManageLocks()` reports availability. Use grid/column/resolver permissions for mandatory application restrictions. These local controls do not replace server authorization. Formatting permissions and persisted/user-specific locks are not provided here.
+Host policies retain their false veto after unlock. Set `allowLockChanges: false` at construction to disable management in the API/menu; `canManageLocks()` reports availability. Use grid/column/resolver permissions for mandatory application restrictions. These local controls do not replace server authorization. Use the formatting capability for color restrictions; persisted/user-specific locks are not provided here.
 
 ## Configured column editors
 
@@ -280,3 +280,11 @@ Checkbox cells store booleans and draw a checkbox in Canvas. Clicking the box to
 Set `imageColumns: ['avatar']` for URL-valued columns. Images use contain sizing with padding, preserving aspect ratio and cell/pane clipping; empty values draw nothing. Loading and unavailable states are drawn inside the cell. Custom renderers take precedence. Image completion schedules repaint without closing menus or changing layout. Image value changes repaint the viewport so old resources can be released; ordinary text changes still use dirty-cell repaint.
 
 Only visible cells request images, sharing one image per visible URL. The cache is pruned on full redraw/scroll and handlers are released on eviction/destroy. Pending browser requests may finish after eviction, but cannot repaint the destroyed grid. URLs can be relative, HTTP(S), image data URLs or blob URLs; other schemes are rejected. Images use anonymous CORS and no referrer, so cross-origin servers must permit CORS. Callers own blob URLs. There is no image upload, cropping, gallery or automatic row sizing. Canvas screen-reader limitations still apply.
+
+## Cell formatting and admin control
+
+Right-click → **Format cells…** opens the native color dialog. Choose selected cells (including multiple ranges), this row, this column or the whole table. Apply changes enabled background/text colors; Clear formatting resets both colors to theme defaults in that scope. Escape/Cancel dismisses. Formatting preserves values and selection, shares Ctrl/Cmd+Z/Y history with edits, and throws through the API while editing or destroyed.
+
+Canvas exposes core `format(targets, patch)`, `canFormat(targets)`, and `getFormat(row, col)`; see the [core formatting contract](../core/README.md#sparse-cell-formatting). Set `permissions: { formatting: false }`, column permissions, or a resolver veto to disable formatting in the menu, API and history, independently of editing. Existing colors remain visible. The demo admin checkbox illustrates this host policy; it is not server authorization.
+
+Default text, checkbox strokes, cell backgrounds and native editor colors use effective styles. Custom renderers receive frozen `cell.format` and decide how to apply content colors; their paint may override the cell background. Color changes repaint the viewport, while value updates retain dirty-cell drawing. Headers retain the theme. Only colors are supported; fonts, borders, formatting clipboard and persistence remain outside this preview.

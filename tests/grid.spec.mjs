@@ -1295,3 +1295,49 @@ test('image cells load once per visible URL, repaint on load, contain/clip and r
   await later.fulfill({ contentType: 'image/svg+xml', body: red });
   await expect(page.locator('canvas')).toHaveCount(0); expect(errors).toEqual([]);
 });
+
+
+test('format dialog colors multiple ranges, preserves value history and applies scopes with admin veto', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.blockFormat = false;
+    window.source = new LocalDataSource(Array.from({ length: 30 }, (_, id) => ({ id, name: 'Ada', team: 'Ops' })), row => row.id);
+    window.grid = createGrid({ container: document.querySelector('#grid'), frozenRows: 1, frozenColumns: 1,
+      columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true }, { key: 'team', title: 'Team' }], dataSource: window.source,
+      resolveCellPermission: cell => window.blockFormat ? { formatting: false } : cell.rowIndex === 1 ? { writable: false } : undefined });
+  });
+  const viewport = page.getByLabel(/^Data grid viewport/);
+  await viewport.click({ position: { x: 180, y: 16 } }); await viewport.click({ position: { x: 340, y: 48 }, modifiers: ['Shift'] });
+  await viewport.click({ position: { x: 180, y: 112 }, modifiers: ['Control'] });
+  await viewport.click({ position: { x: 180, y: 112 }, button: 'right' }); await page.getByRole('menuitem', { name: 'Format cells…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Format cells' });
+  await dialog.getByLabel('Background color', { exact: true }).fill('#ffee00'); await dialog.getByLabel('Change text color', { exact: true }).check();
+  await dialog.getByLabel('Text color', { exact: true }).fill('#123456'); await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+  expect(await page.evaluate(() => window.grid.getSelectionRanges().length)).toBe(2);
+  expect(await page.evaluate(() => [window.grid.getFormat(0, 1), window.grid.getFormat(1, 2), window.grid.getFormat(3, 1), window.grid.getFormat(2, 1)])).toEqual([
+    { background: '#ffee00', textColor: '#123456' }, { background: '#ffee00', textColor: '#123456' }, { background: '#ffee00', textColor: '#123456' }, {}]);
+  await viewport.press('F2'); const editor = page.getByRole('textbox'); await expect(editor).toHaveCSS('color', 'rgb(18, 52, 86)');
+  expect(await page.evaluate(() => { try { window.grid.format([{ scope: 'table' }], { background: '#000000' }); } catch (e) { return e.message; } })).toMatch(/Finish editing/);
+  await editor.fill('Edited'); await editor.press('Enter'); await viewport.press('Control+z');
+  expect(await page.evaluate(() => window.source.getValue(3, 'name'))).toBe('Ada'); expect(await page.evaluate(() => window.grid.getFormat(3, 1).background)).toBe('#ffee00');
+  await viewport.press('Control+z'); expect(await page.evaluate(() => window.grid.getFormat(3, 1))).toEqual({});
+  await viewport.press('Control+y'); await viewport.press('Control+y'); expect(await page.evaluate(() => window.source.getValue(3, 'name'))).toBe('Edited');
+  await viewport.click({ position: { x: 180, y: 16 }, button: 'right' }); await page.getByRole('menuitem', { name: 'Format cells…' }).click();
+  await dialog.getByLabel('Apply to').selectOption('column'); await dialog.getByLabel('Background color', { exact: true }).fill('#ccffcc'); await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+  expect(await page.evaluate(() => window.grid.getFormat(29, 1))).toEqual({ background: '#ccffcc' });
+  expect(await page.evaluate(() => window.grid.getFormat(0, 1))).toEqual({ background: '#ccffcc', textColor: '#123456' });
+  await viewport.click({ position: { x: 180, y: 16 }, button: 'right' }); await page.getByRole('menuitem', { name: 'Format cells…' }).click();
+  await dialog.getByLabel('Apply to').selectOption('row'); await dialog.getByRole('button', { name: 'Clear formatting' }).click();
+  expect(await page.evaluate(() => window.grid.getFormat(0, 1))).toEqual({}); expect(await page.evaluate(() => window.grid.getFormat(29, 1).background)).toBe('#ccffcc');
+  expect(await page.evaluate(async () => {
+    window.grid.format([{ scope: 'column', columnIndex: 2 }], { background: '#00ff0080' }); window.grid.updateCells([{ rowIndex: 0, columnKey: 'team', value: 'Dirty' }]);
+    const next = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await next(); const partial = document.querySelector('canvas').toDataURL(); window.grid.render(); await next(); return partial === document.querySelector('canvas').toDataURL();
+  })).toBe(true);
+  await page.evaluate(() => { window.blockFormat = true; window.grid.render(); });
+  await viewport.click({ position: { x: 180, y: 16 }, button: 'right' }); await expect(page.getByRole('menuitem', { name: 'Format cells…' })).toBeDisabled();
+  expect(await page.evaluate(() => { try { window.grid.format([{ scope: 'table' }], { background: '#000000' }); } catch (e) { return e.message; } })).toMatch(/formatting/);
+  await page.getByRole('menu').press('Escape'); await page.evaluate(() => window.grid.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Value write still allowed' }]));
+  expect(await page.evaluate(() => window.source.getValue(0, 'name'))).toBe('Value write still allowed');
+});

@@ -15,6 +15,7 @@ const source = new LocalDataSource(Array.from({ length: 10_000 }, (_, index) => 
 const activity = document.querySelector('#activity');
 const appearance = document.querySelector('#appearance');
 const frozen = document.querySelector('#frozen');
+const formattingLock = document.querySelector('#formatting-lock');
 let grid;
 
 function mount() {
@@ -23,8 +24,10 @@ function mount() {
   grid = createGrid({ container: document.querySelector('#grid'), columns, dataSource: source, multilineEditor: true, wrapText: true,
     frozenRows: frozen.checked ? 1 : 0, frozenColumns: frozen.checked ? 1 : 0,
     theme: appearance.value === 'teal' ? { headerBackground: '#e0f2f1', headerTextColor: '#115e59', selectionColor: '#0f766e' } : {},
+    resolveCellPermission: () => formattingLock.checked ? { formatting: false } : undefined,
     onSelectionRangesChange: ranges => { document.querySelector('#range-count').textContent = `${ranges.length} ranges selected`; },
     onEvent: event => {
+      if (event.type === 'format:change') activity.textContent = `${event.source}: formatting changed.`;
       if (event.type === 'cell:change') activity.textContent = `${event.source}: ${event.changes.length} cell(s) changed. Values stay in this tab.`;
       if (event.type === 'lock:change') activity.textContent = `${event.target.scope} ${event.locked ? 'locked' : 'unlocked'}.`;
             if (event.type === 'freeze:change') {
@@ -38,8 +41,8 @@ function mount() {
     renderCell: (ctx, cell) => {
       if (cell.columnKey !== 'status') return false;
       const review = cell.value === 'Review';
-      ctx.fillStyle = review ? '#fef3c7' : '#dcfce7'; ctx.fillRect(cell.x + 10, cell.y + 5, cell.width - 20, cell.height - 10);
-      ctx.fillStyle = review ? '#92400e' : '#166534'; ctx.font = '600 12px system-ui'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = cell.format.background ?? (review ? '#fef3c7' : '#dcfce7'); ctx.fillRect(cell.x + 10, cell.y + 5, cell.width - 20, cell.height - 10);
+      ctx.fillStyle = cell.format.textColor ?? (review ? '#92400e' : '#166534'); ctx.font = '600 12px system-ui'; ctx.textBaseline = 'middle';
       ctx.fillText(String(cell.value), cell.x + 18, cell.y + cell.height / 2); return true;
     },
   });
@@ -55,5 +58,6 @@ for (const action of ['undo', 'redo']) document.querySelector(`#${action}`).addE
   try { if (!grid[action]()) activity.textContent = `Nothing to ${action}.`; }
   catch (error) { activity.textContent = error instanceof Error ? error.message : 'Action failed.'; }
 });
+formattingLock.addEventListener('change', () => { grid.render(); activity.textContent = formattingLock.checked ? 'Formatting locked by admin policy.' : 'Formatting enabled.'; });
 document.querySelector('#find').addEventListener('click', () => grid.openSearch());
 mount();

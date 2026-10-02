@@ -1,11 +1,12 @@
 import { createGridEngine } from '@acheron-grid/core';
-import type { CellUpdate, DataSource, Column, CellSelection, SelectionRange, CellPermission, CellLockTarget, GridEngineOptions, ViewportRegion } from '@acheron-grid/core';
+import type { CellUpdate, DataSource, Column, CellSelection, SelectionRange, CellPermission, CellLockTarget, CellFormatTarget, CellFormat, CellFormatPatch, GridEngineOptions, ViewportRegion } from '@acheron-grid/core';
 
 let editorId = 0;
 
-export type { Column, CellSelection, SelectionRange, CellLockTarget } from '@acheron-grid/core';
+export type { Column, CellSelection, SelectionRange, CellLockTarget, CellFormatTarget, CellFormat, CellFormatPatch } from '@acheron-grid/core';
 export interface CellRenderInfo {
   readonly value: unknown;
+  readonly format: Readonly<CellFormat>;
   readonly rowIndex: number;
   readonly rowId: string | number;
   readonly columnIndex: number;
@@ -59,6 +60,9 @@ export interface Grid {
   isLocked(target: CellLockTarget): boolean;
   canManageLocks(): boolean;
   setLocked(target: CellLockTarget, locked: boolean): void;
+  getFormat(rowIndex: number, columnIndex: number): Readonly<CellFormat>;
+  canFormat(targets: readonly CellFormatTarget[]): boolean;
+  format(targets: readonly CellFormatTarget[], patch: CellFormatPatch | null): void;
   updateCells(updates: readonly CellUpdate[]): void;
   undo(): boolean;
   redo(): boolean;
@@ -156,7 +160,7 @@ export function createGrid(options: GridOptions): Grid {
   let fullDraw = true;
   const dirty = new Map<string, { rowIndex: number; columnKey: string }>();
   let menu: HTMLDivElement | null = null;
-  let sizeDialog: HTMLDialogElement | null = null;
+  let activeDialog: HTMLDialogElement | null = null;
   let resizing: { pointerId: number; axis: 'column' | 'row'; index: number; start: number; size: number; proposed: number; edge: number } | null = null;
   const resizeGuide = doc.createElement('div');
   resizeGuide.setAttribute('aria-hidden', 'true');
@@ -247,7 +251,7 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function openSearch(): void {
-    if (destroyed || !finishEdit(true)) return;
+    if (destroyed || activeDialog?.open || !finishEdit(true)) return;
     closeMenu(); endResize(); searchBar.hidden = false;
     refreshSearch(); searchInput.focus({ preventScroll: true }); searchInput.select();
   }
@@ -285,8 +289,8 @@ export function createGrid(options: GridOptions): Grid {
 
   function openSizeDialog(label: string, current: number, apply: (size: number) => void): void {
     const dialog = doc.createElement('dialog');
-    sizeDialog?.remove();
-    sizeDialog = dialog;
+    activeDialog?.remove();
+    activeDialog = dialog;
     dialog.setAttribute('aria-label', label);
     dialog.style.cssText = 'padding:20px;border:1px solid var(--acheron-grid-line-color);border-radius:8px;box-shadow:0 8px 24px #0f172a26;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font)';
     const form = doc.createElement('form');
@@ -313,12 +317,70 @@ export function createGrid(options: GridOptions): Grid {
     dialog.append(form);
     dialog.addEventListener('close', () => {
       dialog.remove();
-      if (sizeDialog === dialog) sizeDialog = null;
+      if (activeDialog === dialog) activeDialog = null;
       if (!destroyed && !editor) scroller.focus({ preventScroll: true });
     });
     root.append(dialog);
     dialog.showModal();
     input.focus(); input.select();
+  }
+
+  function format(targets: readonly CellFormatTarget[], patch: CellFormatPatch | null): void {
+    if (destroyed) throw new Error('Grid is destroyed.');
+    if (editor) throw new Error('Finish editing before changing formatting.');
+    engine.format(targets, patch);
+  }
+
+  function openFormatDialog(row: number, col: number): void {
+    const ranges = getSelectionRanges();
+    const dialog = doc.createElement('dialog'); activeDialog?.remove(); activeDialog = dialog;
+    dialog.setAttribute('aria-label', 'Format cells');
+    dialog.style.cssText = 'padding:20px;border:1px solid var(--acheron-grid-line-color);border-radius:8px;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font)';
+    const form = doc.createElement('form');
+    const scopeLabel = doc.createElement('label'); scopeLabel.textContent = 'Apply to ';
+    const scope = doc.createElement('select');
+    for (const [value, label] of [['selection', 'Selected cells'], ['row', 'This row'], ['column', 'This column'], ['table', 'Whole table']]) {
+      const option = doc.createElement('option'); option.value = value!; option.textContent = label!; scope.append(option);
+    }
+    scopeLabel.append(scope); form.append(scopeLabel);
+    function field(label: string, value: string, checked: boolean) {
+      const line = doc.createElement('div'); line.style.cssText = 'display:flex;gap:12px;align-items:center;margin:16px 0';
+      const apply = doc.createElement('input'); apply.type = 'checkbox'; apply.checked = checked;
+      const applyLabel = doc.createElement('label'); applyLabel.append(apply, ` Change ${label.toLowerCase()}`);
+      const color = doc.createElement('input'); color.type = 'color'; color.value = value; color.setAttribute('aria-label', label);
+      line.append(applyLabel, color); form.append(line); return { apply, color };
+    }
+    const background = field('Background color', '#fff4b3', true);
+    const text = field('Text color', '#0f172a', false);
+    const error = doc.createElement('div'); error.setAttribute('role', 'alert'); error.style.cssText = 'color:#9f1239;margin-bottom:12px'; error.hidden = true;
+    const save = doc.createElement('button'); save.type = 'submit'; save.textContent = 'Apply';
+    const clear = doc.createElement('button'); clear.type = 'button'; clear.textContent = 'Clear formatting';
+    const cancel = doc.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel';
+    for (const button of [save, clear, cancel]) button.style.cssText = 'padding:6px 12px;margin-right:8px';
+    function targets(): CellFormatTarget[] {
+      if (scope.value === 'row') return [{ scope: 'row', rowIndex: row }];
+      if (scope.value === 'column') return [{ scope: 'column', columnIndex: col }];
+      if (scope.value === 'table') return [{ scope: 'table' }];
+      return ranges.map(range => ({ scope: 'range', range }));
+    }
+    function checkPermission(): void {
+      const allowed = engine.canFormat(targets()); save.disabled = clear.disabled = !allowed;
+      error.hidden = allowed; error.textContent = allowed ? '' : 'Formatting is not allowed for this selection.';
+    }
+    function apply(patch: CellFormatPatch): void {
+      try { format(targets(), patch); dialog.close(); }
+      catch (failure) { error.textContent = failure instanceof Error ? failure.message : 'Formatting failed.'; error.hidden = false; }
+    }
+    scope.addEventListener('change', checkPermission);
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      if (!background.apply.checked && !text.apply.checked) { error.textContent = 'Choose a color to change.'; error.hidden = false; return; }
+      apply({ ...(background.apply.checked ? { background: background.color.value } : {}), ...(text.apply.checked ? { textColor: text.color.value } : {}) });
+    });
+    clear.addEventListener('click', () => apply({ background: null, textColor: null }));
+    cancel.addEventListener('click', () => dialog.close());
+    dialog.addEventListener('close', () => { dialog.remove(); if (activeDialog === dialog) activeDialog = null; if (!destroyed && !editor) scroller.focus({ preventScroll: true }); });
+    form.append(error, save, clear, cancel); dialog.append(form); root.append(dialog); checkPermission(); dialog.showModal(); scope.focus();
   }
 
   function setLocked(target: CellLockTarget, locked: boolean): void {
@@ -392,6 +454,7 @@ export function createGrid(options: GridOptions): Grid {
     item('Edit cell', engine.canEdit(selection.rowIndex, selection.columnIndex), beginEdit);
     item('Undo', engine.canUndo(), () => { replay(false); });
     item('Redo', engine.canRedo(), () => { replay(true); });
+    item('Format cells…', engine.canFormat(getSelectionRanges().map(range => ({ scope: 'range', range }))), () => openFormatDialog(row, col));
     for (const [label, target] of [
       ['cell', { scope: 'cell', rowIndex: row, columnIndex: col }],
       ['row', { scope: 'row', rowIndex: row }],
@@ -622,6 +685,9 @@ export function createGrid(options: GridOptions): Grid {
     editor.setAttribute('aria-label', `Edit row ${selection.rowIndex + 1}, ${column.title}`);
     editor.setAttribute('aria-errormessage', editorError.id);
     editor.style.cssText = 'position:absolute;box-sizing:border-box;pointer-events:auto;border:2px solid var(--acheron-selection-color);background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);padding:0 8px';
+    const cellFormat = engine.getFormat(selection.rowIndex, selection.columnIndex);
+    if (cellFormat.background) editor.style.background = cellFormat.background;
+    if (cellFormat.textColor) editor.style.color = cellFormat.textColor;
     if (editor instanceof win.HTMLTextAreaElement) editor.style.resize = 'none';
     const clearValidation = () => {
       editor?.setCustomValidity('');
@@ -845,7 +911,10 @@ export function createGrid(options: GridOptions): Grid {
   function cell(value: unknown, x: number, y: number, width: number, height: number, header: boolean, rowIndex = 0, columnIndex = 0): void {
     const ctx = context!;
     ctx.clearRect(x, y, width, height);
-    ctx.fillStyle = header ? theme.headerBackground : theme.background;
+    const format = header ? null : engine.getFormat(rowIndex, columnIndex);
+    const background = format?.background ?? theme.background;
+    const textColor = format?.textColor ?? theme.textColor;
+    ctx.fillStyle = header ? theme.headerBackground : background;
     ctx.fillRect(x, y, width, height);
     ctx.strokeStyle = theme.gridLineColor;
     ctx.lineWidth = 1;
@@ -857,7 +926,7 @@ export function createGrid(options: GridOptions): Grid {
         ctx.beginPath();
         ctx.rect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
         ctx.clip();
-        handled = options.renderCell(ctx, Object.freeze({ value, rowIndex, rowId: dataSource.getRowId(rowIndex),
+        handled = options.renderCell(ctx, Object.freeze({ value, format: format!, rowIndex, rowId: dataSource.getRowId(rowIndex),
           columnIndex, columnKey: columns[columnIndex]!.key, x, y, width, height }));
       } catch (error) {
         win.console.error('Cell renderer failed.', error);
@@ -867,13 +936,13 @@ export function createGrid(options: GridOptions): Grid {
       }
       if (handled) { highlightSearch(x, y, width, height, rowIndex, columnIndex); return; }
       ctx.clearRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
-      ctx.fillStyle = theme.background;
+      ctx.fillStyle = background;
       ctx.fillRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
     }
-    if (!header && imageColumns.has(columns[columnIndex]!.key)) { imageCell(value, x, y, width, height); highlightSearch(x, y, width, height, rowIndex, columnIndex); return; }
+    if (!header && imageColumns.has(columns[columnIndex]!.key)) { imageCell(value, x, y, width, height, textColor); highlightSearch(x, y, width, height, rowIndex, columnIndex); return; }
     if (!header && columnEditors.get(columns[columnIndex]!.key)?.type === 'checkbox' && typeof value === 'boolean') {
       const size = Math.max(0, Math.min(16, width - 20, height - 8)); const left = x + 10; const top = y + (height - size) / 2;
-      ctx.save(); ctx.strokeStyle = theme.textColor; ctx.lineWidth = 1;
+      ctx.save(); ctx.strokeStyle = textColor; ctx.lineWidth = 1;
       if (size > 0) {
         ctx.strokeRect(left + .5, top + .5, size - 1, size - 1);
         if (value) { ctx.beginPath(); ctx.moveTo(left + size * .2, top + size * .5); ctx.lineTo(left + size * .45, top + size * .75); ctx.lineTo(left + size * .8, top + size * .25); ctx.lineWidth = 2; ctx.stroke(); }
@@ -884,7 +953,7 @@ export function createGrid(options: GridOptions): Grid {
     ctx.beginPath();
     ctx.rect(x + 8, y, Math.max(0, width - 16), height);
     ctx.clip();
-    ctx.fillStyle = header ? theme.headerTextColor : theme.textColor;
+    ctx.fillStyle = header ? theme.headerTextColor : textColor;
     ctx.font = header ? theme.headerFont : theme.font;
     ctx.textBaseline = 'middle';
     const text = value == null ? '' : String(value);
@@ -906,7 +975,7 @@ export function createGrid(options: GridOptions): Grid {
     if (!header) highlightSearch(x, y, width, height, rowIndex, columnIndex);
   }
 
-  function imageCell(value: unknown, x: number, y: number, width: number, height: number): void {
+  function imageCell(value: unknown, x: number, y: number, width: number, height: number, textColor: string): void {
     if (value == null || value === '') return;
     let item: { image: HTMLImageElement; state: 'loading' | 'ready' | 'error' } | undefined;
     try {
@@ -937,7 +1006,7 @@ export function createGrid(options: GridOptions): Grid {
       const w = image.naturalWidth * ratio; const h = image.naturalHeight * ratio;
       if (ratio > 0) ctx.drawImage(image, x + (width - w) / 2, y + (height - h) / 2, w, h);
     } else {
-      ctx.font = theme.font; ctx.fillStyle = theme.textColor; ctx.textBaseline = 'middle';
+      ctx.font = theme.font; ctx.fillStyle = textColor; ctx.textBaseline = 'middle';
       ctx.fillText(item?.state === 'loading' ? 'Loading…' : 'Image unavailable', x + 8, y + height / 2);
     }
     ctx.restore(); ctx.beginPath();
@@ -1136,6 +1205,9 @@ export function createGrid(options: GridOptions): Grid {
     isLocked: engine.isLocked,
     canManageLocks: engine.canManageLocks,
     setLocked,
+    getFormat: engine.getFormat,
+    canFormat: engine.canFormat,
+    format,
     updateCells,
     undo: () => replay(false),
     redo: () => replay(true),
@@ -1156,8 +1228,8 @@ export function createGrid(options: GridOptions): Grid {
       searchMatches.clear();
       visibleImages.clear(); releaseUnusedImages();
       root.removeEventListener('keydown', searchShortcut, true);
-      sizeDialog?.remove();
-      sizeDialog = null;
+      activeDialog?.remove();
+      activeDialog = null;
       endResize();
       root.removeEventListener('pointerdown', onHeaderPointerDown, true);
       root.removeEventListener('keydown', cancelResizeKey, true);

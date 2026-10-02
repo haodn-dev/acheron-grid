@@ -10,3 +10,7 @@ export type CellLockTarget =
   | { readonly scope: 'row'; readonly rowIndex: number }
   | { readonly scope: 'column'; readonly columnIndex: number }
   | { readonly scope: 'cell'; readonly rowIndex: number; readonly columnIndex: number };
+
+export type CellFormatTarget = CellLockTarget | { readonly scope: 'range'; readonly range: Readonly<SelectionRange> };
+export interface CellFormat { readonly background?: string; readonly textColor?: string; }
+export interface CellFormatPatch { readonly background?: string | null; readonly textColor?: string | null; }

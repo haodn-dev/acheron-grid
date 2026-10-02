@@ -6,13 +6,14 @@ export interface CellPermission {
   readonly copyable: boolean;
   readonly pasteable: boolean;
   readonly writable: boolean;
+  readonly formatting: boolean;
 }
 export type CellPermissionPolicy = Partial<CellPermission>;
 export type CellPermissionResolver = (cell: Readonly<CellSelection>) => CellPermissionPolicy | undefined;
 
 /** Explicit denials survive every later scope; defaults are not denials. */
 export function resolvePermissions(editable: boolean, ...policies: readonly (CellPermissionPolicy | undefined)[]): CellPermission {
-  const result = { editable, pasteable: editable, selectable: true, copyable: true, writable: true };
+  const result = { editable, pasteable: editable, selectable: true, copyable: true, writable: true, formatting: true };
   for (const key of Object.keys(result) as (keyof CellPermission)[]) {
     for (const policy of policies) {
       const value = policy?.[key];

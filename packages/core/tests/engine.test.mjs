@@ -174,7 +174,7 @@ test('capabilities preserve defaults, deny veto and immutable scope snapshots', 
   const policy = { writable: false };
   const { engine } = fixture({ permissions: policy, resolveCellPermission: () => ({ writable: true, editable: true }) });
   policy.writable = true;
-  assert.deepEqual(engine.getCellPermission(0, 0), { editable: false, pasteable: false, selectable: true, copyable: true, writable: false });
+  assert.deepEqual(engine.getCellPermission(0, 0), { editable: false, pasteable: false, selectable: true, copyable: true, writable: false, formatting: true });
   assert.equal(engine.select(0, 0), true);
   assert.equal(engine.copySelection(), 'Ada');
   assert.throws(() => engine.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Denied' }]), /writable/);
@@ -428,4 +428,41 @@ test('sparse scope locks veto every write path, preserve copy/history and cannot
   const lockEvent = events.filter(e => e.type === 'lock:change').at(-1); assert.ok(Object.isFrozen(lockEvent)); assert.ok(Object.isFrozen(lockEvent.target));
   const disabled = fixture({ allowLockChanges: false }).engine; assert.equal(disabled.canManageLocks(), false); assert.throws(() => disabled.setLocked(table, true), /disabled/);
   engine.destroy(); assert.equal(engine.canManageLocks(), false); assert.throws(() => engine.isLocked(cell), /destroyed/);
+});
+
+
+test('sparse formatting applies per-property precedence, shares data history and honors atomic admin veto', () => {
+  let blocked = false; const events = [];
+  const { engine, source } = fixture({ onEvent: e => events.push(e), resolveCellPermission: c => ({ ...(c.rowIndex === 1 ? { writable: false } : {}), ...(blocked && c.rowIndex === 0 && c.columnIndex === 1 ? { formatting: false } : {}) }) });
+  const cell = { scope: 'cell', rowIndex: 0, columnIndex: 0 }; const column = { scope: 'column', columnIndex: 0 }; const range = { scope: 'range', range: { startRow: 0, endRow: 0, startColumn: 0, endColumn: 1 } };
+  engine.format([column], { background: '#ff0000' }); engine.format([cell], { textColor: '#112233' });
+  engine.format([{ scope: 'row', rowIndex: 0 }], { background: '#00ff00' }); engine.format([cell], { background: '#0000ff' });
+  assert.deepEqual(engine.getFormat(0, 0), { background: '#0000ff', textColor: '#112233' });
+  engine.format([column], { background: '#ff0000', textColor: '#abcdef' }); engine.format([cell], { textColor: '#123456' });
+  engine.format([column], { background: '#00ffff' }); assert.deepEqual(engine.getFormat(0, 0), { background: '#00ffff', textColor: '#123456' });
+  engine.format([range], { background: null, textColor: null }); assert.deepEqual(engine.getFormat(0, 0), {}); assert.deepEqual(engine.getFormat(0, 1), {});
+  assert.deepEqual(engine.getFormat(1, 0), { background: '#00ffff', textColor: '#abcdef' });
+  engine.select(0, 0); engine.editCell(0, 0, 'Changed'); engine.undo(); assert.equal(source.getValue(0, 'name'), 'Ada'); assert.deepEqual(engine.getFormat(0, 0), {});
+  engine.undo(); assert.deepEqual(engine.getFormat(0, 0), { background: '#00ffff', textColor: '#123456' });
+  const before = engine.getFormat(1, 0); blocked = true;
+  assert.equal(engine.canFormat([range]), false); assert.throws(() => engine.format([{ scope: 'cell', rowIndex: 1, columnIndex: 0 }, { scope: 'cell', rowIndex: 0, columnIndex: 1 }], { background: '#000000' }), /formatting/);
+  assert.deepEqual(engine.getFormat(1, 0), before); assert.equal(engine.canRedo(), true); assert.throws(() => engine.redo(), /formatting/); assert.equal(engine.canRedo(), true);
+  blocked = false; engine.redo(); assert.deepEqual(engine.getFormat(0, 0), {});
+  engine.setLocked({ scope: 'table' }, true); engine.format([cell], { background: '#f00' }); assert.equal(engine.getCellPermission(0, 0).writable, false); assert.equal(engine.getCellPermission(0, 0).formatting, true);
+  assert.deepEqual(engine.getFormat(0, 0), { background: '#f00' }); engine.undo(); assert.deepEqual(engine.getFormat(0, 0), {});
+  const count = events.length;
+  for (const patch of [{ background: 'red' }, { background: '#xx0000' }, { unknown: '#000000' }]) assert.throws(() => engine.format([cell], patch), TypeError);
+  assert.throws(() => engine.format([{ scope: 'range', range: {} }], { background: '#000000' }), RangeError); assert.equal(events.length, count);
+  const event = events.filter(e => e.type === 'format:change').at(-1); assert.equal(event.source, 'undo'); assert.ok(Object.isFrozen(event)); assert.ok(Object.isFrozen(event.changes)); assert.ok(Object.isFrozen(event.changes[0].target));
+  assert.throws(() => { engine.getFormat(1, 0).background = '#000000'; }, TypeError);
+  const veto = fixture({ permissions: { formatting: false }, resolveCellPermission: () => ({ formatting: true }) }).engine;
+  assert.throws(() => veto.format([cell], { background: '#000000' }), /formatting/); veto.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Allowed value write' }]);
+});
+
+test('million-row column formatting retains one sparse target and reads no source values or identities', () => {
+  let reads = 0; let identities = 0; const events = [];
+  const engine = createGridEngine({ columns: [{ key: 'name', title: 'Name' }], dataSource: { getRowCount: () => 1_000_000, getRowId: row => { identities++; return row; }, getValue: () => { reads++; return 'Ada'; } }, onEvent: event => events.push(event) });
+  engine.format([{ scope: 'column', columnIndex: 0 }], { background: '#123456' }); assert.deepEqual(engine.getFormat(999_999, 0), { background: '#123456' });
+  assert.equal(events.at(-1).changes.length, 1); assert.equal(reads, 0); assert.equal(identities, 0);
+  engine.undo(); assert.deepEqual(engine.getFormat(999_999, 0), {}); engine.redo(); assert.equal(engine.getFormat(0, 0).background, '#123456');
 });
