@@ -169,3 +169,120 @@ test('notification observes committed history, teardown drops callback and histo
   assert.equal(throwing.getValue(0, 'name'), 'Committed');
   assert.equal(throwing.canUndo(), true);
 });
+
+test('capabilities preserve defaults, deny veto and immutable scope snapshots', () => {
+  const policy = { writable: false };
+  const { engine } = fixture({ permissions: policy, resolveCellPermission: () => ({ writable: true, editable: true }) });
+  policy.writable = true;
+  assert.deepEqual(engine.getCellPermission(0, 0), { editable: false, pasteable: false, selectable: true, copyable: true, writable: false });
+  assert.equal(engine.select(0, 0), true);
+  assert.equal(engine.copySelection(), 'Ada');
+  assert.throws(() => engine.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Denied' }]), /writable/);
+  assert.throws(() => engine.getCellPermission(0, -1), /Invalid cell/);
+  assert.throws(() => { engine.getCellPermission(0, 0).copyable = false; }, TypeError);
+  const { engine: enabled } = fixture({ columns: [{ key: 'name', title: 'Name', permissions: { editable: true, pasteable: true } }] });
+  assert.equal(enabled.canEdit(0, 0), true);
+  enabled.editCell(0, 0, 'Enabled');
+  const { engine: veto } = fixture({ columns: [{ key: 'name', title: 'Name', editable: true, permissions: { editable: false } }], resolveCellPermission: () => ({ editable: true }) });
+  assert.equal(veto.canEdit(0, 0), false);
+  assert.throws(() => fixture({ permissions: { copyable: 'yes' } }).engine.getCellPermission(0, 0), /boolean/);
+});
+
+test('dynamic row/cell denies are atomic before parsers and preserve history for retry', () => {
+  let blocked = false;
+  let parses = 0;
+  const events = [];
+  const { engine, source, changes } = fixture({
+    columns: [{ key: 'name', title: 'Name', editable: true, parse: text => { parses++; return text; } }],
+    resolveCellPermission: cell => blocked && cell.rowId === 2 ? { writable: false } : undefined,
+    onEvent: event => events.push(event),
+  });
+  engine.select(0, 0);
+  blocked = true;
+  assert.throws(() => engine.paste('First\nSecond'), /pasteable/);
+  assert.equal(parses, 0);
+  assert.throws(() => engine.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'First' }, { rowIndex: 1, columnKey: 'name', value: 'Second' }]), /writable/);
+  assert.equal(source.getValue(0, 'name'), 'Ada');
+  assert.equal(engine.canUndo(), false);
+  assert.equal(changes.length, 1);
+  assert.equal(events.length, 1);
+  blocked = false;
+  engine.paste('First\nSecond');
+  blocked = true;
+  assert.throws(() => engine.undo(), /writable/);
+  assert.equal(engine.canUndo(), true);
+  assert.equal(source.getValue(0, 'name'), 'First');
+  blocked = false;
+  engine.undo();
+  blocked = true;
+  assert.throws(() => engine.redo(), /writable/);
+  assert.equal(engine.canRedo(), true);
+  blocked = false;
+  engine.redo();
+  assert.deepEqual(events.filter(event => event.type === 'cell:change').map(event => event.source), ['paste', 'undo', 'redo']);
+  assert.equal(events.at(-2).changes[0].previous, 'First');
+  assert.equal(events.at(-2).changes[0].value, 'Ada');
+});
+
+test('selection checks endpoint only and copy rejects a denied interior cell', () => {
+  const { engine, changes } = fixture({ resolveCellPermission: cell => cell.rowIndex === 0 && cell.columnIndex === 1 ? { selectable: false, copyable: false } : undefined });
+  engine.select(0, 0);
+  assert.equal(engine.select(0, 1), false);
+  assert.equal(engine.getSelection().columnIndex, 0);
+  assert.equal(changes.length, 1);
+  engine.select(1, 1, true);
+  assert.deepEqual(engine.getSelectionRange(), { startRow: 0, endRow: 1, startColumn: 0, endColumn: 1 });
+  assert.throws(() => engine.copySelection(), /copyable/);
+});
+
+test('events follow committed invalidation, omit no-ops and call both throwing hooks', () => {
+  const sequence = [];
+  let engine;
+  ({ engine } = fixture({ onInvalidate: () => sequence.push('invalidate'), onEvent(event) {
+    sequence.push(event);
+    assert.throws(() => engine.clearSelection(), /Nested/);
+    if (event.type === 'cell:change') {
+      assert.equal(engine.canUndo(), true);
+      assert.equal(engine.copySelection(), 'New');
+    }
+  } }));
+  engine.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Ada' }]);
+  engine.select(0, 0);
+  engine.select(0, 0);
+  engine.editCell(0, 0, 'New');
+  engine.setColumnWidth(0, 160);
+  engine.setColumnWidth(0, 200);
+  engine.setRowHeight(1, 48);
+  engine.clearSelection();
+  engine.clearSelection();
+  assert.deepEqual(sequence.filter(item => typeof item !== 'string').map(event => event.type), ['selection:change', 'cell:change', 'column:resize', 'row:resize', 'selection:change']);
+  assert.equal(sequence[3].source, 'edit');
+  assert.deepEqual(sequence[5], { type: 'column:resize', index: 0, previous: 160, size: 200 });
+  assert.equal(sequence[9].selection, null);
+  for (let i = 0; i < sequence.length; i += 2) assert.equal(sequence[i], 'invalidate');
+  engine.destroy();
+  assert.equal(sequence.length, 10);
+  const error = new Error('First failure');
+  let called = 0;
+  const { engine: failing } = fixture({ onInvalidate: () => { throw error; }, onEvent: () => { called++; throw new Error('Second failure'); } });
+  assert.throws(() => failing.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Committed' }]), thrown => thrown === error);
+  assert.equal(called, 1);
+  assert.equal(failing.getValue(0, 'name'), 'Committed');
+  assert.equal(failing.canUndo(), true);
+});
+
+test('parser, permission query and source setter cannot issue nested commands', () => {
+  let engine;
+  const source = new LocalDataSource([{ id: 1, name: 'Ada' }], row => row.id);
+  engine = createGridEngine({ columns: [{ key: 'name', title: 'Name', editable: true, parse() { engine.clearSelection(); return 'Bad'; } }], dataSource: source });
+  assert.throws(() => engine.editCell(0, 0, 'New'), /Nested/);
+  assert.equal(source.getValue(0, 'name'), 'Ada');
+  engine = createGridEngine({ columns: [{ key: 'name', title: 'Name' }], dataSource: source, resolveCellPermission() { engine.updateCells([]); return {}; } });
+  assert.throws(() => engine.getCellPermission(0, 0), /Nested/);
+  assert.throws(() => engine.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'New' }]), /Nested/);
+  engine = createGridEngine({ columns: [{ key: 'name', title: 'Name' }], dataSource: {
+    getRowCount: () => 1, getRowId: () => 1, getValue: () => 'Ada', setValue() { engine.destroy(); },
+  } });
+  assert.throws(() => engine.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'New' }]), /Nested/);
+  assert.equal(engine.canUndo(), false);
+});

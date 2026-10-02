@@ -593,3 +593,58 @@ test('ignores header, blank space, modified keys and empty data', async ({ page 
   await page.keyboard.press('ArrowDown');
   expect(await page.evaluate(() => window.grid.getSelection())).toBeNull();
 });
+
+test('capabilities govern browser focus, menu, editor commit and typed events', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
+    window.blockWrite = false;
+    window.events = [];
+    window.selections = [];
+    window.ranges = [];
+    window.source = new LocalDataSource([{ id: 1, name: 'Ada', team: 'Design' }, { id: 2, name: 'Grace', team: 'Research' }], row => row.id);
+    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source,
+      columns: [{ key: 'name', title: 'Name', editable: true }, { key: 'team', title: 'Team', editable: true }],
+      resolveCellPermission: cell => cell.rowIndex === 0 && cell.columnIndex === 1 ? { selectable: false } : (cell.rowIndex === 1 || window.blockWrite ? { writable: false } : undefined),
+      onEvent: event => { window.events.push(event); },
+      onSelectionChange: cell => window.selections.push(cell), onSelectionRangeChange: range => window.ranges.push(range),
+    });
+  });
+  const viewport = page.getByLabel(/^Data grid viewport/);
+  await viewport.click({ position: { x: 20, y: 16 } });
+  await viewport.press('ArrowRight');
+  expect(await page.evaluate(() => window.grid.getSelection())).toMatchObject({ rowIndex: 0, columnIndex: 0 });
+  await viewport.dblclick({ position: { x: 180, y: 16 } });
+  await expect(page.getByRole('textbox')).toHaveCount(0);
+  await viewport.click({ position: { x: 180, y: 16 }, button: 'right' });
+  await expect(page.getByRole('menu')).toHaveCount(0);
+  expect(await page.evaluate(() => window.selections.length)).toBe(1);
+  expect(await page.evaluate(() => window.ranges.length)).toBe(1);
+  await viewport.press('ArrowDown');
+  expect(await page.evaluate(() => window.grid.copySelection())).toBe('Grace');
+  await viewport.press('Enter');
+  await expect(page.getByRole('textbox')).toHaveCount(0);
+  await viewport.press('Shift+F10');
+  await expect(page.getByRole('menuitem', { name: 'Edit cell', exact: true })).toBeDisabled();
+  await expect(page.getByRole('menuitem', { name: 'Paste', exact: true })).toBeDisabled();
+  await page.getByRole('menu').press('Escape');
+  await viewport.press('ArrowUp');
+  await viewport.press('Enter');
+  const input = page.getByRole('textbox');
+  await input.fill('Draft');
+  await page.evaluate(() => { window.blockWrite = true; });
+  await input.press('Enter');
+  await expect(input).toHaveAttribute('aria-invalid', 'true');
+  expect(await page.evaluate(() => window.source.getValue(0, 'name'))).toBe('Ada');
+  await input.press('Escape');
+  await page.evaluate(() => { window.blockWrite = false; });
+  await viewport.press('Enter');
+  await page.getByRole('textbox').fill('Updated');
+  await page.getByRole('textbox').press('Enter');
+  expect(await page.evaluate(() => window.events.filter(event => event.type === 'cell:change').map(event => event.source))).toEqual(['edit']);
+  expect(await page.evaluate(() => window.grid.getCellPermission(1, 0))).toMatchObject({ writable: false, selectable: true, copyable: true });
+  expect(await page.evaluate(() => window.selections.length)).toBe(3);
+  await page.evaluate(() => window.grid.destroy());
+  await expect(viewport).toHaveCount(0);
+});

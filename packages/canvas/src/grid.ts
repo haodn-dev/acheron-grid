@@ -1,8 +1,8 @@
 import { createGridEngine } from '@acheron-grid/core';
-import type { CellUpdate, DataSource, Column, CellSelection, SelectionRange } from '@acheron-grid/core';
+import type { CellUpdate, DataSource, Column, CellSelection, SelectionRange, CellPermission, GridEngineOptions } from '@acheron-grid/core';
 
 export type { Column, CellSelection, SelectionRange } from '@acheron-grid/core';
-export interface GridOptions {
+export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 'resolveCellPermission' | 'onEvent'> {
   onSelectionChange?: (selection: CellSelection | null) => void;
   onSelectionRangeChange?: (range: SelectionRange | null) => void;
   container: HTMLElement;
@@ -17,6 +17,7 @@ export interface Grid {
   updateCells(updates: readonly CellUpdate[]): void;
   undo(): boolean;
   redo(): boolean;
+  getCellPermission(rowIndex: number, columnIndex: number): CellPermission;
   getSelection(): CellSelection | null;
   getSelectionRange(): SelectionRange | null;
   copySelection(): string;
@@ -34,6 +35,9 @@ export function createGrid(options: GridOptions): Grid {
   const engine = createGridEngine({ columns: options.columns, dataSource,
     ...(options.rowHeight === undefined ? {} : { rowHeight: options.rowHeight }),
     ...(options.columnWidth === undefined ? {} : { columnWidth: options.columnWidth }),
+    ...(options.permissions === undefined ? {} : { permissions: options.permissions }),
+    ...(options.resolveCellPermission === undefined ? {} : { resolveCellPermission: options.resolveCellPermission }),
+    ...(options.onEvent === undefined ? {} : { onEvent: options.onEvent }),
     onInvalidate(change) {
     if (change.type === 'cells') invalidate(change.cells);
     else if (change.type === 'layout') {
@@ -133,8 +137,9 @@ export function createGrid(options: GridOptions): Grid {
     closeMenu();
     const range = getSelectionRange();
     if (!range || row < range.startRow || row > range.endRow || col < range.startColumn || col > range.endColumn) select(row, col, false, false);
-    if (destroyed) return;
-    const selection = engine.getSelection()!;
+    if (destroyed || !engine.getCellPermission(row, col).selectable) return;
+    const selection = engine.getSelection();
+    if (!selection) return;
     const popup = doc.createElement('div');
     menu = popup;
     popup.popover = 'auto';
@@ -165,7 +170,7 @@ export function createGrid(options: GridOptions): Grid {
       });
       popup.append(button);
     }
-    item('Copy', !!win.navigator.clipboard?.writeText, () => win.navigator.clipboard.writeText(copySelection()));
+    item('Copy', engine.getCellPermission(selection.rowIndex, selection.columnIndex).copyable && !!win.navigator.clipboard?.writeText, () => win.navigator.clipboard.writeText(copySelection()));
     item('Paste', !!win.navigator.clipboard?.readText && engine.canPaste(), async () => {
       const text = await win.navigator.clipboard.readText();
       if (destroyed || fingerprint !== JSON.stringify(getSelectionRange())) throw new Error('Selection changed before paste. Try again.');
@@ -340,7 +345,7 @@ export function createGrid(options: GridOptions): Grid {
     const previous = engine.getSelection();
     const changed = previous?.rowIndex !== rowIndex || previous?.columnIndex !== columnIndex;
     const previousRange = JSON.stringify(getSelectionRange());
-    engine.select(rowIndex, columnIndex, extend);
+    if (!engine.select(rowIndex, columnIndex, extend)) return;
     const selection = engine.getSelection()!;
     const rangeChanged = previousRange !== JSON.stringify(getSelectionRange());
     const left = columnAxis.position(columnIndex);
@@ -376,6 +381,7 @@ export function createGrid(options: GridOptions): Grid {
     if (!cell) return;
     event.preventDefault();
     if (!finishEdit(true)) return;
+    if (!engine.getCellPermission(cell.row, cell.col).selectable) return;
     scroller.focus({ preventScroll: true });
     select(cell.row, cell.col, event.shiftKey);
     if (event.pointerType !== 'touch') {
@@ -569,13 +575,16 @@ export function createGrid(options: GridOptions): Grid {
   win.addEventListener('resize', render);
   render();
   function onDoubleClick(event: MouseEvent): void {
-    if (event.target !== editor && pointerCell(event) && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) beginEdit();
+    const cell = pointerCell(event);
+    const selection = engine.getSelection();
+    if (event.target !== editor && cell && selection?.rowIndex === cell.row && selection.columnIndex === cell.col && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) beginEdit();
   }
   return {
     render,
     updateCells,
     undo: () => replay(false),
     redo: () => replay(true),
+    getCellPermission: engine.getCellPermission,
     getSelection,
     getSelectionRange,
     copySelection,
@@ -584,6 +593,7 @@ export function createGrid(options: GridOptions): Grid {
     setRowHeight: (index, height) => resizeAxis(rowAxis, index, height),
     destroy() {
       if (destroyed) return;
+      engine.destroy();
       destroyed = true;
       closeMenu();
       sizeDialog?.remove();
@@ -596,7 +606,6 @@ export function createGrid(options: GridOptions): Grid {
       root.removeEventListener('lostpointercapture', endResize);
       scroller.removeEventListener('contextmenu', onContextMenu);
       dirty.clear();
-      engine.destroy();
       const input = editor;
       editor = null;
       input?.remove();

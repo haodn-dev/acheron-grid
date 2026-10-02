@@ -26,9 +26,9 @@ engine.destroy();
 
 The engine owns selection/anchor, sparse row/column layout, text parsing, TSV operations, data commands and delta history. The Canvas grid uses this same engine. Browser focus, scrolling, editor drafts, menus, dialogs, OS clipboard and frame scheduling stay in the browser layer.
 
-`select(rowIndex, columnIndex, extend?)` rejects invalid coordinates; `clearSelection()` clears the range. `getSelection()` and `getSelectionRange()` return copies. `rows` and `columnsLayout` expose read-only `size`, `position`, `indexAt` and `range` geometry queries; mutations use `setRowHeight` and `setColumnWidth`. Columns are frozen snapshots. `getValue`, `canEdit`, `canPaste`, `canUndo` and `canRedo` provide queries. `editCell(rowIndex, columnIndex, text)` applies the same editable/parser rules as the DOM editor; `updateCells` retains its programmatic, already-validated-value semantics. `canPaste` checks the starting cell and write capability; `paste` validates the entire rectangle before writing.
+`select(rowIndex, columnIndex, extend?)` rejects invalid coordinates and returns whether selection changed; denied targets return false; `clearSelection()` clears the range. `getSelection()` and `getSelectionRange()` return copies. `rows` and `columnsLayout` expose read-only `size`, `position`, `indexAt` and `range` geometry queries; mutations use `setRowHeight` and `setColumnWidth`. Columns are frozen snapshots. `getValue`, `canEdit`, `canPaste`, `canUndo` and `canRedo` provide queries. `editCell(rowIndex, columnIndex, text)` applies the same editable/parser rules as the DOM editor; `updateCells` retains its programmatic, already-validated-value semantics. `canPaste` checks the starting cell and write capability; `paste` validates the entire rectangle before writing.
 
-An optional synchronous `onInvalidate(change)` renderer hook receives `cells`, `selection` or `layout` notifications after committed state/history. These notifications describe repaint needs, not the future public domain event system. The hook may query committed state; if it throws, the exception propagates and does not roll back an already committed mutation. `destroy()` drops the hook and history, clears selection without notification and is idempotent. Mutations/copy/paste throw after destruction; undo/redo return false. As with the browser API, source values are shallow references and external source writes are outside history. Row count remains fixed at construction.
+An optional synchronous `onInvalidate(change)` renderer hook receives `cells`, `selection` or `layout` notifications after committed state/history. These notifications describe repaint needs, separate from public domain events. The hook may query committed state; if it throws, the exception propagates and does not roll back an already committed mutation. `destroy()` drops the hook and history, clears selection without notification and is idempotent. Mutations/copy/paste throw after destruction; undo/redo return false. As with the browser API, source values are shallow references and external source writes are outside history. Row count remains fixed at construction.
 
 Build/typecheck includes a separate ES2022-only TypeScript configuration with no DOM or ambient Node types. Unit tests also compile the headless dependency closure and verify it excludes browser modules.
 
@@ -36,9 +36,9 @@ Build/typecheck includes a separate ES2022-only TypeScript configuration with no
 
 DataSource exposes synchronous getRowCount/getRowId/getValue and optional setValue/setValues. Row count is fixed at construction. LocalDataSource copies the row array and shallow row snapshots, with unique stable row IDs; nested values remain caller-owned.
 
-updateCells accepts already-validated values and intentionally does not apply column parsers or the editor's editable flag. editCell and paste apply those rules. Batch setters must be synchronous and atomic, leaving data unchanged on failure. Validation completes before writes. Duplicate updates use the last value, Object.is no-ops preserve history, and undo/redo retain at most 100 delta commands with shallow value references. External writes are outside history; replay rejects row identity/current value conflicts. Resize is not in data history.
+updateCells accepts already-validated values and intentionally does not apply column parsers or the editor's editable flag. editCell and paste apply resolved editable/pasteable permissions and text parsers. All writes, including API updates and undo/redo, require writable permission. Batch setters must be synchronous and atomic, leaving data unchanged on failure. Validation completes before writes. Duplicate updates use the last value, Object.is no-ops preserve history, and undo/redo retain at most 100 delta commands with shallow value references. External writes are outside history; replay rejects row identity/current value conflicts. Resize is not in data history.
 
-Clipboard processing is limited to 100,000 cells and 10 million UTF-16 code units. Async sources, centralized capability permissions, public domain events, framework adapters and multiple ranges are not implemented.
+Clipboard processing is limited to 100,000 cells and 10 million UTF-16 code units. Async sources, framework adapters and multiple ranges are not implemented.
 
 ## Browser import migration
 
@@ -52,3 +52,19 @@ import type { Column, CellSelection, SelectionRange } from '@acheron-grid/core';
 ```
 
 The createGrid methods and behavior remain the same; see the [Canvas guide](../canvas/README.md). Core does not re-export Canvas because that would invert the dependency direction. Existing core/headless consumers continue to work.
+
+## Capabilities and domain events
+
+Core and Canvas options accept `permissions` (grid scope), column `permissions`, and a pure `resolveCellPermission(cell)` callback for application row/cell rules. Policies are partial booleans: `editable`, `selectable`, `copyable`, `pasteable`, `writable`. Any explicit false veto survives later scopes. By default selection/copy/write are allowed, while edit/paste follow column `editable`. Policies may enable edit/paste on a column with no editable opt-in; `writable: false` always denies both.
+
+`getCellPermission(rowIndex, columnIndex)` returns a frozen resolved snapshot or throws for invalid coordinates. Setter/parser availability is separate: `canEdit` checks those too, and `canPaste` checks only the starting cell and setter availability. Paste checks every destination before any parser or setter. Copy denies the entire TSV if any cell is not copyable. Selection checks only the active endpoint, so a rectangular range may cover non-selectable interior cells. Denied pointer/keyboard targets keep the previous selection without searching for another cell.
+
+API updates and undo/redo check current writable permissions, without applying UI editable or pasteable rules. Denied batches never write or move history. `canUndo/canRedo` indicate stack availability; replay may still fail permission/conflict checks. Grid/column policies are construction snapshots; callback rules are resolved on every operation/query. Existing selection is not automatically removed on a policy change. Canvas callers can call `render()` after changing callback policy; an open editor rechecks permissions at commit. These capabilities do not replace server authorization.
+
+Pass synchronous `onEvent(event)` to either factory. The discriminated `GridEvent` union contains:
+
+- `cell:change`: source `api/edit/paste/undo/redo`, one batch of `{ rowIndex, rowId, columnKey, previous, value }` changes.
+- `selection:change`: active `selection` and normalized `range`, or null after clear.
+- `column:resize` / `row:resize`: `index`, `previous`, `size`; layout stays outside data history.
+
+State and history commit before renderer invalidation, then the domain event. Failures before commit and no-ops emit nothing. Both notification hooks are attempted even if one throws; the first error propagates after both, without rolling back committed state. Event envelopes/payload metadata are frozen; values remain shallow caller-owned references. Parser, resolver, setter and notification hooks cannot issue nested engine mutations; queries of committed state are allowed. Destroy silently releases hooks/history. Canvas legacy selection callbacks remain separate and are not duplicated by onEvent.

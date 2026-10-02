@@ -65,7 +65,7 @@ Give the container explicit dimensions, such as `width: 100%; height: 480px`. Mo
 
 The `DataSource` interface exposes `getRowCount()`, `getRowId(index)`, and `getValue(index, columnKey)`. Grid dimensions use the row count at mount time; changing the row count requires remounting. Custom sources must provide synchronous values and valid counts.
 
-`createGrid(options)` returns `render()`, `updateCells(updates)`, `undo()`, `redo()`, `getSelection()`, `getSelectionRange()`, `copySelection()`, `paste(text)` and `destroy()`. `render()` schedules a viewport redraw, coalesced into the next animation frame. `destroy()` removes only the grid's own DOM and releases its listeners and observer; repeated calls are safe. Calls to `render()` after destruction do nothing.
+`createGrid(options)` returns `render()`, `updateCells(updates)`, `undo()`, `redo()`, `getCellPermission(rowIndex, columnIndex)`, `getSelection()`, `getSelectionRange()`, `copySelection()`, `paste(text)` and `destroy()`. `render()` schedules a viewport redraw, coalesced into the next animation frame. `destroy()` removes only the grid's own DOM and releases its listeners and observer; repeated calls are safe. Calls to `render()` after destruction do nothing.
 
 Column keys must be unique. All cell dimensions must be positive finite numbers. Values are rendered as plain text using `String(value)`; `null` and `undefined` display as empty cells.
 
@@ -107,7 +107,7 @@ grid.undo(); // true if a command was undone
 grid.redo(); // true if a command was redone
 ```
 
-Each call is one undoable command, including edits committed through the DOM editor. Repeated cells use the last supplied value; unchanged values are skipped using `Object.is`. These APIs take zero-based row indices and already validated values: they do not run column parsers or enforce the UI's `editable` flag. Invalid indices/unknown grid columns are rejected before any write.
+Each call is one undoable command, including edits committed through the DOM editor. Repeated cells use the last supplied value; unchanged values are skipped using `Object.is`. These APIs take zero-based row indices and already validated values: they do not run column parsers or enforce the UI's `editable` flag. Invalid indices/unknown grid columns and denied writable permissions are rejected before any write.
 
 `LocalDataSource.setValues(updates)` validates all fields and builds replacement rows before committing the batch. Custom sources must provide a synchronous, atomic `setValues(updates)` for multiple-cell commands; a single-cell command can use `setValue`. Setters must leave data unchanged when throwing. A failed command or replay does not move history. Async setters are unsupported.
 
@@ -130,7 +130,7 @@ grid.paste('Grace\tOperations\r\nAda\tDesign'); // one undoable command
 
 Native copy/paste events support Ctrl/Cmd+C/V on the focused viewport without Clipboard API permissions. The text editor keeps native clipboard behavior. Copy exports values only, with null/undefined as empty text. TSV quotes tabs/newlines/quotes and doubles embedded quotes. Paste accepts quoted multiline TSV with tab and CRLF/LF/CR separators; one trailing row separator is ignored. Ragged rows and malformed quotes are rejected.
 
-Paste starts at the selected range's top-left cell and uses the clipboard rectangle's dimensions. It does not tile/fill the selection, add rows or skip read-only columns. Every destination must be within bounds and `editable`; values pass through column parsers. Non-string existing values require a parser. All values are validated before the atomic write, so parser/bounds/read-only failures leave data/history unchanged. Multi-cell paste requires an atomic source `setValues` implementation.
+Paste starts at the selected range's top-left cell and uses the clipboard rectangle's dimensions. It does not tile/fill the selection, add rows or skip read-only columns. Every destination must be within bounds and permit `pasteable`/`writable`; values pass through column parsers. Non-string existing values require a parser. All values are validated before the atomic write, so parser/bounds/read-only failures leave data/history unchanged. Multi-cell paste requires an atomic source `setValues` implementation.
 
 Clipboard work is limited to 100,000 cells and 10,000,000 UTF-16 code units per payload. Over-limit transfers throw `RangeError`. Copy/paste APIs throw while editing or after destruction; no selection yields empty copy/no-op paste. Event errors use native alerts. HTML-only clipboard, cut and formula processing are not supported. Actual OS clipboard and spreadsheet interoperability have not been verified; browser tests exercise native event handlers with controlled `DataTransfer` payloads.
 
@@ -156,3 +156,9 @@ Menu Copy/Paste calls `navigator.clipboard` only from the clicked action and req
 Run `npm run benchmark` from the engine root. The installed Playwright runner measures callbacks that draw a viewport of a lazy 1,000,000-row × 1,000-column source, including sparse resize overrides, scrolling and partial updates. JSON output reports sample counts, median/P95 callback time and maximum source cell reads. The fixture uses a 640×360 CSS pixel grid.
 
 This measures synchronous JavaScript/Canvas callback cost in headless Chromium. It does not measure deferred rasterization, compositor/GPU work, end-to-end FPS or peak memory, and does not claim 60 FPS on other hardware or browsers.
+
+## Capabilities and typed events
+
+Canvas forwards `permissions`, column `permissions`, `resolveCellPermission(cell)` and `onEvent(event)` to core, and exposes `getCellPermission(rowIndex, columnIndex)`. See the [core contract](../core/README.md#capabilities-and-domain-events) for veto precedence, atomic batches, current-policy history checks, event payloads and callback errors.
+
+A read-only row can still be selected/copied with `resolveCellPermission: cell => cell.rowId === 'locked' ? { writable: false } : undefined`. Denied selection targets retain the previous endpoint and do not scroll or fire legacy selection callbacks. Right-clicking a non-selectable cell does not open its action menu. Edit/Paste reflect resolved capabilities; Copy reflects the active cell and still validates the whole range when invoked. Dynamic policy changes require `grid.render()` to refresh the UI; an open editor rechecks at commit and retains its draft on denial. `onEvent` is synchronous and cannot cancel an already committed change.

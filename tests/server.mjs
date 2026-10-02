@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-const coreFiles = new Set(['index.js', 'viewport.js', 'data-source.js', 'tsv.js', 'axis.js', 'engine.js', 'types.js', 'headless.js']);
+const coreFiles = new Set(['index.js', 'viewport.js', 'data-source.js', 'tsv.js', 'axis.js', 'engine.js', 'types.js', 'headless.js', 'permissions.js', 'events.js']);
 const canvasFiles = new Set(['index.js', 'grid.js']);
 createServer(async (request, response) => {
   if (request.url === '/') {
