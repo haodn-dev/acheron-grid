@@ -1041,7 +1041,7 @@ test('resize guides defer row/column geometry until release and Escape/cancel pr
   await page.evaluate(async () => {
     const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
     window.events = [];
-    window.grid = createGrid({ container: document.querySelector('#grid'), columns: [{ key: 'name', title: 'Name', editable: true }, { key: 'team', title: 'Team' }],
+    window.grid = createGrid({ container: document.querySelector('#grid'), frozenColumns: 1, columns: [{ key: 'name', title: 'Name', editable: true }, { key: 'team', title: 'Team' }],
       dataSource: new LocalDataSource(Array.from({ length: 30 }, (_, id) => ({ id, name: 'Ada', team: 'Ops' })), row => row.id),
       onEvent: event => window.events.push(event) });
   });
@@ -1057,14 +1057,14 @@ test('resize guides defer row/column geometry until release and Escape/cancel pr
   await page.mouse.move(bounds.x + 226, bounds.y - 18); await page.mouse.down(); await page.mouse.move(bounds.x + 270, bounds.y - 18); await page.keyboard.press('Escape'); await page.mouse.up();
   expect(await viewport.evaluate(el => el.firstChild.style.width)).toBe('380px'); await expect(guide).toBeHidden();
   const selection = await page.evaluate(() => window.grid.getSelection());
-  await page.mouse.move(bounds.x + 4, bounds.y + 32); await page.mouse.down(); await page.mouse.move(bounds.x + 4, bounds.y + 64);
+  await page.mouse.move(bounds.x + 80, bounds.y + 32); await page.mouse.down(); await page.mouse.move(bounds.x + 80, bounds.y + 64);
   await expect(guide).toBeVisible(); await expect(guide).toHaveAttribute('data-axis', 'row');
   expect(await viewport.evaluate(el => el.firstChild.style.height)).toBe('960px');
   await page.mouse.up(); expect(await viewport.evaluate(el => el.firstChild.style.height)).toBe('992px');
   expect(await page.evaluate(() => window.grid.getSelection())).toEqual(selection);
   expect(await page.evaluate(() => window.events.filter(event => event.type === 'row:resize').length)).toBe(1);
   await viewport.press('F2'); const input = page.getByRole('textbox'); expect(await input.evaluate(el => el.offsetHeight)).toBe(64); await input.press('Escape');
-  await page.mouse.move(bounds.x + 4, bounds.y + 64); await page.mouse.down(); await page.mouse.move(bounds.x + 4, bounds.y + 90);
+  await page.mouse.move(bounds.x + 80, bounds.y + 64); await page.mouse.down(); await page.mouse.move(bounds.x + 80, bounds.y + 90);
   await page.evaluate(() => document.querySelector('[data-grid-resize-guide]').parentElement.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true })));
   await page.mouse.up(); expect(await viewport.evaluate(el => el.firstChild.style.height)).toBe('992px'); await expect(guide).toBeHidden();
 });
@@ -1098,7 +1098,7 @@ test('multiline overlay grows, preserves invalid drafts, inserts newlines and sa
   await viewport.press('Control+y'); expect(await page.evaluate(() => window.source.getValue(0, 'name'))).toBe('First line\nSecond line');
   await viewport.click({ position: { x: 180, y: 16 } }); await viewport.press('F2'); await editor.fill('Preserved draft');
   await viewport.evaluate(el => { el.scrollTop = 700; });
-  await expect(editor).toHaveValue('Preserved draft'); expect(await editor.evaluate(el => el.parentElement.style.clipPath)).toBe('inset(100%)');
+  await expect(editor).toHaveValue('Preserved draft'); await expect.poll(() => editor.evaluate(el => el.parentElement.style.clipPath)).toBe('inset(100%)');
   await viewport.evaluate(el => { el.scrollTop = 0; }); await expect(editor).toBeVisible(); await editor.press('Escape');
   expect(await page.evaluate(async () => {
     window.grid.setRowHeight(0, 96); window.grid.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Wrapped text\nSecond line' }]);

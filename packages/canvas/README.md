@@ -243,7 +243,7 @@ The viewport exposes Shift+F8 via `aria-keyshortcuts` and announces active posit
 
 ## Resize preview
 
-Drag within 8px of a column header edge for a vertical guide, or within the leftmost 10px of the viewport near a row edge for a horizontal guide. Sizes stay unchanged during dragging. Release applies one resize command; Escape, pointer cancellation, capture loss, viewport/layout redraw or destroy discard the draft. Column/row drafts clamp to 24–1000px. The guide follows the theme selection color and stays within the viewport. Selection is preserved. Numeric resize dialogs and programmatic size APIs still apply immediately; no layout undo history is added.
+Drag within 8px of a column header edge for a vertical guide, or within the first column when columns are frozen (otherwise the leftmost 10px of the viewport) near a row edge for a horizontal guide. Sizes stay unchanged during dragging. Release applies one resize command; Escape, pointer cancellation, capture loss, viewport/layout redraw or destroy discard the draft. Column/row drafts clamp to 24–1000px. The guide follows the theme selection color and stays within the viewport. Selection is preserved. Numeric resize dialogs and programmatic size APIs still apply immediately; no layout undo history is added.
 
 ## Multiline editing and wrapping
 

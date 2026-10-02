@@ -300,15 +300,16 @@ export function createGrid(options: GridOptions): Grid {
     const bounds = scroller.getBoundingClientRect();
     const x = event.clientX - bounds.left;
     const y = event.clientY - bounds.top;
-    if (x < 0 || x > 10 || y < 0 || y >= scroller.clientHeight || !rowCount || !columns.length) return null;
+    if (x < 0 || x > (engine.frozenColumns ? Math.min(columnAxis.size(0), scroller.clientWidth) : 10) || y < 0 || y >= scroller.clientHeight || !rowCount || !columns.length) return null;
+    const tolerance = x <= 10 ? 8 : 3;
     const view = viewport();
-    if (engine.frozenRows > 0 && Math.abs(rowAxis.position(engine.frozenRows) - y) <= 8) return engine.frozenRows - 1;
+    if (engine.frozenRows > 0 && Math.abs(rowAxis.position(engine.frozenRows) - y) <= tolerance) return engine.frozenRows - 1;
     const offset = y + (y < view.frozenHeight ? 0 : view.scrollTop);
     const row = rowAxis.indexAt(offset);
     const first = y < view.frozenHeight ? 0 : engine.frozenRows;
     const limit = y < view.frozenHeight ? engine.frozenRows : rowCount;
-    if (row < limit && row >= first && Math.abs(rowAxis.position(row + 1) - offset) <= 8) return row;
-    if (row > first && Math.abs(rowAxis.position(row) - offset) <= 8) return row - 1;
+    if (row < limit && row >= first && Math.abs(rowAxis.position(row + 1) - offset) <= tolerance) return row;
+    if (row > first && Math.abs(rowAxis.position(row) - offset) <= tolerance) return row - 1;
     return null;
   }
 
@@ -351,6 +352,7 @@ export function createGrid(options: GridOptions): Grid {
   function onHeaderPointerMove(event: PointerEvent): void {
     root.style.cursor = resizing ? (resizing.axis === 'column' ? 'col-resize' : 'row-resize')
       : columnEdge(event) !== null ? 'col-resize' : rowEdge(event) !== null ? 'row-resize' : '';
+    root.title = root.style.cursor === 'row-resize' ? 'Drag the row boundary to resize height' : '';
     if (resizing?.pointerId === event.pointerId) {
       resizing.proposed = Math.max(24, Math.min(1000, resizing.size + (resizing.axis === 'column' ? event.clientX : event.clientY) - resizing.start));
       showResizeGuide();
@@ -362,6 +364,7 @@ export function createGrid(options: GridOptions): Grid {
     resizing = null;
     resizeGuide.style.display = 'none';
     root.style.cursor = '';
+    root.title = '';
     if (pointerId !== undefined && root.hasPointerCapture(pointerId)) root.releasePointerCapture(pointerId);
   }
 
