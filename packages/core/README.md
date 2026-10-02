@@ -70,7 +70,33 @@ Column keys must be unique. All cell dimensions must be positive finite numbers.
 
 ## Limits
 
-All local rows reside in memory. Virtualization bounds cell rendering work, not data storage. Native scrolling is subject to browser scroll-size limits, so this preview does not guarantee arbitrary dataset dimensions. Cells have a uniform width and height; there are no custom renderers, editors, or mutation APIs yet.
+All local rows reside in memory. Virtualization bounds cell rendering work, not data storage. Native scrolling is subject to browser scroll-size limits, so this preview does not guarantee arbitrary dataset dimensions. Custom renderers and editors are not implemented.
+
+## Headless engine
+
+The experimental `@acheron-grid/core/headless` entry point exports `createGridEngine`, `LocalDataSource` and their types. It runs in Node without DOM, Canvas or framework globals. The existing root entry remains the browser-compatible `createGrid` API; the whole package has not yet migrated to separate browser and domain packages.
+
+```js
+import { createGridEngine, LocalDataSource } from '@acheron-grid/core/headless';
+
+const engine = createGridEngine({
+  columns: [{ key: 'name', title: 'Name', editable: true }],
+  dataSource: new LocalDataSource([{ id: 1, name: 'Ada' }], row => row.id),
+});
+engine.select(0, 0);
+engine.editCell(0, 0, 'Grace');
+engine.copySelection(); // 'Grace'; no system clipboard access
+engine.undo();
+engine.destroy();
+```
+
+The engine owns selection/anchor, sparse row/column layout, text parsing, TSV operations, data commands and delta history. The Canvas grid uses this same engine. Browser focus, scrolling, editor drafts, menus, dialogs, OS clipboard and frame scheduling stay in the browser layer.
+
+`select(rowIndex, columnIndex, extend?)` rejects invalid coordinates; `clearSelection()` clears the range. `getSelection()` and `getSelectionRange()` return copies. `rows` and `columnsLayout` expose read-only `size`, `position`, `indexAt` and `range` geometry queries; mutations use `setRowHeight` and `setColumnWidth`. Columns are frozen snapshots. `getValue`, `canEdit`, `canPaste`, `canUndo` and `canRedo` provide queries. `editCell(rowIndex, columnIndex, text)` applies the same editable/parser rules as the DOM editor; `updateCells` retains its programmatic, already-validated-value semantics. `canPaste` checks the starting cell and write capability; `paste` validates the entire rectangle before writing.
+
+An optional synchronous `onInvalidate(change)` renderer hook receives `cells`, `selection` or `layout` notifications after committed state/history. These notifications describe repaint needs, not the future public domain event system. The hook may query committed state; if it throws, the exception propagates and does not roll back an already committed mutation. `destroy()` drops the hook and history, clears selection without notification and is idempotent. Mutations/copy/paste throw after destruction; undo/redo return false. As with the browser API, source values are shallow references and external source writes are outside history. Row count remains fixed at construction.
+
+Build/typecheck includes a separate ES2022-only TypeScript configuration with no DOM or ambient Node types. Unit tests also compile the headless dependency closure and verify it excludes browser modules.
 
 ## Selection and keyboard
 

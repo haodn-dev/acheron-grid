@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-const files = new Set(['index.js', 'grid.js', 'viewport.js', 'data-source.js', 'tsv.js', 'axis.js']);
+const files = new Set(['index.js', 'grid.js', 'viewport.js', 'data-source.js', 'tsv.js', 'axis.js', 'engine.js', 'types.js', 'headless.js']);
 createServer(async (request, response) => {
   if (request.url === '/') {
     response.setHeader('Content-Type', 'text/html');

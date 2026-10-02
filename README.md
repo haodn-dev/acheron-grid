@@ -12,6 +12,8 @@ The first core preview implements read-only Canvas rendering, row and column vir
 
 Start with the [core package guide](packages/core/README.md) for local installation, an example, and API limitations. No package has been published. Opt-in DOM editing, atomic local batch updates, partial cell repaint and undo/redo are available. Rectangular selection, TSV copy/paste, individual row/column resize and a built-in context menu are available. Multiple ranges, remote data sources and framework adapters remain planned. Canvas cell content is not yet accessible to screen readers. The V1 scope below remains the target, not a list of completed features.
 
+The experimental `@acheron-grid/core/headless` entry runs selection, layout, editing, clipboard and history without browser globals. The Canvas grid uses this same domain engine. The root entry still provides the compatible browser `createGrid` API; separate browser packaging remains in progress.
+
 ## Design goals
 
 - **Canvas rendering:** draw grid content on Canvas, with DOM elements for editors, menus, overlays, and accessibility support.

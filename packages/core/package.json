@@ -4,7 +4,23 @@
   "private": true,
   "type": "module",
   "description": "Framework-independent Canvas data grid engine",
-  "files": ["dist", "README.md"],
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "scripts": { "build": "tsc -p tsconfig.json", "typecheck": "tsc -p tsconfig.json --noEmit", "dev": "tsc -p tsconfig.json --watch" }
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./headless": {
+      "types": "./dist/headless.d.ts",
+      "import": "./dist/headless.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.headless.json && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.headless.json",
+    "dev": "tsc -p tsconfig.json --watch"
+  }
 }

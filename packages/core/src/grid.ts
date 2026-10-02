@@ -1,10 +1,8 @@
-import type { CellUpdate, DataSource, RowId } from './data-source.js';
-import { GridAxis } from './axis.js';
-import { clipboardCellLimit, clipboardTextLimit, decodeTsv, encodeTsv } from './tsv.js';
+import type { CellUpdate, DataSource } from './data-source.js';
+import type { Column, CellSelection, SelectionRange } from './types.js';
+import { createGridEngine } from './engine.js';
 
-export interface Column { key: string; title: string; editable?: boolean; parse?: (text: string) => unknown; }
-export interface CellSelection { rowIndex: number; rowId: RowId; columnIndex: number; columnKey: string; }
-export interface SelectionRange { startRow: number; endRow: number; startColumn: number; endColumn: number; }
+export type { Column, CellSelection, SelectionRange } from './types.js';
 export interface GridOptions {
   onSelectionChange?: (selection: CellSelection | null) => void;
   onSelectionRangeChange?: (range: SelectionRange | null) => void;
@@ -32,19 +30,20 @@ export interface Grid {
 /** Mount a grid. The caller owns the container and its dimensions. */
 export function createGrid(options: GridOptions): Grid {
   const { container, dataSource } = options;
-  const columns = options.columns.map(column => ({ ...column }));
-  const rowHeight = options.rowHeight ?? 32;
-  const columnWidth = options.columnWidth ?? 160;
   const headerHeight = options.headerHeight ?? 36;
-  for (const size of [rowHeight, columnWidth, headerHeight]) {
-    if (!Number.isFinite(size) || size <= 0) throw new RangeError('Grid sizes must be positive finite numbers.');
-  }
-  if (new Set(columns.map(column => column.key)).size !== columns.length) throw new Error('Column keys must be unique.');
-  const rowCount = dataSource.getRowCount();
-  if (!Number.isSafeInteger(rowCount) || rowCount < 0) throw new RangeError('Invalid row count.');
-  if (!Number.isFinite(rowCount * rowHeight) || !Number.isFinite(columns.length * columnWidth)) throw new RangeError('Grid dimensions overflow.');
-  const rowAxis = new GridAxis(rowCount, rowHeight);
-  const columnAxis = new GridAxis(columns.length, columnWidth);
+  if (!Number.isFinite(headerHeight) || headerHeight <= 0) throw new RangeError('Grid sizes must be positive finite numbers.');
+  const engine = createGridEngine({ columns: options.columns, dataSource,
+    ...(options.rowHeight === undefined ? {} : { rowHeight: options.rowHeight }),
+    ...(options.columnWidth === undefined ? {} : { columnWidth: options.columnWidth }),
+    onInvalidate(change) {
+    if (change.type === 'cells') invalidate(change.cells);
+    else if (change.type === 'layout') {
+      spacer.style.width = String(columnAxis.position(columns.length)) + 'px';
+      spacer.style.height = String(rowAxis.position(rowCount)) + 'px';
+      render();
+    } else render();
+  } });
+  const { columns, rowCount, rows: rowAxis, columnsLayout: columnAxis } = engine;
   const doc = container.ownerDocument;
   const win = doc.defaultView!;
   const root = doc.createElement('div');
@@ -55,9 +54,9 @@ export function createGrid(options: GridOptions): Grid {
   scroller.tabIndex = 0;
   scroller.setAttribute('aria-label', viewportLabel);
   const spacer = doc.createElement('div');
-  spacer.style.width = `${columns.length * columnWidth}px`;
+  spacer.style.width = `${columnAxis.position(columns.length)}px`;
   spacer.style.position = 'relative';
-  spacer.style.height = `${rowCount * rowHeight}px`;
+  spacer.style.height = `${rowAxis.position(rowCount)}px`;
   scroller.append(spacer);
   const canvas = doc.createElement('canvas');
   canvas.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none';
@@ -68,15 +67,10 @@ export function createGrid(options: GridOptions): Grid {
   container.append(root);
   let frame: number | undefined;
   let destroyed = false;
-  let selection: CellSelection | null = null;
-  let anchor: CellSelection | null = null;
   let dragPointer: number | null = null;
   let editor: HTMLInputElement | null = null;
   let fullDraw = true;
-  const dirty = new Map<string, CellUpdate>();
-  type Change = CellUpdate & { previous: unknown; rowId: RowId };
-  const past: Change[][] = [];
-  const future: Change[][] = [];
+  const dirty = new Map<string, { rowIndex: number; columnKey: string }>();
   let menu: HTMLDivElement | null = null;
   let sizeDialog: HTMLDialogElement | null = null;
   let resizing: { pointerId: number; column: number; x: number; width: number } | null = null;
@@ -123,13 +117,11 @@ export function createGrid(options: GridOptions): Grid {
     input.focus(); input.select();
   }
 
-  function resizeAxis(axis: GridAxis, index: number, size: number): void {
+  function resizeAxis(axis: typeof rowAxis, index: number, size: number): void {
     if (destroyed) throw new Error('Grid is destroyed.');
     if (editor) throw new Error('Finish editing before resizing cells.');
-    axis.setSize(index, size);
-    spacer.style.width = `${columnAxis.position(columns.length)}px`;
-    spacer.style.height = `${rowAxis.position(rowCount)}px`;
-    render();
+    if (axis === rowAxis) engine.setRowHeight(index, size);
+    else engine.setColumnWidth(index, size);
   }
 
   function closeMenu(focus = false): void {
@@ -143,6 +135,7 @@ export function createGrid(options: GridOptions): Grid {
     const range = getSelectionRange();
     if (!range || row < range.startRow || row > range.endRow || col < range.startColumn || col > range.endColumn) select(row, col, false, false);
     if (destroyed) return;
+    const selection = engine.getSelection()!;
     const popup = doc.createElement('div');
     menu = popup;
     popup.popover = 'auto';
@@ -174,14 +167,14 @@ export function createGrid(options: GridOptions): Grid {
       popup.append(button);
     }
     item('Copy', !!win.navigator.clipboard?.writeText, () => win.navigator.clipboard.writeText(copySelection()));
-    item('Paste', !!win.navigator.clipboard?.readText && !!(dataSource.setValue || dataSource.setValues) && !!columns[getSelectionRange()!.startColumn]!.editable, async () => {
+    item('Paste', !!win.navigator.clipboard?.readText && engine.canPaste(), async () => {
       const text = await win.navigator.clipboard.readText();
       if (destroyed || fingerprint !== JSON.stringify(getSelectionRange())) throw new Error('Selection changed before paste. Try again.');
       paste(text);
     });
-    item('Edit cell', !!dataSource.setValue && !!columns[selection!.columnIndex]!.editable && (columns[selection!.columnIndex]!.parse !== undefined || dataSource.getValue(selection!.rowIndex, selection!.columnKey) == null || typeof dataSource.getValue(selection!.rowIndex, selection!.columnKey) === 'string'), beginEdit);
-    item('Undo', past.length > 0, () => { replay(false); });
-    item('Redo', future.length > 0, () => { replay(true); });
+    item('Edit cell', engine.canEdit(selection.rowIndex, selection.columnIndex), beginEdit);
+    item('Undo', engine.canUndo(), () => { replay(false); });
+    item('Redo', engine.canRedo(), () => { replay(true); });
     item('Resize column…', true, () => openSizeDialog('Column width', columnAxis.size(col), size => resizeAxis(columnAxis, col, size)));
     item('Resize row…', true, () => openSizeDialog('Row height', rowAxis.size(row), size => resizeAxis(rowAxis, row, size)));
     popup.addEventListener('keydown', event => {
@@ -241,19 +234,12 @@ export function createGrid(options: GridOptions): Grid {
 
   function endResize(): void { resizing = null; root.style.cursor = ''; }
 
-  function write(changes: readonly CellUpdate[]): void {
-    if (changes.length === 1 && dataSource.setValue) {
-      const change = changes[0]!;
-      dataSource.setValue(change.rowIndex, change.columnKey, change.value);
-    } else if (dataSource.setValues) dataSource.setValues(changes);
-    else throw new Error('An atomic setValues method is required for batch writes.');
-  }
-
-  function invalidate(changes: readonly CellUpdate[]): void {
+  function invalidate(changes: readonly { rowIndex: number; columnKey: string }[]): void {
+    const selection = engine.getSelection();
     for (const change of changes) dirty.set(JSON.stringify([change.rowIndex, change.columnKey]), change);
     if (selection) {
       const column = columns[selection.columnIndex]!;
-      const value = dataSource.getValue(selection.rowIndex, column.key);
+      const value = engine.getValue(selection.rowIndex, column.key);
       scroller.setAttribute('aria-label', `${viewportLabel}: row ${selection.rowIndex + 1}, ${column.title}, ${value == null ? '' : String(value)}`);
     }
     schedule();
@@ -262,56 +248,20 @@ export function createGrid(options: GridOptions): Grid {
   function updateCells(updates: readonly CellUpdate[]): void {
     if (destroyed) throw new Error('Grid is destroyed.');
     if (editor) throw new Error('Finish editing before updating cells.');
-    applyUpdates(updates);
-  }
-
-  function applyUpdates(updates: readonly CellUpdate[]): void {
-    const unique = new Map<string, CellUpdate>();
-    for (const update of updates) {
-      if (!Number.isSafeInteger(update.rowIndex) || update.rowIndex < 0 || update.rowIndex >= rowCount) throw new RangeError('Invalid row index.');
-      if (!columns.some(column => column.key === update.columnKey)) throw new Error(`Unknown column: ${update.columnKey}`);
-      unique.set(JSON.stringify([update.rowIndex, update.columnKey]), { ...update });
-    }
-    const changes: Change[] = [...unique.values()].map(update => ({ ...update,
-      previous: dataSource.getValue(update.rowIndex, update.columnKey), rowId: dataSource.getRowId(update.rowIndex),
-    })).filter(change => !Object.is(change.previous, change.value));
-    if (!changes.length) return;
-    write(changes);
-    past.push(changes);
-    // keep the latest 100 commands; large values remain shallow caller-owned references.
-    if (past.length > 100) past.shift();
-    future.length = 0;
-    invalidate(changes);
+    engine.updateCells(updates);
   }
 
   function replay(redo: boolean): boolean {
     if (destroyed || editor) return false;
-    const from = redo ? future : past;
-    const to = redo ? past : future;
-    const changes = from.at(-1);
-    if (!changes) return false;
-    for (const change of changes) {
-      if (dataSource.getRowId(change.rowIndex) !== change.rowId || !Object.is(dataSource.getValue(change.rowIndex, change.columnKey), redo ? change.previous : change.value)) {
-        throw new Error('History conflicts with external data changes.');
-      }
-    }
-    const updates = changes.map(change => ({ ...change, value: redo ? change.value : change.previous }));
-    write(updates);
-    from.pop();
-    to.push(changes);
-    invalidate(updates);
-    return true;
+    return redo ? engine.redo() : engine.undo();
   }
 
   function finishEdit(commit: boolean): boolean {
+    const selection = engine.getSelection();
     if (!editor || !selection) return true;
     if (commit) {
       try {
-        const column = columns[selection.columnIndex]!;
-        const previous = dataSource.getValue(selection.rowIndex, column.key);
-        if (editor.value !== (previous == null ? '' : String(previous))) {
-          applyUpdates([{ rowIndex: selection.rowIndex, columnKey: column.key, value: column.parse ? column.parse(editor.value) : editor.value }]);
-        }
+        engine.editCell(selection.rowIndex, selection.columnIndex, editor.value);
       } catch (error) {
         editor.setCustomValidity(error instanceof Error ? error.message : 'Unable to save cell.');
         editor.setAttribute('aria-invalid', 'true');
@@ -328,12 +278,10 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function beginEdit(): void {
-    if (destroyed || editor || !selection || !dataSource.setValue) return;
+    const selection = engine.getSelection();
+    if (destroyed || editor || !selection || !engine.canEdit(selection.rowIndex, selection.columnIndex)) return;
     const column = columns[selection.columnIndex]!;
-    if (!column.editable) return;
-    const value = dataSource.getValue(selection.rowIndex, column.key);
-    // text values by default; typed columns provide a parser.
-    if (!column.parse && value != null && typeof value !== 'string') return;
+    const value = engine.getValue(selection.rowIndex, column.key);
     editor = doc.createElement('input');
     editor.type = 'text';
     editor.value = value == null ? '' : String(value);
@@ -357,65 +305,23 @@ export function createGrid(options: GridOptions): Grid {
     editor.select();
   }
 
-  function getSelection(): CellSelection | null {
-    return selection ? { ...selection } : null;
-  }
-
-  function getSelectionRange(): SelectionRange | null {
-    if (!selection || !anchor) return null;
-    return { startRow: Math.min(anchor.rowIndex, selection.rowIndex), endRow: Math.max(anchor.rowIndex, selection.rowIndex),
-      startColumn: Math.min(anchor.columnIndex, selection.columnIndex), endColumn: Math.max(anchor.columnIndex, selection.columnIndex) };
-  }
+  const getSelection = engine.getSelection;
+  const getSelectionRange = engine.getSelectionRange;
 
   function copySelection(): string {
     if (destroyed) throw new Error('Grid is destroyed.');
     if (editor) throw new Error('Finish editing before copying cells.');
-    const range = getSelectionRange();
-    if (!range) return '';
-    if ((range.endRow - range.startRow + 1) * (range.endColumn - range.startColumn + 1) > clipboardCellLimit) throw new RangeError('Selection has too many cells.');
-    const rows: string[][] = [];
-    let length = 0;
-    for (let row = range.startRow; row <= range.endRow; row++) {
-      const values: string[] = [];
-      for (let col = range.startColumn; col <= range.endColumn; col++) {
-        const value = dataSource.getValue(row, columns[col]!.key);
-        const text = value == null ? '' : String(value);
-        length += text.length;
-        if (length > clipboardTextLimit) throw new RangeError('Selection text is too large.');
-        values.push(text);
-      }
-      rows.push(values);
-    }
-    const text = encodeTsv(rows);
-    if (text.length > clipboardTextLimit) throw new RangeError('Selection text is too large.');
-    return text;
+    return engine.copySelection();
   }
 
   function paste(text: string): void {
     if (destroyed) throw new Error('Grid is destroyed.');
     if (editor) throw new Error('Finish editing before pasting cells.');
-    const range = getSelectionRange();
-    if (!range) return;
-    const rows = decodeTsv(text);
-    const height = rows.length;
-    const width = rows[0]!.length;
-    if (range.startRow + height > rowCount || range.startColumn + width > columns.length) throw new RangeError('Paste extends beyond grid bounds.');
-    const updates: CellUpdate[] = [];
-    for (let row = 0; row < height; row++) {
-      for (let col = 0; col < width; col++) {
-        const column = columns[range.startColumn + col]!;
-        const rowIndex = range.startRow + row;
-        if (!column.editable) throw new Error(`Column is read-only: ${column.key}`);
-        const current = dataSource.getValue(rowIndex, column.key);
-        if (!column.parse && current != null && typeof current !== 'string') throw new Error(`Column requires a parser: ${column.key}`);
-        const value = rows[row]![col]!;
-        updates.push({ rowIndex, columnKey: column.key, value: column.parse ? column.parse(value) : value });
-      }
-    }
-    applyUpdates(updates);
+    engine.paste(text);
   }
 
   function onCopy(event: ClipboardEvent): void {
+    const selection = engine.getSelection();
     if (event.target === editor || !selection || !event.clipboardData) return;
     event.preventDefault();
     try { event.clipboardData.setData('text/plain', copySelection()); }
@@ -423,6 +329,7 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function onPaste(event: ClipboardEvent): void {
+    const selection = engine.getSelection();
     if (event.target === editor || !selection || !event.clipboardData?.types.includes('text/plain')) return;
     event.preventDefault();
     try { paste(event.clipboardData.getData('text/plain')); }
@@ -431,10 +338,11 @@ export function createGrid(options: GridOptions): Grid {
 
   function select(rowIndex: number, columnIndex: number, extend = false, reveal = true): void {
     if (destroyed || rowCount === 0 || columns.length === 0) return;
-    const changed = selection?.rowIndex !== rowIndex || selection?.columnIndex !== columnIndex;
+    const previous = engine.getSelection();
+    const changed = previous?.rowIndex !== rowIndex || previous?.columnIndex !== columnIndex;
     const previousRange = JSON.stringify(getSelectionRange());
-    selection = { rowIndex, rowId: dataSource.getRowId(rowIndex), columnIndex, columnKey: columns[columnIndex]!.key };
-    if (!extend || !anchor) anchor = { ...selection };
+    engine.select(rowIndex, columnIndex, extend);
+    const selection = engine.getSelection()!;
     const rangeChanged = previousRange !== JSON.stringify(getSelectionRange());
     const left = columnAxis.position(columnIndex);
     const top = rowAxis.position(rowIndex);
@@ -444,9 +352,8 @@ export function createGrid(options: GridOptions): Grid {
       if (top < scroller.scrollTop || rowAxis.size(rowIndex) > scroller.clientHeight) scroller.scrollTop = top;
       else if (top + rowAxis.size(rowIndex) > scroller.scrollTop + scroller.clientHeight) scroller.scrollTop = top + rowAxis.size(rowIndex) - scroller.clientHeight;
     }
-    const value = dataSource.getValue(rowIndex, selection.columnKey);
+    const value = engine.getValue(rowIndex, selection.columnKey);
     scroller.setAttribute('aria-label', `${viewportLabel}: row ${rowIndex + 1}, ${columns[columnIndex]!.title}, ${value == null ? '' : String(value)}`);
-    if (changed || rangeChanged) render();
     if (changed) options.onSelectionChange?.(getSelection());
     if (rangeChanged) options.onSelectionRangeChange?.(getSelectionRange());
   }
@@ -488,6 +395,7 @@ export function createGrid(options: GridOptions): Grid {
   function onPointerEnd(): void { dragPointer = null; }
 
   function onKeyDown(event: KeyboardEvent): void {
+    const selection = engine.getSelection();
     if ((event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) && selection) {
       event.preventDefault();
       const bounds = scroller.getBoundingClientRect();
@@ -513,10 +421,8 @@ export function createGrid(options: GridOptions): Grid {
     if (event.key === 'Escape') {
       if (selection) {
         event.preventDefault();
-        selection = null;
-        anchor = null;
+        engine.clearSelection();
         scroller.setAttribute('aria-label', viewportLabel);
-        render();
         options.onSelectionChange?.(null);
         options.onSelectionRangeChange?.(null);
       }
@@ -575,7 +481,7 @@ export function createGrid(options: GridOptions): Grid {
         context!.beginPath();
         context!.rect(x, y, columnAxis.size(col), rowAxis.size(change.rowIndex));
         context!.clip();
-        const value = dataSource.getValue(change.rowIndex, change.columnKey);
+        const value = engine.getValue(change.rowIndex, change.columnKey);
         cell(value == null ? '' : String(value), x, y, columnAxis.size(col), rowAxis.size(change.rowIndex), false);
         context!.restore();
       }
@@ -601,7 +507,7 @@ export function createGrid(options: GridOptions): Grid {
     context!.clip();
     for (let row = rows.start; row < rows.end; row++) {
       for (let col = cols.start; col < cols.end; col++) {
-        const value = dataSource.getValue(row, columns[col]!.key);
+        const value = engine.getValue(row, columns[col]!.key);
         cell(value == null ? '' : String(value), columnAxis.position(col) - scroller.scrollLeft,
           headerHeight + rowAxis.position(row) - scroller.scrollTop, columnAxis.size(col), rowAxis.size(row), false);
       }
@@ -619,6 +525,7 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function drawSelection(): void {
+    const selection = engine.getSelection();
     if (selection) {
       const range = getSelectionRange()!;
       context!.strokeStyle = '#2563eb';
@@ -690,12 +597,10 @@ export function createGrid(options: GridOptions): Grid {
       root.removeEventListener('lostpointercapture', endResize);
       scroller.removeEventListener('contextmenu', onContextMenu);
       dirty.clear();
-      past.length = future.length = 0;
+      engine.destroy();
       const input = editor;
       editor = null;
       input?.remove();
-      selection = null;
-      anchor = null;
       dragPointer = null;
       scroller.removeEventListener('pointermove', onPointerMove);
       scroller.removeEventListener('pointerup', onPointerEnd);
