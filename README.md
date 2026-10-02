@@ -40,11 +40,11 @@ V1 focuses on displaying and editing tabular application data. Formula evaluatio
 
 ## Repository structure
 
-[`packages/core/`](packages/core/README.md) contains the headless engine and unit tests; [packages/canvas](packages/canvas/README.md) contains browser rendering and interactions. Browser integration tests live in `tests/`. Framework adapters, standalone examples and themes remain planned. The Canvas preview includes a render-callback benchmark in headless Chromium.
+[`packages/core/`](packages/core/README.md) contains the headless engine and unit tests; [packages/canvas](packages/canvas/README.md) contains browser rendering and interactions. Browser integration tests live in `tests/`. Framework adapters remain planned. The [vanilla playground](examples/vanilla/README.md) runs independently with local packages and demonstrates themes and interactions. The Canvas preview includes a render-callback benchmark in headless Chromium.
 
 ## Development
 
-Use Node.js 22 or later. Run `npm ci`, then `npm run build`. Check types with `npm run typecheck` and run unit tests with `npm test`. For browser tests, install Chromium with `npx playwright install chromium` and run `npm run test:browser`.
+Use Node.js 22 or later. Run `npm ci`, then `npm run build`. Check types with `npm run typecheck` and run unit tests with `npm test`. For browser tests, install Chromium with `npx playwright install chromium` and run `npm run test:browser`. Run `npm run playground` for the standalone preview at http://127.0.0.1:4180; check it with `npm run test:playground`.
 
 ## License
 

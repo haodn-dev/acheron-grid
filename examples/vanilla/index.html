@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Acheron Grid — Vanilla playground</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f4f7fa;color:#0f172a;font:14px system-ui,sans-serif}main{max-width:1280px;margin:auto;padding:32px 24px}h1{font-size:32px;letter-spacing:-1px;margin:8px 0}p{line-height:1.6;color:#475569}.eyebrow{font-size:11px;letter-spacing:2px;font-weight:700;color:#0f766e}.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:16px;margin:24px 0}button,select{font:inherit;padding:8px 12px;border:1px solid #cbd5e1;border-radius:6px;background:white;color:#0f172a}button{cursor:pointer}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #0f766e;outline-offset:3px}.card{border:1px solid #dbe3eb;border-radius:12px;overflow:hidden;background:white;box-shadow:0 8px 24px #0f172a08}.card-header{display:flex;justify-content:space-between;gap:12px;padding:18px 20px;border-bottom:1px solid #dbe3eb}#grid{height:clamp(280px,60vh,640px);width:100%}.card-footer{padding:12px 20px;border-top:1px solid #dbe3eb;font-size:13px}#activity{margin:0}details{margin-top:20px}summary{cursor:pointer;font-weight:600}label{display:flex;gap:8px;align-items:center}small{color:#64748b}
+  </style>
+  <script type="importmap">{"imports":{"@acheron-grid/core":"/core/index.js","@acheron-grid/canvas":"/canvas/index.js"}}</script>
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+<main>
+  <span class="eyebrow">ACHERON GRID / VANILLA PLAYGROUND</span>
+  <h1>Explore the grid.</h1>
+  <p>Select, edit and scroll. A standalone preview using local sample data.</p>
+  <div class="toolbar" aria-label="Grid controls">
+    <label>Appearance <select id="appearance"><option value="teal">Teal</option><option value="light">Light</option></select></label>
+    <label><input id="frozen" type="checkbox" checked> Freeze first row and ID column</label>
+    <button id="undo" type="button">Undo</button><button id="redo" type="button">Redo</button><button id="reset" type="button">Reset view</button>
+  </div>
+  <div class="card">
+    <div class="card-header"><strong>Records</strong><span id="range-count">0 ranges selected</span><small>10,000 rows · 8 columns</small></div>
+    <div id="grid"></div>
+    <div class="card-footer"><p id="activity" role="status">Ready. Changes stay in this tab.</p></div>
+  </div>
+  <details open><summary>Keyboard and selection</summary><p>Click or use arrows to select. Shift extends a range; Ctrl/Cmd+click adds another. Shift+F8 arms the next click/navigation to add a range. Escape clears selection. Copy/paste requires one range. Enter/F2 edits Name or Status; Enter saves and Escape cancels. Ctrl/Cmd+Z undoes; Ctrl/Cmd+Shift+Z or Ctrl+Y redoes. Right-click for cell actions and resizing.</p></details>
+  <p><small>Appearance, frozen controls and Reset view remount the grid: selection and undo history reset; edited sample values remain. Canvas cells do not yet have a complete screen-reader grid tree.</small></p>
+</main>
+</body>
+</html>
