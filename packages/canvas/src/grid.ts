@@ -14,8 +14,14 @@ export interface CellRenderInfo {
   readonly height: number;
 }
 export type CellRenderer = (context: CanvasRenderingContext2D, cell: CellRenderInfo) => boolean;
+export type CellEditor = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+export interface CellEditorInfo extends CellSelection {
+  readonly value: unknown;
+}
+export type CellEditorFactory = (cell: Readonly<CellEditorInfo>, document: Document) => CellEditor | null;
 export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 'resolveCellPermission' | 'onEvent' | 'frozenRows' | 'frozenColumns'> {
   renderCell?: CellRenderer;
+  createEditor?: CellEditorFactory;
   onSelectionChange?: (selection: CellSelection | null) => void;
   onSelectionRangeChange?: (range: SelectionRange | null) => void;
   container: HTMLElement;
@@ -86,7 +92,7 @@ export function createGrid(options: GridOptions): Grid {
   let frame: number | undefined;
   let destroyed = false;
   let dragPointer: number | null = null;
-  let editor: HTMLInputElement | null = null;
+  let editor: CellEditor | null = null;
   const editorPane = doc.createElement('div');
   editorPane.style.cssText = 'position:absolute;overflow:hidden;pointer-events:none;z-index:1';
   root.append(editorPane);
@@ -287,6 +293,7 @@ export function createGrid(options: GridOptions): Grid {
     if (!editor || !selection) return true;
     if (commit) {
       try {
+        if (!editor.checkValidity()) throw new Error(editor.validationMessage);
         engine.editCell(selection.rowIndex, selection.columnIndex, editor.value);
       } catch (error) {
         editor.setCustomValidity(error instanceof Error ? error.message : 'Unable to save cell.');
@@ -309,16 +316,29 @@ export function createGrid(options: GridOptions): Grid {
     if (destroyed || editor || !selection || !engine.canEdit(selection.rowIndex, selection.columnIndex)) return;
     const column = columns[selection.columnIndex]!;
     const value = engine.getValue(selection.rowIndex, column.key);
-    editor = doc.createElement('input');
-    editor.type = 'text';
-    editor.value = value == null ? '' : String(value);
+    try {
+      const custom = options.createEditor?.(Object.freeze({ ...selection, value }), doc) ?? null;
+      if (custom && (custom.ownerDocument !== doc || custom.parentNode || !['INPUT', 'SELECT', 'TEXTAREA'].includes(custom.tagName))) {
+        throw new Error('Cell editor must be a detached input, select or textarea from the grid document.');
+      }
+      editor = custom ?? doc.createElement('input');
+      if (!custom) editor.value = value == null ? '' : String(value);
+    } catch (error) {
+      actionError.textContent = error instanceof Error ? error.message : 'Unable to create cell editor.';
+      actionError.style.display = 'block';
+      return;
+    }
+    actionError.style.display = 'none';
     editor.setAttribute('aria-label', `Edit row ${selection.rowIndex + 1}, ${column.title}`);
     editor.style.cssText = 'position:absolute;box-sizing:border-box;pointer-events:auto;border:2px solid #2563eb;background:white;font:13px system-ui;padding:0 8px';
-    editor.addEventListener('input', () => {
+    const clearValidation = () => {
       editor?.setCustomValidity('');
       editor?.removeAttribute('aria-invalid');
-    });
+    };
+    editor.addEventListener('input', clearValidation);
+    editor.addEventListener('change', clearValidation);
     editor.addEventListener('keydown', event => {
+      if (!(event instanceof win.KeyboardEvent)) return;
       event.stopPropagation();
       if (event.isComposing || event.keyCode === 229) return;
       if (event.key === 'Enter' || event.key === 'Escape') {
@@ -330,7 +350,7 @@ export function createGrid(options: GridOptions): Grid {
     editorPane.append(editor);
     positionEditor();
     editor.focus({ preventScroll: true });
-    editor.select();
+    if (editor.tagName !== 'SELECT' && 'select' in editor) editor.select();
   }
 
   const getSelection = engine.getSelection;

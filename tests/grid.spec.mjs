@@ -863,3 +863,78 @@ test('custom renderer keeps raw metadata, clipping, fallback and partial pixels 
   expect(result.afterScroll.some(cell => cell.rowIndex > 0 && cell.columnIndex === 0 && cell.x === 0)).toBe(true);
   expect(errors.some(error => error.includes('Cell renderer failed.'))).toBe(true);
 });
+
+test('native custom editors share validation, permissions, history, clipping and cleanup', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
+    window.source = new LocalDataSource(Array.from({ length: 100 }, (_, id) => ({ id, status: 'Review', name: 'Ada', count: 2 })), row => row.id);
+    window.allowEdit = true;
+    window.factoryMode = 'normal';
+    window.editorCalls = [];
+    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source,
+      frozenRows: 1, frozenColumns: 1,
+      columns: [{ key: 'status', title: 'Status', editable: true }, { key: 'name', title: 'Name', editable: true },
+        { key: 'count', title: 'Count', editable: true, parse: text => { const value = Number(text); if (value < 1) throw new Error('Positive count required'); return value; } }],
+      resolveCellPermission: () => ({ editable: window.allowEdit }),
+      createEditor(cell, doc) {
+        window.editorCalls.push({ ...cell, frozen: Object.isFrozen(cell), ownDocument: doc === document });
+        if (window.factoryMode === 'throw') throw new Error('Factory failure');
+        if (window.factoryMode === 'attached') return document.querySelector('#grid');
+        if (cell.columnKey === 'name') return null;
+        if (cell.columnKey === 'count') {
+          const input = doc.createElement('input'); input.type = 'number'; input.min = '1'; input.required = true; input.value = String(cell.value); return input;
+        }
+        const select = doc.createElement('select'); select.required = true;
+        for (const value of ['', 'Review', 'Active']) { const option = doc.createElement('option'); option.value = option.textContent = value; select.append(option); }
+        select.value = String(cell.value); return select;
+      } });
+  });
+  const viewport = page.getByLabel(/^Data grid viewport/);
+  await viewport.click({ position: { x: 20, y: 16 } });
+  await viewport.press('F2');
+  const select = page.getByRole('combobox', { name: 'Edit row 1, Status' });
+  await expect(select).toHaveValue('Review');
+  expect(await page.evaluate(() => window.editorCalls[0])).toMatchObject({ rowIndex: 0, rowId: 0, columnIndex: 0, columnKey: 'status', value: 'Review', frozen: true, ownDocument: true });
+  await select.selectOption(''); await select.press('Enter');
+  await expect(select).toHaveAttribute('aria-invalid', 'true');
+  expect(await page.evaluate(() => window.source.getValue(0, 'status'))).toBe('Review');
+  await select.selectOption('Active');
+  await page.evaluate(() => { window.allowEdit = false; });
+  await select.press('Enter'); await expect(select).toHaveAttribute('aria-invalid', 'true');
+  await page.evaluate(() => { window.allowEdit = true; });
+  await select.selectOption('Review'); await select.selectOption('Active');
+  await select.press('Enter'); await expect(select).toHaveCount(0);
+  expect(await page.evaluate(() => window.source.getValue(0, 'status'))).toBe('Active');
+  await viewport.press('Control+z');
+  expect(await page.evaluate(() => window.source.getValue(0, 'status'))).toBe('Review');
+  await viewport.press('Control+y');
+  expect(await page.evaluate(() => window.source.getValue(0, 'status'))).toBe('Active');
+  await viewport.press('F2'); await select.selectOption('Review'); await select.press('Escape');
+  expect(await page.evaluate(() => window.source.getValue(0, 'status'))).toBe('Active');
+  await viewport.press('F2');
+  await viewport.evaluate(el => { el.scrollTop = 300; el.scrollLeft = 70; });
+  await expect(select).toBeVisible();
+  expect(await select.evaluate(el => ({ left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth }))).toMatchObject({ left: 0, top: 0, width: 160 });
+  await select.selectOption('Review'); await select.press('Tab');
+  expect(await page.evaluate(() => window.source.getValue(0, 'status'))).toBe('Review');
+  await viewport.press('Control+Home');
+  await viewport.click({ position: { x: 180, y: 16 } }); await viewport.press('F2');
+  const text = page.getByRole('textbox'); await expect(text).toHaveValue('Ada'); await text.fill('Default'); await text.press('Enter');
+  await viewport.click({ position: { x: 340, y: 16 } }); await viewport.press('F2');
+  const number = page.getByRole('spinbutton'); await number.fill('0'); await number.press('Enter');
+  await expect(number).toHaveAttribute('aria-invalid', 'true');
+  await number.fill('3'); await number.press('Enter');
+  expect(await page.evaluate(() => window.source.getValue(0, 'count'))).toBe(3);
+  await page.evaluate(() => { window.factoryMode = 'throw'; });
+  await viewport.press('F2'); await expect(page.getByRole('alert')).toHaveText('Factory failure');
+  await page.evaluate(() => { window.factoryMode = 'attached'; });
+  await viewport.press('F2'); await expect(page.getByRole('alert')).toContainText('detached');
+  await page.evaluate(() => { window.factoryMode = 'normal'; });
+  await viewport.press('F2'); await expect(number).toBeVisible(); await expect(page.getByRole('alert')).toBeHidden();
+  await number.fill('4');
+  await page.evaluate(() => window.grid.destroy());
+  await expect(number).toHaveCount(0);
+  expect(await page.evaluate(() => window.source.getValue(0, 'count'))).toBe(3);
+});

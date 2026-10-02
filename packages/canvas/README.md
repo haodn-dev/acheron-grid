@@ -9,6 +9,7 @@ An experimental Canvas browser renderer for the headless @acheron-grid/core engi
 - A local data source with unique row IDs and shallow row snapshots.
 - Resize observation, coalesced rendering, and explicit cleanup.
 - Optional custom cell drawing with clipping, fallback and partial repaint support.
+- Custom native cell editors: input, select or textarea.
 - Single-cell selection by pointer and keyboard, with automatic scrolling.
 
 This package is a development preview, not a published release. Multi-range selection, remote data sources, and framework adapters are not implemented. Canvas cell content is not yet accessible to screen readers. A headless render-callback benchmark is available; end-to-end frame rate has not been verified.
@@ -42,6 +43,29 @@ renderCell: (ctx, cell) => {
 `CellRenderer` and `CellRenderInfo` are exported types. The shallow-frozen metadata contains raw `value`, `rowIndex`, `rowId`, `columnIndex`, `columnKey`, and `x`, `y`, `width`, `height` in CSS pixels relative to the Canvas, including the header offset. Values are not deep-frozen. Each invocation is clipped to the cell interior and its visible pane; context state is saved and restored. Set your own font, color and alignment. Keep any additional `save()`/`restore()` calls balanced and never resize the Canvas or mutate the grid/data source from the callback.
 
 Only visible body cells are passed to the synchronous callback. Partial updates call it only for dirty visible cells; scrolling, resizing and `grid.render()` redraw visible content. External drawing state changes require `grid.render()`. A thrown callback error is logged and the default text is drawn; marks from a callback returning `false` or throwing are cleared. Drawing is a trusted extension, not a sandbox. Custom drawing does not change editing, clipboard values, permissions or screen-reader support. Core remains independent of Canvas.
+
+## Custom native editors
+
+Pass `createEditor(cell, document)` to return a fresh, detached `input`, `select` or `textarea` created with the supplied document. Return `null` to use the default text input. `CellEditor`, `CellEditorInfo` and `CellEditorFactory` are exported types. Metadata is shallow-frozen and contains the current selection coordinates/identity plus the raw value.
+
+```ts
+createEditor: (cell, doc) => {
+  if (cell.columnKey !== 'status') return null;
+  const select = doc.createElement('select');
+  for (const value of ['Review', 'Active']) {
+    const option = doc.createElement('option');
+    option.value = option.textContent = value;
+    select.append(option);
+  }
+  select.value = String(cell.value ?? '');
+  select.required = true;
+  return select;
+}
+```
+
+The factory initializes the control's value, options, type and constraints. The grid owns its accessible label, positioning, styles, focus and removal. Only one editor is mounted; its overlay follows the cell's pane and clips during scrolling. Native validation runs before the shared edit command; `Column.parse` still receives the control's string value. Non-string values require a parser. Current permissions are checked at commit, with the same events/history/partial repaint as text editing.
+
+Enter commits (including textarea), Escape cancels, Tab/blur commits, and IME composition does not commit. Failed validation/parser/write keeps the draft with `aria-invalid`; input/change clears the error for retry. Native control keys and clipboard stay in the editor. Factory errors or invalid/attached/foreign-document elements produce an alert without mounting an editor. Destroy removes the editor and discards its draft. Factories must not mutate grid/source or install external listeners requiring cleanup; composite widgets, framework components, async validation and custom lifecycle callbacks are not supported.
 
 ## Usage
 
