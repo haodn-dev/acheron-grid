@@ -92,6 +92,7 @@ export function createGrid(options: GridOptions): Grid {
       throw new TypeError(`Invalid grid theme ${key}. Use a concrete CSS ${property} value.`);
     }
   }
+  const indicatorPolicy = Object.freeze({ ...options.permissions });
   const headerHeight = options.headerHeight ?? 36;
   if (!Number.isFinite(headerHeight) || headerHeight <= 0) throw new RangeError('Grid sizes must be positive finite numbers.');
   const engine = createGridEngine({ columns: options.columns, dataSource,
@@ -589,7 +590,14 @@ export function createGrid(options: GridOptions): Grid {
   function onHeaderPointerMove(event: PointerEvent): void {
     root.style.cursor = resizing ? (resizing.axis === 'column' ? 'col-resize' : 'row-resize')
       : columnEdge(event) !== null ? 'col-resize' : rowEdge(event) !== null ? 'row-resize' : '';
-    root.title = root.style.cursor === 'row-resize' ? 'Drag the row boundary to resize height' : '';
+    const column = columnEdge(event);
+    const cell = pointerCell(event);
+    const bounds = root.getBoundingClientRect();
+    const headerColumn = columnAxis.indexAt(event.clientX - bounds.left + (event.clientX - bounds.left < viewport().frozenWidth ? 0 : scroller.scrollLeft));
+    root.title = root.style.cursor === 'row-resize' ? 'Drag the row boundary to resize height'
+      : column !== null ? 'Drag the column boundary to resize width'
+      : event.clientY - bounds.top < headerHeight && headerColumn >= 0 && headerColumn < columns.length ? stateLabels(null, headerColumn).join('; ')
+      : cell ? stateLabels(cell.row, cell.col).join('; ') : '';
     if (resizing?.pointerId === event.pointerId) {
       resizing.proposed = Math.max(24, Math.min(1000, resizing.size + (resizing.axis === 'column' ? event.clientX : event.clientY) - resizing.start));
       showResizeGuide();
@@ -917,7 +925,51 @@ export function createGrid(options: GridOptions): Grid {
     }
   }
 
+  function stateLabels(row: number | null, col: number): string[] {
+    const labels: string[] = [];
+    if (engine.isLocked({ scope: 'table' })) labels.push('Table locked');
+    if (engine.isLocked({ scope: 'column', columnIndex: col })) labels.push('Column locked');
+    if (col < engine.frozenColumns) labels.push('Column frozen');
+    if (row === null) {
+      const policy = columns[col]!.permissions;
+      if ([indicatorPolicy, policy].some(scope => scope?.writable === false || scope?.selectable === false || scope?.editable === false)) labels.push('Column disabled by permissions');
+    } else {
+      if (engine.isLocked({ scope: 'row', rowIndex: row })) labels.push('Row locked');
+      if (engine.isLocked({ scope: 'cell', rowIndex: row, columnIndex: col })) labels.push('Cell locked');
+      if (row < engine.frozenRows) labels.push('Row frozen');
+      const permission = engine.getCellPermission(row, col);
+      if (!permission.selectable || (!permission.writable && !labels.some(label => label.endsWith('locked'))) || (columns[col]!.editable && !permission.editable && permission.writable)) labels.push('Cell disabled by permissions');
+    }
+    return labels;
+  }
+
   function cell(value: unknown, x: number, y: number, width: number, height: number, header: boolean, rowIndex = 0, columnIndex = 0): void {
+    paintCell(value, x, y, width, height, header, rowIndex, columnIndex);
+    const labels = stateLabels(header ? null : rowIndex, columnIndex);
+    const badges: string[] = [];
+    if (labels.some(label => label.endsWith('locked'))) badges.push('L');
+    if (labels.some(label => label.includes('disabled'))) badges.push('D');
+    if (header && columnIndex < engine.frozenColumns) badges.push('F');
+    if (!header && (columnIndex === 0 || (x <= 0 && x + width > 0))) {
+      if (labels.includes('Row locked')) badges.push('RL');
+      if (rowIndex < engine.frozenRows) badges.push('RF');
+    }
+    const ctx = context!;
+    ctx.save(); ctx.beginPath(); ctx.rect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2)); ctx.clip();
+    if (badges.length) {
+      const text = badges.join('·'); ctx.font = '600 9px system-ui';
+      const size = ctx.measureText(text).width + 6;
+      ctx.fillStyle = theme.headerBackground; ctx.fillRect(x + width - size - 3, y + 3, size, 13);
+      ctx.strokeStyle = theme.headerTextColor; ctx.lineWidth = 1; ctx.strokeRect(x + width - size - 3.5, y + 2.5, size, 13);
+      ctx.fillStyle = theme.headerTextColor; ctx.textBaseline = 'middle'; ctx.fillText(text, x + width - size, y + 9.5);
+    }
+    ctx.strokeStyle = theme.selectionColor; ctx.lineWidth = 2;
+    if (columnIndex === engine.frozenColumns - 1) { ctx.beginPath(); ctx.moveTo(x + width - 1, y); ctx.lineTo(x + width - 1, y + height); ctx.stroke(); }
+    if (!header && rowIndex === engine.frozenRows - 1) { ctx.beginPath(); ctx.moveTo(x, y + height - 1); ctx.lineTo(x + width, y + height - 1); ctx.stroke(); }
+    ctx.restore();
+  }
+
+  function paintCell(value: unknown, x: number, y: number, width: number, height: number, header: boolean, rowIndex = 0, columnIndex = 0): void {
     const ctx = context!;
     ctx.clearRect(x, y, width, height);
     const format = header ? null : engine.getFormat(rowIndex, columnIndex);
@@ -1130,7 +1182,7 @@ export function createGrid(options: GridOptions): Grid {
       context!.beginPath();
       context!.rect(band.x, 0, band.width, headerHeight);
       context!.clip();
-      for (let col = band.start; col < band.end; col++) cell(columns[col]!.title, columnAxis.position(col) + band.offset, 0, columnAxis.size(col), headerHeight, true);
+      for (let col = band.start; col < band.end; col++) cell(columns[col]!.title, columnAxis.position(col) + band.offset, 0, columnAxis.size(col), headerHeight, true, 0, col);
       context!.restore();
     }
     releaseUnusedImages();
@@ -1186,6 +1238,7 @@ export function createGrid(options: GridOptions): Grid {
     activeCell.setAttribute('aria-colindex', String(selection.columnIndex + 1));
     activeCell.setAttribute('aria-readonly', String(!engine.canEdit(selection.rowIndex, selection.columnIndex)));
     const content = `${title}: ${text}`;
+    activeCell.setAttribute('aria-description', stateLabels(selection.rowIndex, selection.columnIndex).join('; '));
     if (activeCell.textContent !== content) activeCell.textContent = content;
     scroller.setAttribute('aria-activedescendant', activeCell.id);
     scroller.setAttribute('aria-label', `${viewportLabel}: row ${selection.rowIndex + 1}, ${title}, ${text}`);

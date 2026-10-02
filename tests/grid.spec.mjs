@@ -1397,3 +1397,43 @@ test('active-cell ARIA mirror follows selection, history, locks and focus with b
   await page.evaluate(() => { window.grid.destroy(); window.otherGrid.destroy(); });
   await expect(page.locator('[role="grid"]')).toHaveCount(0);
 });
+
+
+test('state badges and hover distinguish scoped locks, permissions and frozen boundaries', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
+    window.grid = createGrid({ container: document.querySelector('#grid'), frozenColumns: 1,
+      columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true }],
+      dataSource: new LocalDataSource([{ id: 0, name: 'Ada' }, { id: 1, name: 'Lin' }], row => row.id),
+      resolveCellPermission: cell => cell.rowIndex === 1 ? { writable: false } : undefined });
+  });
+  const viewport = page.getByRole('grid'); const root = page.locator('#grid > div'); const bounds = await viewport.boundingBox();
+  await page.mouse.move(bounds.x + 240, bounds.y + 48);
+  await expect(root).toHaveAttribute('title', 'Cell disabled by permissions');
+  await viewport.click({ position: { x: 240, y: 48 } });
+  await expect(viewport.getByRole('gridcell')).toHaveAttribute('aria-description', 'Cell disabled by permissions');
+  await page.evaluate(() => {
+    window.grid.setLocked({ scope: 'row', rowIndex: 0 }, true);
+    window.grid.setLocked({ scope: 'column', columnIndex: 1 }, true);
+    window.grid.setFrozen(1, 2);
+  });
+  await page.mouse.move(bounds.x + 240, bounds.y - 18);
+  await expect(root).toHaveAttribute('title', 'Column locked; Column frozen');
+  await page.mouse.move(bounds.x + 80, bounds.y + 16);
+  await expect(root).toHaveAttribute('title', 'Column frozen; Row locked; Row frozen');
+  await viewport.click({ position: { x: 80, y: 16 } });
+  await expect(viewport.getByRole('gridcell')).toHaveAttribute('aria-description', 'Column frozen; Row locked; Row frozen');
+  expect(await page.evaluate(async () => {
+    const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await frame(); const canvas = document.querySelector('canvas'); const ctx = canvas.getContext('2d');
+    const snapshot = () => JSON.stringify([...ctx.getImageData(0, 0, canvas.width, canvas.height).data]);
+    const before = snapshot();
+    window.grid.setLocked({ scope: 'row', rowIndex: 0 }, false); window.grid.setLocked({ scope: 'column', columnIndex: 1 }, false); window.grid.setFrozen(0, 0);
+    await frame(); return before !== snapshot();
+  })).toBe(true);
+  await page.mouse.move(bounds.x + 240, bounds.y - 18); await expect(root).toHaveAttribute('title', '');
+  await page.mouse.move(bounds.x + 240, bounds.y + 48); await expect(root).toHaveAttribute('title', 'Cell disabled by permissions');
+  await page.mouse.move(bounds.x + 160, bounds.y - 18); await expect(root).toHaveAttribute('title', 'Drag the column boundary to resize width');
+});
