@@ -36,13 +36,15 @@ test('column menus apply local sort and combined filters, map edits, and recover
   await header(); await page.getByRole('menuitem', { name: 'Sort descending…', exact: true }).click();
   await page.getByRole('button', { name: 'Apply view', exact: true }).click();
   await viewport.press('ArrowRight'); await viewport.press('ArrowRight'); await expect(cell).toHaveText('Name: Record 10000');
+  await expect(page.getByRole('button', { name: 'Select row 1', exact: true })).toHaveText('1');
   await viewport.press('F2'); await page.getByRole('textbox', { name: 'Edit row 1, Name' }).fill('Mapped edit'); await page.getByRole('textbox', { name: 'Edit row 1, Name' }).press('Enter');
   await header(); await page.getByRole('menuitem', { name: 'Filter column…', exact: true }).click();
   await page.getByRole('combobox', { name: 'Filter condition' }).selectOption('equals'); await page.getByRole('searchbox', { name: 'Contains text' }).fill('Mapped edit');
   await page.getByRole('button', { name: 'Apply view', exact: true }).click(); await expect(viewport).toHaveAttribute('aria-rowcount', '1');
+  await expect(page.locator('[data-grid-index] button')).toHaveCount(1); await expect(page.locator('[data-grid-index] button')).toHaveText('1');
   await header(400); await page.getByRole('menuitem', { name: 'Filter column…', exact: true }).click();
   await page.getByRole('searchbox', { name: 'Contains text' }).fill('no-match'); await page.getByRole('button', { name: 'Apply view', exact: true }).click();
-  await expect(viewport).toHaveAttribute('aria-rowcount', '0'); await expect(viewport).toBeFocused();
+  await expect(viewport).toHaveAttribute('aria-rowcount', '0'); await expect(page.locator('[data-grid-index] button')).toHaveCount(0); await expect(viewport).toBeFocused();
   await header(); await page.getByRole('menuitem', { name: 'Clear sort and filters…', exact: true }).click();
   await page.getByRole('button', { name: 'Apply view', exact: true }).click(); await expect(viewport).toHaveAttribute('aria-rowcount', '10000');
   await viewport.press('Control+End'); await expect(cell).toHaveText('Metric 3: 30000'); await viewport.press('Home'); await viewport.press('ArrowRight'); await expect(cell).toHaveText('Name: Mapped edit');

@@ -1467,6 +1467,44 @@ test('whole axes select through headers, row edge and keyboard with continuous f
   const vertical = page.locator('[data-grid-freeze-line="column"]'); const horizontal = page.locator('[data-grid-freeze-line="row"]');
   await expect(vertical).toBeVisible(); await expect(horizontal).toBeVisible();
   expect(await vertical.evaluate(el => [el.style.top, el.style.height])).toEqual(['0px', `${await viewport.evaluate(el => el.clientHeight) + 36}px`]);
-  expect(await horizontal.evaluate(el => el.style.width)).toBe(`${await viewport.evaluate(el => el.clientWidth)}px`);
+  expect(await horizontal.evaluate(el => el.style.width)).toBe(`${await viewport.evaluate(el => el.clientWidth) + await page.locator("[data-grid-index]").evaluate(el => el.offsetWidth)}px`);
   await page.evaluate(() => window.grid.setFrozen(0, 0)); await expect(vertical).toBeHidden(); await expect(horizontal).toBeHidden();
+});
+
+
+test('default row index stays fixed, selects and resizes rows without changing data coordinates', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.indexOptions = { container: document.querySelector('#grid'), frozenRows: 1,
+      columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true }],
+      dataSource: new LocalDataSource(Array.from({ length: 1000 }, (_, id) => ({ id, name: `Item ${id}` })), row => row.id) };
+    window.grid = createGrid(window.indexOptions);
+  });
+  const gutter = page.locator('[data-grid-index]'); const viewport = page.getByRole('grid');
+  await expect(gutter).toBeVisible(); await expect(viewport).toHaveAttribute('aria-colcount', '2');
+  await page.getByRole('button', { name: 'Select row 3', exact: true }).click();
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toEqual({ startRow: 2, endRow: 2, startColumn: 0, endColumn: 1 });
+  await expect(page.getByRole('button', { name: 'Select row 3', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  expect(await page.evaluate(() => window.grid.copySelection())).toBe('2\tItem 2');
+  const bounds = await viewport.boundingBox(); const gutterBounds = await gutter.boundingBox();
+  await page.mouse.move(gutterBounds.x + 20, bounds.y + 96); await page.mouse.down();
+  await page.mouse.move(gutterBounds.x + 20, bounds.y + 116);
+  await expect(page.locator('[data-grid-resize-guide]')).toBeVisible();
+  expect(await page.getByRole('button', { name: 'Select row 3', exact: true }).evaluate(el => el.offsetHeight)).toBe(32);
+  await page.mouse.up();
+  await expect.poll(() => page.getByRole('button', { name: 'Select row 3', exact: true }).evaluate(el => el.offsetHeight)).toBe(52);
+  await page.evaluate(() => { const el = document.querySelector('[role="grid"]'); el.scrollTop = 320; el.scrollLeft = 100; });
+  await expect(page.getByRole('button', { name: 'Select row 1', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Select row 3', exact: true })).toHaveCount(0);
+  expect(await gutter.evaluate(el => el.getBoundingClientRect().x)).toBe(gutterBounds.x);
+  expect(await gutter.getByRole('button').count()).toBeLessThan(30);
+  const firstMoving = gutter.getByRole('button').nth(1); const row = Number(await firstMoving.textContent()) - 1;
+  await firstMoving.click({ button: 'right' }); await expect(page.getByRole('menu')).toBeVisible();
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toMatchObject({ startRow: row, endRow: row, startColumn: 0, endColumn: 1 });
+  await page.getByRole('menu').press('Escape');
+  await page.evaluate(() => { window.grid.destroy(); window.grid = null; });
+  await expect(gutter).toHaveCount(0);
+  await page.evaluate(async () => { const { createGrid } = await import('/canvas/index.js'); window.grid = createGrid({ ...window.indexOptions, indexColumn: false }); });
+  await expect(gutter).toBeHidden();
 });

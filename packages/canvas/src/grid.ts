@@ -53,6 +53,7 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
   rowHeight?: number;
   columnWidth?: number;
   headerHeight?: number;
+  indexColumn?: boolean;
 }
 export interface Grid {
   render(): void;
@@ -126,6 +127,7 @@ export function createGrid(options: GridOptions): Grid {
     } else render();
   } });
   const { columns, rowCount, rows: rowAxis, columnsLayout: columnAxis } = engine;
+  const indexWidth = options.indexColumn === false ? 0 : Math.max(48, String(rowCount).length * 8 + 16);
   if (options.imageColumns !== undefined && !Array.isArray(options.imageColumns)) throw new TypeError('Image columns must be column keys.');
   const imageColumns = new Set(options.imageColumns ?? []);
   for (const key of imageColumns) if (!columns.some(column => column.key === key)) throw new TypeError('Unknown image column.');
@@ -148,7 +150,7 @@ export function createGrid(options: GridOptions): Grid {
   for (const [key, value] of Object.entries(theme)) root.style.setProperty('--acheron-' + key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase()), value);
   const scroller = doc.createElement('div');
   const viewportLabel = dataSource.setValue && columns.some(column => column.editable) ? 'Data grid viewport' : 'Read-only data grid viewport';
-  scroller.style.cssText = `position:absolute;inset:${headerHeight}px 0 0;overflow:auto;overscroll-behavior:contain`;
+  scroller.style.cssText = `position:absolute;inset:${headerHeight}px 0 0 ${indexWidth}px;overflow:auto;overscroll-behavior:contain`;
   scroller.tabIndex = 0;
   scroller.setAttribute('aria-label', viewportLabel);
   scroller.setAttribute('aria-keyshortcuts', 'Shift+F8 Control+f Meta+f');
@@ -173,10 +175,16 @@ export function createGrid(options: GridOptions): Grid {
   scroller.append(spacer, activeRow);
   const canvas = doc.createElement('canvas');
   canvas.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none';
+  canvas.style.left = `${indexWidth}px`;
   canvas.setAttribute('aria-hidden', 'true');
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Canvas 2D is unavailable.');
-  root.append(scroller, canvas);
+  const indexGutter = doc.createElement('div');
+  indexGutter.dataset.gridIndex = '';
+  indexGutter.hidden = indexWidth === 0;
+  indexGutter.style.cssText = `position:absolute;left:0;top:0;width:${indexWidth}px;overflow:hidden;background:var(--acheron-header-background);color:var(--acheron-header-text-color);font:var(--acheron-font)`;
+  indexGutter.setAttribute('aria-label', 'Row index');
+  root.append(scroller, canvas, indexGutter);
   container.append(root);
   let frame: number | undefined;
   let destroyed = false;
@@ -552,7 +560,7 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function headerColumn(event: MouseEvent): number | null {
-    const bounds = root.getBoundingClientRect(); const x = event.clientX - bounds.left; const y = event.clientY - bounds.top;
+    const bounds = root.getBoundingClientRect(); const x = event.clientX - bounds.left - indexWidth; const y = event.clientY - bounds.top;
     if (x < 0 || x >= scroller.clientWidth || y < 0 || y >= headerHeight || !columns.length) return null;
     const col = columnAxis.indexAt(x + (x < viewport().frozenWidth ? 0 : scroller.scrollLeft));
     return col < columns.length ? col : null;
@@ -560,6 +568,12 @@ export function createGrid(options: GridOptions): Grid {
 
   function onHeaderContextMenu(event: MouseEvent): void {
     const bounds = root.getBoundingClientRect();
+    if (indexWidth && event.clientX >= bounds.left && event.clientX < bounds.left + indexWidth && event.clientY >= bounds.top + headerHeight) {
+      event.preventDefault(); event.stopPropagation();
+      const row = indexRow(event);
+      if (row !== null && finishEdit(true)) { selectRow(row); openMenu(row, 0, event.clientX, event.clientY); }
+      return;
+    }
     if (event.clientY < bounds.top || event.clientY >= bounds.top + headerHeight) return;
     event.preventDefault(); event.stopPropagation();
     const col = headerColumn(event);
@@ -617,7 +631,7 @@ export function createGrid(options: GridOptions): Grid {
 
   function columnEdge(event: PointerEvent): number | null {
     const bounds = root.getBoundingClientRect();
-    const x = event.clientX - bounds.left;
+    const x = event.clientX - bounds.left - indexWidth;
     const y = event.clientY - bounds.top;
     if (x < 0 || x >= scroller.clientWidth || y < 0 || y >= headerHeight || !columns.length) return null;
     const view = viewport();
@@ -635,7 +649,7 @@ export function createGrid(options: GridOptions): Grid {
     const bounds = scroller.getBoundingClientRect();
     const x = event.clientX - bounds.left;
     const y = event.clientY - bounds.top;
-    if (x < 0 || x > (engine.frozenColumns ? Math.min(columnAxis.size(0), scroller.clientWidth) : 10) || y < 0 || y >= scroller.clientHeight || !rowCount || !columns.length) return null;
+    if (x < -indexWidth || x > (engine.frozenColumns ? Math.min(columnAxis.size(0), scroller.clientWidth) : 10) || y < 0 || y >= scroller.clientHeight || !rowCount || !columns.length) return null;
     const tolerance = x <= 10 ? 8 : 3;
     const view = viewport();
     if (engine.frozenRows > 0 && Math.abs(rowAxis.position(engine.frozenRows) - y) <= tolerance) return engine.frozenRows - 1;
@@ -654,18 +668,20 @@ export function createGrid(options: GridOptions): Grid {
     const position = resizing.edge + resizing.proposed - resizing.size;
     resizeGuide.dataset.axis = resizing.axis;
     resizeGuide.style.display = 'block';
-    resizeGuide.style.left = resizing.axis === 'column' ? `${Math.max(0, Math.min(view.width - 2, position))}px` : '0px';
+    resizeGuide.style.left = resizing.axis === 'column' ? `${indexWidth + Math.max(0, Math.min(view.width - 2, position))}px` : '0px';
     resizeGuide.style.top = resizing.axis === 'row' ? `${Math.max(headerHeight, Math.min(headerHeight + view.height - 2, position))}px` : '0px';
-    resizeGuide.style.width = resizing.axis === 'column' ? '2px' : `${view.width}px`;
+    resizeGuide.style.width = resizing.axis === 'column' ? '2px' : `${indexWidth + view.width}px`;
     resizeGuide.style.height = resizing.axis === 'row' ? '2px' : `${headerHeight + view.height}px`;
   }
 
   function onHeaderPointerDown(event: PointerEvent): void {
     if (resizing) { event.preventDefault(); return; }
-    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || (event.target !== root && !(event.target instanceof win.Node && scroller.contains(event.target)))) return;
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || (event.target !== root && !(event.target instanceof win.Node && (scroller.contains(event.target) || indexGutter.contains(event.target))))) return;
     const column = columnEdge(event);
     const row = column === null ? rowEdge(event) : null;
     if (column === null && row === null) {
+      const row = indexRow(event);
+      if (row !== null && finishEdit(true)) { event.preventDefault(); selectRow(row); scroller.focus({ preventScroll: true }); return; }
       const col = headerColumn(event);
       if (col !== null && rowCount && finishEdit(true)) { event.preventDefault(); selectColumn(col); scroller.focus({ preventScroll: true }); }
       return;
@@ -694,11 +710,11 @@ export function createGrid(options: GridOptions): Grid {
     const column = columnEdge(event);
     const cell = pointerCell(event);
     const bounds = root.getBoundingClientRect();
-    const headerColumn = columnAxis.indexAt(event.clientX - bounds.left + (event.clientX - bounds.left < viewport().frozenWidth ? 0 : scroller.scrollLeft));
+    const headerColumn = columnAxis.indexAt(event.clientX - bounds.left - indexWidth + (event.clientX - bounds.left - indexWidth < viewport().frozenWidth ? 0 : scroller.scrollLeft));
     root.title = root.style.cursor === 'row-resize' ? 'Drag the row boundary to resize height'
       : column !== null ? 'Drag the column boundary to resize width'
-      : event.clientY - bounds.top < headerHeight && headerColumn >= 0 && headerColumn < columns.length ? stateLabels(null, headerColumn).join('; ')
-      : cell ? stateLabels(cell.row, cell.col).join('; ') : '';
+      : event.clientY - bounds.top < headerHeight && event.clientX >= bounds.left + indexWidth && headerColumn >= 0 && headerColumn < columns.length ? stateLabels(null, headerColumn).join('; ')
+      : indexRow(event) !== null ? `Select row ${indexRow(event)! + 1}` : cell ? stateLabels(cell.row, cell.col).join('; ') : '';
     if (resizing?.pointerId === event.pointerId) {
       resizing.proposed = Math.max(24, Math.min(1000, resizing.size + (resizing.axis === 'column' ? event.clientX : event.clientY) - resizing.start));
       showResizeGuide();
@@ -1229,7 +1245,7 @@ export function createGrid(options: GridOptions): Grid {
     if (!editor || !selection) return;
     const rect = viewport().cellRect(selection.rowIndex, selection.columnIndex);
     const clip = rect.clip;
-    editorPane.style.left = `${clip.x}px`;
+    editorPane.style.left = `${indexWidth + clip.x}px`;
     editorPane.style.top = `${headerHeight + clip.y}px`;
     editorPane.style.width = `${clip.width}px`;
     editorPane.style.height = `${clip.height}px`;
@@ -1251,7 +1267,7 @@ export function createGrid(options: GridOptions): Grid {
     if (editorError.style.display !== 'none') {
       editorError.style.maxWidth = `${clip.width}px`;
       editorError.style.visibility = hidden ? 'hidden' : 'visible';
-      editorError.style.left = `${Math.max(clip.x, Math.min(rect.x, clip.x + clip.width - editorError.offsetWidth))}px`;
+      editorError.style.left = `${indexWidth + Math.max(clip.x, Math.min(rect.x, clip.x + clip.width - editorError.offsetWidth))}px`;
       editorError.style.top = `${headerHeight + Math.max(clip.y, Math.min(rect.y + editor.offsetHeight + 4, clip.y + clip.height - editorError.offsetHeight))}px`;
     }
   }
@@ -1326,7 +1342,48 @@ export function createGrid(options: GridOptions): Grid {
       for (let col = band.start; col < band.end; col++) cell(columns[col]!.title, columnAxis.position(col) + band.offset, 0, columnAxis.size(col), headerHeight, true, 0, col);
       context!.restore();
     }
+    drawIndex();
     releaseUnusedImages();
+  }
+
+  function indexRow(event: MouseEvent): number | null {
+    if (!indexWidth || !columns.length) return null;
+    const bounds = root.getBoundingClientRect();
+    const x = event.clientX - bounds.left; const y = event.clientY - bounds.top - headerHeight;
+    const view = viewport();
+    if (x < 0 || x >= indexWidth || y < 0 || y >= view.height) return null;
+    const row = rowAxis.indexAt(y + (y < view.frozenHeight ? 0 : view.scrollTop));
+    return row < rowCount ? row : null;
+  }
+
+  function drawIndex(): void {
+    if (!indexWidth) return;
+    const view = viewport(); const range = getSelectionRange();
+    indexGutter.style.height = `${headerHeight + view.height}px`;
+    const corner = doc.createElement('div'); corner.textContent = '#'; corner.title = 'Row index';
+    corner.style.cssText = `height:${headerHeight}px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--acheron-grid-line-color);box-sizing:border-box`;
+    const children: HTMLElement[] = [corner];
+    const fixed = rowAxis.range(0, view.frozenHeight);
+    const moving = rowAxis.range(rowAxis.position(engine.frozenRows) + view.scrollTop, view.height - view.frozenHeight);
+    for (const band of [
+      { start: 0, end: Math.min(engine.frozenRows, fixed.end), y: 0, height: view.frozenHeight, offset: 0 },
+      { start: Math.max(engine.frozenRows, moving.start), end: moving.end, y: view.frozenHeight, height: view.height - view.frozenHeight, offset: -view.scrollTop },
+    ]) {
+      if (band.height <= 0) continue;
+      const pane = doc.createElement('div');
+      pane.style.cssText = `position:absolute;left:0;top:${headerHeight + band.y}px;width:100%;height:${band.height}px;overflow:hidden`;
+      for (let row = band.start; row < band.end; row++) {
+        const button = doc.createElement('button'); button.type = 'button'; button.tabIndex = -1;
+        button.textContent = String(row + 1); button.setAttribute('aria-label', `Select row ${row + 1}`);
+        const selected = !!range && range.startColumn === 0 && range.endColumn === columns.length - 1 && row >= range.startRow && row <= range.endRow;
+        button.setAttribute('aria-pressed', String(selected));
+        button.style.cssText = `position:absolute;left:0;top:${rowAxis.position(row) + band.offset - band.y}px;width:100%;height:${rowAxis.size(row)}px;box-sizing:border-box;border:0;border-right:1px solid var(--acheron-grid-line-color);border-bottom:1px solid var(--acheron-grid-line-color);background:var(--acheron-header-background);color:inherit;font:inherit;cursor:pointer;${selected ? 'box-shadow:inset 0 0 0 9999px color-mix(in srgb,var(--acheron-selection-color) 16%,transparent)' : ''}`;
+        button.addEventListener('click', event => { if (event.detail === 0 && finishEdit(true)) { selectRow(row); scroller.focus({ preventScroll: true }); } });
+        pane.append(button);
+      }
+      children.push(pane);
+    }
+    indexGutter.replaceChildren(...children);
   }
 
   function releaseUnusedImages(): void {
@@ -1390,9 +1447,9 @@ export function createGrid(options: GridOptions): Grid {
     syncAccessibleCell();
     const view = viewport();
     freezeVertical.hidden = !engine.frozenColumns || view.frozenWidth >= view.width;
-    freezeVertical.style.left = `${Math.max(0, view.frozenWidth - 1)}px`; freezeVertical.style.top = '0px'; freezeVertical.style.width = '2px'; freezeVertical.style.height = `${headerHeight + view.height}px`;
+    freezeVertical.style.left = `${indexWidth + Math.max(0, view.frozenWidth - 1)}px`; freezeVertical.style.top = '0px'; freezeVertical.style.width = '2px'; freezeVertical.style.height = `${headerHeight + view.height}px`;
     freezeHorizontal.hidden = !engine.frozenRows || view.frozenHeight >= view.height;
-    freezeHorizontal.style.top = `${headerHeight + Math.max(0, view.frozenHeight - 1)}px`; freezeHorizontal.style.left = '0px'; freezeHorizontal.style.height = '2px'; freezeHorizontal.style.width = `${view.width}px`;
+    freezeHorizontal.style.top = `${headerHeight + Math.max(0, view.frozenHeight - 1)}px`; freezeHorizontal.style.left = '0px'; freezeHorizontal.style.height = '2px'; freezeHorizontal.style.width = `${indexWidth + view.width}px`;
     endResize();
     positionEditor();
     closeMenu();
