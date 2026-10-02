@@ -1,5 +1,5 @@
 import type { CellUpdate, DataSource, RowId } from './data-source.js';
-import type { Column, CellSelection, SelectionRange } from './types.js';
+import type { Column, CellSelection, SelectionRange, CellLockTarget } from './types.js';
 import { resolvePermissions } from './permissions.js';
 import type { CellPermission, CellPermissionPolicy, CellPermissionResolver } from './permissions.js';
 import type { GridEvent, GridChangeSource } from './events.js';
@@ -21,6 +21,7 @@ export interface GridEngineOptions {
   onEvent?: (event: GridEvent) => void;
   rowHeight?: number;
   columnWidth?: number;
+  allowLockChanges?: boolean;
   frozenRows?: number;
   frozenColumns?: number;
   /** Synchronous renderer notification after state and history have committed. */
@@ -51,6 +52,12 @@ export function createGridEngine(options: GridEngineOptions) {
   const permissions = options.permissions ? Object.freeze({ ...options.permissions }) : undefined;
   let resolver = options.resolveCellPermission;
   let onEvent = options.onEvent;
+  const allowLockChanges = options.allowLockChanges ?? true;
+  if (typeof allowLockChanges !== 'boolean') throw new TypeError('allowLockChanges must be boolean.');
+  let tableLocked = false;
+  const lockedRows = new Set<number>();
+  const lockedColumns = new Set<number>();
+  const lockedCells = new Set<string>();
   let busy = false;
   let destroyed = false;
   let onInvalidate = options.onInvalidate;
@@ -91,7 +98,7 @@ export function createGridEngine(options: GridEngineOptions) {
     const column = columns[columnIndex]!;
     return query(() => {
       const cell = Object.freeze({ rowIndex, rowId: dataSource.getRowId(rowIndex), columnIndex, columnKey: column.key });
-      return resolvePermissions(column.editable ?? false, permissions, column.permissions, resolver?.(cell));
+      return resolvePermissions(column.editable ?? false, permissions, column.permissions, resolver?.(cell), tableLocked || lockedRows.has(rowIndex) || lockedColumns.has(columnIndex) || lockedCells.has(`${rowIndex}:${columnIndex}`) ? { writable: false } : undefined);
     });
   }
 
@@ -290,6 +297,32 @@ export function createGridEngine(options: GridEngineOptions) {
     if (previous !== size) notify({ type: 'layout' }, Object.freeze({ type: axis === rowAxis ? 'row:resize' : 'column:resize', index, previous, size }));
   }
 
+  function validateLockTarget(target: CellLockTarget): void {
+    if (!target || !['table', 'row', 'column', 'cell'].includes(target.scope)) throw new TypeError('Invalid lock scope.');
+    if ((target.scope === 'row' || target.scope === 'cell') && (!Number.isSafeInteger(target.rowIndex) || target.rowIndex < 0 || target.rowIndex >= rowCount)) throw new RangeError('Invalid lock row.');
+    if ((target.scope === 'column' || target.scope === 'cell') && (!Number.isSafeInteger(target.columnIndex) || target.columnIndex < 0 || target.columnIndex >= columns.length)) throw new RangeError('Invalid lock column.');
+  }
+
+  function isLocked(target: CellLockTarget): boolean {
+    assertAlive(); validateLockTarget(target);
+    if (target.scope === 'table') return tableLocked;
+    if (target.scope === 'row') return lockedRows.has(target.rowIndex);
+    if (target.scope === 'column') return lockedColumns.has(target.columnIndex);
+    return lockedCells.has(`${target.rowIndex}:${target.columnIndex}`);
+  }
+
+  function setLocked(target: CellLockTarget, locked: boolean): void {
+    assertAlive();
+    if (!allowLockChanges) throw new Error('Lock management is disabled.');
+    if (typeof locked !== 'boolean') throw new TypeError('Lock state must be boolean.');
+    if (isLocked(target) === locked) return;
+    if (target.scope === 'table') tableLocked = locked;
+    else if (target.scope === 'row') { if (locked) lockedRows.add(target.rowIndex); else lockedRows.delete(target.rowIndex); }
+    else if (target.scope === 'column') { if (locked) lockedColumns.add(target.columnIndex); else lockedColumns.delete(target.columnIndex); }
+    else { const key = `${target.rowIndex}:${target.columnIndex}`; if (locked) lockedCells.add(key); else lockedCells.delete(key); }
+    notify({ type: 'layout' }, Object.freeze({ type: 'lock:change', target: Object.freeze({ ...target }), locked }));
+  }
+
   function setFrozen(rows: number, columnCount: number): void {
     assertAlive();
     if (!Number.isSafeInteger(rows) || rows < 0 || rows > rowCount || !Number.isSafeInteger(columnCount) || columnCount < 0 || columnCount > columns.length) throw new RangeError('Invalid frozen row or column count.');
@@ -323,6 +356,8 @@ export function createGridEngine(options: GridEngineOptions) {
     undo: () => command(() => replay(false)), redo: () => command(() => replay(true)),
     canUndo: () => !destroyed && past.length > 0,
     canRedo: () => !destroyed && future.length > 0,
+    isLocked, canManageLocks: () => !destroyed && allowLockChanges,
+    setLocked: (target: CellLockTarget, locked: boolean) => command(() => setLocked(target, locked)),
     setFrozen: (rows: number, columns: number) => command(() => setFrozen(rows, columns)),
     setColumnWidth: (index: number, size: number) => command(() => resize(columnAxis, index, size)),
     setRowHeight: (index: number, size: number) => command(() => resize(rowAxis, index, size)),
@@ -335,6 +370,7 @@ export function createGridEngine(options: GridEngineOptions) {
       past.length = future.length = 0;
       selection = anchor = null;
       retainedRanges.length = 0;
+      lockedRows.clear(); lockedColumns.clear(); lockedCells.clear(); tableLocked = false;
     }),
   });
 }

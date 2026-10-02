@@ -1,9 +1,9 @@
 import { createGridEngine } from '@acheron-grid/core';
-import type { CellUpdate, DataSource, Column, CellSelection, SelectionRange, CellPermission, GridEngineOptions, ViewportRegion } from '@acheron-grid/core';
+import type { CellUpdate, DataSource, Column, CellSelection, SelectionRange, CellPermission, CellLockTarget, GridEngineOptions, ViewportRegion } from '@acheron-grid/core';
 
 let editorId = 0;
 
-export type { Column, CellSelection, SelectionRange } from '@acheron-grid/core';
+export type { Column, CellSelection, SelectionRange, CellLockTarget } from '@acheron-grid/core';
 export interface CellRenderInfo {
   readonly value: unknown;
   readonly rowIndex: number;
@@ -31,7 +31,7 @@ export interface GridTheme {
   font: string;
   headerFont: string;
 }
-export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 'resolveCellPermission' | 'onEvent' | 'frozenRows' | 'frozenColumns'> {
+export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 'resolveCellPermission' | 'onEvent' | 'allowLockChanges' | 'frozenRows' | 'frozenColumns'> {
   theme?: Partial<GridTheme>;
   multilineEditor?: boolean;
   wrapText?: boolean;
@@ -53,6 +53,9 @@ export interface Grid {
   readonly frozenRows: number;
   readonly frozenColumns: number;
   setFrozen(rows: number, columns: number): void;
+  isLocked(target: CellLockTarget): boolean;
+  canManageLocks(): boolean;
+  setLocked(target: CellLockTarget, locked: boolean): void;
   updateCells(updates: readonly CellUpdate[]): void;
   undo(): boolean;
   redo(): boolean;
@@ -89,6 +92,7 @@ export function createGrid(options: GridOptions): Grid {
     ...(options.permissions === undefined ? {} : { permissions: options.permissions }),
     ...(options.resolveCellPermission === undefined ? {} : { resolveCellPermission: options.resolveCellPermission }),
     ...(options.onEvent === undefined ? {} : { onEvent: options.onEvent }),
+    ...(options.allowLockChanges === undefined ? {} : { allowLockChanges: options.allowLockChanges }),
     ...(options.frozenRows === undefined ? {} : { frozenRows: options.frozenRows }),
     ...(options.frozenColumns === undefined ? {} : { frozenColumns: options.frozenColumns }),
     onInvalidate(change) {
@@ -297,6 +301,12 @@ export function createGrid(options: GridOptions): Grid {
     input.focus(); input.select();
   }
 
+  function setLocked(target: CellLockTarget, locked: boolean): void {
+    if (destroyed) throw new Error('Grid is destroyed.');
+    if (editor) throw new Error('Finish editing before changing locks.');
+    engine.setLocked(target, locked);
+  }
+
   function setFrozen(rows: number, columns: number): void {
     if (destroyed) throw new Error('Grid is destroyed.');
     if (editor) throw new Error('Finish editing before changing frozen panes.');
@@ -362,6 +372,16 @@ export function createGrid(options: GridOptions): Grid {
     item('Edit cell', engine.canEdit(selection.rowIndex, selection.columnIndex), beginEdit);
     item('Undo', engine.canUndo(), () => { replay(false); });
     item('Redo', engine.canRedo(), () => { replay(true); });
+    for (const [label, target] of [
+      ['cell', { scope: 'cell', rowIndex: row, columnIndex: col }],
+      ['row', { scope: 'row', rowIndex: row }],
+      ['column', { scope: 'column', columnIndex: col }],
+      ['table', { scope: 'table' }],
+    ] as const) {
+      const locked = engine.isLocked(target);
+      item(`${locked ? 'Unlock' : 'Lock'} ${label}`, engine.canManageLocks(), () => setLocked(target, !locked));
+    }
+    if (!engine.getCellPermission(row, col).writable) item('Cell is read-only', false, () => {});
     const rowsFit = rowAxis.position(row + 1) < scroller.clientHeight;
     const columnsFit = columnAxis.position(col + 1) < scroller.clientWidth;
     item('Freeze rows through this row', rowsFit && engine.frozenRows !== row + 1, () => setFrozen(row + 1, engine.frozenColumns));
@@ -1020,6 +1040,9 @@ export function createGrid(options: GridOptions): Grid {
     get frozenRows() { return engine.frozenRows; },
     get frozenColumns() { return engine.frozenColumns; },
     setFrozen,
+    isLocked: engine.isLocked,
+    canManageLocks: engine.canManageLocks,
+    setLocked,
     updateCells,
     undo: () => replay(false),
     redo: () => replay(true),

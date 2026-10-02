@@ -403,3 +403,29 @@ test('dynamic frozen prefixes validate atomically, preserve data history and upd
   engine.setFrozen(0, 0); assert.equal(engine.getViewport({ width: 200, height: 40, scrollLeft: 100, scrollTop: 20 }).regions.length, 1);
   engine.destroy(); assert.throws(() => engine.setFrozen(1, 1), /destroyed/);
 });
+
+
+test('sparse scope locks veto every write path, preserve copy/history and cannot override admin policy', () => {
+  const events = []; const { engine, source } = fixture({ onEvent: e => events.push(e), resolveCellPermission: c => c.rowIndex === 1 ? { writable: false } : undefined });
+  const cell = { scope: 'cell', rowIndex: 0, columnIndex: 0 }; const row = { scope: 'row', rowIndex: 0 }; const column = { scope: 'column', columnIndex: 0 }; const table = { scope: 'table' };
+  engine.select(0, 0); engine.editCell(0, 0, 'Changed');
+  for (const target of [cell, row, column, table]) {
+    engine.setLocked(target, true); assert.equal(engine.isLocked(target), true); assert.equal(engine.getCellPermission(0, 0).writable, false);
+    assert.equal(engine.copySelection(), 'Changed'); assert.throws(() => engine.editCell(0, 0, 'Denied'), /cannot be edited/);
+    assert.throws(() => engine.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Denied' }]), /writable/);
+    assert.throws(() => engine.paste('Denied'), /pasteable/); assert.throws(() => engine.undo(), /writable/);
+    assert.equal(source.getValue(0, 'name'), 'Changed'); assert.equal(engine.canUndo(), true);
+    engine.setLocked(target, false); assert.equal(engine.getCellPermission(0, 0).writable, true);
+  }
+  engine.setLocked(row, true); engine.setLocked(cell, true); engine.setLocked(cell, false);
+  assert.equal(engine.isLocked(cell), false); assert.equal(engine.getCellPermission(0, 0).writable, false); engine.setLocked(row, false);
+  assert.equal(engine.undo(), true); assert.equal(source.getValue(0, 'name'), 'Ada');
+  engine.setLocked({ scope: 'row', rowIndex: 1 }, true); engine.setLocked({ scope: 'row', rowIndex: 1 }, false);
+  assert.equal(engine.getCellPermission(1, 0).writable, false);
+  const count = events.length; engine.setLocked(table, false); assert.equal(events.length, count);
+  for (const target of [{ scope: 'row', rowIndex: -1 }, { scope: 'column', columnIndex: 2 }, { scope: 'cell', rowIndex: 0, columnIndex: 0.5 }, { scope: 'unknown' }]) assert.throws(() => engine.setLocked(target, true));
+  assert.throws(() => engine.setLocked(table, 'true'), TypeError);
+  const lockEvent = events.filter(e => e.type === 'lock:change').at(-1); assert.ok(Object.isFrozen(lockEvent)); assert.ok(Object.isFrozen(lockEvent.target));
+  const disabled = fixture({ allowLockChanges: false }).engine; assert.equal(disabled.canManageLocks(), false); assert.throws(() => disabled.setLocked(table, true), /disabled/);
+  engine.destroy(); assert.equal(engine.canManageLocks(), false); assert.throws(() => engine.isLocked(cell), /destroyed/);
+});

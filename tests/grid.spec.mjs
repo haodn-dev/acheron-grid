@@ -1182,3 +1182,36 @@ test('right-click freeze/unfreeze changes pane geometry without remounting or cl
     return partial === document.querySelector('canvas').toDataURL();
   })).toBe(true);
 });
+
+
+test('lock menus guard edits and APIs, retain copy, show scope unlock and honor disabled admin management', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.source = new LocalDataSource([{ id: 0, name: 'Ada' }, { id: 1, name: 'Grace' }], row => row.id);
+    window.columns = [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true }];
+    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source, columns: window.columns,
+      resolveCellPermission: cell => cell.rowIndex === 1 ? { writable: false } : undefined });
+  });
+  const viewport = page.getByLabel(/^Data grid viewport/);
+  await viewport.click({ position: { x: 180, y: 16 }, button: 'right' }); await page.getByRole('menuitem', { name: 'Lock cell', exact: true }).click();
+  await viewport.press('F2'); await expect(page.getByRole('textbox')).toHaveCount(0);
+  expect(await page.evaluate(() => window.grid.copySelection())).toBe('Ada');
+  expect(await page.evaluate(() => { try { window.grid.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Denied' }]); } catch (e) { return e.message; } })).toMatch(/writable/);
+  await viewport.click({ position: { x: 180, y: 16 }, button: 'right' });
+  await expect(page.getByRole('menuitem', { name: 'Edit cell', exact: true })).toBeDisabled(); await expect(page.getByRole('menuitem', { name: 'Cell is read-only', exact: true })).toBeDisabled();
+  await page.getByRole('menuitem', { name: 'Unlock cell', exact: true }).click(); await viewport.press('F2');
+  const editor = page.getByRole('textbox'); await editor.fill('Changed'); await editor.press('Enter');
+  await viewport.click({ position: { x: 180, y: 16 }, button: 'right' }); await page.getByRole('menuitem', { name: 'Lock table', exact: true }).click();
+  await viewport.click({ position: { x: 180, y: 16 }, button: 'right' }); await page.getByRole('menuitem', { name: 'Unlock table', exact: true }).click();
+  await viewport.press('Control+z'); expect(await page.evaluate(() => window.source.getValue(0, 'name'))).toBe('Ada');
+  await viewport.click({ position: { x: 180, y: 48 }, button: 'right' }); await page.getByRole('menuitem', { name: 'Lock row', exact: true }).click();
+  await viewport.click({ position: { x: 180, y: 48 }, button: 'right' }); await page.getByRole('menuitem', { name: 'Unlock row', exact: true }).click();
+  await viewport.press('F2'); await expect(editor).toHaveCount(0); // Host permission still denies this row.
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); window.grid.destroy();
+    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source, columns: window.columns, allowLockChanges: false });
+  });
+  await viewport.click({ position: { x: 180, y: 16 }, button: 'right' }); await expect(page.getByRole('menuitem', { name: 'Lock table', exact: true })).toBeDisabled();
+  expect(await page.evaluate(() => { try { window.grid.setLocked({ scope: 'table' }, true); } catch (e) { return e.message; } })).toMatch(/disabled/);
+});

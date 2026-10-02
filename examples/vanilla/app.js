@@ -22,7 +22,8 @@ function mount() {
     onSelectionRangesChange: ranges => { document.querySelector('#range-count').textContent = `${ranges.length} ranges selected`; },
     onEvent: event => {
       if (event.type === 'cell:change') activity.textContent = `${event.source}: ${event.changes.length} cell(s) changed. Values stay in this tab.`;
-      if (event.type === 'freeze:change') {
+      if (event.type === 'lock:change') activity.textContent = `${event.target.scope} ${event.locked ? 'locked' : 'unlocked'}.`;
+            if (event.type === 'freeze:change') {
         frozen.checked = event.rows === 1 && event.columns === 1;
         frozen.indeterminate = !frozen.checked && (event.rows > 0 || event.columns > 0);
         activity.textContent = `Frozen: ${event.rows} row(s), ${event.columns} column(s).`;
