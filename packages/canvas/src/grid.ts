@@ -125,7 +125,12 @@ export function createGrid(options: GridOptions): Grid {
   const dirty = new Map<string, { rowIndex: number; columnKey: string }>();
   let menu: HTMLDivElement | null = null;
   let sizeDialog: HTMLDialogElement | null = null;
-  let resizing: { pointerId: number; column: number; x: number; width: number } | null = null;
+  let resizing: { pointerId: number; axis: 'column' | 'row'; index: number; start: number; size: number; proposed: number; edge: number } | null = null;
+  const resizeGuide = doc.createElement('div');
+  resizeGuide.setAttribute('aria-hidden', 'true');
+  resizeGuide.setAttribute('data-grid-resize-guide', '');
+  resizeGuide.style.cssText = 'display:none;position:absolute;pointer-events:none;z-index:3;background:var(--acheron-selection-color)';
+  root.append(resizeGuide);
   const actionError = doc.createElement('div');
   actionError.setAttribute('role', 'alert');
   actionError.style.cssText = 'display:none;position:absolute;bottom:20px;left:12px;right:24px;z-index:2;padding:10px;background:#fff1f2;color:#9f1239;border:1px solid #fda4af;border-radius:6px;font:13px system-ui';
@@ -272,33 +277,101 @@ export function createGrid(options: GridOptions): Grid {
     const y = event.clientY - bounds.top;
     if (x < 0 || x >= scroller.clientWidth || y < 0 || y >= headerHeight || !columns.length) return null;
     const view = viewport();
-    if (engine.frozenColumns > 0 && Math.abs(columnAxis.position(engine.frozenColumns) - x) <= 5 && x <= view.width) return engine.frozenColumns - 1;
+    if (engine.frozenColumns > 0 && Math.abs(columnAxis.position(engine.frozenColumns) - x) <= 8 && x <= view.width) return engine.frozenColumns - 1;
     const offset = x + (x < view.frozenWidth ? 0 : view.scrollLeft);
     const col = columnAxis.indexAt(offset);
     const first = x < view.frozenWidth ? 0 : engine.frozenColumns;
     const limit = x < view.frozenWidth ? engine.frozenColumns : columns.length;
-    if (col < limit && col >= first && Math.abs(columnAxis.position(col + 1) - offset) <= 5) return col;
-    if (col > first && Math.abs(columnAxis.position(col) - offset) <= 5) return col - 1;
+    if (col < limit && col >= first && Math.abs(columnAxis.position(col + 1) - offset) <= 8) return col;
+    if (col > first && Math.abs(columnAxis.position(col) - offset) <= 8) return col - 1;
     return null;
   }
 
+  function rowEdge(event: PointerEvent): number | null {
+    const bounds = scroller.getBoundingClientRect();
+    const x = event.clientX - bounds.left;
+    const y = event.clientY - bounds.top;
+    if (x < 0 || x > 10 || y < 0 || y >= scroller.clientHeight || !rowCount || !columns.length) return null;
+    const view = viewport();
+    if (engine.frozenRows > 0 && Math.abs(rowAxis.position(engine.frozenRows) - y) <= 8) return engine.frozenRows - 1;
+    const offset = y + (y < view.frozenHeight ? 0 : view.scrollTop);
+    const row = rowAxis.indexAt(offset);
+    const first = y < view.frozenHeight ? 0 : engine.frozenRows;
+    const limit = y < view.frozenHeight ? engine.frozenRows : rowCount;
+    if (row < limit && row >= first && Math.abs(rowAxis.position(row + 1) - offset) <= 8) return row;
+    if (row > first && Math.abs(rowAxis.position(row) - offset) <= 8) return row - 1;
+    return null;
+  }
+
+  function showResizeGuide(): void {
+    if (!resizing) return;
+    const view = viewport();
+    const position = resizing.edge + resizing.proposed - resizing.size;
+    resizeGuide.dataset.axis = resizing.axis;
+    resizeGuide.style.display = 'block';
+    resizeGuide.style.left = resizing.axis === 'column' ? `${Math.max(0, Math.min(view.width - 2, position))}px` : '0px';
+    resizeGuide.style.top = resizing.axis === 'row' ? `${Math.max(headerHeight, Math.min(headerHeight + view.height - 2, position))}px` : '0px';
+    resizeGuide.style.width = resizing.axis === 'column' ? '2px' : `${view.width}px`;
+    resizeGuide.style.height = resizing.axis === 'row' ? '2px' : `${headerHeight + view.height}px`;
+  }
+
   function onHeaderPointerDown(event: PointerEvent): void {
-    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+    if (resizing) { event.preventDefault(); return; }
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || (event.target !== root && !(event.target instanceof win.Node && scroller.contains(event.target)))) return;
     const column = columnEdge(event);
-    if (column === null) return;
+    const row = column === null ? rowEdge(event) : null;
+    if (column === null && row === null) return;
     event.preventDefault();
     if (!finishEdit(true)) return;
     closeMenu();
-    resizing = { pointerId: event.pointerId, column, x: event.clientX, width: columnAxis.size(column) };
+    const axis = column === null ? 'row' : 'column';
+    const index = column ?? row!;
+    const size = axis === 'column' ? columnAxis.size(index) : rowAxis.size(index);
+    const view = viewport();
+    const edge = axis === 'column' ? columnAxis.position(index + 1) - (index < engine.frozenColumns ? 0 : view.scrollLeft)
+      : headerHeight + rowAxis.position(index + 1) - (index < engine.frozenRows ? 0 : view.scrollTop);
+    resizing = { pointerId: event.pointerId, axis, index, size, proposed: size,
+      start: axis === 'column' ? event.clientX : event.clientY,
+      edge };
+    scroller.focus({ preventScroll: true });
     root.setPointerCapture(event.pointerId);
+    root.style.cursor = axis === 'column' ? 'col-resize' : 'row-resize';
+    showResizeGuide();
   }
 
   function onHeaderPointerMove(event: PointerEvent): void {
-    root.style.cursor = resizing || columnEdge(event) !== null ? 'col-resize' : '';
-    if (resizing?.pointerId === event.pointerId) resizeAxis(columnAxis, resizing.column, Math.max(24, Math.min(1000, resizing.width + event.clientX - resizing.x)));
+    root.style.cursor = resizing ? (resizing.axis === 'column' ? 'col-resize' : 'row-resize')
+      : columnEdge(event) !== null ? 'col-resize' : rowEdge(event) !== null ? 'row-resize' : '';
+    if (resizing?.pointerId === event.pointerId) {
+      resizing.proposed = Math.max(24, Math.min(1000, resizing.size + (resizing.axis === 'column' ? event.clientX : event.clientY) - resizing.start));
+      showResizeGuide();
+    }
   }
 
-  function endResize(): void { resizing = null; root.style.cursor = ''; }
+  function endResize(): void {
+    const pointerId = resizing?.pointerId;
+    resizing = null;
+    resizeGuide.style.display = 'none';
+    root.style.cursor = '';
+    if (pointerId !== undefined && root.hasPointerCapture(pointerId)) root.releasePointerCapture(pointerId);
+  }
+
+  function commitResize(event: PointerEvent): void {
+    if (resizing?.pointerId !== event.pointerId) return;
+    const draft = resizing;
+    endResize();
+    try { resizeAxis(draft.axis === 'column' ? columnAxis : rowAxis, draft.index, draft.proposed); }
+    catch (error) {
+      actionError.textContent = error instanceof Error ? error.message : 'Unable to resize.';
+      actionError.style.display = 'block';
+    }
+  }
+
+  function cancelResizeKey(event: KeyboardEvent): void {
+    if (resizing && event.key === 'Escape') {
+      event.preventDefault(); event.stopPropagation(); endResize();
+    }
+  }
 
   function invalidate(changes: readonly { rowIndex: number; columnKey: string }[]): void {
     const selection = engine.getSelection();
@@ -466,7 +539,7 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function onPointerDown(event: PointerEvent): void {
-    if (event.target === editor || event.button !== 0 || event.altKey) return;
+    if (event.defaultPrevented || event.target === editor || event.button !== 0 || event.altKey) return;
     const cell = pointerCell(event);
     if (!cell) return;
     event.preventDefault();
@@ -712,6 +785,7 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function render(): void {
+    endResize();
     positionEditor();
     closeMenu();
     fullDraw = true;
@@ -725,9 +799,10 @@ export function createGrid(options: GridOptions): Grid {
   scroller.addEventListener('scroll', render, { passive: true });
   scroller.addEventListener('pointerdown', onPointerDown);
   scroller.addEventListener('contextmenu', onContextMenu);
-  root.addEventListener('pointerdown', onHeaderPointerDown);
+  root.addEventListener('pointerdown', onHeaderPointerDown, true);
+  root.addEventListener('keydown', cancelResizeKey, true);
   root.addEventListener('pointermove', onHeaderPointerMove);
-  root.addEventListener('pointerup', endResize);
+  root.addEventListener('pointerup', commitResize);
   root.addEventListener('pointercancel', endResize);
   root.addEventListener('lostpointercapture', endResize);
   scroller.addEventListener('pointermove', onPointerMove);
@@ -766,9 +841,10 @@ export function createGrid(options: GridOptions): Grid {
       sizeDialog?.remove();
       sizeDialog = null;
       endResize();
-      root.removeEventListener('pointerdown', onHeaderPointerDown);
+      root.removeEventListener('pointerdown', onHeaderPointerDown, true);
+      root.removeEventListener('keydown', cancelResizeKey, true);
       root.removeEventListener('pointermove', onHeaderPointerMove);
-      root.removeEventListener('pointerup', endResize);
+      root.removeEventListener('pointerup', commitResize);
       root.removeEventListener('pointercancel', endResize);
       root.removeEventListener('lostpointercapture', endResize);
       scroller.removeEventListener('contextmenu', onContextMenu);

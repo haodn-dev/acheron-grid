@@ -1035,3 +1035,36 @@ test('Ctrl/Meta adds ranges across panes, edits active cell, guards clipboard an
   await expect(page.getByRole('status')).not.toContainText('Next click');
   await viewport.press('Escape'); await expect(page.getByRole('status')).toHaveText('Selection cleared.');
 });
+
+test('resize guides defer row/column geometry until release and Escape/cancel preserve selection', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.events = [];
+    window.grid = createGrid({ container: document.querySelector('#grid'), columns: [{ key: 'name', title: 'Name', editable: true }, { key: 'team', title: 'Team' }],
+      dataSource: new LocalDataSource(Array.from({ length: 30 }, (_, id) => ({ id, name: 'Ada', team: 'Ops' })), row => row.id),
+      onEvent: event => window.events.push(event) });
+  });
+  const viewport = page.getByLabel(/^Data grid viewport/); await viewport.click({ position: { x: 20, y: 16 } });
+  const bounds = await viewport.boundingBox(); const guide = page.locator('[data-grid-resize-guide]');
+  await page.mouse.move(bounds.x + 166, bounds.y - 18); await page.mouse.down(); await page.mouse.move(bounds.x + 226, bounds.y - 18);
+  await expect(guide).toBeVisible(); await expect(guide).toHaveAttribute('data-axis', 'column');
+  expect(await page.evaluate(() => window.events.filter(event => event.type === 'column:resize').length)).toBe(0);
+  expect(await viewport.evaluate(el => el.firstChild.style.width)).toBe('320px');
+  await page.mouse.up(); await expect(guide).toBeHidden();
+  expect(await viewport.evaluate(el => el.firstChild.style.width)).toBe('380px');
+  expect(await page.evaluate(() => window.events.filter(event => event.type === 'column:resize').length)).toBe(1);
+  await page.mouse.move(bounds.x + 226, bounds.y - 18); await page.mouse.down(); await page.mouse.move(bounds.x + 270, bounds.y - 18); await page.keyboard.press('Escape'); await page.mouse.up();
+  expect(await viewport.evaluate(el => el.firstChild.style.width)).toBe('380px'); await expect(guide).toBeHidden();
+  const selection = await page.evaluate(() => window.grid.getSelection());
+  await page.mouse.move(bounds.x + 4, bounds.y + 32); await page.mouse.down(); await page.mouse.move(bounds.x + 4, bounds.y + 64);
+  await expect(guide).toBeVisible(); await expect(guide).toHaveAttribute('data-axis', 'row');
+  expect(await viewport.evaluate(el => el.firstChild.style.height)).toBe('960px');
+  await page.mouse.up(); expect(await viewport.evaluate(el => el.firstChild.style.height)).toBe('992px');
+  expect(await page.evaluate(() => window.grid.getSelection())).toEqual(selection);
+  expect(await page.evaluate(() => window.events.filter(event => event.type === 'row:resize').length)).toBe(1);
+  await viewport.press('F2'); const input = page.getByRole('textbox'); expect(await input.evaluate(el => el.offsetHeight)).toBe(64); await input.press('Escape');
+  await page.mouse.move(bounds.x + 4, bounds.y + 64); await page.mouse.down(); await page.mouse.move(bounds.x + 4, bounds.y + 90);
+  await page.evaluate(() => document.querySelector('[data-grid-resize-guide]').parentElement.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true })));
+  await page.mouse.up(); expect(await viewport.evaluate(el => el.firstChild.style.height)).toBe('992px'); await expect(guide).toBeHidden();
+});
