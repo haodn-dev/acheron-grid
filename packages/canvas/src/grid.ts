@@ -19,7 +19,18 @@ export interface CellEditorInfo extends CellSelection {
   readonly value: unknown;
 }
 export type CellEditorFactory = (cell: Readonly<CellEditorInfo>, document: Document) => CellEditor | null;
+export interface GridTheme {
+  background: string;
+  textColor: string;
+  headerBackground: string;
+  headerTextColor: string;
+  gridLineColor: string;
+  selectionColor: string;
+  font: string;
+  headerFont: string;
+}
 export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 'resolveCellPermission' | 'onEvent' | 'frozenRows' | 'frozenColumns'> {
+  theme?: Partial<GridTheme>;
   renderCell?: CellRenderer;
   createEditor?: CellEditorFactory;
   onSelectionChange?: (selection: CellSelection | null) => void;
@@ -49,6 +60,17 @@ export interface Grid {
 /** Mount a grid. The caller owns the container and its dimensions. */
 export function createGrid(options: GridOptions): Grid {
   const { container, dataSource } = options;
+  const doc = container.ownerDocument;
+  const win = doc.defaultView!;
+  const theme = Object.freeze({ background: '#ffffff', textColor: '#0f172a', headerBackground: '#edf2f7',
+    headerTextColor: '#334155', gridLineColor: '#e2e8f0', selectionColor: '#2563eb',
+    font: '400 13px system-ui, sans-serif', headerFont: '600 13px system-ui, sans-serif', ...options.theme });
+  for (const [key, value] of Object.entries(theme)) {
+    const property = key === 'font' || key === 'headerFont' ? 'font' : 'color';
+    if (typeof value !== 'string' || /var\(|currentcolor|^(inherit|initial|unset|revert)/i.test(value.trim()) || !win.CSS.supports(property, value)) {
+      throw new TypeError(`Invalid grid theme ${key}. Use a concrete CSS ${property} value.`);
+    }
+  }
   const headerHeight = options.headerHeight ?? 36;
   if (!Number.isFinite(headerHeight) || headerHeight <= 0) throw new RangeError('Grid sizes must be positive finite numbers.');
   const engine = createGridEngine({ columns: options.columns, dataSource,
@@ -68,10 +90,9 @@ export function createGrid(options: GridOptions): Grid {
     } else render();
   } });
   const { columns, rowCount, rows: rowAxis, columnsLayout: columnAxis } = engine;
-  const doc = container.ownerDocument;
-  const win = doc.defaultView!;
   const root = doc.createElement('div');
-  root.style.cssText = 'position:relative;width:100%;height:100%;overflow:hidden;background:#fff';
+  root.style.cssText = 'position:relative;width:100%;height:100%;overflow:hidden;background:var(--acheron-background)';
+  for (const [key, value] of Object.entries(theme)) root.style.setProperty('--acheron-' + key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase()), value);
   const scroller = doc.createElement('div');
   const viewportLabel = dataSource.setValue && columns.some(column => column.editable) ? 'Data grid viewport' : 'Read-only data grid viewport';
   scroller.style.cssText = `position:absolute;inset:${headerHeight}px 0 0;overflow:auto;overscroll-behavior:contain`;
@@ -111,7 +132,7 @@ export function createGrid(options: GridOptions): Grid {
     sizeDialog?.remove();
     sizeDialog = dialog;
     dialog.setAttribute('aria-label', label);
-    dialog.style.cssText = 'padding:20px;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 8px 24px #0f172a26;color:#0f172a;font:14px system-ui';
+    dialog.style.cssText = 'padding:20px;border:1px solid var(--acheron-grid-line-color);border-radius:8px;box-shadow:0 8px 24px #0f172a26;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font)';
     const form = doc.createElement('form');
     const fieldLabel = doc.createElement('label');
     fieldLabel.textContent = `${label} (px) `;
@@ -170,9 +191,9 @@ export function createGrid(options: GridOptions): Grid {
     popup.setAttribute('role', 'menu');
     popup.setAttribute('aria-label', 'Cell actions');
     popup.className = 'acheron-context-menu';
-    popup.style.cssText = 'position:fixed;margin:0;padding:6px;min-width:200px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 8px 24px #0f172a26;background:white;color:#0f172a;font:13px system-ui';
+    popup.style.cssText = 'position:fixed;margin:0;padding:6px;min-width:200px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;border:1px solid var(--acheron-grid-line-color);border-radius:8px;box-shadow:0 8px 24px #0f172a26;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font)';
     const style = doc.createElement('style');
-    style.textContent = '.acheron-context-menu button{display:block;width:100%;padding:8px 10px;border:0;border-radius:4px;background:transparent;text-align:left;color:inherit;font:inherit;cursor:pointer}.acheron-context-menu button:hover:not(:disabled),.acheron-context-menu button:focus-visible{background:#eff6ff;outline:2px solid #2563eb}.acheron-context-menu button:disabled{opacity:.45;cursor:default}';
+    style.textContent = '.acheron-context-menu button{display:block;width:100%;padding:8px 10px;border:0;border-radius:4px;background:transparent;text-align:left;color:inherit;font:inherit;cursor:pointer}.acheron-context-menu button:hover:not(:disabled),.acheron-context-menu button:focus-visible{background:var(--acheron-header-background);outline:2px solid var(--acheron-selection-color)}.acheron-context-menu button:disabled{opacity:.45;cursor:default}';
     popup.append(style);
     const fingerprint = JSON.stringify(getSelectionRange());
     function item(label: string, enabled: boolean, action: () => void | Promise<void>): void {
@@ -330,7 +351,7 @@ export function createGrid(options: GridOptions): Grid {
     }
     actionError.style.display = 'none';
     editor.setAttribute('aria-label', `Edit row ${selection.rowIndex + 1}, ${column.title}`);
-    editor.style.cssText = 'position:absolute;box-sizing:border-box;pointer-events:auto;border:2px solid #2563eb;background:white;font:13px system-ui;padding:0 8px';
+    editor.style.cssText = 'position:absolute;box-sizing:border-box;pointer-events:auto;border:2px solid var(--acheron-selection-color);background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);padding:0 8px';
     const clearValidation = () => {
       editor?.setCustomValidity('');
       editor?.removeAttribute('aria-invalid');
@@ -502,9 +523,10 @@ export function createGrid(options: GridOptions): Grid {
 
   function cell(value: unknown, x: number, y: number, width: number, height: number, header: boolean, rowIndex = 0, columnIndex = 0): void {
     const ctx = context!;
-    ctx.fillStyle = header ? '#edf2f7' : '#ffffff';
+    ctx.clearRect(x, y, width, height);
+    ctx.fillStyle = header ? theme.headerBackground : theme.background;
     ctx.fillRect(x, y, width, height);
-    ctx.strokeStyle = '#e2e8f0';
+    ctx.strokeStyle = theme.gridLineColor;
     ctx.lineWidth = 1;
     ctx.strokeRect(x + 0.5, y + 0.5, width, height);
     if (!header && options.renderCell) {
@@ -523,15 +545,16 @@ export function createGrid(options: GridOptions): Grid {
         ctx.beginPath();
       }
       if (handled) return;
-      ctx.fillStyle = '#ffffff';
+      ctx.clearRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
+      ctx.fillStyle = theme.background;
       ctx.fillRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
     }
     ctx.save();
     ctx.beginPath();
     ctx.rect(x + 8, y, Math.max(0, width - 16), height);
     ctx.clip();
-    ctx.fillStyle = header ? '#334155' : '#0f172a';
-    ctx.font = `${header ? '600' : '400'} 13px system-ui, sans-serif`;
+    ctx.fillStyle = header ? theme.headerTextColor : theme.textColor;
+    ctx.font = header ? theme.headerFont : theme.font;
     ctx.textBaseline = 'middle';
     ctx.fillText(value == null ? '' : String(value), x + 10, y + height / 2);
     ctx.restore();
@@ -634,7 +657,7 @@ export function createGrid(options: GridOptions): Grid {
     for (const region of regions) {
       context!.save();
       clipRegion(region);
-      context!.strokeStyle = '#2563eb';
+      context!.strokeStyle = theme.selectionColor;
       context!.lineWidth = 2;
       context!.strokeRect(columnAxis.position(range.startColumn) + region.offsetX + 1,
         headerHeight + rowAxis.position(range.startRow) + region.offsetY + 1,

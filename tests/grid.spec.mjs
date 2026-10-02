@@ -938,3 +938,48 @@ test('native custom editors share validation, permissions, history, clipping and
   await expect(number).toHaveCount(0);
   expect(await page.evaluate(() => window.source.getValue(0, 'count'))).toBe(3);
 });
+
+test('themes isolate mounts and keep editor/menu styles and translucent partial pixels consistent', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
+    window.theme = { background: 'rgba(255, 255, 255, 0.5)', textColor: '#112233', headerBackground: '#abcdef', headerTextColor: '#123456', gridLineColor: '#998877', selectionColor: '#ff0000', font: '16px monospace', headerFont: 'bold 18px monospace' };
+    window.source = new LocalDataSource([{ id: 0, name: 'Ada' }, { id: 1, name: 'Grace' }], row => row.id);
+    const options = { container: document.querySelector('#grid'), columns: [{ key: 'name', title: 'Name', editable: true }], dataSource: window.source, frozenRows: 1, frozenColumns: 1 };
+    window.grid = createGrid({ ...options, theme: window.theme });
+    window.theme.background = '#000000';
+    window.failures = 0;
+    for (const theme of [{ background: 'bad color' }, { font: 'bad font' }, { textColor: 'var(--color)' }]) {
+      try { createGrid({ ...options, theme }); } catch { window.failures++; }
+    }
+    const other = document.createElement('div'); other.style.cssText = 'width:320px;height:160px'; document.body.append(other);
+    window.other = createGrid({ ...options, container: other });
+  });
+  expect(await page.evaluate(() => window.failures)).toBe(3);
+  const viewport = page.getByLabel(/^Data grid viewport/).first();
+  await viewport.click({ position: { x: 20, y: 16 } }); await viewport.press('F2');
+  const input = page.getByRole('textbox');
+  expect(await input.evaluate(el => { const s = getComputedStyle(el); return { color: s.color, border: s.borderTopColor, background: s.backgroundColor, font: s.fontFamily }; })).toEqual({ color: 'rgb(17, 34, 51)', border: 'rgb(255, 0, 0)', background: 'rgba(255, 255, 255, 0.5)', font: 'monospace' });
+  await input.fill('Changed'); await input.press('Enter');
+  const result = await page.evaluate(async () => {
+    const next = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await next();
+    const canvas = document.querySelector('#grid canvas');
+    const ctx = canvas.getContext('2d');
+    const header = [...ctx.getImageData(100, 15, 1, 1).data];
+    const partial = canvas.toDataURL(); window.grid.render(); await next();
+    const match = partial === canvas.toDataURL();
+    const defaults = [...document.querySelectorAll('canvas')][1].getContext('2d').getImageData(100, 15, 1, 1).data;
+    return { header, match, defaults: [...defaults], roots: document.querySelectorAll('#grid > div').length };
+  });
+  expect(result.header).toEqual([171, 205, 239, 255]);
+  expect(result.defaults).toEqual([237, 242, 247, 255]);
+  expect(result.match).toBe(true);
+  expect(result.roots).toBe(1);
+  await viewport.click({ position: { x: 20, y: 16 }, button: 'right' });
+  const menu = page.getByRole('menu', { name: 'Cell actions' });
+  expect(await menu.evaluate(el => getComputedStyle(el).color)).toBe('rgb(17, 34, 51)');
+  await page.getByRole('menuitem', { name: 'Resize column…' }).click();
+  expect(await page.getByRole('dialog').evaluate(el => getComputedStyle(el).color)).toBe('rgb(17, 34, 51)');
+});

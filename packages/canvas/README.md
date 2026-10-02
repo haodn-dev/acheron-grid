@@ -10,6 +10,7 @@ An experimental Canvas browser renderer for the headless @acheron-grid/core engi
 - Resize observation, coalesced rendering, and explicit cleanup.
 - Optional custom cell drawing with clipping, fallback and partial repaint support.
 - Custom native cell editors: input, select or textarea.
+- Optional color and font theme shared by Canvas and editor/menu/dialog surfaces.
 - Single-cell selection by pointer and keyboard, with automatic scrolling.
 
 This package is a development preview, not a published release. Multi-range selection, remote data sources, and framework adapters are not implemented. Canvas cell content is not yet accessible to screen readers. A headless render-callback benchmark is available; end-to-end frame rate has not been verified.
@@ -68,6 +69,23 @@ The factory initializes the control's value, options, type and constraints. The 
 Enter commits (including textarea), Escape cancels, Tab/blur commits, and IME composition does not commit. Failed validation/parser/write keeps the draft with `aria-invalid`; input/change clears the error for retry. Native control keys and clipboard stay in the editor. Factory errors or invalid/attached/foreign-document elements produce an alert without mounting an editor. Destroy removes the editor and discards its draft. Factories must not mutate grid/source or install external listeners requiring cleanup; composite widgets, framework components, async validation and custom lifecycle callbacks are not supported.
 
 ## Usage
+
+### Basic themes
+
+Pass `theme?: Partial<GridTheme>` at construction. Supported fields are `background`, `textColor`, `headerBackground`, `headerTextColor`, `gridLineColor`, `selectionColor`, `font` and `headerFont`. Omitted fields keep the default light palette and 13px system font. Font values use the CSS font shorthand. Values are validated before mounting; use concrete CSS colors/fonts, without CSS variables, inheritance keywords or `currentColor`.
+
+```ts
+theme: {
+  headerBackground: '#e0f2f1',
+  headerTextColor: '#115e59',
+  selectionColor: '#0f766e',
+  font: '14px system-ui',
+}
+```
+
+Each grid snapshots its theme independently. Canvas cells, headers, lines and selection use the theme; native editor, menu and resize-dialog surfaces inherit matching CSS variables scoped to that grid. Native browser control chrome and semantic error alerts keep their own appearance. Custom renderers own their drawing colors/fonts. Transparent backgrounds are supported: dirty cell repaint clears old pixels before drawing. Theme changes after construction have no effect; runtime switching, automatic dark mode, theme presets and per-cell styles are not provided. Theme fonts do not resize rows/columns; configure geometry separately.
+
+### Mounting a grid
 
 Install the built package from a local checkout in your consumer project:
 
