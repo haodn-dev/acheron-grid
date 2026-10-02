@@ -1,8 +1,8 @@
 import { createGridEngine } from '@acheron-grid/core';
-import type { CellUpdate, DataSource, Column, CellSelection, SelectionRange, CellPermission, GridEngineOptions } from '@acheron-grid/core';
+import type { CellUpdate, DataSource, Column, CellSelection, SelectionRange, CellPermission, GridEngineOptions, ViewportRegion } from '@acheron-grid/core';
 
 export type { Column, CellSelection, SelectionRange } from '@acheron-grid/core';
-export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 'resolveCellPermission' | 'onEvent'> {
+export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 'resolveCellPermission' | 'onEvent' | 'frozenRows' | 'frozenColumns'> {
   onSelectionChange?: (selection: CellSelection | null) => void;
   onSelectionRangeChange?: (range: SelectionRange | null) => void;
   container: HTMLElement;
@@ -38,6 +38,8 @@ export function createGrid(options: GridOptions): Grid {
     ...(options.permissions === undefined ? {} : { permissions: options.permissions }),
     ...(options.resolveCellPermission === undefined ? {} : { resolveCellPermission: options.resolveCellPermission }),
     ...(options.onEvent === undefined ? {} : { onEvent: options.onEvent }),
+    ...(options.frozenRows === undefined ? {} : { frozenRows: options.frozenRows }),
+    ...(options.frozenColumns === undefined ? {} : { frozenColumns: options.frozenColumns }),
     onInvalidate(change) {
     if (change.type === 'cells') invalidate(change.cells);
     else if (change.type === 'layout') {
@@ -72,6 +74,9 @@ export function createGrid(options: GridOptions): Grid {
   let destroyed = false;
   let dragPointer: number | null = null;
   let editor: HTMLInputElement | null = null;
+  const editorPane = doc.createElement('div');
+  editorPane.style.cssText = 'position:absolute;overflow:hidden;pointer-events:none;z-index:1';
+  root.append(editorPane);
   let fullDraw = true;
   const dirty = new Map<string, { rowIndex: number; columnKey: string }>();
   let menu: HTMLDivElement | null = null;
@@ -113,7 +118,7 @@ export function createGrid(options: GridOptions): Grid {
     dialog.addEventListener('close', () => {
       dialog.remove();
       if (sizeDialog === dialog) sizeDialog = null;
-      if (!destroyed) scroller.focus({ preventScroll: true });
+      if (!destroyed && !editor) scroller.focus({ preventScroll: true });
     });
     root.append(dialog);
     dialog.showModal();
@@ -213,10 +218,14 @@ export function createGrid(options: GridOptions): Grid {
     const x = event.clientX - bounds.left;
     const y = event.clientY - bounds.top;
     if (x < 0 || x >= scroller.clientWidth || y < 0 || y >= headerHeight || !columns.length) return null;
-    const offset = x + scroller.scrollLeft;
+    const view = viewport();
+    if (engine.frozenColumns > 0 && Math.abs(columnAxis.position(engine.frozenColumns) - x) <= 5 && x <= view.width) return engine.frozenColumns - 1;
+    const offset = x + (x < view.frozenWidth ? 0 : view.scrollLeft);
     const col = columnAxis.indexAt(offset);
-    if (col < columns.length && Math.abs(columnAxis.position(col + 1) - offset) <= 5) return col;
-    if (col > 0 && Math.abs(columnAxis.position(col) - offset) <= 5) return col - 1;
+    const first = x < view.frozenWidth ? 0 : engine.frozenColumns;
+    const limit = x < view.frozenWidth ? engine.frozenColumns : columns.length;
+    if (col < limit && col >= first && Math.abs(columnAxis.position(col + 1) - offset) <= 5) return col;
+    if (col > first && Math.abs(columnAxis.position(col) - offset) <= 5) return col - 1;
     return null;
   }
 
@@ -277,6 +286,7 @@ export function createGrid(options: GridOptions): Grid {
     const input = editor;
     editor = null;
     input.remove();
+    editorPane.style.width = editorPane.style.height = '0px';
     select(selection.rowIndex, selection.columnIndex, true);
     return true;
   }
@@ -290,7 +300,7 @@ export function createGrid(options: GridOptions): Grid {
     editor.type = 'text';
     editor.value = value == null ? '' : String(value);
     editor.setAttribute('aria-label', `Edit row ${selection.rowIndex + 1}, ${column.title}`);
-    editor.style.cssText = `position:absolute;box-sizing:border-box;z-index:1;border:2px solid #2563eb;background:white;font:13px system-ui;padding:0 8px;left:${columnAxis.position(selection.columnIndex)}px;top:${rowAxis.position(selection.rowIndex)}px;width:${columnAxis.size(selection.columnIndex)}px;height:${rowAxis.size(selection.rowIndex)}px`;
+    editor.style.cssText = 'position:absolute;box-sizing:border-box;pointer-events:auto;border:2px solid #2563eb;background:white;font:13px system-ui;padding:0 8px';
     editor.addEventListener('input', () => {
       editor?.setCustomValidity('');
       editor?.removeAttribute('aria-invalid');
@@ -304,7 +314,8 @@ export function createGrid(options: GridOptions): Grid {
       } else if (event.key === 'Tab' && !finishEdit(true)) event.preventDefault();
     });
     editor.addEventListener('blur', () => finishEdit(true));
-    spacer.append(editor);
+    editorPane.append(editor);
+    positionEditor();
     editor.focus({ preventScroll: true });
     editor.select();
   }
@@ -348,13 +359,18 @@ export function createGrid(options: GridOptions): Grid {
     if (!engine.select(rowIndex, columnIndex, extend)) return;
     const selection = engine.getSelection()!;
     const rangeChanged = previousRange !== JSON.stringify(getSelectionRange());
-    const left = columnAxis.position(columnIndex);
-    const top = rowAxis.position(rowIndex);
     if (reveal) {
-      if (left < scroller.scrollLeft || columnAxis.size(columnIndex) > scroller.clientWidth) scroller.scrollLeft = left;
-      else if (left + columnAxis.size(columnIndex) > scroller.scrollLeft + scroller.clientWidth) scroller.scrollLeft = left + columnAxis.size(columnIndex) - scroller.clientWidth;
-      if (top < scroller.scrollTop || rowAxis.size(rowIndex) > scroller.clientHeight) scroller.scrollTop = top;
-      else if (top + rowAxis.size(rowIndex) > scroller.scrollTop + scroller.clientHeight) scroller.scrollTop = top + rowAxis.size(rowIndex) - scroller.clientHeight;
+      const view = viewport();
+      const left = columnAxis.position(columnIndex);
+      const top = rowAxis.position(rowIndex);
+      if (columnIndex >= engine.frozenColumns && view.width > view.frozenWidth) {
+        if (left < view.scrollLeft + view.frozenWidth || columnAxis.size(columnIndex) > view.width - view.frozenWidth) scroller.scrollLeft = left - view.frozenWidth;
+        else if (left + columnAxis.size(columnIndex) > view.scrollLeft + view.width) scroller.scrollLeft = left + columnAxis.size(columnIndex) - view.width;
+      }
+      if (rowIndex >= engine.frozenRows && view.height > view.frozenHeight) {
+        if (top < view.scrollTop + view.frozenHeight || rowAxis.size(rowIndex) > view.height - view.frozenHeight) scroller.scrollTop = top - view.frozenHeight;
+        else if (top + rowAxis.size(rowIndex) > view.scrollTop + view.height) scroller.scrollTop = top + rowAxis.size(rowIndex) - view.height;
+      }
     }
     const value = engine.getValue(rowIndex, selection.columnKey);
     scroller.setAttribute('aria-label', `${viewportLabel}: row ${rowIndex + 1}, ${columns[columnIndex]!.title}, ${value == null ? '' : String(value)}`);
@@ -369,10 +385,12 @@ export function createGrid(options: GridOptions): Grid {
     let y = event.clientY - bounds.top;
     if (clamp) { x = Math.max(0, Math.min(scroller.clientWidth - 1, x)); y = Math.max(0, Math.min(scroller.clientHeight - 1, y)); }
     if (x < 0 || y < 0 || x >= scroller.clientWidth || y >= scroller.clientHeight) return null;
-    const row = rowAxis.indexAt(y + scroller.scrollTop);
-    const col = columnAxis.indexAt(x + scroller.scrollLeft);
-    if (!clamp && (row >= rowCount || col >= columns.length)) return null;
-    return { row: Math.min(rowCount - 1, row), col: Math.min(columns.length - 1, col) };
+    const hit = viewport().hitTest(x, y);
+    if (hit || !clamp) return hit;
+    const view = viewport();
+    const row = Math.min(rowCount - 1, rowAxis.indexAt(y + (y < view.frozenHeight ? 0 : view.scrollTop)));
+    const col = Math.min(columns.length - 1, columnAxis.indexAt(x + (x < view.frozenWidth ? 0 : view.scrollLeft)));
+    return { row, col };
   }
 
   function onPointerDown(event: PointerEvent): void {
@@ -404,8 +422,9 @@ export function createGrid(options: GridOptions): Grid {
     if ((event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) && selection) {
       event.preventDefault();
       const bounds = scroller.getBoundingClientRect();
-      openMenu(selection.rowIndex, selection.columnIndex, bounds.left + columnAxis.position(selection.columnIndex) - scroller.scrollLeft,
-        bounds.top + rowAxis.position(selection.rowIndex + 1) - scroller.scrollTop);
+      const rect = viewport().cellRect(selection.rowIndex, selection.columnIndex);
+      openMenu(selection.rowIndex, selection.columnIndex, bounds.left + Math.max(rect.clip.x, rect.x),
+        bounds.top + Math.min(rect.clip.y + rect.clip.height, rect.y + rect.height));
       return;
     }
     if (event.isComposing || event.altKey) return;
@@ -466,87 +485,123 @@ export function createGrid(options: GridOptions): Grid {
     ctx.restore();
   }
 
+  function viewport() {
+    return engine.getViewport({ width: scroller.clientWidth, height: scroller.clientHeight, scrollLeft: scroller.scrollLeft, scrollTop: scroller.scrollTop });
+  }
+
+  function positionEditor(): void {
+    const selection = engine.getSelection();
+    if (!editor || !selection) return;
+    const rect = viewport().cellRect(selection.rowIndex, selection.columnIndex);
+    const clip = rect.clip;
+    editorPane.style.left = `${clip.x}px`;
+    editorPane.style.top = `${headerHeight + clip.y}px`;
+    editorPane.style.width = `${clip.width}px`;
+    editorPane.style.height = `${clip.height}px`;
+    editor.style.left = `${rect.x - clip.x}px`;
+    editor.style.top = `${rect.y - clip.y}px`;
+    editor.style.width = `${rect.width}px`;
+    editor.style.height = `${rect.height}px`;
+  }
+
+  function clipRegion(region: ViewportRegion): void {
+    const clip = region.clip;
+    context!.beginPath();
+    context!.rect(clip.x, headerHeight + clip.y, clip.width, clip.height);
+    context!.clip();
+  }
+
   function draw(): void {
     frame = undefined;
     if (destroyed) return;
-    const width = scroller.clientWidth;
-    const bodyHeight = scroller.clientHeight;
-    const height = Math.min(root.clientHeight, bodyHeight + headerHeight);
+    const view = viewport();
     if (!fullDraw) {
-      context!.save();
-      context!.beginPath();
-      context!.rect(0, headerHeight, width, Math.max(0, height - headerHeight));
-      context!.clip();
       for (const change of dirty.values()) {
         const col = columns.findIndex(column => column.key === change.columnKey);
-        const x = columnAxis.position(col) - scroller.scrollLeft;
-        const y = headerHeight + rowAxis.position(change.rowIndex) - scroller.scrollTop;
-        if (x >= width || x + columnAxis.size(col) <= 0 || y >= height || y + rowAxis.size(change.rowIndex) <= headerHeight) continue;
+        const rect = view.cellRect(change.rowIndex, col);
+        const clip = rect.clip;
+        if (rect.x >= clip.x + clip.width || rect.x + rect.width <= clip.x || rect.y >= clip.y + clip.height || rect.y + rect.height <= clip.y || clip.width <= 0 || clip.height <= 0) continue;
         context!.save();
         context!.beginPath();
-        context!.rect(x, y, columnAxis.size(col), rowAxis.size(change.rowIndex));
+        context!.rect(clip.x, headerHeight + clip.y, clip.width, clip.height);
+        context!.clip();
+        context!.beginPath();
+        context!.rect(rect.x, headerHeight + rect.y, rect.width, rect.height);
         context!.clip();
         const value = engine.getValue(change.rowIndex, change.columnKey);
-        cell(value == null ? '' : String(value), x, y, columnAxis.size(col), rowAxis.size(change.rowIndex), false);
+        cell(value == null ? '' : String(value), rect.x, headerHeight + rect.y, rect.width, rect.height, false);
         context!.restore();
       }
-      drawSelection();
-      context!.restore();
+      drawSelection(view.regions);
       dirty.clear();
       return;
     }
     fullDraw = false;
     dirty.clear();
     const ratio = win.devicePixelRatio || 1;
-    canvas.width = Math.max(0, Math.round(width * ratio));
+    const height = Math.min(root.clientHeight, view.height + headerHeight);
+    canvas.width = Math.max(0, Math.round(view.width * ratio));
     canvas.height = Math.max(0, Math.round(height * ratio));
-    canvas.style.width = `${width}px`;
+    canvas.style.width = `${view.width}px`;
     canvas.style.height = `${height}px`;
     context!.setTransform(ratio, 0, 0, ratio, 0, 0);
-    context!.clearRect(0, 0, width, height);
-    const rows = rowAxis.range(scroller.scrollTop, bodyHeight);
-    const cols = columnAxis.range(scroller.scrollLeft, width);
-    context!.save();
-    context!.beginPath();
-    context!.rect(0, headerHeight, width, Math.max(0, height - headerHeight));
-    context!.clip();
-    for (let row = rows.start; row < rows.end; row++) {
-      for (let col = cols.start; col < cols.end; col++) {
-        const value = engine.getValue(row, columns[col]!.key);
-        cell(value == null ? '' : String(value), columnAxis.position(col) - scroller.scrollLeft,
-          headerHeight + rowAxis.position(row) - scroller.scrollTop, columnAxis.size(col), rowAxis.size(row), false);
+    context!.clearRect(0, 0, view.width, height);
+    for (const region of view.regions) {
+      context!.save();
+      clipRegion(region);
+      for (let row = region.rows.start; row < region.rows.end; row++) {
+        for (let col = region.columns.start; col < region.columns.end; col++) {
+          const value = engine.getValue(row, columns[col]!.key);
+          cell(value == null ? '' : String(value), columnAxis.position(col) + region.offsetX,
+            headerHeight + rowAxis.position(row) + region.offsetY, columnAxis.size(col), rowAxis.size(row), false);
+        }
       }
+      context!.restore();
     }
-    drawSelection();
-    context!.restore();
-    context!.save();
-    context!.beginPath();
-    context!.rect(0, 0, width, headerHeight);
-    context!.clip();
-    for (let col = cols.start; col < cols.end; col++) {
-      cell(columns[col]!.title, columnAxis.position(col) - scroller.scrollLeft, 0, columnAxis.size(col), headerHeight, true);
+    drawSelection(view.regions);
+    const fixed = columnAxis.range(0, view.frozenWidth);
+    const moving = columnAxis.range(columnAxis.position(engine.frozenColumns) + view.scrollLeft, view.width - view.frozenWidth);
+    for (const band of [
+      { start: 0, end: Math.min(engine.frozenColumns, fixed.end), x: 0, width: view.frozenWidth, offset: 0 },
+      { start: Math.max(engine.frozenColumns, moving.start), end: moving.end, x: view.frozenWidth, width: view.width - view.frozenWidth, offset: -view.scrollLeft },
+    ]) {
+      if (band.width <= 0) continue;
+      context!.save();
+      context!.beginPath();
+      context!.rect(band.x, 0, band.width, headerHeight);
+      context!.clip();
+      for (let col = band.start; col < band.end; col++) cell(columns[col]!.title, columnAxis.position(col) + band.offset, 0, columnAxis.size(col), headerHeight, true);
+      context!.restore();
     }
-    context!.restore();
   }
 
-  function drawSelection(): void {
+  function drawSelection(regions: readonly ViewportRegion[]): void {
     const selection = engine.getSelection();
-    if (selection) {
-      const range = getSelectionRange()!;
+    const range = getSelectionRange();
+    if (!selection || !range) return;
+    for (const region of regions) {
+      context!.save();
+      clipRegion(region);
       context!.strokeStyle = '#2563eb';
       context!.lineWidth = 2;
-      context!.strokeRect(columnAxis.position(range.startColumn) - scroller.scrollLeft + 1,
-        headerHeight + rowAxis.position(range.startRow) - scroller.scrollTop + 1,
-        Math.max(0, (columnAxis.position(range.endColumn + 1) - columnAxis.position(range.startColumn)) - 2),
-        Math.max(0, (rowAxis.position(range.endRow + 1) - rowAxis.position(range.startRow)) - 2));
-      if (range.startRow === range.endRow && range.startColumn === range.endColumn) return;
-      context!.strokeRect(columnAxis.position(selection.columnIndex) - scroller.scrollLeft + 1,
-        headerHeight + rowAxis.position(selection.rowIndex) - scroller.scrollTop + 1,
-        Math.max(0, columnAxis.size(selection.columnIndex) - 2), Math.max(0, rowAxis.size(selection.rowIndex) - 2));
+      context!.strokeRect(columnAxis.position(range.startColumn) + region.offsetX + 1,
+        headerHeight + rowAxis.position(range.startRow) + region.offsetY + 1,
+        Math.max(0, columnAxis.position(range.endColumn + 1) - columnAxis.position(range.startColumn) - 2),
+        Math.max(0, rowAxis.position(range.endRow + 1) - rowAxis.position(range.startRow) - 2));
+      if (range.startRow !== range.endRow || range.startColumn !== range.endColumn) {
+        // The active cell belongs to only one pane; never project it into another.
+        if (selection.rowIndex >= region.rows.start && selection.rowIndex < region.rows.end && selection.columnIndex >= region.columns.start && selection.columnIndex < region.columns.end) {
+          context!.strokeRect(columnAxis.position(selection.columnIndex) + region.offsetX + 1,
+            headerHeight + rowAxis.position(selection.rowIndex) + region.offsetY + 1,
+            Math.max(0, columnAxis.size(selection.columnIndex) - 2), Math.max(0, rowAxis.size(selection.rowIndex) - 2));
+        }
+      }
+      context!.restore();
     }
   }
 
   function render(): void {
+    positionEditor();
     closeMenu();
     fullDraw = true;
     schedule();

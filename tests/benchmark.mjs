@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-test('headless Canvas callback cost: one million rows and one thousand columns', async ({ page }) => {
+for (const frozen of [0, 1]) test(`headless Canvas callback cost: million rows, thousand columns, freeze ${frozen}`, async ({ page }) => {
   await page.goto('/');
-  const result = await page.evaluate(async () => {
+  const result = await page.evaluate(async frozen => {
     const { createGrid } = await import('/canvas/index.js');
     let reads = 0;
     const samples = [];
@@ -15,7 +15,7 @@ test('headless Canvas callback cost: one million rows and one thousand columns',
       if (reads > before) samples.push({ ms: performance.now() - start, reads: reads - before });
     });
     const next = () => new Promise(resolve => request(() => request(resolve)));
-    const grid = createGrid({ container: document.querySelector('#grid'),
+    const grid = createGrid({ container: document.querySelector('#grid'), frozenRows: frozen, frozenColumns: frozen,
       columns: Array.from({ length: 1000 }, (_, i) => ({ key: `c${i}`, title: `Column ${i}` })),
       dataSource: { getRowCount: () => 1_000_000, getRowId: i => i,
         getValue: (row, key) => { reads++; return values.get(`${row}:${key}`) ?? `${row}:${key}`; },
@@ -51,8 +51,8 @@ test('headless Canvas callback cost: one million rows and one thousand columns',
     grid.destroy();
     window.requestAnimationFrame = request;
     return { userAgent: navigator.userAgent, viewport: '640x360 CSS px', devicePixelRatio,
-      rows: 1_000_000, columns: 1000, scroll: summarize(scroll), partial: summarize(partial) };
-  });
+      rows: 1_000_000, columns: 1000, frozen, scroll: summarize(scroll), partial: summarize(partial) };
+  }, frozen);
   expect(result.scroll.samples).toBeGreaterThanOrEqual(60);
   expect(result.scroll.maxCellReads).toBeLessThan(100);
   expect(result.partial.samples).toBe(60);

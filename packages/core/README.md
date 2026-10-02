@@ -68,3 +68,11 @@ Pass synchronous `onEvent(event)` to either factory. The discriminated `GridEven
 - `column:resize` / `row:resize`: `index`, `previous`, `size`; layout stays outside data history.
 
 State and history commit before renderer invalidation, then the domain event. Failures before commit and no-ops emit nothing. Both notification hooks are attempted even if one throws; the first error propagates after both, without rolling back committed state. Event envelopes/payload metadata are frozen; values remain shallow caller-owned references. Parser, resolver, setter and notification hooks cannot issue nested engine mutations; queries of committed state are allowed. Destroy silently releases hooks/history. Canvas legacy selection callbacks remain separate and are not duplicated by onEvent.
+
+## Frozen panes and viewport geometry
+
+Set construction options `frozenRows` / `frozenColumns` to safe integers from zero to the row/column count (default zero). They freeze leading data rows/left columns; the header is separate. Counts are readonly; changing them requires remounting. Resize still updates sparse sizes. Prefixes larger than the viewport are clipped, with no scrolling area on that dimension; they are not reduced automatically.
+
+`engine.getViewport({ width, height, scrollLeft, scrollTop })` takes body client dimensions excluding header/scrollbars. All inputs must be finite and nonnegative; offsets clamp to dataset bounds. The readonly `ViewportLayout` contains normalized offsets, clipped frozen extents and at most four nonempty `regions`. Each region has `clip`, end-exclusive `rows`/`columns`, and `offsetX/offsetY` translations for axis positions.
+
+`view.hitTest(x, y)` maps body-local coordinates to `{ row, col }` or null for blank/outside/nonfinite coordinates. `view.cellRect(row, col)` returns the full body-local rectangle and its pane clip, throwing for invalid dataset coordinates. Coordinates remain dataset indices; these helpers do not apply permissions. Frozen geometry never reads source values and bounds region work by visible indices, even if a million rows are frozen. Query a fresh viewport after scroll, viewport resize or axis mutations; it holds axis references and is not a durable layout snapshot. Canvas uses these same mappings for painting, pointer input, editor placement and menu targets.

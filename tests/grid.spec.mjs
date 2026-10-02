@@ -648,3 +648,134 @@ test('capabilities govern browser focus, menu, editor commit and typed events', 
   await page.evaluate(() => window.grid.destroy());
   await expect(viewport).toHaveCount(0);
 });
+
+test('frozen panes keep hit tests, editor, dirty pixels, menu and header resize aligned', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
+    window.source = new LocalDataSource(Array.from({ length: 100 }, (_, id) => ({ id, ...Object.fromEntries(Array.from({ length: 20 }, (_, col) => [`c${col}`, `${id}:${col}`])) })), row => row.id);
+    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source, columnWidth: 100,
+      frozenRows: 2, frozenColumns: 2, resolveCellPermission: cell => cell.rowIndex === 1 ? { writable: false } : undefined, columns: Array.from({ length: 20 }, (_, col) => ({ key: `c${col}`, title: `C${col}`, editable: true })) });
+    const scroller = document.querySelector('[tabindex]');
+    scroller.scrollLeft = 250; scroller.scrollTop = 320;
+    window.grid.render();
+  });
+  const viewport = page.getByLabel(/^Data grid viewport/);
+  for (const [x, y, row, col] of [[20, 16, 0, 0], [220, 16, 0, 4], [20, 100, 13, 0], [220, 100, 13, 4]]) {
+    await viewport.click({ position: { x, y } });
+    expect(await page.evaluate(() => window.grid.getSelection())).toMatchObject({ rowIndex: row, columnIndex: col });
+  }
+  await viewport.press('Enter');
+  const bodyInput = page.getByRole('textbox');
+  await bodyInput.fill('Clipped draft');
+  const clipped = await page.evaluate(async () => {
+    const scroller = document.querySelector('[tabindex]');
+    scroller.scrollLeft = 300;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const bounds = scroller.getBoundingClientRect();
+    return document.elementFromPoint(bounds.x + 150, bounds.y + 100)?.tagName;
+  });
+  expect(clipped).not.toBe('INPUT');
+  await page.evaluate(async () => {
+    document.querySelector('[tabindex]').scrollLeft = 900;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  expect(await page.evaluate(() => document.querySelector('input').value)).toBe('Clipped draft');
+  expect(await page.evaluate(() => window.source.getValue(13, 'c4'))).toBe('13:4');
+  await page.evaluate(() => { document.querySelector('[tabindex]').scrollLeft = 200; });
+  await bodyInput.press('Escape');
+  await viewport.click({ position: { x: 20, y: 48 } });
+  await viewport.press('Enter');
+  await expect(page.getByRole('textbox')).toHaveCount(0);
+  await viewport.press('Shift+F10');
+  await expect(page.getByRole('menuitem', { name: 'Paste', exact: true })).toBeDisabled();
+  await page.getByRole('menu').press('Escape');
+  await viewport.click({ position: { x: 20, y: 16 } });
+  await viewport.press('Enter');
+  const input = page.getByRole('textbox');
+  const original = await input.boundingBox();
+  await input.fill('Frozen draft');
+  await page.evaluate(() => { const scroller = document.querySelector('[tabindex]'); scroller.scrollLeft = 450; scroller.scrollTop = 640; });
+  await expect.poll(async () => await input.boundingBox()).toEqual(original);
+  await input.press('Enter');
+  expect(await page.evaluate(() => window.source.getValue(0, 'c0'))).toBe('Frozen draft');
+  await viewport.press('Control+z');
+  expect(await page.evaluate(() => window.source.getValue(0, 'c0'))).toBe('0:0');
+  await viewport.press('Control+Shift+z');
+  await viewport.click({ position: { x: 20, y: 16 }, button: 'right' });
+  await page.getByRole('menuitem', { name: 'Resize column…', exact: true }).click();
+  await page.getByRole('spinbutton').fill('120');
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await viewport.press('Enter');
+  await expect.poll(async () => (await input.boundingBox()).width).toBe(120);
+  await input.press('Escape');
+  const bounds = await viewport.boundingBox();
+  await page.mouse.move(bounds.x + 220, bounds.y - 18);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + 240, bounds.y - 18);
+  await page.mouse.up();
+  await viewport.click({ position: { x: 140, y: 16 } });
+  await viewport.press('Enter');
+  await expect.poll(async () => (await input.boundingBox()).width).toBe(120);
+  await input.press('Escape');
+  await page.evaluate(() => { const scroller = document.querySelector('[tabindex]'); scroller.scrollLeft = 250; scroller.scrollTop = 320; window.grid.render(); });
+  await viewport.click({ position: { x: 20, y: 16 } });
+  await viewport.click({ position: { x: 280, y: 100 }, modifiers: ['Shift'] });
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toMatchObject({ startRow: 0, startColumn: 0, endRow: 13, endColumn: 4 });
+  const equality = await page.evaluate(async () => {
+    const next = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await next();
+    window.grid.updateCells([{ rowIndex: 0, columnKey: 'c0', value: 'Corner' }, { rowIndex: 0, columnKey: 'c4', value: 'Top' }, { rowIndex: 13, columnKey: 'c0', value: 'Left' }, { rowIndex: 13, columnKey: 'c4', value: 'Body' }]);
+    await next();
+    const canvas = document.querySelector('canvas');
+    const partial = canvas.toDataURL();
+    window.grid.render();
+    await next();
+    return partial === canvas.toDataURL();
+  });
+  expect(equality).toBe(true);
+  const beforeHome = await viewport.evaluate(el => ({ x: el.scrollLeft, y: el.scrollTop }));
+  await viewport.press('Control+Home');
+  expect(await viewport.evaluate(el => ({ x: el.scrollLeft, y: el.scrollTop }))).toEqual(beforeHome);
+  await viewport.press('ArrowRight');
+  await viewport.press('ArrowRight');
+  expect(await viewport.evaluate(el => el.scrollLeft)).toBe(0);
+  await viewport.press('ArrowDown');
+  await viewport.press('ArrowDown');
+  expect(await viewport.evaluate(el => el.scrollTop)).toBe(0);
+  await page.evaluate(() => window.grid.destroy());
+  await expect(input).toHaveCount(0);
+  await expect(viewport).toHaveCount(0);
+});
+
+test('frozen viewport reads stay bounded even when the entire dataset is frozen', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    let reads = 0;
+    const grid = createGrid({ container: document.querySelector('#grid'), frozenRows: 1_000_000, frozenColumns: 1000,
+      columns: Array.from({ length: 1000 }, (_, col) => ({ key: `c${col}`, title: String(col) })),
+      dataSource: { getRowCount: () => 1_000_000, getRowId: row => row, getValue: (row, col) => { reads++; return `${row}:${col}`; }, setValue() {} } });
+    const next = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await next();
+    reads = 0;
+    const scroller = document.querySelector('[tabindex]');
+    scroller.scrollLeft = 8000; scroller.scrollTop = 16000000;
+    grid.render();
+    await next();
+    const full = reads;
+    reads = 0;
+    grid.updateCells([{ rowIndex: 500000, columnKey: 'c50', value: 'offscreen' }]);
+    await next();
+    const offscreen = reads;
+    scroller.dispatchEvent(new PointerEvent('pointerdown', { button: 0, clientX: scroller.getBoundingClientRect().x + 10, clientY: scroller.getBoundingClientRect().y + 10 }));
+    const selection = grid.getSelection();
+    grid.destroy();
+    return { full, offscreen, selection };
+  });
+  expect(result.full).toBeLessThan(100);
+  // One source read in command normalization, none in the offscreen draw.
+  expect(result.offscreen).toBe(1);
+  expect(result.selection).toMatchObject({ rowIndex: 0, columnIndex: 0 });
+});

@@ -286,3 +286,74 @@ test('parser, permission query and source setter cannot issue nested commands', 
   assert.throws(() => engine.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'New' }]), /Nested/);
   assert.equal(engine.canUndo(), false);
 });
+
+test('frozen viewport mapping, seams, resize and validation stay headless', () => {
+  const { engine } = fixture({ frozenRows: 1, frozenColumns: 1 });
+  const view = engine.getViewport({ width: 240, height: 48, scrollLeft: 80, scrollTop: 16 });
+  assert.equal(view.regions.length, 4);
+  assert.deepEqual(view.hitTest(159, 31), { row: 0, col: 0 });
+  assert.deepEqual(view.hitTest(160, 32), { row: 1, col: 1 });
+  assert.equal(view.hitTest(240, 0), null);
+  assert.equal(view.hitTest(NaN, 0), null);
+  assert.deepEqual(view.cellRect(1, 1), { x: 80, y: 16, width: 160, height: 32, clip: { x: 160, y: 32, width: 80, height: 16 } });
+  engine.setRowHeight(0, 40);
+  engine.setColumnWidth(0, 180);
+  const resized = engine.getViewport({ width: 240, height: 48, scrollLeft: 999, scrollTop: 999 });
+  assert.equal(resized.frozenWidth, 180);
+  assert.equal(resized.frozenHeight, 40);
+  assert.equal(resized.scrollLeft, 100);
+  assert.equal(resized.scrollTop, 24);
+  assert.deepEqual(resized.hitTest(180, 40), { row: 1, col: 1 });
+  assert.throws(() => resized.cellRect(-1, 0), /Invalid cell/);
+  assert.throws(() => { resized.regions[0].clip.x = 99; }, TypeError);
+  for (const value of [-1, .5, Infinity, NaN, 3]) assert.throws(() => fixture({ frozenRows: value }), /frozen/);
+  assert.throws(() => fixture({ frozenColumns: 3 }), /frozen/);
+  assert.throws(() => engine.getViewport({ width: -1, height: 0, scrollLeft: 0, scrollTop: 0 }), /Invalid viewport/);
+  engine.destroy();
+  assert.throws(() => engine.getViewport({ width: 0, height: 0, scrollLeft: 0, scrollTop: 0 }), /destroyed/);
+});
+
+test('frozen counts do not increase visible work, including all-frozen and tiny viewports', () => {
+  let reads = 0;
+  const engine = createGridEngine({ columns: Array.from({ length: 1000 }, (_, i) => ({ key: `c${i}`, title: String(i) })),
+    frozenRows: 1_000_000, frozenColumns: 1000, dataSource: { getRowCount: () => 1_000_000, getRowId: row => row, getValue: () => { reads++; return ''; } } });
+  const view = engine.getViewport({ width: 640, height: 320, scrollLeft: 10000, scrollTop: 10000000 });
+  assert.equal(view.regions.length, 1);
+  assert.deepEqual(view.regions[0].rows, { start: 0, end: 10 });
+  assert.deepEqual(view.regions[0].columns, { start: 0, end: 4 });
+  assert.deepEqual(view.hitTest(639, 319), { row: 9, col: 3 });
+  assert.equal(reads, 0);
+  assert.equal(engine.getViewport({ width: 0, height: 0, scrollLeft: 0, scrollTop: 0 }).regions.length, 0);
+  assert.equal(engine.getViewport({ width: 10, height: 10, scrollLeft: 0, scrollTop: 0 }).regions.length, 1);
+  const mixed = createGridEngine({ columns: engine.columns, frozenRows: 1, frozenColumns: 1, dataSource: { getRowCount: () => 1_000_000, getRowId: row => row, getValue: () => '' } });
+  const scrolled = mixed.getViewport({ width: 640, height: 320, scrollLeft: 200, scrollTop: 50000 });
+  assert.equal(scrolled.cellRect(0, 2).x, 120);
+  assert.deepEqual(scrolled.hitTest(170, 10), { row: 0, col: 2 });
+  assert.deepEqual(scrolled.hitTest(150, 10), { row: 0, col: 0 });
+  const cells = new Set();
+  for (const region of scrolled.regions) for (let row = region.rows.start; row < region.rows.end; row++) for (let col = region.columns.start; col < region.columns.end; col++) {
+    assert.equal(cells.has(`${row}:${col}`), false);
+    cells.add(`${row}:${col}`);
+    const rect = scrolled.cellRect(row, col);
+    const x = (Math.max(rect.x, rect.clip.x) + Math.min(rect.x + rect.width, rect.clip.x + rect.clip.width)) / 2;
+    const y = (Math.max(rect.y, rect.clip.y) + Math.min(rect.y + rect.height, rect.clip.y + rect.clip.height)) / 2;
+    assert.deepEqual(scrolled.hitTest(x, y), { row, col });
+  }
+  assert.ok(cells.size < 100);
+});
+
+test('zero-frozen, empty and fractional-size viewport queries preserve coordinates', () => {
+  const { engine } = fixture();
+  engine.setRowHeight(0, 32.5);
+  engine.setColumnWidth(0, 160.5);
+  const view = engine.getViewport({ width: 200, height: 40, scrollLeft: 20.5, scrollTop: 10.5 });
+  assert.equal(view.regions.length, 1);
+  assert.deepEqual(view.hitTest(140, 22), { row: 1, col: 1 });
+  assert.equal(view.cellRect(0, 0).x, -20.5);
+  assert.equal(view.cellRect(0, 0).y, -10.5);
+  const empty = createGridEngine({ columns: [], dataSource: new LocalDataSource([], row => row.id) });
+  const blank = empty.getViewport({ width: 200, height: 100, scrollLeft: 1000, scrollTop: 1000 });
+  assert.equal(blank.regions.length, 0);
+  assert.equal(blank.hitTest(0, 0), null);
+  assert.equal(blank.scrollTop, 0);
+});

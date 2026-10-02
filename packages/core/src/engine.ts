@@ -4,6 +4,8 @@ import { resolvePermissions } from './permissions.js';
 import type { CellPermission, CellPermissionPolicy, CellPermissionResolver } from './permissions.js';
 import type { GridEvent, GridChangeSource } from './events.js';
 import { GridAxis } from './axis.js';
+import { createViewport } from './panes.js';
+import type { ViewportOptions } from './panes.js';
 import { clipboardCellLimit, clipboardTextLimit, decodeTsv, encodeTsv } from './tsv.js';
 
 export type GridInvalidation =
@@ -19,6 +21,8 @@ export interface GridEngineOptions {
   onEvent?: (event: GridEvent) => void;
   rowHeight?: number;
   columnWidth?: number;
+  frozenRows?: number;
+  frozenColumns?: number;
   /** Synchronous renderer notification after state and history have committed. */
   onInvalidate?: (change: GridInvalidation) => void;
 }
@@ -36,6 +40,11 @@ export function createGridEngine(options: GridEngineOptions) {
   const columnIndices = new Map(columns.map((column, index) => [column.key, index]));
   const rowCount = dataSource.getRowCount();
   if (!Number.isSafeInteger(rowCount) || rowCount < 0) throw new RangeError('Invalid row count.');
+  const frozenRows = options.frozenRows ?? 0;
+  const frozenColumns = options.frozenColumns ?? 0;
+  for (const [count, limit] of [[frozenRows, rowCount], [frozenColumns, columns.length]] as const) {
+    if (!Number.isSafeInteger(count) || count < 0 || count > limit) throw new RangeError('Invalid frozen row or column count.');
+  }
   if (!Number.isFinite(rowCount * rowHeight) || !Number.isFinite(columns.length * columnWidth)) throw new RangeError('Grid dimensions overflow.');
   const rowAxis = new GridAxis(rowCount, rowHeight);
   const columnAxis = new GridAxis(columns.length, columnWidth);
@@ -269,7 +278,8 @@ export function createGridEngine(options: GridEngineOptions) {
   }
 
   return Object.freeze({
-    columns, rowCount,
+    columns, rowCount, frozenRows, frozenColumns,
+    getViewport: (viewport: ViewportOptions) => { assertAlive(); return createViewport(rowAxis, columnAxis, frozenRows, frozenColumns, viewport); },
     rows: axisView(rowAxis), columnsLayout: axisView(columnAxis),
     getValue: (row: number, key: string): unknown => dataSource.getValue(row, key),
     getSelection, getSelectionRange, getCellPermission, canEdit, canPaste,
