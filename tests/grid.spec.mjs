@@ -2012,3 +2012,21 @@ test('column creation dialog, managed row views and structured browser clipboard
   await page.evaluate(()=>window.grid.undo());await expect(page.getByRole('columnheader',{name:'Count',exact:true})).toBeVisible();
 
 });
+
+
+test('menu icons and groups, quiet search focus, match tint and dropdown hover share themed UI',async({page})=>{
+  const errors=[];page.on('pageerror',error=>errors.push(error.message));await page.goto('/');
+  await page.addStyleTag({content:'input:focus-visible{outline:2px solid green;outline-offset:3px}'});
+  await page.evaluate(async()=>{const {createGrid}=await import('/canvas/index.js');const {LocalDataSource}=await import('/core/index.js');window.source=new LocalDataSource([{id:1,name:'Match',status:'Active'},{id:2,name:'Match',status:'Pending'}],row=>row.id);window.grid=createGrid({container:document.querySelector('#grid'),dataSource:window.source,theme:{iconColor:'#172554'},columns:[{key:'name',title:'Name',editable:true},{key:'status',title:'Status',editable:true}],columnEditors:{status:{type:'select',values:['Active','Pending']}}});});
+  const viewport=page.locator('[data-grid-viewport]');await viewport.click({position:{x:20,y:16},button:'right'});
+  const menu=page.getByRole('menu');await expect(menu.getByRole('separator')).toHaveCount(5);
+  expect(await menu.getByRole('menuitem').evaluateAll(items=>items.every(item=>item.querySelector('svg[aria-hidden=true]')))).toBe(true);
+  await expect(menu.getByRole('menuitem',{name:'Copy',exact:true}).locator('svg')).toHaveCSS('color','rgb(23, 37, 84)');await menu.press('Escape');
+  await viewport.press('Control+f');const search=page.getByRole('searchbox',{name:'Find in grid',exact:true});await expect(search).toHaveCSS('outline-style','none');await expect(search).toHaveCSS('box-shadow','none');await search.fill('Match');await expect(page.getByRole('status').filter({hasText:'1 of 2'})).toBeVisible();
+  const pixels=await page.evaluate(async()=>{await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));const ctx=document.querySelector('canvas').getContext('2d');const pixel=(x,y)=>[...ctx.getImageData(x,y,1,1).data];return {current:pixel(120,40),other:pixel(120,72),marker:pixel(1,40)};});
+  expect(pixels.current).not.toEqual(pixels.other);expect(pixels.marker[0]).toBeGreaterThan(pixels.marker[2]);await page.getByRole('button',{name:'Close search',exact:true}).click();
+  const b=await viewport.boundingBox();await page.mouse.move(b.x+305,b.y+16);expect(await page.evaluate(()=>document.querySelector('[data-grid-root]')?.style.cursor??document.querySelector('[data-grid-viewport]').parentElement.style.cursor)).toBe('pointer');
+  await viewport.click({position:{x:305,y:16}});await expect(page.getByRole('combobox',{name:'Edit row 1, Status',exact:true})).toBeVisible();await page.keyboard.press('Escape');
+  await page.evaluate(()=>window.grid.setLocked({scope:'cell',rowIndex:0,columnIndex:1},true));await page.mouse.move(b.x+40,b.y+16);await page.mouse.move(b.x+305,b.y+16);expect(await viewport.evaluate(el=>el.parentElement.style.cursor)).not.toBe('pointer');
+  expect(errors).toEqual([]);
+});

@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 const coreFiles = new Set(['index.js', 'viewport.js', 'data-source.js', 'tsv.js', 'axis.js', 'engine.js', 'types.js', 'headless.js', 'permissions.js', 'events.js', 'panes.js', 'structure.js', 'clipboard.js']);
-const canvasFiles = new Set(['index.js', 'grid.js', 'links.js', 'headers.js', 'reorder.js', 'choices.js']);
+const canvasFiles = new Set(['index.js', 'grid.js', 'links.js', 'headers.js', 'reorder.js', 'choices.js', 'icons.js']);
 createServer(async (request, response) => {
   if (request.url === '/') {
     response.setHeader('Content-Type', 'text/html');

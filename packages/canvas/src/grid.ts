@@ -1,3 +1,4 @@
+import { icons } from './icons.js';
 import { choicePanel, positionChoicePanel } from './choices.js';
 import type { ChoiceEditorOptions } from './choices.js';
 import { reorderedIndices } from './reorder.js';
@@ -35,6 +36,8 @@ export interface GridTheme {
   textColor: string;
   headerBackground: string;
   headerTextColor: string;
+  iconColor: string;
+  searchHighlightColor: string;
   gridLineColor: string;
   selectionColor: string;
   freezeColor: string;
@@ -132,13 +135,7 @@ export interface Grid {
 }
 
 
-// Lucide SVG assets; see ../LICENSE.lucide for attribution and license terms.
-const stateIconSvg = {
-  "lock": "<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <rect width=\"18\" height=\"11\" x=\"3\" y=\"11\" rx=\"2\" ry=\"2\" />\n  <path d=\"M7 11V7a5 5 0 0 1 10 0v4\" />\n</svg>\n",
-  "arrow-up": "<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"m5 12 7-7 7 7\" />\n  <path d=\"M12 19V5\" />\n</svg>\n",
-  "arrow-down": "<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M12 5v14\" />\n  <path d=\"m19 12-7 7-7-7\" />\n</svg>\n",
-  "funnel": "<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z\" />\n</svg>\n"
-} as const;
+const stateIconSvg = {lock:icons.lock,'arrow-up':icons['arrow-up'],'arrow-down':icons['arrow-down'],funnel:icons.funnel,'chevron-down':icons['chevron-down']} as const;
 
 /** Mount a grid. The caller owns the container and its dimensions. */
 export function createGrid(options: GridOptions): Grid {
@@ -154,7 +151,7 @@ export function createGrid(options: GridOptions): Grid {
   const doc = container.ownerDocument;
   const win = doc.defaultView!;
   let theme = Object.freeze({ background: '#ffffff', textColor: '#0f172a', headerBackground: '#edf2f7',
-    headerTextColor: '#334155', gridLineColor: '#e2e8f0', selectionColor: '#2563eb',
+    headerTextColor: '#334155', iconColor: '#475569', searchHighlightColor: '#f59e0b', gridLineColor: '#e2e8f0', selectionColor: '#2563eb',
     freezeColor: '#94a3b8', scrollbarColor: '#a8b6c8', linkColor: '#2563eb', font: '400 13px system-ui, sans-serif', headerFont: '600 13px system-ui, sans-serif', ...options.theme });
   function validateTheme(candidate: GridTheme): void {
     for (const [key, value] of Object.entries(candidate)) {
@@ -196,6 +193,7 @@ export function createGrid(options: GridOptions): Grid {
     if (change.type === 'cells') { if (options.autoRowHeight) { change.cells.forEach(cell => measuredRows.delete(cell.rowIndex)); fullDraw = true; } invalidate(change.cells); if (!searchBar.hidden) refreshSearch(); }
     else if (change.type === 'layout' || change.type === 'structure') {
       if (change.type === 'structure') {
+        hoveredChoice=null;
         if(managesView)currentView=engine.view;
         if(axisAnchor) {
           const map=axisAnchor.axis==='row'?change.rowMap:change.columnMap,next=map[axisAnchor.index];
@@ -337,16 +335,26 @@ export function createGrid(options: GridOptions): Grid {
   const stateIcons = Object.fromEntries(Object.entries(stateIconSvg).map(([name, svg]) => {
     const image = doc.createElement('img');
     image.onload = () => { if (!destroyed) { fullDraw = true; schedule(); } };
-    const color = theme.headerTextColor.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const color = theme.iconColor.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     image.src = `data:image/svg+xml,${encodeURIComponent(svg.replace('currentColor', color))}`;
     return [name, image];
   }));
+  function svgIcon(name:keyof typeof icons,size=16):Element {
+    const svg=new win.DOMParser().parseFromString(icons[name],'image/svg+xml').documentElement;
+    svg.setAttribute('width',String(size));svg.setAttribute('height',String(size));svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');
+    return doc.importNode(svg,true);
+  }
   const rowLockSvg = new win.DOMParser().parseFromString(stateIconSvg.lock, 'image/svg+xml').documentElement;
   function stateIcon(name: keyof typeof stateIconSvg, x: number, y: number): void {
     const image = stateIcons[name]!;
     if (image.complete && image.naturalWidth) context!.drawImage(image, x, y, 16, 16);
   }
 
+  let hoveredChoice:{row:number;col:number}|null=null;
+  function clearChoiceHover():void {
+    if(!hoveredChoice)return;const old=hoveredChoice;hoveredChoice=null;
+    if(old.row<rowCount&&old.col<columns.length)invalidate([{rowIndex:old.row,columnKey:columns[old.col]!.key}]);
+  }
   let dragPointer: number | null = null;
   let axisAnchor: { axis: 'row' | 'column'; index: number } | null = null;
   let axisDrag: { axis: 'row' | 'column'; index: number } | null = null;
@@ -415,7 +423,7 @@ export function createGrid(options: GridOptions): Grid {
   const searchInput = doc.createElement('input');
   searchInput.type = 'search';
   searchInput.setAttribute('aria-label', 'Find in grid');
-  searchInput.style.cssText = 'width:140px;min-width:80px;max-width:100%;padding:6px;font:inherit;color:inherit;background:var(--acheron-background);border:1px solid var(--acheron-grid-line-color);border-radius:4px';
+  searchInput.style.cssText = 'width:140px;min-width:80px;max-width:100%;padding:6px;font:inherit;color:inherit;background:var(--acheron-background);border:1px solid var(--acheron-grid-line-color);border-radius:4px;outline:none;box-shadow:none';
   const searchStatus = doc.createElement('span');
   searchStatus.setAttribute('role', 'status');
   searchStatus.style.cssText = 'display:inline-block;padding:0 8px';
@@ -424,8 +432,7 @@ export function createGrid(options: GridOptions): Grid {
   const searchClose = doc.createElement('button');
   for (const [button, label, text] of [[searchPrevious, 'Previous match', '↑'], [searchNext, 'Next match', '↓'], [searchClose, 'Close search', '×']] as const) {
     button.type = 'button'; button.setAttribute('aria-label', label);
-    const svg = new win.DOMParser().parseFromString(text === '↑' ? stateIconSvg['arrow-up'] : text === '↓' ? stateIconSvg['arrow-down'] : '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>', 'image/svg+xml').documentElement;
-    svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); svg.setAttribute('aria-hidden', 'true'); button.append(doc.importNode(svg, true));
+    button.append(svgIcon(text==='↑'?'arrow-up':text==='↓'?'arrow-down':'x',14));
     button.style.cssText = 'padding:4px 8px;margin-left:2px;font:inherit;color:inherit;background:var(--acheron-background);border:1px solid var(--acheron-grid-line-color);border-radius:3px';
   }
   searchBar.append(searchInput, searchStatus, searchPrevious, searchNext, searchClose);
@@ -735,13 +742,28 @@ export function createGrid(options: GridOptions): Grid {
     popup.className = 'acheron-context-menu';
     popup.style.cssText = 'position:fixed;margin:0;padding:6px;min-width:200px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;border:1px solid var(--acheron-grid-line-color);border-radius:8px;box-shadow:0 8px 24px #0f172a26;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font)';
     const style = doc.createElement('style');
-    style.textContent = '.acheron-context-menu button{display:block;width:100%;padding:8px 10px;border:0;border-radius:4px;background:transparent;text-align:left;color:inherit;font:inherit;cursor:pointer}.acheron-context-menu button:hover:not(:disabled),.acheron-context-menu button:focus-visible{background:var(--acheron-header-background);outline:2px solid var(--acheron-selection-color)}.acheron-context-menu button:disabled{opacity:.45;cursor:default}';
+    style.textContent = '.acheron-context-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:0;border-radius:4px;background:transparent;text-align:left;color:inherit;font:inherit;cursor:pointer}.acheron-context-menu button:hover:not(:disabled),.acheron-context-menu button:focus-visible{background:var(--acheron-header-background);outline:1px solid var(--acheron-grid-line-color)}.acheron-context-menu button:disabled{opacity:.45;cursor:default}.acheron-context-menu svg{flex:none;color:var(--acheron-icon-color)}.acheron-context-menu [role=separator]{height:1px;background:var(--acheron-grid-line-color);margin:5px 4px}';
     popup.append(style);
     const fingerprint = JSON.stringify(getSelectionRanges());
+    const menuIcons:readonly (readonly [string,keyof typeof icons,string])[]=[
+      ['Copy','copy','clipboard'],['Paste','clipboard-paste','clipboard'],
+      ['Select row','rows-3','selection'],['Select column','columns-3','selection'],
+      ['Sort ascending','arrow-up','view'],['Sort descending','arrow-down','view'],['Filter','funnel','view'],['Clear sort','list-filter','view'],
+      ['Insert row above','between-horizontal-start','structure'],['Insert row','between-horizontal-end','structure'],['Insert rows','rows-3','structure'],
+      ['Insert column left','between-vertical-start','structure'],['Insert column','between-vertical-end','structure'],['Delete','x','structure'],['Move','move','structure'],
+      ['Open links','external-link','links'],['Edit','square-pen','editing'],['Undo','undo-2','editing'],['Redo','redo-2','editing'],['Format','palette','editing'],
+      ['Unlock','lock-open','permissions'],['Lock','lock','permissions'],['Cell is','lock','permissions'],
+      ['Freeze','snowflake','freeze'],['Unfreeze','panel-top-close','freeze'],
+      ['Auto-fit','maximize-2','layout'],['Resize column','arrow-left-right','layout'],['Resize row','arrow-up-down','layout'],
+    ];
+    let previousGroup='';
     function item(label: string, enabled: boolean, action: () => void | Promise<void>): void {
       const button = doc.createElement('button');
       button.type = 'button';
-      button.textContent = label;
+      const [,name,group]=menuIcons.find(([prefix])=>label.startsWith(prefix)) ?? ['', 'square-pen', 'editing'];
+      if(previousGroup&&group!==previousGroup){const separator=doc.createElement('div');separator.setAttribute('role','separator');popup.append(separator);}
+      previousGroup=group;
+      button.append(svgIcon(name),doc.createTextNode(label));
       button.setAttribute('role', 'menuitem');
       button.disabled = !enabled;
       button.addEventListener('click', async () => {
@@ -803,8 +825,6 @@ export function createGrid(options: GridOptions): Grid {
       }, null);
     });
     if (!header && rowCount && cellLinks(row, col).length) item('Open links…', options.allowOpenLinks !== false, () => openLinks(row, col, x, y));
-    item('Auto-fit column', true, () => autoFitColumn(col));
-    item('Auto-fit row', rowCount > 0, () => autoFitRow(row));
     item('Edit cell', rowCount > 0 && engine.canEdit(selection.rowIndex, selection.columnIndex), beginEdit);
     item('Undo', engine.canUndo(), () => { replay(false); });
     item('Redo', engine.canRedo(), () => { replay(true); });
@@ -828,6 +848,8 @@ export function createGrid(options: GridOptions): Grid {
     item('Unfreeze rows', engine.frozenRows > 0, () => setFrozen(0, engine.frozenColumns));
     item('Unfreeze columns', engine.frozenColumns > 0, () => setFrozen(engine.frozenRows, 0));
     item('Unfreeze table', engine.frozenRows > 0 || engine.frozenColumns > 0, () => setFrozen(0, 0));
+    item('Auto-fit column', true, () => autoFitColumn(col));
+    item('Auto-fit row', rowCount > 0, () => autoFitRow(row));
     item('Resize column…', true, () => openSizeDialog('Column width', columnAxis.size(col), size => resizeAxis(columnAxis, col, size)));
     item('Resize row…', rowCount > 0, () => openSizeDialog('Row height', rowAxis.size(row), size => resizeAxis(rowAxis, row, size)));
     popup.addEventListener('keydown', event => {
@@ -1057,6 +1079,9 @@ export function createGrid(options: GridOptions): Grid {
       : columnEdge(event) !== null ? 'col-resize' : rowEdge(event) !== null ? 'row-resize' : '';
     const column = columnEdge(event);
     const cell = pointerCell(event);
+    const config=cell ? columnEditors.get(columns[cell.col]!.key) : undefined;
+    const next=cell && config && config.type!=='checkbox' && !resizing && !editor && engine.canEdit(cell.row,cell.col) ? cell : null;
+    if(next?.row!==hoveredChoice?.row||next?.col!==hoveredChoice?.col){clearChoiceHover();hoveredChoice=next;if(next)invalidate([{rowIndex:next.row,columnKey:columns[next.col]!.key}]);}
     const bounds = root.getBoundingClientRect();
     const headerColumn = columnAxis.indexAt(event.clientX - bounds.left - indexWidth + (event.clientX - bounds.left - indexWidth < viewport().frozenWidth ? 0 : scroller.scrollLeft));
     root.title = root.style.cursor === 'row-resize' ? 'Drag the row boundary to resize height'
@@ -1064,6 +1089,7 @@ export function createGrid(options: GridOptions): Grid {
       : event.clientY - bounds.top < headerHeight && event.clientX >= bounds.left + indexWidth && headerColumn >= 0 && headerColumn < columns.length ? stateLabels(null, headerColumn).join('; ')
       : indexRow(event) !== null ? [`Select row ${indexRow(event)! + 1}`, ...rowLabels(indexRow(event)!)].join('; ') : cell ? stateLabels(cell.row, cell.col).join('; ') : '';
     if (!resizing && cell && event.altKey && options.allowOpenLinks !== false && cellLinks(cell.row, cell.col).length) { root.style.cursor = 'pointer'; root.title = 'Alt+click to open links'; }
+    if(hoveredChoice && cell){const rect=viewport().cellRect(cell.row,cell.col);if(event.clientX-scroller.getBoundingClientRect().left>=rect.x+rect.width-24)root.style.cursor='pointer';}
     if (resizing?.pointerId === event.pointerId) {
       resizing.proposed = Math.max(24, Math.min(1000, resizing.size + (resizing.axis === 'column' ? event.clientX : event.clientY) - resizing.start));
       showResizeGuide();
@@ -1368,6 +1394,8 @@ export function createGrid(options: GridOptions): Grid {
       actionError.style.display = 'block';
       return;
     }
+    const choice=columnEditors.get(columns[cell.col]!.key);
+    if(!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&choice&&choice.type!=='checkbox'&&engine.canEdit(cell.row,cell.col)){const rect=viewport().cellRect(cell.row,cell.col);if(event.clientX-scroller.getBoundingClientRect().left>=rect.x+rect.width-24){clearChoiceHover();beginEdit();return;}}
     if (!event.ctrlKey && !event.metaKey && !event.shiftKey && columnEditors.get(columns[cell.col]!.key)?.type === 'checkbox') {
       const rect = viewport().cellRect(cell.row, cell.col); const bounds = scroller.getBoundingClientRect();
       const x = event.clientX - bounds.left - rect.x; const y = event.clientY - bounds.top - rect.y;
@@ -1556,9 +1584,9 @@ export function createGrid(options: GridOptions): Grid {
       : engine.isLocked({ scope: 'cell', rowIndex, columnIndex }) || (!indexWidth && leading && labels.includes('Row locked'));
     if (locked && width >= 24 && height >= 20) {
       const left = x + width - 18; const top = y + 4;
-      ctx.fillStyle = header ? theme.headerBackground : theme.background; ctx.fillRect(left - 1, top - 1, 18, 18);
       stateIcon('lock', left, top);
     }
+    if(!header&&hoveredChoice?.row===rowIndex&&hoveredChoice.col===columnIndex&&width>=28&&height>=20&&engine.canEdit(rowIndex,columnIndex))stateIcon('chevron-down',x+width-22,y+(height-16)/2);
     ctx.restore();
     ctx.save(); ctx.strokeStyle = theme.gridLineColor; ctx.lineWidth = 1; ctx.beginPath();
     ctx.moveTo(x + width - .5, y); ctx.lineTo(x + width - .5, y + height - .5); ctx.lineTo(x, y + height - .5); ctx.stroke(); ctx.restore();
@@ -1688,8 +1716,10 @@ export function createGrid(options: GridOptions): Grid {
 
   function highlightSearch(x: number, y: number, width: number, height: number, row: number, col: number): void {
     if (!searchMatches.has(row * columns.length + col)) return;
-    context!.save(); context!.strokeStyle = '#d97706'; context!.lineWidth = 2;
-    context!.strokeRect(x + 3, y + 3, Math.max(0, width - 6), Math.max(0, height - 6)); context!.restore();
+    const current=row*columns.length+col===searchCurrent;
+    context!.save();context!.fillStyle=theme.searchHighlightColor;context!.globalAlpha=current ? .22 : .09;
+    context!.fillRect(x,y,Math.max(0,width-1),Math.max(0,height-1));context!.globalAlpha=1;
+    if(current)context!.fillRect(x,y,3,Math.max(0,height-1));context!.restore();
   }
 
   function viewport() {
@@ -1944,7 +1974,7 @@ export function createGrid(options: GridOptions): Grid {
         if (locked) {
           const icon = rowLockSvg.cloneNode(true) as Element;
           icon.setAttribute('width', '12'); icon.setAttribute('height', '12'); icon.setAttribute('aria-hidden', 'true');
-          icon.setAttribute('style', 'position:absolute;right:3px;top:4px;pointer-events:none');
+          icon.setAttribute('style', 'position:absolute;right:3px;top:4px;pointer-events:none;color:var(--acheron-icon-color)');
           button.append(doc.importNode(icon, true));
         }
         const selected = getSelectionRanges().some(range => range.startColumn === 0 && range.endColumn === columns.length - 1 && row >= range.startRow && row <= range.endRow);
@@ -2151,6 +2181,8 @@ export function createGrid(options: GridOptions): Grid {
   });
   observer.observe(root);
   scroller.addEventListener('scroll', render, { passive: true });
+  scroller.addEventListener('scroll',clearChoiceHover,{passive:true});
+  root.addEventListener('pointerleave',clearChoiceHover);
   scroller.addEventListener('pointerdown', onPointerDown);
   scroller.addEventListener('click', onLinkClick);
   scroller.addEventListener('contextmenu', onContextMenu);
@@ -2201,7 +2233,7 @@ export function createGrid(options: GridOptions): Grid {
       const next = Object.freeze({ ...theme, ...patch }); validateTheme(next); theme = next; measuredRows.clear();
       for (const [key, value] of Object.entries(theme)) root.style.setProperty('--acheron-' + key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase()), value);
       for (const [name, image] of Object.entries(stateIcons)) {
-        const color = theme.headerTextColor.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        const color = theme.iconColor.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
         image.src = `data:image/svg+xml,${encodeURIComponent(stateIconSvg[name as keyof typeof stateIconSvg].replace('currentColor', color))}`;
       }
       render();
@@ -2271,6 +2303,8 @@ export function createGrid(options: GridOptions): Grid {
       if (frame !== undefined) win.cancelAnimationFrame(frame);
       observer.disconnect();
       scroller.removeEventListener('scroll', render);
+      scroller.removeEventListener('scroll',clearChoiceHover);
+      root.removeEventListener('pointerleave',clearChoiceHover);
       win.removeEventListener('blur', onPointerEnd);
       win.removeEventListener('resize', render);
       root.remove();
