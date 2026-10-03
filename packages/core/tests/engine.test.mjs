@@ -358,7 +358,7 @@ test('zero-frozen, empty and fractional-size viewport queries preserve coordinat
   assert.equal(blank.scrollTop, 0);
 });
 
-test('multi-range state stays sparse, immutable and rejects ambiguous clipboard operations', () => {
+test('multi-range state stays sparse and immutable while clipboard broadcasts atomically', () => {
   const events = [];
   const { engine, source } = fixture({ onEvent: event => events.push(event), resolveCellPermission: cell => cell.rowIndex === 1 && cell.columnIndex === 1 ? { selectable: false } : undefined });
   engine.select(0, 0); engine.select(1, 0, true);
@@ -371,10 +371,11 @@ test('multi-range state stays sparse, immutable and rejects ambiguous clipboard 
   const copied = engine.getSelectionRanges(); copied[0].endRow = 999; copied.pop();
   assert.equal(engine.getSelectionRanges().length, 2); assert.equal(engine.getSelectionRanges()[0].endRow, 1);
   const event = events.at(-1); assert.ok(Object.isFrozen(event.ranges)); assert.ok(event.ranges.every(Object.isFrozen));
-  assert.throws(() => engine.copySelection(), /single selection range/);
-  assert.throws(() => engine.paste('10'), /single selection range/);
-  assert.equal(engine.canPaste(), false); assert.equal(source.getValue(0, 'score'), 1);
-  assert.equal(engine.addSelection(1, 1), false); assert.equal(events.at(-1), event);
+  assert.equal(engine.copySelection(), 'Ada\r\nGrace\r\n1');
+  assert.equal(engine.canPaste(), true);
+  engine.paste('10'); assert.equal(source.getValue(0, 'score'), 10); assert.equal(source.getValue(0, 'name'), '10');
+  engine.undo(); assert.equal(source.getValue(0, 'score'), 1);
+  assert.equal(engine.addSelection(1, 1), false); assert.equal(events.at(-1).type, 'cell:change');
   assert.throws(() => engine.addSelection(9, 0), RangeError); assert.deepEqual(engine.getSelectionRanges(), event.ranges);
   engine.editCell(0, 1, '3'); engine.undo(); engine.redo(); assert.equal(engine.getSelectionRanges().length, 2);
   engine.select(0, 1); assert.equal(engine.getSelectionRanges().length, 1); assert.equal(engine.copySelection(), '3');
@@ -623,4 +624,52 @@ test('structural source failures are atomic and a mixed operation sequence fully
   assert.equal(engine.rows.size(4),32);assert.equal(engine.getFormat(4,0).background,undefined);
   let replayed=0;while(engine.redo())replayed++;
   assert.equal(replayed,count);assert.equal(engine.rowCount,7);assert.equal(engine.frozenRows,2);
+});
+
+
+test('managed views preserve record state and history, refresh edits and never select hidden rows', () => {
+  const source=new LocalDataSource([{id:'a',name:'C',score:1},{id:'b',name:'A',score:2},{id:'c',name:'B',score:3},{id:'d',name:'D',score:4}],row=>row.id);
+  const events=[], invalidations=[];
+  const engine=createGridEngine({dataSource:source,columns:[{key:'name',title:'Name',editable:true},{key:'score',title:'Score',editable:true,parse:Number}],onEvent:e=>events.push(e),onInvalidate:e=>invalidations.push(e)});
+  engine.select(0,0); engine.setRowHeight(0,70); engine.format([{scope:'row',rowIndex:0}],{background:'#abcdef'}); engine.setLocked({scope:'cell',rowIndex:0,columnIndex:1},true);
+  engine.setView({sort:{columnKey:'name',direction:'asc'}});
+  assert.equal(engine.getSelection().rowId,'a'); assert.equal(engine.getSelection().rowIndex,2);
+  engine.selectRange({startRow:0,endRow:2,startColumn:0,endColumn:0}); assert.equal(engine.getSelection().rowId,'b'); assert.equal(engine.getSelection().rowIndex,0); assert.deepEqual(engine.getSelectionRange(),{startRow:0,endRow:2,startColumn:0,endColumn:0}); engine.select(2,0);
+  assert.equal(engine.rows.size(2),70); assert.equal(engine.getFormat(2,0).background,'#abcdef'); assert.equal(engine.isLocked({scope:'cell',rowIndex:2,columnIndex:1}),true);
+  engine.editCell(2,0,'0'); assert.equal(source.getValue(0,'name'),'0'); assert.equal(engine.getSelection().rowIndex,0);
+  assert.equal(engine.undo(),true); assert.equal(engine.getSelection().rowIndex,2); assert.equal(source.getValue(0,'name'),'C');
+  assert.equal(engine.redo(),true); assert.equal(engine.getSelection().rowIndex,0);
+  engine.setView({filters:[{columnKey:'score',query:'2',operator:'equals'}]}); assert.equal(engine.rowCount,1); assert.equal(engine.sourceRowCount,4); assert.equal(engine.getSelection(),null);
+  engine.select(0,0); engine.editCell(0,0,'Only B'); assert.equal(source.getValue(1,'name'),'Only B');
+  engine.updateCells([{rowIndex:0,columnKey:'score',value:5}]); assert.equal(engine.rowCount,0); engine.undo(); assert.equal(engine.rowCount,1); assert.equal(engine.getRowId(0),'b');
+  assert.throws(()=>engine.setView({sort:{columnKey:'missing',direction:'asc'}}),/Unknown view column/); assert.equal(engine.rowCount,1);
+  assert.throws(()=>engine.deleteRows([0]),/permission|denied|structur/i); assert.equal(source.getRowCount(),4);
+  engine.setView({filters:[{columnKey:'name',query:'B'}]}); assert.equal(engine.rowCount,2);
+  engine.selectRange({startRow:0,endRow:1,startColumn:0,endColumn:0}); engine.format([{scope:'range',range:engine.getSelectionRange()}],{textColor:'#123456'});
+  assert.equal(engine.copySelection(),'Only B\r\nB'); engine.paste('Selected\r\nSelected');
+  assert.equal(source.getValue(1,'name'),'Selected'); assert.equal(source.getValue(2,'name'),'Selected'); assert.equal(source.getValue(0,'name'),'0');
+  engine.undo(); engine.setView({}); assert.equal(engine.rowCount,4); assert.equal(engine.rows.size(0),70); assert.equal(engine.getFormat(1,0).textColor,'#123456'); assert.deepEqual(engine.getFormat(3,0),{});
+  assert.ok(events.some(event=>event.type==='view:change')); assert.ok(invalidations.some(change=>change.type==='structure'));
+});
+
+test('structured clipboard preserves holes, supports paired ranges and validates before writes', () => {
+  const source=new LocalDataSource(Array.from({length:6},(_,id)=>({id,a:String(id),b:'keep',c:String(id+10)})),row=>row.id);
+  const engine=createGridEngine({dataSource:source,columns:['a','b','c'].map(key=>({key,title:key,editable:true}))});
+  engine.select(0,0); engine.addSelection(0,2); const blocks=engine.copySelectionBlocks(); assert.equal(engine.copySelection(),'0\t10');
+  engine.select(2,0); engine.pasteSelectionBlocks(blocks); assert.equal(source.getValue(2,'a'),'0'); assert.equal(source.getValue(2,'b'),'keep'); assert.equal(source.getValue(2,'c'),'10');
+  engine.undo(); assert.equal(source.getValue(2,'a'),'2'); assert.equal(source.getValue(2,'c'),'12'); engine.redo();
+  engine.select(3,0); engine.addSelection(4,2); engine.pasteSelectionBlocks(blocks); assert.equal(source.getValue(3,'a'),'0'); assert.equal(source.getValue(4,'c'),'10');
+  engine.addSelection(5,0); assert.throws(()=>engine.pasteSelectionBlocks(blocks),/counts must match/);
+  engine.select(5,2); assert.throws(()=>engine.pasteSelectionBlocks(blocks),/bounds/); assert.equal(source.getValue(5,'c'),'15');
+  assert.throws(()=>engine.pasteSelectionBlocks('{"version":1,"blocks":[{"row":0,"column":0,"values":[[7]]}]}'),/clipboard/i);
+  engine.select(0,0); engine.addSelection(1,0); engine.setLocked({scope:'row',rowIndex:1},true);
+  assert.throws(()=>engine.paste('denied'),/pasteable/); assert.equal(source.getValue(0,'a'),'0');
+});
+
+test('inserted column defaults and hidden values survive structural replay and new rows', () => {
+  const {engine,source}=fixture();
+  engine.insertColumns(1,[{key:'extra',title:'Extra',editable:true,defaultValue:'initial'}]);
+  assert.equal(source.getValue(0,'extra'),'initial'); engine.undo(); engine.redo(); assert.equal(source.getValue(1,'extra'),'initial');
+  engine.updateCells([{rowIndex:0,columnKey:'extra',value:'edited'}]); engine.deleteColumns([1]); engine.undo(); assert.equal(source.getValue(0,'extra'),'edited');
+  engine.insertRows(2,[{id:3,values:{id:3,name:'New',score:3}}]); assert.equal(source.getValue(2,'extra'),'initial'); engine.undo(); engine.redo(); assert.equal(source.getValue(2,'extra'),'initial');
 });

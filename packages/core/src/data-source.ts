@@ -9,7 +9,7 @@ export interface DataSource {
   /** Full shallow row snapshot, including fields outside the visible columns. */
   getRow?(index: number): DataRow;
   /** Initialize missing fields atomically; existing hidden column values are retained. */
-  addColumns?(keys: readonly string[]): void;
+  addColumns?(keys: readonly string[], defaults?: Readonly<Record<string,unknown>>): void;
   /** Apply sequential splices atomically, preserving unique row IDs. */
   spliceRows?(splices: readonly RowSplice[]): void;
   getRowId(index: number): RowId;
@@ -24,6 +24,7 @@ export class LocalDataSource<T extends Record<string, unknown>> implements DataS
   private rows: Readonly<T>[];
   private ids: RowId[];
   private readonly addedColumns=new Set<string>();
+  private columnDefaults:Record<string,unknown>={};
 
   constructor(rows: readonly T[], getRowId: (row: T, index: number) => RowId) {
     this.rows = rows.map(row => Object.freeze({ ...row }));
@@ -66,9 +67,13 @@ export class LocalDataSource<T extends Record<string, unknown>> implements DataS
     for (const [index, row] of next) this.rows[index] = row;
   }
 
-  addColumns(keys: readonly string[]): void {
+  addColumns(keys: readonly string[], defaults:Readonly<Record<string,unknown>>={}): void {
     if(keys.some(key=>typeof key!=='string'||!key||['__proto__','constructor','prototype'].includes(key)))throw new TypeError('Invalid added column key.');
+    const initial=Object.fromEntries(keys.filter(key=>Object.hasOwn(defaults,key)).map(key=>[key,defaults[key]]));
+    const rows=Object.keys(initial).length ? this.rows.map(row=>Object.freeze({...initial,...row}) as Readonly<T>) : this.rows;
     for(const key of keys)this.addedColumns.add(key);
+    this.columnDefaults={...this.columnDefaults,...initial};
+    this.rows=rows;
   }
 
   getRow(index: number): DataRow {
@@ -82,7 +87,7 @@ export class LocalDataSource<T extends Record<string, unknown>> implements DataS
       if (!Number.isSafeInteger(splice.index) || splice.index < 0 || splice.index > rows.length || !Number.isSafeInteger(splice.deleteCount) || splice.deleteCount < 0 || splice.deleteCount > rows.length - splice.index || !Array.isArray(splice.rows)) throw new RangeError('Invalid row splice.');
       const added = splice.rows.map(row => {
         if (!row || (typeof row.id !== 'string' && typeof row.id !== 'number') || typeof row.id === 'number' && !Number.isFinite(row.id) || !row.values || typeof row.values !== 'object' || Array.isArray(row.values)) throw new TypeError('Invalid inserted row.');
-        return Object.freeze({ ...row.values }) as Readonly<T>;
+        return Object.freeze({ ...this.columnDefaults, ...row.values }) as Readonly<T>;
       });
       // Slice/concat avoids argument limits when inserting large batches.
       rows=rows.slice(0,splice.index).concat(added,rows.slice(splice.index+splice.deleteCount));
@@ -145,6 +150,7 @@ export class LocalDataView implements DataSource {
     if (!Number.isSafeInteger(index) || index < 0 || index >= this.indices.length) throw new RangeError('Invalid view row index.');
     return this.indices[index]!;
   }
+  getSourceIndex(index: number): number { return this.sourceIndex(index); }
   getRowCount(): number { return this.indices.length; }
   getRowId(index: number): RowId { return this.source.getRowId(this.sourceIndex(index)); }
   getValue(index: number, columnKey: string): unknown { return this.source.getValue(this.sourceIndex(index), columnKey); }

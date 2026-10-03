@@ -1,9 +1,11 @@
+import type { LocalViewOptions } from './data-source.js';
 import type { StructureRequest } from './structure.js';
 import type { CellUpdate, RowId } from './data-source.js';
 import type { CellSelection, SelectionRange, CellLockTarget, CellFormatTarget, CellFormatPatch } from './types.js';
 
 export type GridChangeSource = 'api' | 'edit' | 'paste' | 'undo' | 'redo';
 export type GridEvent =
+  | {readonly type:'view:change'; readonly view:Readonly<LocalViewOptions>; readonly rowCount:number; readonly sourceRowCount:number}
   | { readonly type: 'structure:change'; readonly source: 'api' | 'undo' | 'redo'; readonly request: Readonly<StructureRequest>; readonly rowCount: number; readonly columnKeys: readonly string[] }
   | { readonly type: 'cell:change'; readonly source: GridChangeSource;
       readonly changes: readonly Readonly<CellUpdate & { rowId: RowId; previous: unknown }>[] }

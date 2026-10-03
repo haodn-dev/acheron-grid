@@ -25,7 +25,7 @@ Core does not import Canvas or framework code. `@acheron-grid/core/headless` rem
 - Local search, opt-in column sort/filter views, themes and native dialogs that tolerate host CSS resets.
 - An active-cell ARIA mirror and keyboard status announcements. Complete screen-reader support remains unverified.
 
-Sorting/filtering use a host-managed local projection and remount; values persist in the source, while selection, history, user locks, colors and custom sizing reset. Rendering virtualization does not make filtering or in-memory storage independent of dataset size.
+Core-managed local sorting/filtering preserves selection, history, locks, colors and sizes and refreshes after edits. Legacy host-managed projections remain supported. Rendering virtualization does not make filtering or in-memory storage independent of dataset size.
 
 ## Quick start
 

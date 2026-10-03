@@ -1,3 +1,7 @@
+import { LocalDataView } from './data-source.js';
+import type { LocalViewOptions } from './data-source.js';
+import { blocksToTsv, encodeBlocks, decodeBlocks } from './clipboard.js';
+import type { ClipboardBlock } from './clipboard.js';
 import { reorderedIndices } from './structure.js';
 import type { StructureRequest } from './structure.js';
 import type { CellUpdate, DataSource, RowId, DataRow, RowSplice } from './data-source.js';
@@ -8,7 +12,7 @@ import type { GridEvent, GridChangeSource } from './events.js';
 import { GridAxis } from './axis.js';
 import { createViewport } from './panes.js';
 import type { ViewportOptions } from './panes.js';
-import { clipboardCellLimit, clipboardTextLimit, decodeTsv, encodeTsv } from './tsv.js';
+import { clipboardCellLimit, clipboardTextLimit, decodeTsv } from './tsv.js';
 
 export type GridInvalidation =
   | { readonly type: 'cells'; readonly cells: readonly { readonly rowIndex: number; readonly columnKey: string }[] }
@@ -18,6 +22,7 @@ export type GridInvalidation =
 
 export interface GridEngineOptions {
   columns: readonly Column[];
+  view?: LocalViewOptions;
   canChangeStructure?: (request: Readonly<StructureRequest>) => boolean;
   dataSource: DataSource;
   permissions?: CellPermissionPolicy;
@@ -64,6 +69,7 @@ export function createGridEngine(options: GridEngineOptions) {
   const allowLockChanges = options.allowLockChanges ?? true;
   if (typeof allowLockChanges !== 'boolean') throw new TypeError('allowLockChanges must be boolean.');
   let tableLocked = false;
+  const addedColumnKeys=new Set<string>();
   const manualRows=new Set<number>();
   const lockedRows = new Set<number>();
   const lockedColumns = new Set<number>();
@@ -92,6 +98,90 @@ export function createGridEngine(options: GridEngineOptions) {
   const formats = new Map<string, FormatEntry>();
   let orderedFormats: FormatEntry[] = [];
   let formatOrder = 0;
+  let view: Readonly<LocalViewOptions> = Object.freeze({});
+  let projection: number[] | null = null;
+  let reverseProjection = new Map<number, number>();
+  let projectedAxis: GridAxis | null = null;
+  let cachedRanges: SelectionRange[] | null = null;
+  let activeParts = 1;
+  let displayAnchor: { row: number; col: number } | null = null;
+
+  function viewAxis(): GridAxis { return projectedAxis ?? rowAxis; }
+  function rebuildViewAxis(): void {
+    if (!projection) { projectedAxis = null; return; }
+    const axis = new GridAxis(projection.length, rowHeight);
+    axis.replace(projection.length, rowAxis.snapshot().flatMap(([row, size]) => {
+      const index = reverseProjection.get(row); return index === undefined ? [] : [[index, size] as const];
+    }));
+    projectedAxis = axis;
+  }
+  function buildProjection(next: LocalViewOptions): number[] | null {
+    for (const key of [next.sort?.columnKey, ...(next.filters ?? []).map(filter => filter.columnKey)]) {
+      if (key !== undefined && !columnIndices.has(key)) throw new Error('Unknown view column: ' + key);
+    }
+    const local = new LocalDataView(dataSource, next);
+    return next.sort || next.filters?.length ? Array.from({length: local.getRowCount()}, (_, i) => local.getSourceIndex(i)) : null;
+  }
+  function installProjection(next: number[] | null): void {
+    projection = next; reverseProjection = new Map(next?.map((row, index) => [row, index]) ?? []);
+    cachedRanges = null; rebuildViewAxis();
+  }
+  function displayRow(row: number): number { return projection ? reverseProjection.get(row) ?? -1 : row; }
+  function displaySelection(): CellSelection | null {
+    if (!selection) return null;
+    const rowIndex = displayRow(selection.rowIndex);
+    if (rowIndex >= 0) return {...selection, rowIndex};
+    const range = displaySelectionRanges().at(-1);
+    return range ? { rowIndex: range.startRow, rowId: dataSource.getRowId(sourceRow(range.startRow)), columnIndex: range.startColumn, columnKey: columns[range.startColumn]!.key } : null;
+  }
+  function setView(next: LocalViewOptions): void {
+    assertAlive();
+    const snapshot = Object.freeze({...next, ...(next.sort ? {sort:Object.freeze({...next.sort})} : {}), ...(next.filters ? {filters:Object.freeze(next.filters.map(filter => Object.freeze({...filter})))} : {})});
+    const nextProjection = buildProjection(snapshot);
+    const old = projection ?? Array.from({length:rowCount}, (_, i) => i);
+    view = snapshot; installProjection(nextProjection); displayAnchor = null;
+    notify({type:'structure', rowMap:old.map(displayRow), columnMap:columns.map((_, i) => i)}, Object.freeze({type:'view:change', view, rowCount:visibleRowCount(), sourceRowCount:rowCount}));
+  }
+  function sourceTarget<T extends CellLockTarget>(target: T): T {
+    return target.scope === 'row' || target.scope === 'cell' ? {...target, rowIndex:sourceRow(target.rowIndex)} : target;
+  }
+  function sourceRanges(range: SelectionRange): SelectionRange[] {
+    if (![range.startRow,range.endRow,range.startColumn,range.endColumn].every(Number.isSafeInteger) || range.startRow<0 || range.endRow<range.startRow || range.endRow>=visibleRowCount() || range.startColumn<0 || range.endColumn<range.startColumn || range.endColumn>=columns.length) throw new RangeError('Invalid selection range.');
+    const rows = Array.from({length:range.endRow-range.startRow+1}, (_,i)=>sourceRow(range.startRow+i)).sort((a,b)=>a-b);
+    const result:SelectionRange[]=[];
+    for (const row of rows) { const last=result.at(-1); if(last && last.endRow+1===row)last.endRow=row; else result.push({...range,startRow:row,endRow:row}); }
+    return result;
+  }
+  function sourceFormats(targets: readonly CellFormatTarget[]): CellFormatTarget[] {
+    return targets.flatMap<CellFormatTarget>(target => target.scope === 'range' ? sourceRanges(target.range).map(range=>({scope:'range' as const,range})) : [sourceTarget(target)]);
+  }
+  function selectDisplayRange(range:SelectionRange, mode:'replace'|'add'|'extend'='replace'):boolean {
+    assertAlive();
+    const parts=sourceRanges(range);
+    if (!getCellPermission(sourceRow(range.startRow),range.startColumn).selectable || !getCellPermission(sourceRow(range.endRow),range.endColumn).selectable) return false;
+    if (!['replace','add','extend'].includes(mode)) throw new TypeError('Invalid selection mode.');
+    if (mode==='add' && displaySelectionRanges().length>=128) throw new RangeError('Selection supports at most 128 ranges.');
+    const old=getSelectionRanges();
+    const keep=mode==='replace' ? [] : mode==='extend' ? old.slice(0, Math.max(0,old.length-activeParts)) : old;
+    const row=sourceRow(range.startRow);
+    const others=parts.flatMap(part=>row<part.startRow||row>part.endRow ? [part] : [
+      ...(part.startRow<row ? [{...part,endRow:row-1}] : []),
+      ...(row<part.endRow ? [{...part,startRow:row+1}] : []),
+    ]);
+    retainedRanges.splice(0,retainedRanges.length,...keep,...others);
+    selection={rowIndex:row,rowId:dataSource.getRowId(row),columnIndex:range.startColumn,columnKey:columns[range.startColumn]!.key};
+    anchor={rowIndex:row,rowId:selection.rowId,columnIndex:range.endColumn,columnKey:columns[range.endColumn]!.key};
+    activeParts=others.length+1; cachedRanges=null;
+    displayAnchor={row:range.startRow,col:range.startColumn};
+    notifySelection(true,true); return true;
+  }
+  function selectDisplay(row:number,col:number,extend=false,add=false):boolean {
+    if (!projection && activeParts===1) { displayAnchor={row,col}; return select(row,col,extend,add); }
+    const from=extend ? displayAnchor ?? {row:displaySelection()?.rowIndex ?? row,col:displaySelection()?.columnIndex ?? col} : {row,col};
+    const result=selectDisplayRange({startRow:Math.min(from.row,row),endRow:Math.max(from.row,row),startColumn:Math.min(from.col,col),endColumn:Math.max(from.col,col)},add?'add':extend?'extend':'replace');
+    displayAnchor=from; return result;
+  }
+
   const emptyFormat: Readonly<CellFormat> = Object.freeze({});
 
   function assertAlive(): void {
@@ -111,6 +201,15 @@ export function createGridEngine(options: GridEngineOptions) {
   }
 
   function notify(change: GridInvalidation, event: GridEvent): void {
+    cachedRanges = null;
+    if (projection && change.type === 'cells') {
+      const old = projection;
+      installProjection(buildProjection(view));
+      if (old.length !== projection!.length || old.some((row,i)=>row !== projection![i])) {
+        displayAnchor=null;
+        change={type:'structure',rowMap:old.map(displayRow),columnMap:columns.map((_,i)=>i)};
+      } else change={type:'cells',cells:change.cells.flatMap(cell=> {const rowIndex=displayRow(cell.rowIndex);return rowIndex<0?[]:[{...cell,rowIndex}];})};
+    } else if (change.type === 'layout') rebuildViewAxis();
     let failed = false;
     let firstError: unknown;
     try { onInvalidate?.(change); } catch (error) { failed = true; firstError = error; }
@@ -233,60 +332,85 @@ export function createGridEngine(options: GridEngineOptions) {
     return range ? [...retainedRanges.map(range => ({ ...range })), range] : [];
   }
 
-  function requireSingleRange(): void {
-    if (retainedRanges.length) throw new Error('Copy and paste require a single selection range.');
+  function displaySelectionRanges():SelectionRange[] {
+    if (!projection && activeParts===1) return getSelectionRanges();
+    if (cachedRanges) return cachedRanges.map(range=>({...range}));
+    const grouped=new Map<string,Set<number>>();
+    for(const range of getSelectionRanges()) {
+      const key=range.startColumn+':'+range.endColumn;
+      const rows=grouped.get(key) ?? new Set<number>(); grouped.set(key,rows);
+      for(let row=range.startRow;row<=range.endRow;row++){const index=displayRow(row);if(index>=0)rows.add(index);}
+    }
+    const result:SelectionRange[]=[];
+    for(const [key,rows] of grouped) {
+      const [startColumn,endColumn]=key.split(':').map(Number); let last:SelectionRange|undefined;
+      for(const row of [...rows].sort((a,b)=>a-b)){if(last&&last.endRow+1===row)last.endRow=row;else {last={startRow:row,endRow:row,startColumn:startColumn!,endColumn:endColumn!};result.push(last);}}
+    }
+    if(selection) {
+      const row=displayRow(selection.rowIndex),col=selection.columnIndex;
+      const index=result.findIndex(range=>row>=range.startRow&&row<=range.endRow&&col>=range.startColumn&&col<=range.endColumn);
+      if(index>=0)result.push(...result.splice(index,1));
+    }
+    cachedRanges=result;return result.map(range=>({...range}));
   }
-
-  function copySelection(): string {
+  function sourceRow(index:number):number {
+    if (!Number.isSafeInteger(index)||index<0||index>=visibleRowCount())throw new RangeError('Invalid row index in view.');
+    return projection ? projection[index]! : index;
+  }
+  function visibleRowCount():number { return projection?.length ?? rowCount; }
+  function clipboardBlocks():ClipboardBlock[] {
     assertAlive();
-    const range = getSelectionRange();
-    if (!range) return '';
-    requireSingleRange();
-    if ((range.endRow - range.startRow + 1) * (range.endColumn - range.startColumn + 1) > clipboardCellLimit) throw new RangeError('Selection has too many cells.');
-    const rows: string[][] = [];
-    let length = 0;
-    for (let row = range.startRow; row <= range.endRow; row++) {
-      const values: string[] = [];
-      for (let col = range.startColumn; col <= range.endColumn; col++) {
-        requirePermission(row, col, 'copyable');
-        const value = dataSource.getValue(row, columns[col]!.key);
-        const text = value == null ? '' : String(value);
-        length += text.length;
-        if (length > clipboardTextLimit) throw new RangeError('Selection text is too large.');
-        values.push(text);
+    const ranges=displaySelectionRanges().sort((a,b)=>a.startRow-b.startRow||a.startColumn-b.startColumn);
+    if(!ranges.length)return [];
+    const firstRow=Math.min(...ranges.map(range=>range.startRow)),firstColumn=Math.min(...ranges.map(range=>range.startColumn));
+    let cells=0,length=0;
+    return ranges.map(range=>{
+      cells+=(range.endRow-range.startRow+1)*(range.endColumn-range.startColumn+1);
+      if(cells>clipboardCellLimit)throw new RangeError('Selection has too many cells.');
+      const values:string[][]=[];
+      for(let row=range.startRow;row<=range.endRow;row++) {
+        const line:string[]=[];
+        for(let col=range.startColumn;col<=range.endColumn;col++) {
+          const index=sourceRow(row);requirePermission(index,col,'copyable');
+          const value=dataSource.getValue(index,columns[col]!.key),text=value==null?'':String(value);
+          length+=text.length;if(length>clipboardTextLimit)throw new RangeError('Selection text is too large.');line.push(text);
+        }
+        values.push(line);
       }
-      rows.push(values);
-    }
-    const text = encodeTsv(rows);
-    if (text.length > clipboardTextLimit) throw new RangeError('Selection text is too large.');
-    return text;
+      return {row:range.startRow-firstRow,column:range.startColumn-firstColumn,values};
+    });
   }
-
-  function paste(text: string): void {
+  function copySelection():string { return blocksToTsv(clipboardBlocks()); }
+  function pasteBlocks(blocks:readonly ClipboardBlock[],structured:boolean):void {
     assertAlive();
-    const range = getSelectionRange();
-    if (!range) return;
-    requireSingleRange();
-    const rows = decodeTsv(text);
-    const height = rows.length;
-    const width = rows[0]!.length;
-    if (range.startRow + height > rowCount || range.startColumn + width > columns.length) throw new RangeError('Paste extends beyond grid bounds.');
-    for (let row = 0; row < height; row++) {
-      for (let col = 0; col < width; col++) requirePermission(range.startRow + row, range.startColumn + col, 'pasteable');
-    }
-    const updates: CellUpdate[] = [];
-    for (let row = 0; row < height; row++) {
-      for (let col = 0; col < width; col++) {
-        const column = columns[range.startColumn + col]!;
-        const rowIndex = range.startRow + row;
-        const current = dataSource.getValue(rowIndex, column.key);
-        if (!column.parse && current != null && typeof current !== 'string') throw new Error(`Column requires a parser: ${column.key}`);
-        const value = rows[row]![col]!;
-        updates.push({ rowIndex, columnKey: column.key, value: column.parse ? column.parse(value) : value });
+    const ranges=displaySelectionRanges().sort((a,b)=>a.startRow-b.startRow||a.startColumn-b.startColumn);
+    if(!ranges.length)return;
+    if(structured&&ranges.length>1&&ranges.length!==blocks.length)throw new Error('Clipboard and target range counts must match.');
+    const placements=structured
+      ? ranges.length===1 ? blocks.map(block=>({row:ranges[0]!.startRow+block.row,col:ranges[0]!.startColumn+block.column,values:block.values}))
+        : blocks.map((block,i)=>({row:ranges[i]!.startRow,col:ranges[i]!.startColumn,values:block.values}))
+      : ranges.map(range=>({row:range.startRow,col:range.startColumn,values:blocks[0]!.values}));
+    let cells=0;
+    const texts=new Map<string,{rowIndex:number;columnKey:string;columnIndex:number;text:string}>();
+    for(const place of placements) {
+      const height=place.values.length,width=place.values[0]!.length;
+      cells+=height*width;if(cells>clipboardCellLimit)throw new RangeError('Paste has too many cells.');
+      if(place.row+height>visibleRowCount()||place.col+width>columns.length)throw new RangeError('Paste extends beyond grid bounds.');
+      for(let row=0;row<height;row++)for(let col=0;col<width;col++){
+        const rowIndex=sourceRow(place.row+row),columnIndex=place.col+col,columnKey=columns[columnIndex]!.key,text=place.values[row]![col]!,key=JSON.stringify([rowIndex,columnKey]),previous=texts.get(key);
+        if(previous&&previous.text!==text)throw new Error('Overlapping paste targets contain conflicting values.');
+        texts.set(key,{rowIndex,columnKey,columnIndex,text});
       }
     }
-    applyUpdates(updates, 'paste');
+    for(const cell of texts.values())requirePermission(cell.rowIndex,cell.columnIndex,'pasteable');
+    const updates=[...texts.values()].map(cell=>{
+      const column=columns[cell.columnIndex]!,current=dataSource.getValue(cell.rowIndex,column.key);
+      if(!column.parse&&current!=null&&typeof current!=='string')throw new Error('Column requires a parser: '+column.key);
+      return {rowIndex:cell.rowIndex,columnKey:column.key,value:column.parse?column.parse(cell.text):cell.text};
+    });
+    applyUpdates(updates,'paste');
   }
+  function paste(text:string):void { pasteBlocks([{row:0,column:0,values:decodeTsv(text)}],false); }
 
   function select(rowIndex: number, columnIndex: number, extend = false, add = false): boolean {
     assertAlive();
@@ -332,17 +456,19 @@ export function createGridEngine(options: GridEngineOptions) {
   }
 
   function notifySelection(changed: boolean, rangeChanged: boolean): void {
-    const endpoint = getSelection();
-    const range = getSelectionRange();
+    cachedRanges=null;
+    const endpoint = displaySelection();
+    const range = displaySelectionRanges().at(-1) ?? null;
     notify({ type: 'selection', changed, rangeChanged }, Object.freeze({ type: 'selection:change',
       selection: endpoint ? Object.freeze(endpoint) : null, range: range ? Object.freeze(range) : null,
-      ranges: Object.freeze(getSelectionRanges().map(range => Object.freeze(range))) }));
+      ranges: Object.freeze(displaySelectionRanges().map(range => Object.freeze(range))) }));
   }
 
   function clearSelection(): void {
     assertAlive();
     if (!selection) return;
     selection = anchor = null;
+    activeParts=1;displayAnchor=null;cachedRanges=null;
     retainedRanges.length = 0;
     notifySelection(true, true);
   }
@@ -357,7 +483,7 @@ export function createGridEngine(options: GridEngineOptions) {
 
   function canPaste(): boolean {
     const range = getSelectionRange();
-    return !destroyed && !retainedRanges.length && !!range && !!(dataSource.setValue || dataSource.setValues) && getCellPermission(range.startRow, range.startColumn).pasteable;
+    return !destroyed && !!range && !!(dataSource.setValue || dataSource.setValues) && getCellPermission(range.startRow, range.startColumn).pasteable;
   }
 
   function editCell(rowIndex: number, columnIndex: number, text: string): void {
@@ -506,6 +632,7 @@ export function createGridEngine(options: GridEngineOptions) {
       formats:new Map(formats), frozenRows, frozenColumns};
   }
   function restoreStructure(state: StructureState): void {
+    activeParts=1;displayAnchor=null;cachedRanges=null;
     columns=state.columns; rowCount=state.rowCount; columnIndices.clear(); columns.forEach((column,i)=>columnIndices.set(column.key,i));
     rowAxis.replace(rowCount,state.rows); columnAxis.replace(columns.length,state.widths);
     selection=state.selection ? {...state.selection} : null; anchor=state.anchor ? {...state.anchor} : null;
@@ -578,7 +705,7 @@ export function createGridEngine(options: GridEngineOptions) {
   function structureAllowed(request: Readonly<StructureRequest>): boolean {
     const limit=request?.axis==='row' ? rowCount:columns.length;
     if(!request||!['row','column'].includes(request.axis)||!['insert','delete','move'].includes(request.kind)||!Array.isArray(request.indices)||!Number.isSafeInteger(request.beforeIndex)||request.beforeIndex<0||request.beforeIndex>limit||!Number.isSafeInteger(request.count)||request.count<1||new Set(request.indices).size!==request.indices.length||request.indices.some(i=>!Number.isSafeInteger(i)||i<0||i>=limit))return false;
-    if (destroyed || tableLocked || options.canChangeStructure?.(request)===false) return false;
+    if (destroyed || projection || tableLocked || options.canChangeStructure?.(request)===false) return false;
     if (request.axis==='row' && (!dataSource.getRow || !dataSource.spliceRows)) return false;
     if(request.axis==='column' && request.kind!=='move' && !dataSource.addColumns)return false;
     if (request.kind==='delete') {
@@ -587,7 +714,7 @@ export function createGridEngine(options: GridEngineOptions) {
         for(const row of request.indices)for(let col=0;col<columns.length;col++)if(!getCellPermission(row,col).writable)return false;
       } else {
         if(request.indices.some(col=>lockedColumns.has(col)))return false;
-        for(let row=0;row<rowCount;row++)for(const col of request.indices)if(!getCellPermission(row,col).writable)return false;
+
       }
     }
     return true;
@@ -618,9 +745,10 @@ export function createGridEngine(options: GridEngineOptions) {
       for(const row of inserted) if(removedById.has(row.id)) {
         const index=removedById.get(row.id)!;
         const current=dataSource.getRow!(index);
-        if(Object.keys(current.values).some(key=>!Object.hasOwn(row.values,key)&&current.values[key]!==undefined) || Object.keys(row.values).some(key=>!Object.is(current.values[key],row.values[key]))) throw new Error('Structural history conflicts with external data changes.');
+        if(Object.keys(current.values).some(key=>!Object.hasOwn(row.values,key)&&!addedColumnKeys.has(key)&&current.values[key]!==undefined) || Object.keys(row.values).some(key=>!Object.is(current.values[key],row.values[key]))) throw new Error('Structural history conflicts with external data changes.');
       }
-      dataSource.spliceRows!(splices);
+      const liveRows=new Map(removed.map(i=>[dataSource.getRowId(i),dataSource.getRow!(i)]));
+      dataSource.spliceRows!(splices.map(splice=>({...splice,rows:splice.rows.map(row=>({id:row.id,values:{...liveRows.get(row.id)?.values,...row.values}}))})));
     }
     const state=redo ? entry.after:entry.before;
     const rMap=redo ? entry.rowMap:inverseMap(entry.rowMap,entry.after.rowCount),cMap=redo ? entry.columnMap:inverseMap(entry.columnMap,entry.after.columns.length);
@@ -647,7 +775,10 @@ export function createGridEngine(options: GridEngineOptions) {
     if(!structureAllowed(request))throw new Error('Structural change is disabled.');
     const checkRows=new GridAxis(after.rowCount,rowHeight),checkColumns=new GridAxis(after.columns.length,columnWidth);
     checkRows.replace(after.rowCount,after.rows);checkColumns.replace(after.columns.length,after.widths);
-    if(addedColumns.length)dataSource.addColumns!(addedColumns.map(column=>column.key));
+    if(addedColumns.length) {
+      dataSource.addColumns!(addedColumns.map(column=>column.key),Object.fromEntries(addedColumns.filter(column=>Object.hasOwn(column,'defaultValue')).map(column=>[column.key,column.defaultValue])));
+      addedColumns.forEach(column=>addedColumnKeys.add(column.key));
+    }
     if(request.axis==='row') {
       let inserted=0;const newRows=forward.flatMap(splice=>splice.rows);
       after.rowIds=order.map(old=>old>=0 ? before.rowIds[old]! : newRows[inserted++]!.id);
@@ -727,11 +858,16 @@ export function createGridEngine(options: GridEngineOptions) {
     });
   }
 
+  if(options.view) { view=Object.freeze({...options.view, ...(options.view.sort ? {sort:Object.freeze({...options.view.sort})} : {}), ...(options.view.filters ? {filters:Object.freeze(options.view.filters.map(filter=>Object.freeze({...filter})))} : {})}); installProjection(buildProjection(view)); }
   return Object.freeze({
-    get columns() { return columns; }, get rowCount() { return rowCount; }, get frozenRows() { return frozenRows; }, get frozenColumns() { return frozenColumns; },
-    getViewport: (viewport: ViewportOptions) => { assertAlive(); return createViewport(rowAxis, columnAxis, frozenRows, frozenColumns, viewport); },
-    rows: axisView(rowAxis), columnsLayout: axisView(columnAxis),
-    getValue: (row: number, key: string): unknown => dataSource.getValue(row, key),
+    setView:(next:LocalViewOptions)=>command(()=>setView(next)),
+    get view(){return view;},
+    get sourceRowCount(){return rowCount;},
+    getRowId:(row:number)=>dataSource.getRowId(sourceRow(row)),
+    get columns() { return columns; }, get rowCount() { return visibleRowCount(); }, get frozenRows() { return Math.min(frozenRows,visibleRowCount()); }, get frozenColumns() { return frozenColumns; },
+    getViewport: (viewport: ViewportOptions) => { assertAlive(); return createViewport(viewAxis(), columnAxis, Math.min(frozenRows,visibleRowCount()), frozenColumns, viewport); },
+    rows: Object.freeze({size:(i:number)=>viewAxis().size(i),position:(i:number)=>viewAxis().position(i),indexAt:(offset:number)=>viewAxis().indexAt(offset),range:(offset:number,extent:number)=>viewAxis().range(offset,extent)}), columnsLayout: axisView(columnAxis),
+    getValue: (row: number, key: string): unknown => dataSource.getValue(sourceRow(row), key),
     insertColumns:(index:number,added:readonly Column[])=>command(()=>insertColumns(index,added)),
     deleteColumns:(indices:readonly number[])=>command(()=>deleteColumns(indices)),
     insertRows: (index:number,rows:readonly DataRow[])=>command(()=>insertRows(index,rows)),
@@ -739,26 +875,30 @@ export function createGridEngine(options: GridEngineOptions) {
     moveRows: (indices:readonly number[],beforeIndex:number)=>command(()=>moveAxis('row',indices,beforeIndex)),
     moveColumns: (indices:readonly number[],beforeIndex:number)=>command(()=>moveAxis('column',indices,beforeIndex)),
     canChangeStructure: (request:Readonly<StructureRequest>)=>query(()=>structureAllowed(request)),
-    isRowHeightManual:(index:number)=>manualRows.has(index),
-    measureRowHeight: (index:number,size:number)=>command(()=>resize(rowAxis,index,size,false)),
-    getSelection, getSelectionRange, getSelectionRanges, getCellPermission, canEdit, canPaste,
-    select: (row: number, col: number, extend = false) => command(() => select(row, col, extend)),
-    selectRange: (range: SelectionRange, mode: 'replace' | 'add' | 'extend' = 'replace') => command(() => selectRange(range, mode)),
-    addSelection: (row: number, col: number) => command(() => select(row, col, false, true)),
+    isRowHeightManual:(index:number)=>manualRows.has(sourceRow(index)),
+    measureRowHeight: (index:number,size:number)=>command(()=>resize(rowAxis,sourceRow(index),size,false)),
+    getSelection:displaySelection, getSelectionRange:()=>displaySelectionRanges().at(-1) ?? null, getSelectionRanges:displaySelectionRanges,
+    getCellPermission:(row:number,col:number)=>getCellPermission(sourceRow(row),col), canEdit:(row:number,col:number)=>!destroyed&&row>=0&&row<visibleRowCount()&&canEdit(sourceRow(row),col),
+    canPaste:()=>displaySelectionRanges().length>0&&canPaste(),
+    select: (row: number, col: number, extend = false) => command(() => selectDisplay(row, col, extend)),
+    selectRange: (range: SelectionRange, mode: 'replace' | 'add' | 'extend' = 'replace') => command(() => { if(!projection && activeParts===1)return selectRange(range,mode); return selectDisplayRange(range,mode); }),
+    addSelection: (row: number, col: number) => command(() => selectDisplay(row, col, false, true)),
     clearSelection: () => command(clearSelection),
-    editCell: (row: number, col: number, text: string) => command(() => editCell(row, col, text)),
-    updateCells: (updates: readonly CellUpdate[]) => command(() => applyUpdates(updates)),
+    editCell: (row: number, col: number, text: string) => command(() => editCell(sourceRow(row), col, text)),
+    updateCells: (updates: readonly CellUpdate[]) => command(() => applyUpdates(updates.map(update=>({...update,rowIndex:sourceRow(update.rowIndex)})))),
+    copySelectionBlocks:()=>query(()=>encodeBlocks(clipboardBlocks())),
+    pasteSelectionBlocks:(text:string)=>command(()=>pasteBlocks(decodeBlocks(text),true)),
     copySelection: () => query(copySelection), paste: (text: string) => command(() => paste(text)),
     undo: () => command(() => replay(false)), redo: () => command(() => replay(true)),
     canUndo: () => !destroyed && past.length > 0,
     canRedo: () => !destroyed && future.length > 0,
-    getFormat, canFormat: (targets: readonly CellFormatTarget[]) => query(() => canFormat(targets)),
-    format: (targets: readonly CellFormatTarget[], patch: CellFormatPatch | null) => command(() => format(targets, patch)),
-    isLocked, canManageLocks: () => !destroyed && allowLockChanges,
-    setLocked: (target: CellLockTarget, locked: boolean) => command(() => setLocked(target, locked)),
+    getFormat:(row:number,col:number)=>getFormat(sourceRow(row),col), canFormat: (targets: readonly CellFormatTarget[]) => query(() => canFormat(sourceFormats(targets))),
+    format: (targets: readonly CellFormatTarget[], patch: CellFormatPatch | null) => command(() => format(sourceFormats(targets), patch)),
+    isLocked:(target:CellLockTarget)=>isLocked(sourceTarget(target)), canManageLocks: () => !destroyed && allowLockChanges,
+    setLocked: (target: CellLockTarget, locked: boolean) => command(() => setLocked(sourceTarget(target), locked)),
     setFrozen: (rows: number, columns: number) => command(() => setFrozen(rows, columns)),
     setColumnWidth: (index: number, size: number) => command(() => resize(columnAxis, index, size)),
-    setRowHeight: (index: number, size: number) => command(() => resize(rowAxis, index, size)),
+    setRowHeight: (index: number, size: number) => command(() => resize(rowAxis, sourceRow(index), size)),
     destroy: () => command(() => {
       if (destroyed) return;
       destroyed = true;
@@ -769,6 +909,7 @@ export function createGridEngine(options: GridEngineOptions) {
       selection = anchor = null;
       retainedRanges.length = 0;
       formats.clear(); orderedFormats.length = 0;
+      projection=null;projectedAxis=null;cachedRanges=null;reverseProjection.clear();displayAnchor=null;
       manualRows.clear();lockedRows.clear(); lockedColumns.clear(); lockedCells.clear(); tableLocked = false;
     }),
   });

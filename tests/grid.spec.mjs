@@ -990,7 +990,7 @@ test('themes isolate mounts and keep editor/menu styles and translucent partial 
   expect(await page.getByRole('dialog').evaluate(el => getComputedStyle(el).color)).toBe('rgb(17, 34, 51)');
 });
 
-test('Ctrl/Meta adds ranges across panes, edits active cell, guards clipboard and preserves partial pixels', async ({ page }) => {
+test('Ctrl/Meta adds ranges across panes, edits active cell, validates clipboard and preserves partial pixels', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
     const { createGrid } = await import('/canvas/index.js');
@@ -1016,8 +1016,8 @@ test('Ctrl/Meta adds ranges across panes, edits active cell, guards clipboard an
   expect(await page.evaluate(() => window.grid.getSelectionRanges().length)).toBe(3);
   expect(await page.evaluate(() => window.source.getValue(4, 'name'))).toBe('Edited');
   await viewport.click({ position: { x: 180, y: 144 }, button: 'right' });
-  await expect(page.getByRole('menuitem', { name: 'Copy', exact: true })).toBeDisabled();
-  await expect(page.getByRole('menuitem', { name: 'Paste', exact: true })).toBeDisabled();
+  await expect(page.getByRole('menuitem', { name: 'Copy', exact: true })).toBeEnabled();
+  await expect(page.getByRole('menuitem', { name: 'Paste', exact: true })).toBeEnabled();
   await page.getByRole('menu').press('Escape');
   const result = await page.evaluate(async () => {
     let denied = 0;
@@ -1027,7 +1027,7 @@ test('Ctrl/Meta adds ranges across panes, edits active cell, guards clipboard an
     await next(); const partial = document.querySelector('canvas').toDataURL(); window.grid.render(); await next();
     return { denied, match: partial === document.querySelector('canvas').toDataURL(), callback: window.ranges.at(-1), event: window.events.filter(event => event.type === 'selection:change').at(-1).ranges };
   });
-  expect(result.denied).toBe(2); expect(result.match).toBe(true); expect(result.callback).toEqual(result.event);
+  expect(result.denied).toBe(1); expect(result.match).toBe(true); expect(result.callback).toEqual(result.event);
   await viewport.press('ArrowDown'); expect(await page.evaluate(() => window.grid.getSelectionRanges().length)).toBe(1);
   await viewport.press('Escape'); expect(await page.evaluate(() => window.grid.getSelectionRanges())).toEqual([]);
   await viewport.press('Control+Home'); await viewport.press('Shift+F8');
@@ -1976,4 +1976,39 @@ test('structural core APIs update one Canvas mount, grouped headers, editor and 
   expect(await page.evaluate(()=>window.grid.getFormat(1,0).background)).toBe('#abc');
   await page.evaluate(()=>{window.grid.insertColumns(1,[{key:'new',title:'New',editable:true}]);window.grid.updateCells([{rowIndex:0,columnKey:'new',value:'Added'}]);});
   await expect(page.getByRole('columnheader',{name:'New',exact:true})).toBeVisible();
+});
+
+
+test('column creation dialog, managed row views and structured browser clipboard retain state', async ({page})=>{
+  await page.goto('/');
+  await page.evaluate(async()=>{
+    const {createGrid}=await import('/canvas/index.js'); const {LocalDataSource}=await import('/core/index.js');
+    window.source=new LocalDataSource([{id:'a',name:'C',other:'keep'},{id:'b',name:'A',other:'keep'},{id:'c',name:'B',other:'keep'}],row=>row.id);
+    window.grid=createGrid({container:document.querySelector('#grid'),dataSource:window.source,allowColumnChanges:true,accessibility:'viewport',columns:[{key:'name',title:'Name',editable:true},{key:'other',title:'Other',editable:true}]});
+  });
+  const viewport=page.locator('[data-grid-viewport]');
+  await viewport.click({position:{x:20,y:16}});
+  await page.evaluate(()=>{window.grid.setRowHeight(0,60);window.grid.format([{scope:'row',rowIndex:0}],{background:'#abcdef'});window.grid.setLocked({scope:'cell',rowIndex:0,columnIndex:1},true);window.originalViewport=document.querySelector('[data-grid-viewport]');window.grid.setView({sort:{columnKey:'name',direction:'asc'}});});
+  expect(await page.evaluate(()=>({same:window.originalViewport===document.querySelector('[data-grid-viewport]'),selection:window.grid.getSelection(),format:window.grid.getFormat(2,0),locked:window.grid.isLocked({scope:'cell',rowIndex:2,columnIndex:1})}))).toMatchObject({same:true,selection:{rowIndex:2,rowId:'a'},format:{background:'#abcdef'},locked:true});
+  await viewport.press('F2');const editor=page.getByRole('textbox');await editor.fill('0');await editor.press('Enter');
+  expect(await page.evaluate(()=>window.grid.getSelection())).toMatchObject({rowIndex:0,rowId:'a'});await page.evaluate(()=>window.grid.undo());
+  await page.evaluate(()=>window.grid.setView({}));
+  await page.getByRole('columnheader',{name:'Name',exact:true}).click({button:'right'});
+  await page.getByRole('menuitem',{name:'Insert column right…',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Insert column',exact:true});await dialog.getByLabel('Column title').fill('Count');await dialog.getByLabel('Column type').selectOption('number');await dialog.getByLabel('Default value').fill('invalid');await dialog.getByRole('button',{name:'Insert column',exact:true}).click();await expect(dialog.getByRole('alert')).toContainText('finite number');
+  await dialog.getByLabel('Default value').fill('7');await dialog.getByRole('button',{name:'Insert column',exact:true}).click();await expect(dialog).not.toBeVisible();
+  expect(await page.evaluate(()=>window.source.getValue(0,window.grid.columns[1].key))).toBe(7);await page.evaluate(()=>{window.grid.undo();window.grid.redo();});await expect(page.getByRole('columnheader',{name:'Count',exact:true})).toBeVisible();
+  await viewport.click({position:{x:20,y:20}});await viewport.click({position:{x:350,y:20},modifiers:['Control']});
+  const copied=await viewport.evaluate(el=>{const data=new DataTransfer();el.dispatchEvent(new ClipboardEvent('copy',{clipboardData:data,bubbles:true,cancelable:true}));window.copied=data;return {types:[...data.types],text:data.getData('text/plain')};});
+  expect(copied.types).toContain('application/x-acheron-grid+json');expect(copied.text).toBe('C\tkeep');
+  await viewport.click({position:{x:20,y:80}});
+  await viewport.evaluate(el=>el.dispatchEvent(new ClipboardEvent('paste',{clipboardData:window.copied,bubbles:true,cancelable:true})));
+  expect(await page.evaluate(()=>({name:window.source.getValue(1,'name'),number:window.source.getValue(1,window.grid.columns[1].key),other:window.source.getValue(1,'other')}))).toEqual({name:'C',number:7,other:'keep'});
+  await page.getByRole('columnheader',{name:'Name',exact:true}).click();
+  await page.getByRole('columnheader',{name:'Count',exact:true}).click({modifiers:['Control']});
+  await page.getByRole('columnheader',{name:'Name',exact:true}).click({button:'right'});
+  await page.getByRole('menuitem',{name:'Delete 2 selected columns',exact:true}).click();
+  expect(await page.evaluate(()=>window.grid.columns.map(column=>column.key))).toEqual(['other']);
+  await page.evaluate(()=>window.grid.undo());await expect(page.getByRole('columnheader',{name:'Count',exact:true})).toBeVisible();
+
 });

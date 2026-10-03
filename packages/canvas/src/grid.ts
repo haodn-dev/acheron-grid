@@ -5,7 +5,7 @@ import type { ReorderRequest, RowChangeRequest } from './reorder.js';
 import { headerLayout, reorderedHeaderGroups } from './headers.js';
 import type { HeaderGroup } from './headers.js';
 import { detectLinks } from './links.js';
-import { createGridEngine } from '@acheron-grid/core';
+import { createGridEngine, gridClipboardType } from '@acheron-grid/core';
 import type { CellUpdate, DataRow, DataSource, Column, CellSelection, SelectionRange, CellPermission, CellLockTarget, CellFormatTarget, CellFormat, CellFormatPatch, LocalViewOptions, GridEngineOptions, ViewportRegion } from '@acheron-grid/core';
 
 let editorId = 0;
@@ -44,8 +44,14 @@ export interface GridTheme {
   linkColor: string;
 }
 export type ColumnEditor = { readonly type: 'select' | 'multiselect'; readonly values: readonly string[] } | { readonly type: 'checkbox' };
+export interface ColumnType {
+  readonly key:string;
+  readonly label:string;
+  readonly create:(input:Readonly<{key:string;title:string;defaultText:string}>)=>{column:Column;editor?:ColumnEditor};
+}
 export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 'resolveCellPermission' | 'onEvent' | 'allowLockChanges' | 'frozenRows' | 'frozenColumns' | 'canChangeStructure' | 'columnWidths'> {
   view?: LocalViewOptions;
+  viewMode?: 'core' | 'host';
   onViewChange?: (view: LocalViewOptions) => void;
   theme?: Partial<GridTheme>;
   imageColumns?: readonly string[];
@@ -61,6 +67,8 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
   createEditor?: CellEditorFactory;
   choiceEditor?: ChoiceEditorOptions | false;
   selectionStyle?: { readonly activeBorderWidth?: number; readonly headerTintOpacity?: number; readonly rangeBorderWidth?: number; readonly rangeTintOpacity?: number };
+  allowColumnChanges?:boolean;
+  columnTypes?:readonly ColumnType[];
   onRowChange?: (request: Readonly<RowChangeRequest>) => void;
   canRowChange?: (request: Readonly<RowChangeRequest>) => boolean;
   onReorder?: (request: Readonly<ReorderRequest>) => void;
@@ -80,6 +88,8 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
   indexColumn?: boolean;
 }
 export interface Grid {
+  setView(view: LocalViewOptions): void;
+  readonly view: Readonly<LocalViewOptions>;
   readonly rowCount: number;
   readonly columns: readonly Column[];
   insertColumns(index:number,columns:readonly Column[]):void;
@@ -112,6 +122,8 @@ export interface Grid {
   getSelection(): CellSelection | null;
   getSelectionRange(): SelectionRange | null;
   getSelectionRanges(): SelectionRange[];
+  copySelectionBlocks(): string;
+  pasteSelectionBlocks(text: string): void;
   copySelection(): string;
   paste(text: string): void;
   setColumnWidth(index: number, width: number): void;
@@ -131,6 +143,8 @@ const stateIconSvg = {
 /** Mount a grid. The caller owns the container and its dimensions. */
 export function createGrid(options: GridOptions): Grid {
   const { container, dataSource } = options;
+  const managesView=options.viewMode === 'core' || (options.viewMode !== 'host' && !options.onViewChange);
+  let currentView=options.view;
   const activeBorderWidth = options.selectionStyle?.activeBorderWidth ?? 1;
   const rangeBorderWidth = options.selectionStyle?.rangeBorderWidth ?? 1;
   const rangeTintOpacity = options.selectionStyle?.rangeTintOpacity ?? .06;
@@ -160,13 +174,15 @@ export function createGrid(options: GridOptions): Grid {
   let leafHeaders = headers.cells.filter(cell => cell.leaf).sort((a, b) => a.start - b.start);
   if (!Number.isFinite(headerHeight) || headerHeight <= 0) throw new RangeError('Grid sizes must be positive finite numbers.');
   const engine = createGridEngine({ columns: options.columns, dataSource,
+    ...(managesView && options.view ? {view:options.view} : {}),
     ...(options.rowHeight === undefined ? {} : { rowHeight: options.rowHeight }),
     ...(options.columnWidths === undefined ? {} : { columnWidths:options.columnWidths }),
     ...(options.columnWidth === undefined ? {} : { columnWidth: options.columnWidth }),
     canChangeStructure: request => {
       if(options.canChangeStructure?.(request)===false)return false;
       if(request.axis==='column') {
-        try { const next=request.columns ?? (request.order ?? reorderedIndices(engine.columns.length,request.indices,request.beforeIndex)).map(i=>engine.columns[i]!); reorderedHeaderGroups(next,options.headerGroups); } catch { return false; }
+        if(request.kind==='insert' && !request.columns)return true;
+        try { const next=request.columns ?? (request.kind==='delete' ? engine.columns.filter((_,i)=>!request.indices.includes(i)) : (request.order ?? reorderedIndices(engine.columns.length,request.indices,request.beforeIndex)).map(i=>engine.columns[i]!)); reorderedHeaderGroups(next,options.headerGroups); } catch { return false; }
       }
       return true;
     },
@@ -180,6 +196,7 @@ export function createGrid(options: GridOptions): Grid {
     if (change.type === 'cells') { if (options.autoRowHeight) { change.cells.forEach(cell => measuredRows.delete(cell.rowIndex)); fullDraw = true; } invalidate(change.cells); if (!searchBar.hidden) refreshSearch(); }
     else if (change.type === 'layout' || change.type === 'structure') {
       if (change.type === 'structure') {
+        if(managesView)currentView=engine.view;
         if(axisAnchor) {
           const map=axisAnchor.axis==='row'?change.rowMap:change.columnMap,next=map[axisAnchor.index];
           axisAnchor=next!==undefined&&next>=0 ? {...axisAnchor,index:next}:null;
@@ -218,17 +235,21 @@ export function createGrid(options: GridOptions): Grid {
   const imageCache = new Map<string, { image: HTMLImageElement; state: 'loading' | 'ready' | 'error' }>();
   const visibleImages = new Set<string>();
   const columnEditors = new Map<string, ColumnEditor>();
-  for (const [key, config] of Object.entries(options.columnEditors ?? {})) {
-    const column = columns.find(column => column.key === key);
+  function validateColumnEditor(column:Column,config:ColumnEditor):ColumnEditor {
     if (!column || !config || !['select', 'multiselect', 'checkbox'].includes(config.type)) throw new TypeError('Invalid column editor configuration.');
     if (config.type === 'select' || config.type === 'multiselect') {
       if (!Array.isArray(config.values) || !config.values.length || config.values.some(value => typeof value !== 'string') || new Set(config.values).size !== config.values.length) throw new TypeError('Select values must be a nonempty list of unique strings.');
       if (config.type === 'multiselect' && config.values.some(value => !value || value.includes(','))) throw new TypeError('Multiselect values must be nonempty and contain no commas.');
-      columnEditors.set(key, Object.freeze({ type: config.type, values: Object.freeze([...config.values]) }));
+      return Object.freeze({ type: config.type, values: Object.freeze([...config.values]) });
     } else {
       if (column.editable && typeof column.parse !== 'function') throw new TypeError('Checkbox columns require a boolean parser.');
-      columnEditors.set(key, Object.freeze({ type: 'checkbox' }));
+      return Object.freeze({ type: 'checkbox' });
     }
+  }
+  for (const [key, config] of Object.entries(options.columnEditors ?? {})) {
+    const column=columns.find(column=>column.key===key);
+    if(!column)throw new TypeError('Unknown editor column.');
+    columnEditors.set(key,validateColumnEditor(column,config));
   }
   const viewportAccessibility = options.accessibility === 'viewport';
   if (options.accessibility !== undefined && !['active', 'viewport'].includes(options.accessibility)) throw new TypeError('Invalid accessibility mode.');
@@ -736,7 +757,7 @@ export function createGrid(options: GridOptions): Grid {
       });
       popup.append(button);
     }
-    item('Copy', rowCount > 0 && getSelectionRanges().length === 1 && engine.getCellPermission(selection.rowIndex, selection.columnIndex).copyable && !!win.navigator.clipboard?.writeText, () => win.navigator.clipboard.writeText(copySelection()));
+    item('Copy', rowCount > 0 && getSelectionRanges().length > 0 && engine.getCellPermission(selection.rowIndex, selection.columnIndex).copyable && !!win.navigator.clipboard?.writeText, () => win.navigator.clipboard.writeText(copySelection()));
     item('Paste', !!win.navigator.clipboard?.readText && engine.canPaste(), async () => {
       const text = await win.navigator.clipboard.readText();
       if (destroyed || fingerprint !== JSON.stringify(getSelectionRanges())) throw new Error('Selection changed before paste. Try again.');
@@ -744,10 +765,10 @@ export function createGrid(options: GridOptions): Grid {
     });
     if (header) {
       item('Select column', true, () => selectColumn(col));
-      item('Sort ascending…', !!options.onViewChange, () => openViewDialog(col, 'asc'));
-      item('Sort descending…', !!options.onViewChange, () => openViewDialog(col, 'desc'));
-      item('Filter column…', !!options.onViewChange, () => openViewDialog(col));
-      item('Clear sort and filters…', !!options.onViewChange, () => openViewDialog(col, 'clear'));
+      item('Sort ascending…', managesView || !!options.onViewChange, () => openViewDialog(col, 'asc'));
+      item('Sort descending…', managesView || !!options.onViewChange, () => openViewDialog(col, 'desc'));
+      item('Filter column…', managesView || !!options.onViewChange, () => openViewDialog(col));
+      item('Clear sort and filters…', managesView || !!options.onViewChange, () => openViewDialog(col, 'clear'));
     } else {
       item('Select row', rowCount > 0, () => selectRow(row));
       item('Select column', true, () => selectColumn(col));
@@ -764,6 +785,12 @@ export function createGrid(options: GridOptions): Grid {
         changeRows(Object.freeze({ ...above, count }));
       }, null));
       item(indices.length > 1 ? `Delete ${indices.length} selected rows` : 'Delete row', rowCount > 0 && options.canRowChange?.(deletion) !== false, () => changeRows(deletion));
+    }
+    if(header&&options.allowColumnChanges) {
+      const request={axis:'column' as const,kind:'insert' as const,indices:[],beforeIndex:indices[0]!,count:1};
+      item('Insert column left…',engine.canChangeStructure(request),()=>openColumnDialog(indices[0]!));
+      item('Insert column right…',engine.canChangeStructure({...request,beforeIndex:indices.at(-1)!+1}),()=>openColumnDialog(indices.at(-1)!+1));
+      item(indices.length>1 ? 'Delete '+indices.length+' selected columns':'Delete column',indices.length<columns.length&&engine.canChangeStructure({axis:'column',kind:'delete',indices,beforeIndex:indices[0]!,count:indices.length}),()=>engine.deleteColumns(indices));
     }
     if (options.onReorder) item(header ? 'Move columns to…' : 'Move rows to…', (header || rowCount > 0) && options.canReorder?.({ axis: header ? 'column' : 'row', indices, beforeIndex: indices[0]! }) !== false, () => {
       const axis = header ? 'column' : 'row'; const count = header ? columns.length : rowCount;
@@ -840,25 +867,69 @@ export function createGrid(options: GridOptions): Grid {
     event.preventDefault(); event.stopPropagation();
     const col = headerColumn(event);
     if (col === null || !finishEdit(true)) return;
-    selectColumn(col);
+    if(!getSelectionRanges().some(range=>range.startRow===0&&range.endRow===rowCount-1&&col>=range.startColumn&&col<=range.endColumn))selectColumn(col);
     const selection = engine.getSelection();
-    if (!rowCount || selection?.columnIndex === col) openMenu(selection?.rowIndex ?? 0, col, event.clientX, event.clientY, true);
+    if (!rowCount || selection) openMenu(selection?.rowIndex ?? 0, col, event.clientX, event.clientY, true);
+  }
+
+  const builtinColumnTypes:readonly ColumnType[]=[
+    {key:'text',label:'Text',create:input=>({column:{key:input.key,title:input.title,editable:true,defaultValue:input.defaultText}})},
+    {key:'number',label:'Number',create:input=>{
+      const parse=(text:string)=>{if(!text.trim())return null;const value=Number(text);if(!Number.isFinite(value))throw new Error('Enter a finite number.');return value;};
+      return {column:{key:input.key,title:input.title,editable:true,parse,defaultValue:parse(input.defaultText)}};
+    }},
+    {key:'checkbox',label:'Checkbox',create:input=>{
+      const parse=(text:string)=>{if(text===''||text==='false')return false;if(text==='true')return true;throw new Error('Use true or false.');};
+      return {column:{key:input.key,title:input.title,editable:true,parse,defaultValue:parse(input.defaultText)},editor:{type:'checkbox'}};
+    }}
+  ];
+  const creationTypes=options.columnTypes ?? builtinColumnTypes;
+  if(!creationTypes.length||new Set(creationTypes.map(type=>type.key)).size!==creationTypes.length||creationTypes.some(type=>!type.key||!type.label||typeof type.create!=='function'))throw new TypeError('Invalid column types.');
+  let createdColumn=0;
+  function openColumnDialog(beforeIndex:number):void {
+    if(!options.allowColumnChanges||activeDialog?.open)return;
+    const dialog=doc.createElement('dialog');dialog.dataset.gridDialog='';dialog.setAttribute('aria-label','Insert column');activeDialog=dialog;
+    const heading=doc.createElement('p');heading.textContent='Insert column';
+    const key=doc.createElement('input'),title=doc.createElement('input'),type=doc.createElement('select'),initial=doc.createElement('input');
+    do{key.value='column_'+(++createdColumn);}while(columns.some(column=>column.key===key.value));
+    key.required=title.required=true;
+    for(const item of creationTypes){const option=doc.createElement('option');option.value=item.key;option.textContent=item.label;type.append(option);}
+    const field=(name:string,input:HTMLElement)=>{const label=doc.createElement('label');label.textContent=name;input.setAttribute('aria-label',name);label.append(input);return label;};
+    const status=doc.createElement('p');status.setAttribute('role','alert');
+    const apply=doc.createElement('button');apply.type='button';apply.textContent='Insert column';
+    const cancel=doc.createElement('button');cancel.type='button';cancel.textContent='Cancel';cancel.onclick=()=>dialog.close();
+    apply.onclick=()=>{
+      if(!key.reportValidity()||!title.reportValidity())return;
+      try {
+        if(!key.value.trim()||!title.value.trim())throw new Error('Key and title are required.');
+        const definition=creationTypes.find(item=>item.key===type.value)!.create(Object.freeze({key:key.value.trim(),title:title.value.trim(),defaultText:initial.value}));
+        if(definition.column.key!==key.value.trim())throw new Error('Column factory must retain the supplied key.');
+        const editorConfig=definition.editor ? validateColumnEditor(definition.column,definition.editor) : undefined;
+        engine.insertColumns(beforeIndex,[definition.column]);
+        if(editorConfig)columnEditors.set(definition.column.key,editorConfig);
+        dialog.close();render();
+      } catch(error){status.textContent=error instanceof Error?error.message:'Unable to insert column.';}
+    };
+    const actions=doc.createElement('div');actions.dataset.dialogActions='';actions.append(apply,cancel);
+    dialog.append(heading,field('Column key',key),field('Column title',title),field('Column type',type),field('Default value',initial),status,actions);
+    root.append(dialog);dialog.addEventListener('close',()=>{dialog.remove();if(activeDialog===dialog)activeDialog=null;if(!destroyed)scroller.focus({preventScroll:true});});
+    dialog.showModal();title.focus();
   }
 
   function openViewDialog(col: number, sort?: 'asc' | 'desc' | 'clear'): void {
-    if (!options.onViewChange || activeDialog?.open) return;
+    if ((!managesView && !options.onViewChange) || activeDialog?.open) return;
     const dialog = doc.createElement('dialog'); activeDialog = dialog;
     dialog.setAttribute('aria-label', sort ? 'Change row view' : 'Filter column');
     dialog.dataset.gridDialog = '';
     const title = doc.createElement('p'); title.textContent = sort === 'clear' ? 'Show all rows in source order' : `${sort ? `Sort ${sort === 'asc' ? 'ascending' : 'descending'}` : 'Filter'}: ${columns[col]!.title}`;
-    const note = doc.createElement('p'); note.textContent = 'Values stay. Changing the view resets selection, undo history, custom colors, user locks and custom sizing. Admin permissions still apply.';
+    const note = doc.createElement('p'); note.textContent = managesView ? 'Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Clear the view before changing rows or columns.' : 'The host applies this row view. State retention depends on its handler.';
     const input = doc.createElement('input'); input.type = 'search'; input.setAttribute('aria-label', 'Contains text');
-    input.placeholder = 'Contains text (empty removes this filter)'; input.style.width = '100%'; input.value = options.view?.filters?.find(filter => filter.columnKey === columns[col]!.key)?.query ?? '';
+    input.placeholder = 'Contains text (empty removes this filter)'; input.style.width = '100%'; input.value = currentView?.filters?.find(filter => filter.columnKey === columns[col]!.key)?.query ?? '';
     const condition = doc.createElement('select'); condition.setAttribute('aria-label', 'Filter condition');
     for (const [value, label] of [['contains', 'Contains text'], ['equals', 'Equals text'], ['not-empty', 'Has a value'], ['empty', 'Is empty']]) {
       const option = doc.createElement('option'); option.value = value!; option.textContent = label!; condition.append(option);
     }
-    condition.value = options.view?.filters?.find(filter => filter.columnKey === columns[col]!.key)?.operator ?? 'contains';
+    condition.value = currentView?.filters?.find(filter => filter.columnKey === columns[col]!.key)?.operator ?? 'contains';
     const updateInput = () => { input.disabled = condition.value === 'empty' || condition.value === 'not-empty'; };
     condition.addEventListener('change', updateInput); updateInput();
     const status = doc.createElement('p'); status.setAttribute('role', 'alert');
@@ -866,14 +937,14 @@ export function createGrid(options: GridOptions): Grid {
     const cancel = doc.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel'; cancel.addEventListener('click', () => dialog.close());
     const commit = () => {
       const key = columns[col]!.key;
-      const filters = (options.view?.filters ?? []).filter(filter => filter.columnKey !== key);
+      const filters = (currentView?.filters ?? []).filter(filter => filter.columnKey !== key);
       if (!sort && (input.value || condition.value === 'empty' || condition.value === 'not-empty')) {
         const operator = condition.value as 'contains' | 'equals' | 'not-empty' | 'empty';
         filters.push({ columnKey: key, query: input.value, operator });
       }
-      const view: LocalViewOptions = sort === 'clear' ? {} : sort ? { ...options.view, sort: { columnKey: key, direction: sort } }
-        : { ...options.view, filters };
-      try { options.onViewChange!(view); if (dialog.isConnected) dialog.close(); }
+      const view: LocalViewOptions = sort === 'clear' ? {} : sort ? { ...currentView, sort: { columnKey: key, direction: sort } }
+        : { ...currentView, filters };
+      try { if(managesView)engine.setView(view); currentView=view; options.onViewChange?.(view); if (dialog.isConnected) dialog.close(); }
       catch (error) { status.textContent = error instanceof Error ? error.message : 'Unable to change view.'; }
     };
     apply.addEventListener('click', commit); input.addEventListener('keydown', event => { if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); commit(); } });
@@ -1146,7 +1217,7 @@ export function createGrid(options: GridOptions): Grid {
     editor.addEventListener('blur', () => { if (!options.editorOptions?.pinned && !choices && !(editor instanceof win.HTMLSelectElement && editor.dataset.gridChoiceEditor !== undefined && options.choiceEditor)) finishEdit(true); });
     editorPane.append(editor);
     if (options.editorOptions?.guardNavigation !== false) win.addEventListener('beforeunload', guardEditNavigation);
-    editorLabel.textContent = `${column.title} · Row ${selection.rowIndex + 1} · ${String(dataSource.getRowId(selection.rowIndex))}`;
+    editorLabel.textContent = `${column.title} · Row ${selection.rowIndex + 1} · ${String(engine.getRowId(selection.rowIndex))}`;
     positionEditor();
     editor.focus({ preventScroll: true });
     if (editor.tagName !== 'SELECT' && 'select' in editor) editor.select();
@@ -1176,7 +1247,7 @@ export function createGrid(options: GridOptions): Grid {
     const selection = engine.getSelection();
     if (event.target === editor || !selection || !event.clipboardData) return;
     event.preventDefault();
-    try { event.clipboardData.setData('text/plain', copySelection()); }
+    try { const text=copySelection(),blocks=engine.copySelectionBlocks();event.clipboardData.setData('text/plain',text);event.clipboardData.setData(gridClipboardType,blocks); }
     catch (error) { win.alert(error instanceof Error ? error.message : 'Unable to copy cells.'); }
   }
 
@@ -1184,7 +1255,7 @@ export function createGrid(options: GridOptions): Grid {
     const selection = engine.getSelection();
     if (event.target === editor || !selection || !event.clipboardData?.types.includes('text/plain')) return;
     event.preventDefault();
-    try { paste(event.clipboardData.getData('text/plain')); }
+    try { if(event.clipboardData.types.includes(gridClipboardType))engine.pasteSelectionBlocks(event.clipboardData.getData(gridClipboardType));else paste(event.clipboardData.getData('text/plain')); }
     catch (error) { win.alert(error instanceof Error ? error.message : 'Unable to paste cells.'); }
   }
 
@@ -1422,9 +1493,9 @@ export function createGrid(options: GridOptions): Grid {
     if (engine.isLocked({ scope: 'column', columnIndex: col })) labels.push('Column locked');
     if (col < engine.frozenColumns) labels.push('Column frozen');
     if (row === null) {
-      const sort = options.view?.sort;
+      const sort = currentView?.sort;
       if (sort?.columnKey === columns[col]!.key) labels.push(`Sorted ${sort.direction === 'asc' ? 'ascending' : 'descending'}`);
-      const filter = options.view?.filters?.find(filter => filter.columnKey === columns[col]!.key);
+      const filter = currentView?.filters?.find(filter => filter.columnKey === columns[col]!.key);
       if (filter) labels.push(`Filtered: ${filter.operator ?? 'contains'} ${filter.query}`.trim());
       const policy = columns[col]!.permissions;
       if ([indicatorPolicy, policy].some(scope => scope?.writable === false || scope?.selectable === false || scope?.editable === false)) labels.push('Column disabled by permissions');
@@ -1469,10 +1540,10 @@ export function createGrid(options: GridOptions): Grid {
       ctx.globalAlpha = rangeTintOpacity; ctx.fillStyle = theme.selectionColor; ctx.fillRect(x, y, width, height); ctx.globalAlpha = 1;
     }
     if (header) {
-      if (options.view?.sort?.columnKey === columns[columnIndex]!.key) {
-        stateIcon(options.view.sort.direction === 'asc' ? 'arrow-up' : 'arrow-down', x + width - 36, y + (height - 16) / 2);
+      if (currentView?.sort?.columnKey === columns[columnIndex]!.key) {
+        stateIcon(currentView!.sort!.direction === 'asc' ? 'arrow-up' : 'arrow-down', x + width - 36, y + (height - 16) / 2);
       }
-      if (options.view?.filters?.some(filter => filter.columnKey === columns[columnIndex]!.key)) {
+      if (currentView?.filters?.some(filter => filter.columnKey === columns[columnIndex]!.key)) {
         stateIcon('funnel', x + width - 54, y + (height - 16) / 2);
       }
     }
@@ -1516,7 +1587,7 @@ export function createGrid(options: GridOptions): Grid {
         ctx.beginPath();
         ctx.rect(x, y, width, height);
         ctx.clip();
-        handled = options.renderCell(ctx, Object.freeze({ value, format: format!, rowIndex, rowId: dataSource.getRowId(rowIndex),
+        handled = options.renderCell(ctx, Object.freeze({ value, format: format!, rowIndex, rowId: engine.getRowId(rowIndex),
           columnIndex, columnKey: columns[columnIndex]!.key, x, y, width, height }));
       } catch (error) {
         win.console.error('Cell renderer failed.', error);
@@ -1781,7 +1852,7 @@ export function createGrid(options: GridOptions): Grid {
         header.style.cssText = `position:absolute;left:${Math.max(band.x, columnAxis.position(col) + band.offset)}px;top:${layout.level * headerRowHeight}px;width:${Math.max(0, Math.min(band.x + band.width, columnAxis.position(col + 1) + band.offset) - Math.max(band.x, columnAxis.position(col) + band.offset))}px;height:${layout.rowSpan * headerRowHeight}px`;
         header.dataset.headerLevel = String(layout.level);
         header.setAttribute('aria-rowspan', String(layout.rowSpan));
-        if (viewportAccessibility) { header.setAttribute('role', 'columnheader'); header.setAttribute('aria-colindex', String(col + 1)); header.setAttribute('aria-label', columns[col]!.title); header.setAttribute('aria-description', stateLabels(null, col).join('; ')); const sort = options.view?.sort; header.setAttribute('aria-sort', sort?.columnKey === columns[col]!.key ? sort.direction === 'asc' ? 'ascending' : 'descending' : 'none'); }
+        if (viewportAccessibility) { header.setAttribute('role', 'columnheader'); header.setAttribute('aria-colindex', String(col + 1)); header.setAttribute('aria-label', columns[col]!.title); header.setAttribute('aria-description', stateLabels(null, col).join('; ')); const sort = currentView?.sort; header.setAttribute('aria-sort', sort?.columnKey === columns[col]!.key ? sort.direction === 'asc' ? 'ascending' : 'descending' : 'none'); }
         reorderHandle(header, 'column', col);
         headerNodes.push(header);
       }
@@ -2114,6 +2185,10 @@ export function createGrid(options: GridOptions): Grid {
     run();
   }
   return {
+    setView:(view:LocalViewOptions)=>structureAction(()=>{engine.setView(view);currentView=engine.view;}),
+    get view(){return managesView ? engine.view : currentView ?? {};},
+    copySelectionBlocks:engine.copySelectionBlocks,
+    pasteSelectionBlocks:(text:string)=>structureAction(()=>engine.pasteSelectionBlocks(text)),
     get rowCount() { return rowCount; }, get columns() { return columns; },
     insertColumns:(index:number,added:readonly Column[])=>structureAction(()=>engine.insertColumns(index,added)),
     deleteColumns:(indices:readonly number[])=>structureAction(()=>engine.deleteColumns(indices)),
