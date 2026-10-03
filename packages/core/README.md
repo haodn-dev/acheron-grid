@@ -21,6 +21,8 @@ npm install /path/to/acheron-grid-engine/packages/core
 
 ## Usage
 
+Structured clipboard blocks can carry optional per-cell `formats` (`background`, `textColor`, `contentFormat`). The content hint is `plain`, `html` or `markdown`; core stores this sparse metadata without parsing markup. Formatted paste checks paste/writable/formatting permissions and commits values and formatting in one history entry. `format:change` events include the `paste` source for that operation. Plain TSV remains value-only. Clipboard helpers `encodeBlocks`, `decodeBlocks` and `blocksToTsv` are exported for renderer integration.
+
 The root entry exports `createGridEngine`, `LocalDataSource`, `LocalDataView` and their public types. It runs in Node without DOM, Canvas or framework globals. The earlier @acheron-grid/core/headless subpath remains an alias. Browser rendering is provided by [@acheron-grid/canvas](../canvas/README.md).
 
 ```js

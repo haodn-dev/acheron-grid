@@ -9,11 +9,49 @@ export interface TextRun {
   readonly code?: boolean;
   readonly href?: string;
 }
-export interface RichText { readonly text: string; readonly runs: readonly TextRun[]; }
+export interface RichText { readonly text: string; readonly runs: readonly TextRun[]; readonly unavailable?: boolean; }
+
+/** Build mounted markup only from text and explicitly supported marks. */
+export function richTextHtml(rich: RichText, document: Document): string {
+  const container = document.createElement('div');
+  for (const run of rich.runs) {
+    const span = document.createElement('span');
+    run.text.split('\n').forEach((text, index) => { if (index) span.append(document.createElement('br')); span.append(document.createTextNode(text)); });
+    let node: HTMLElement = span;
+    for (const tag of [run.code ? 'code' : '', run.bold ? 'strong' : '', run.italic ? 'em' : '', run.underline ? 'u' : '']) {
+      if (tag) { const wrapper = document.createElement(tag); wrapper.append(node); node = wrapper; }
+    }
+    const href = run.href ? safeWebUrl(run.href) : undefined;
+    if (href) { const anchor = document.createElement('a'); anchor.href = href; anchor.append(node); node = anchor; }
+    container.append(node);
+  }
+  return container.innerHTML;
+}
+
+export function richTextSource(rich: RichText, format: RichTextFormat, document: Document): string {
+  if (format === 'html') return richTextHtml(rich, document);
+  const runs: TextRun[] = [];
+  for (const run of rich.runs) {
+    const last = runs.at(-1);
+    if (last && !!last.bold === !!run.bold && !!last.italic === !!run.italic && !!last.code === !!run.code && last.href === run.href) runs[runs.length - 1] = { ...last, text: last.text + run.text };
+    else runs.push(run);
+  }
+  return runs.map(run => run.text.split('\n').map(part => {
+    const leading = /^\s*/.exec(part)![0], trailing = /\s*$/.exec(part)![0];
+    const core = part.slice(leading.length, part.length - trailing.length);
+    if (!core) return part;
+    let text = core.replace(/[\\`*_{}\[\]()#+.!<>~&-]/g, '\\$&');
+    if (run.code) { const longest = Math.max(0, ...Array.from(core.matchAll(/`+/g), match => match[0].length)); const ticks = '`'.repeat(longest + 1); text = ticks + ' ' + core + ' ' + ticks; }
+    if (run.bold) text = '**' + text + '**';
+    if (run.italic) text = '*' + text + '*';
+    if (run.href && safeWebUrl(run.href)) text = '[' + text + '](' + run.href.replace(/[()\\]/g, character => encodeURIComponent(character)) + ')';
+    return leading + text + trailing;
+  }).join('  \n')).join('');
+}
 
 /** Read only inert markup. No parsed element is mounted or used as an image. */
-export function readHtml(source: string, document: Document): RichText {
-  if (source.length > 100_000) return { text: source, runs: [{ text: source }] };
+export function readHtml(source: string, document: Document, preserveWhitespace = false): RichText {
+  if (source.length > 100_000) throw new RangeError('Rich text exceeds 100,000 characters.');
   const template = document.createElement('template');
   template.innerHTML = source;
   const runs: TextRun[] = [];
@@ -22,8 +60,8 @@ export function readHtml(source: string, document: Document): RichText {
     if (depth > 128) return;
     if (node.nodeType === 3) {
       const text = node.textContent ?? '';
-      if (!text.trim() && ((node.parentNode?.nodeType === 11 && /[\r\n]/.test(text)) || ['UL', 'OL'].includes(node.parentElement?.tagName ?? ''))) return;
-      if (text) runs.push({ ...style, text: style.code ? text : text.replace(/\s+/g, ' ') }); return;
+      if (!preserveWhitespace && !text.trim() && ((node.parentNode?.nodeType === 11 && /[\r\n]/.test(text)) || ['UL', 'OL'].includes(node.parentElement?.tagName ?? ''))) return;
+      if (text) runs.push({ ...style, text: style.code || preserveWhitespace ? text : text.replace(/\s+/g, ' ') }); return;
     }
     if (node.nodeType !== 1) return;
     const element = node as Element; const tag = element.tagName.toLowerCase();
@@ -42,6 +80,12 @@ export function readHtml(source: string, document: Document): RichText {
     const next = { ...style, ...(['strong', 'b'].includes(tag) ? { bold: true } : {}),
       ...(['em', 'i'].includes(tag) ? { italic: true } : {}), ...(tag === 'u' ? { underline: true } : {}),
       ...(['code', 'pre'].includes(tag) ? { code: true } : {}), ...(href ? { href } : {}) };
+    if (preserveWhitespace) {
+      const css = (element as HTMLElement).style;
+      if (css?.fontWeight) next.bold = css.fontWeight === 'bold' || Number(css.fontWeight) >= 600;
+      if (css?.fontStyle) next.italic = css.fontStyle === 'italic';
+      if (css?.textDecorationLine) next.underline = css.textDecorationLine.includes('underline');
+    }
     node.childNodes.forEach(child => visit(child, next, depth + 1));
     if (block) breakLine();
   };
@@ -62,7 +106,6 @@ export interface TextPiece { readonly run: TextRun; readonly font: string; reado
 /** Shared geometry for painting, wrapping and measuring styled text. */
 export function layoutRichText(context: CanvasRenderingContext2D, rich: RichText, font: string, width: number, wrap: boolean, maxLines = 1000): { pieces: TextPiece[]; lines: number; width: number; lineHeight: number } {
   context.font = font;
-  font = context.font;
   font = context.font;
   const metrics = context.measureText('M');
   const lineHeight = Math.ceil(metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent) || 18;

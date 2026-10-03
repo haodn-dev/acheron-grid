@@ -1,6 +1,7 @@
 import { clipboardCellLimit, clipboardTextLimit, encodeTsv } from './tsv.js';
+import type { CellFormat } from './types.js';
 
-export interface ClipboardBlock { readonly row:number; readonly column:number; readonly values:readonly (readonly string[])[]; }
+export interface ClipboardBlock { readonly row:number; readonly column:number; readonly values:readonly (readonly string[])[]; readonly formats?: readonly (readonly CellFormat[])[]; }
 export const gridClipboardType='application/x-acheron-grid+json';
 export function encodeBlocks(blocks:readonly ClipboardBlock[]):string {
   const text=JSON.stringify({version:1,blocks});
@@ -17,7 +18,23 @@ export function decodeBlocks(text:string):ClipboardBlock[] {
     const width=Array.isArray(block.values[0])?block.values[0].length:0;
     if(!width||block.values.some((row:unknown)=>!Array.isArray(row)||row.length!==width||row.some(value=>typeof value!=='string')))throw new TypeError('Invalid clipboard cells.');
     cells+=block.values.length*width;if(cells>clipboardCellLimit)throw new RangeError('Clipboard has too many cells.');
-    return {row:Number(block.row),column:Number(block.column),values:block.values as string[][]};
+    let formats: CellFormat[][] | undefined;
+    if ('formats' in block) {
+      if (!Array.isArray(block.formats) || block.formats.length !== block.values.length) throw new TypeError('Invalid clipboard formats.');
+      formats = block.formats.map((line: unknown) => {
+        if (!Array.isArray(line) || line.length !== width) throw new TypeError('Invalid clipboard formats.');
+        return line.map((format: unknown) => {
+          if (!format || typeof format !== 'object') throw new TypeError('Invalid clipboard format.');
+          const result: Record<string, string> = {};
+          for (const [key, value] of Object.entries(format)) {
+            if (typeof value !== 'string' || (key === 'contentFormat' ? !['plain', 'html', 'markdown'].includes(value) : !['background', 'textColor'].includes(key) || !/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(value))) throw new TypeError('Invalid clipboard format.');
+            result[key] = value;
+          }
+          return result;
+        });
+      });
+    }
+    return {row:Number(block.row),column:Number(block.column),values:block.values as string[][],...(formats ? { formats } : {})};
   });
 }
 export function blocksToTsv(blocks:readonly ClipboardBlock[]):string {

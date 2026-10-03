@@ -6,9 +6,10 @@ import type { ReorderRequest, RowChangeRequest } from './reorder.js';
 import { headerLayout, reorderedHeaderGroups } from './headers.js';
 import type { HeaderGroup } from './headers.js';
 import { detectLinks } from './links.js';
-import { readHtml, layoutRichText } from './rich-text.js';
+import { readHtml, layoutRichText, richTextHtml, richTextSource } from './rich-text.js';
 import type { RichText, RichTextFormat } from './rich-text.js';
-import { createGridEngine, gridClipboardType } from '@acheron-grid/core';
+import { createGridEngine, gridClipboardType, decodeBlocks, encodeBlocks, blocksToTsv } from '@acheron-grid/core';
+import type { ClipboardBlock } from '@acheron-grid/core';
 import type { CellUpdate, DataRow, DataSource, Column, CellSelection, SelectionRange, CellPermission, CellLockTarget, CellFormatTarget, CellFormat, CellFormatPatch, LocalViewOptions, GridEngineOptions, ViewportRegion, RowGroup } from '@acheron-grid/core';
 
 let editorId = 0;
@@ -171,15 +172,15 @@ export function createGrid(options: GridOptions): Grid {
     if (format === 'markdown' && !options.markdownToHtml) throw new TypeError('Markdown columns require a markdownToHtml adapter.');
   }
   const richCache = new Map<string, RichText>();
-  function richText(value: unknown, key: string): RichText | undefined {
-    const format = richTextColumns.get(key);
-    if (!format || typeof value !== 'string') return undefined;
-    if (value.length > 100_000) return { text: value, runs: [{ text: value }] };
+  function richText(value: unknown, key: string, contentFormat?: CellFormat['contentFormat']): RichText | undefined {
+    const format = contentFormat ?? richTextColumns.get(key);
+    if (!format || format === 'plain' || typeof value !== 'string') return undefined;
+    if (value.length > 100_000) return { text: 'Rich text is too large to display', runs: [{ text: 'Rich text is too large to display' }], unavailable: true };
     const cacheKey = format + ':' + value;
     let rich = richCache.get(cacheKey);
     if (!rich) {
       try { rich = readHtml(format === 'markdown' ? options.markdownToHtml!(value) : value, doc); }
-      catch { rich = { text: value, runs: [{ text: value }] }; }
+      catch { rich = { text: 'Rich text unavailable', runs: [{ text: 'Rich text unavailable' }], unavailable: true }; }
       if (value.length <= 4096) {
         if (richCache.size >= 256) richCache.delete(richCache.keys().next().value!);
         richCache.set(cacheKey, rich);
@@ -187,7 +188,7 @@ export function createGrid(options: GridOptions): Grid {
     }
     return rich;
   }
-  function displayedText(value: unknown, key: string): string { return richText(value, key)?.text ?? String(value ?? ''); }
+  function displayedText(value: unknown, key: string, contentFormat?: CellFormat['contentFormat']): string { return richText(value, key, contentFormat)?.text ?? String(value ?? ''); }
   const win = doc.defaultView!;
   let theme = Object.freeze({ background: '#ffffff', textColor: '#0f172a', headerBackground: '#edf2f7',
     headerTextColor: '#334155', iconColor: '#475569', searchHighlightColor: '#f59e0b', gridLineColor: '#e2e8f0', selectionColor: '#2563eb',
@@ -423,6 +424,7 @@ export function createGrid(options: GridOptions): Grid {
   });
   let addNextSelection = false;
   let editor: CellEditor | null = null;
+  let richEditor: HTMLDivElement | null = null;
   let choices: HTMLElement | null = null;
   const editorPane = doc.createElement('div');
   editorPane.style.cssText = 'position:absolute;overflow:hidden;pointer-events:none;z-index:1';
@@ -507,7 +509,7 @@ export function createGrid(options: GridOptions): Grid {
       if (query) for (let row = 0; row < rowCount; row++) for (let col = 0; col < columns.length; col++) {
         const span=engine.getMerge(row,col);if(span&&(span.startRow!==row||span.startColumn!==col))continue;
         const value = engine.getValue(row, columns[col]!.key);
-        if (value != null && displayedText(value, columns[col]!.key).toLocaleLowerCase().includes(query) && engine.getCellPermission(row, col).selectable) searchMatches.add(row * columns.length + col);
+        if (value != null && displayedText(value, columns[col]!.key, engine.getFormat(row, col).contentFormat).toLocaleLowerCase().includes(query) && engine.getCellPermission(row, col).selectable) searchMatches.add(row * columns.length + col);
       }
       if (!searchMatches.has(searchCurrent)) searchCurrent = searchMatches.values().next().value ?? -1;
       updateSearchStatus();
@@ -712,7 +714,7 @@ export function createGrid(options: GridOptions): Grid {
         if (imageColumns.has(column.key)) width = Math.max(width, 64);
         else if (columnEditors.get(column.key)?.type === 'checkbox') width = Math.max(width, 36);
         else {
-          const rich = richText(value, column.key);
+          const rich = richText(value, column.key, engine.getFormat(row, index).contentFormat);
           if (rich) width = Math.max(width, layoutRichText(ctx, rich, theme.font, Infinity, false).width + 20);
           else for (const line of String(value ?? '').split('\n')) width = Math.max(width, ctx.measureText(line).width + 20);
           ctx.font = theme.font;
@@ -742,7 +744,7 @@ export function createGrid(options: GridOptions): Grid {
           height = Math.max(height, custom); continue;
         }
         if (imageColumns.has(key)) { height = Math.max(height, 56); continue; }
-        const rich = richText(value, key);
+        const rich = richText(value, key, engine.getFormat(index, col).contentFormat);
         if (rich) {
           const layout = layoutRichText(ctx, rich, theme.font, Math.max(0, columnAxis.size(col) - 20), !!options.wrapText, Math.ceil(1000 / lineHeight));
           height = Math.max(height, Math.min(1000, layout.lines * layout.lineHeight + 12)); ctx.font = theme.font; continue;
@@ -802,8 +804,33 @@ export function createGrid(options: GridOptions): Grid {
     popup.className = 'acheron-context-menu';
     popup.style.cssText = 'position:fixed;margin:0;padding:6px;min-width:200px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;border:1px solid var(--acheron-grid-line-color);border-radius:8px;box-shadow:0 8px 24px #0f172a26;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font)';
     const style = doc.createElement('style');
-    style.textContent = '.acheron-context-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:0;border-radius:4px;background:transparent;text-align:left;color:inherit;font:inherit;cursor:pointer}.acheron-context-menu button:hover:not(:disabled),.acheron-context-menu button:focus-visible{background:var(--acheron-header-background);outline:1px solid var(--acheron-grid-line-color)}.acheron-context-menu button:disabled{opacity:.45;cursor:default}.acheron-context-menu svg{flex:none;color:var(--acheron-icon-color)}.acheron-context-menu [role=separator]{height:1px;background:var(--acheron-grid-line-color);margin:5px 4px}';
+    style.textContent = '.acheron-context-menu [hidden]{display:none!important}.acheron-context-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:0;border-radius:4px;background:transparent;text-align:left;color:inherit;font:inherit;cursor:pointer;outline:none}.acheron-context-menu button:hover:not(:disabled),.acheron-context-menu button:focus-visible{background:var(--acheron-header-background)}.acheron-context-menu button:focus-visible{box-shadow:inset 0 0 0 1px var(--acheron-grid-line-color)}.acheron-context-menu button:disabled{opacity:.45;cursor:default}.acheron-context-menu svg{flex:none;color:var(--acheron-icon-color)}.acheron-context-menu [role=separator]{height:1px;background:var(--acheron-grid-line-color);margin:5px 4px}';
     popup.append(style);
+    style.textContent += '.acheron-context-menu:popover-open{display:grid;gap:2px}.acheron-context-menu:not(:popover-open){display:none}';
+    popup.addEventListener('toggle', () => { if (!popup.matches(':popover-open') && menu === popup) closeMenu(); });
+    const filter = doc.createElement('input'); filter.type = 'search'; filter.hidden = true; filter.placeholder = 'Filter actions…'; filter.setAttribute('aria-label', 'Filter actions');
+    filter.style.cssText = 'position:sticky;top:0;width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--acheron-grid-line-color);border-radius:4px;background:var(--acheron-background);color:inherit;font:inherit;outline:none';
+    popup.append(filter);
+    const empty = doc.createElement('div'); empty.textContent = 'No matching actions'; empty.hidden = true; empty.setAttribute('role', 'status'); empty.style.padding = '10px';
+    function filterActions(): void {
+      const query = filter.value.trim().toLocaleLowerCase();
+      let count = 0;
+      for (const button of Array.from(popup.querySelectorAll<HTMLButtonElement>('button'))) { button.hidden = !button.textContent!.toLocaleLowerCase().includes(query); if (!button.hidden) count++; }
+      let previousGroup = '';
+      for (const child of Array.from(popup.children)) {
+        if (child.getAttribute('role') === 'separator') (child as HTMLElement).hidden = true;
+        if (child instanceof win.HTMLButtonElement && !child.hidden) {
+          if (previousGroup && child.dataset.group !== previousGroup) {
+            let preceding = child.previousElementSibling;
+            while (preceding && preceding.getAttribute('role') !== 'separator') preceding = preceding.previousElementSibling;
+            if (preceding) (preceding as HTMLElement).hidden = false;
+          }
+          previousGroup = child.dataset.group!;
+        }
+      }
+      empty.hidden = count > 0;
+    }
+    filter.addEventListener('input', filterActions);
     const fingerprint = JSON.stringify(getSelectionRanges());
     const menuIcons:readonly (readonly [string,keyof typeof icons,string])[]=[
       ['Copy','copy','clipboard'],['Paste','clipboard-paste','clipboard'],
@@ -824,6 +851,7 @@ export function createGrid(options: GridOptions): Grid {
       const [,name,group]=menuIcons.find(([prefix])=>label.startsWith(prefix)) ?? ['', 'square-pen', 'editing'];
       if(previousGroup&&group!==previousGroup){const separator=doc.createElement('div');separator.setAttribute('role','separator');popup.append(separator);}
       previousGroup=group;
+      button.dataset.group = group;
       button.append(svgIcon(name),doc.createTextNode(label));
       button.setAttribute('role', 'menuitem');
       button.disabled = !enabled;
@@ -840,11 +868,18 @@ export function createGrid(options: GridOptions): Grid {
       });
       popup.append(button);
     }
-    item('Copy', rowCount > 0 && getSelectionRanges().length > 0 && engine.getCellPermission(selection.rowIndex, selection.columnIndex).copyable && !!win.navigator.clipboard?.writeText, () => win.navigator.clipboard.writeText(copySelection()));
+    item('Copy', rowCount > 0 && getSelectionRanges().length > 0 && engine.getCellPermission(selection.rowIndex, selection.columnIndex).copyable && !!win.navigator.clipboard?.writeText, writeClipboard);
     item('Paste', !!win.navigator.clipboard?.readText && engine.canPaste(), async () => {
-      const text = await win.navigator.clipboard.readText();
+      let text = '', html = '';
+      if (win.navigator.clipboard.read) {
+        const items = await win.navigator.clipboard.read();
+        for (const item of items) {
+          if (item.types.includes('text/html')) html = await (await item.getType('text/html')).text();
+          if (item.types.includes('text/plain')) text = await (await item.getType('text/plain')).text();
+        }
+      } else text = await win.navigator.clipboard.readText();
       if (destroyed || fingerprint !== JSON.stringify(getSelectionRanges())) throw new Error('Selection changed before paste. Try again.');
-      paste(text);
+      if (html) pasteSelectionBlocks(encodeBlocks(htmlClipboardBlocks(html))); else paste(text);
     });
     if (header) {
       item('Select column', true, () => selectColumn(col));
@@ -924,10 +959,16 @@ export function createGrid(options: GridOptions): Grid {
     item('Auto-fit row', rowCount > 0, () => autoFitRow(row));
     item('Resize column…', true, () => openSizeDialog('Column width', columnAxis.size(col), size => resizeAxis(columnAxis, col, size)));
     item('Resize row…', rowCount > 0, () => openSizeDialog('Row height', rowAxis.size(row), size => resizeAxis(rowAxis, row, size)));
+    popup.append(empty);
     popup.addEventListener('keydown', event => {
-      const buttons = Array.from(popup.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));
+      const buttons = Array.from(popup.querySelectorAll<HTMLButtonElement>('button:not(:disabled):not([hidden])'));
       const index = buttons.indexOf(doc.activeElement as HTMLButtonElement);
-      if (event.key === 'Escape' || event.key === 'Tab') { event.preventDefault(); closeMenu(true); }
+      if (event.key === 'Escape' && filter.value) { event.preventDefault(); filter.value = ''; filterActions(); filter.hidden = true; buttons[0]?.focus(); }
+      else if (event.key === 'Escape' || event.key === 'Tab') { event.preventDefault(); closeMenu(true); }
+      else if (event.target !== filter && !event.ctrlKey && !event.metaKey && !event.altKey && (event.key.length === 1 || event.key === 'Backspace')) {
+        event.preventDefault(); filter.hidden = false; filter.value = event.key === 'Backspace' ? filter.value.slice(0, -1) : filter.value + event.key; filterActions(); filter.focus();
+      }
+      else if (event.target === filter && event.key === 'Enter') { event.preventDefault(); buttons[0]?.click(); }
       else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
         event.preventDefault();
         const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
@@ -1231,12 +1272,13 @@ export function createGrid(options: GridOptions): Grid {
         editorError.textContent = error instanceof Error ? error.message : 'Unable to save cell.';
         editorError.style.display = 'block';
         positionEditor();
-        (choices?.querySelector<HTMLInputElement>('input') ?? editor).focus({ preventScroll: true });
+        (choices?.querySelector<HTMLInputElement>('input') ?? richEditor ?? editor).focus({ preventScroll: true });
         return false;
       }
     }
     const input = editor;
     editor = null;
+    richEditor?.remove(); richEditor = null;
     choices?.remove(); choices = null;
     input.remove(); editorAnchor = null; editorLabel.hidden = true; win.removeEventListener('beforeunload', guardEditNavigation);
     editorError.style.position = 'absolute';
@@ -1252,6 +1294,8 @@ export function createGrid(options: GridOptions): Grid {
     if (destroyed || editor || !selection || !engine.canEdit(selection.rowIndex, selection.columnIndex)) return;
     const column = columns[selection.columnIndex]!;
     const value = engine.getValue(selection.rowIndex, column.key);
+    const preview = richText(value, column.key, engine.getFormat(selection.rowIndex, selection.columnIndex).contentFormat);
+    if (preview?.unavailable) { actionError.textContent = 'Rich text cannot be edited until it can be displayed.'; actionError.style.display = 'block'; return; }
     try {
       const custom = options.createEditor?.(Object.freeze({ ...selection, value }), doc) ?? null;
       if (custom && (custom.ownerDocument !== doc || custom.parentNode || !['INPUT', 'SELECT', 'TEXTAREA'].includes(custom.tagName))) {
@@ -1320,11 +1364,55 @@ export function createGrid(options: GridOptions): Grid {
     });
     editor.addEventListener('blur', () => { if (!options.editorOptions?.pinned && !choices && !(editor instanceof win.HTMLSelectElement && editor.dataset.gridChoiceEditor !== undefined && options.choiceEditor)) finishEdit(true); });
     editorPane.append(editor);
+    const contentFormat = cellFormat.contentFormat ?? richTextColumns.get(column.key);
+    if (contentFormat && contentFormat !== 'plain' && !options.createEditor && !columnEditors.has(column.key)) {
+      const backing = editor;
+      const surface = doc.createElement('div'); richEditor = surface;
+      surface.contentEditable = 'true'; surface.setAttribute('role', 'textbox'); surface.setAttribute('aria-multiline', 'true');
+      surface.setAttribute('aria-label', backing.getAttribute('aria-label')!); surface.setAttribute('aria-errormessage', editorError.id);
+      surface.style.cssText = backing.style.cssText + ';white-space:pre-wrap;overflow:auto;overflow-wrap:anywhere;padding:4px 8px;line-height:normal';
+      surface.innerHTML = richTextHtml(richText(value, column.key, contentFormat) ?? { text: String(value ?? ''), runs: [{ text: String(value ?? '') }] }, doc);
+      backing.setAttribute('aria-hidden', 'true'); backing.tabIndex = -1; backing.style.visibility = 'hidden'; backing.style.pointerEvents = 'none';
+      const sync = () => { backing.value = richTextSource(readHtml(surface.innerHTML, doc, true), contentFormat, doc); backing.dispatchEvent(new win.Event('input', { bubbles: true })); };
+      const insert = (rich: RichText) => {
+        const selection = win.getSelection();
+        if (!selection?.rangeCount || !surface.contains(selection.anchorNode)) return;
+        const range = selection.getRangeAt(0); range.deleteContents();
+        const template = doc.createElement('template'); template.innerHTML = richTextHtml(rich, doc);
+        const last = template.content.lastChild; range.insertNode(template.content);
+        if (last) { range.setStartAfter(last); range.collapse(true); selection.removeAllRanges(); selection.addRange(range); }
+        sync();
+      };
+      surface.addEventListener('input', sync);
+      surface.addEventListener('paste', event => {
+        event.preventDefault(); event.stopPropagation();
+        const html = event.clipboardData?.getData('text/html'); const text = event.clipboardData?.getData('text/plain') ?? '';
+        const rich = html ? readHtml(html, doc) : { text, runs: [{ text }] };
+        insert(engine.getCellPermission(selection.rowIndex, selection.columnIndex).formatting ? rich : { text: rich.text, runs: [{ text: rich.text }] });
+      });
+      surface.addEventListener('drop', event => { event.preventDefault(); });
+      surface.addEventListener('click', event => { if ((event.target as Element).closest('a')) event.preventDefault(); });
+      surface.addEventListener('keydown', event => {
+        event.stopPropagation();
+        if (event.isComposing || event.keyCode === 229) return;
+        if ((event.ctrlKey || event.metaKey) && ['b','i','u'].includes(event.key.toLowerCase())) {
+          if (!engine.getCellPermission(selection.rowIndex, selection.columnIndex).formatting || contentFormat === 'markdown' && event.key.toLowerCase() === 'u') event.preventDefault();
+          return;
+        }
+        if (event.key === 'Enter' && (event.altKey || event.ctrlKey || event.metaKey)) { event.preventDefault(); insert({ text: '\n', runs: [{ text: '\n' }] }); return; }
+        if (['Enter', 'Escape', 'Tab'].includes(event.key)) {
+          event.preventDefault(); backing.dispatchEvent(new win.KeyboardEvent('keydown', { key: event.key, shiftKey: event.shiftKey }));
+        }
+      });
+      surface.addEventListener('blur', () => { if (!options.editorOptions?.pinned) finishEdit(true); });
+      editorPane.append(surface);
+    }
     if (options.editorOptions?.guardNavigation !== false) win.addEventListener('beforeunload', guardEditNavigation);
     editorLabel.textContent = `${column.title} · Row ${engine.getRowSourceIndex(selection.rowIndex) + 1} · ${String(engine.getRowId(selection.rowIndex))}`;
     positionEditor();
-    editor.focus({ preventScroll: true });
-    if (editor.tagName !== 'SELECT' && 'select' in editor) editor.select();
+    (richEditor ?? editor).focus({ preventScroll: true });
+    if (richEditor) { const range = doc.createRange(); range.selectNodeContents(richEditor); const selection = win.getSelection(); selection?.removeAllRanges(); selection?.addRange(range); }
+    else if (editor.tagName !== 'SELECT' && 'select' in editor) editor.select();
     if (editor instanceof win.HTMLSelectElement && editor.dataset.gridChoiceEditor !== undefined && options.choiceEditor) {
       choices = choicePanel(editor, root, options.choiceEditor, commit => { const done = finishEdit(commit); if (done) scroller.focus({ preventScroll: true }); return done; });
       editor.style.opacity = '0'; editor.style.pointerEvents = 'none'; editor.tabIndex = -1; editor.setAttribute('aria-hidden', 'true');
@@ -1335,10 +1423,83 @@ export function createGrid(options: GridOptions): Grid {
   const getSelectionRange = engine.getSelectionRange;
   const getSelectionRanges = engine.getSelectionRanges;
 
+  function clipboardBlocks(): ClipboardBlock[] {
+    const ranges = getSelectionRanges();
+    if (!ranges.length) return [];
+    const blocks = decodeBlocks(engine.copySelectionBlocks());
+    const firstRow = Math.min(...ranges.map(range => range.startRow)), firstColumn = Math.min(...ranges.map(range => range.startColumn));
+    return blocks.map(block => {
+      const formats: CellFormat[][] = [];
+      const values = block.values.map((line, row) => line.map((text, col) => {
+        const rowIndex = firstRow + block.row + row, columnIndex = firstColumn + block.column + col;
+        const format = block.formats?.[row]?.[col] ?? engine.getFormat(rowIndex, columnIndex), rich = richText(text, columns[columnIndex]!.key, format.contentFormat);
+        if (rich?.unavailable) throw new Error('Rich text cannot be copied until it can be displayed.');
+        (formats[row] ??= []).push({ ...format, ...(rich ? { contentFormat: 'html' as const } : {}) });
+        return rich ? richTextHtml(rich, doc) : text;
+      }));
+      return { ...block, values, formats };
+    });
+  }
+  function copySelectionBlocks(): string { return encodeBlocks(clipboardBlocks()); }
+  function pasteSelectionBlocks(text: string): void {
+    if (destroyed || editor) throw new Error('Finish editing before pasting cells.');
+    const ranges = getSelectionRanges().sort((a,b) => a.startRow - b.startRow || a.startColumn - b.startColumn);
+    const blocks = decodeBlocks(text).map((block, index) => {
+      const range = ranges.length > 1 ? ranges[index] : ranges[0];
+      if (!range) return block;
+      const formats = block.formats?.map(line => line.map(format => ({ ...format })));
+      const values = block.values.map((line, row) => line.map((value, col) => {
+        const rowIndex = range.startRow + row + (ranges.length === 1 ? block.row : 0), columnIndex = range.startColumn + col + (ranges.length === 1 ? block.column : 0);
+        if (formats?.[row]?.[col]?.contentFormat === 'html' && rowIndex < rowCount && columnIndex < columns.length) {
+          const current = engine.getValue(rowIndex, columns[columnIndex]!.key);
+          if (typeof current === 'number' || typeof current === 'boolean' || columnEditors.has(columns[columnIndex]!.key)) {
+            delete formats[row]![col]!.contentFormat;
+            return readHtml(value, doc).text;
+          }
+        }
+        return value;
+      }));
+      return { ...block, values, ...(formats ? { formats } : {}) };
+    });
+    engine.pasteSelectionBlocks(encodeBlocks(blocks));
+  }
+  function clipboardPlain(blocks: readonly ClipboardBlock[]): string {
+    return blocksToTsv(blocks.map(block => ({ ...block, values: block.values.map((line, row) => line.map((value, col) => block.formats?.[row]?.[col]?.contentFormat === 'html' ? readHtml(value, doc).text : value)) })));
+  }
+  function clipboardHtml(blocks: readonly ClipboardBlock[]): string {
+    const table = doc.createElement('table'); table.setAttribute('data-acheron-blocks', encodeBlocks(blocks));
+    for (const block of blocks) for (const [row, line] of block.values.entries()) {
+      const tr = doc.createElement('tr'); table.append(tr);
+      for (const [col, value] of line.entries()) {
+        const td = doc.createElement('td'), format = block.formats?.[row]?.[col];
+        if (format?.contentFormat === 'html') td.innerHTML = richTextHtml(readHtml(value, doc), doc); else td.textContent = value;
+        if (format?.background) td.style.backgroundColor = format.background;
+        if (format?.textColor) td.style.color = format.textColor;
+        tr.append(td);
+      }
+    }
+    return table.outerHTML;
+  }
+  function htmlClipboardBlocks(html: string): ClipboardBlock[] {
+    if (html.length > 10_000_000) throw new RangeError('Clipboard text is too large.');
+    const template = doc.createElement('template'); template.innerHTML = html;
+    const encoded = template.content.querySelector('table')?.getAttribute('data-acheron-blocks');
+    if (encoded) return decodeBlocks(encoded);
+    const rows = Array.from(template.content.querySelectorAll('table tr'));
+    const cells = rows.length ? rows.map(row => Array.from(row.children).filter(cell => ['TD','TH'].includes(cell.tagName))) : [];
+    const values = cells.length ? cells.map(line => line.map(cell => richTextHtml(readHtml(cell.innerHTML, doc), doc))) : [[richTextHtml(readHtml(html, doc), doc)]];
+    const formats = values.map(line => line.map(() => ({ contentFormat: 'html' as const })));
+    return decodeBlocks(encodeBlocks([{ row: 0, column: 0, values, formats }]));
+  }
+  async function writeClipboard(): Promise<void> {
+    const blocks = clipboardBlocks(); const text = clipboardPlain(blocks);
+    if (win.navigator.clipboard.write && win.ClipboardItem) await win.navigator.clipboard.write([new win.ClipboardItem({ 'text/plain': new win.Blob([text], { type: 'text/plain' }), 'text/html': new win.Blob([clipboardHtml(blocks)], { type: 'text/html' }) })]);
+    else await win.navigator.clipboard.writeText(text);
+  }
   function copySelection(): string {
     if (destroyed) throw new Error('Grid is destroyed.');
     if (editor) throw new Error('Finish editing before copying cells.');
-    return engine.copySelection();
+    return clipboardPlain(clipboardBlocks());
   }
 
   function paste(text: string): void {
@@ -1351,15 +1512,15 @@ export function createGrid(options: GridOptions): Grid {
     const selection = engine.getSelection();
     if (event.target === editor || !selection || !event.clipboardData) return;
     event.preventDefault();
-    try { const text=copySelection(),blocks=engine.copySelectionBlocks();event.clipboardData.setData('text/plain',text);event.clipboardData.setData(gridClipboardType,blocks); }
+    try { const blocks=clipboardBlocks(); event.clipboardData.setData('text/plain',clipboardPlain(blocks)); event.clipboardData.setData('text/html',clipboardHtml(blocks));event.clipboardData.setData(gridClipboardType,encodeBlocks(blocks)); }
     catch (error) { win.alert(error instanceof Error ? error.message : 'Unable to copy cells.'); }
   }
 
   function onPaste(event: ClipboardEvent): void {
     const selection = engine.getSelection();
-    if (event.target === editor || !selection || !event.clipboardData?.types.includes('text/plain')) return;
+    if (event.target === editor || !selection || !event.clipboardData || !event.clipboardData.types.some(type => ['text/plain','text/html',gridClipboardType].includes(type))) return;
     event.preventDefault();
-    try { if(event.clipboardData.types.includes(gridClipboardType))engine.pasteSelectionBlocks(event.clipboardData.getData(gridClipboardType));else paste(event.clipboardData.getData('text/plain')); }
+    try { if(event.clipboardData.types.includes(gridClipboardType))pasteSelectionBlocks(event.clipboardData.getData(gridClipboardType));else if(event.clipboardData.types.includes('text/html'))pasteSelectionBlocks(encodeBlocks(htmlClipboardBlocks(event.clipboardData.getData('text/html'))));else paste(event.clipboardData.getData('text/plain')); }
     catch (error) { win.alert(error instanceof Error ? error.message : 'Unable to paste cells.'); }
   }
 
@@ -1619,11 +1780,11 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function cellLinks(row: number, col: number) {
-    return linksForValue(engine.getValue(row, columns[col]!.key), columns[col]!.key);
+    return linksForValue(engine.getValue(row, columns[col]!.key), columns[col]!.key, engine.getFormat(row, col).contentFormat);
   }
-  function linksForValue(value: unknown, key: string) {
+  function linksForValue(value: unknown, key: string, contentFormat?: CellFormat['contentFormat']) {
     if (options.detectLinks === false || imageColumns.has(key)) return [];
-    const rich = richText(value, key);
+    const rich = richText(value, key, contentFormat);
     if (!rich) return detectLinks(value);
     const links = detectLinks(rich.text);
     let offset = 0;
@@ -1731,7 +1892,7 @@ export function createGrid(options: GridOptions): Grid {
       }
       ctx.restore(); highlightSearch(x, y, width, height, rowIndex, columnIndex); return;
     }
-    const rich = !header ? richText(value, columns[columnIndex]!.key) : undefined;
+    const rich = !header ? richText(value, columns[columnIndex]!.key, format?.contentFormat) : undefined;
     if (rich) {
       ctx.save(); ctx.beginPath(); ctx.rect(x + 8, y, Math.max(0, width - 16), height); ctx.clip();
       ctx.font = theme.font; const metrics = ctx.measureText('M');
@@ -1835,6 +1996,14 @@ export function createGrid(options: GridOptions): Grid {
     return engine.getViewport({ width: scroller.clientWidth, height: scroller.clientHeight, scrollLeft: scroller.scrollLeft, scrollTop: scroller.scrollTop });
   }
 
+  function positionRichEditor(maxHeight: number): void {
+    if (!richEditor || !editor) return;
+    for (const property of ['left', 'top', 'width'] as const) richEditor.style[property] = editor.style[property];
+    richEditor.style.height = '0px';
+    richEditor.style.height = `${Math.min(maxHeight, Math.max(parseFloat(editor.style.height), richEditor.scrollHeight + 4))}px`;
+    editor.style.height = richEditor.style.height;
+    if (editor.hasAttribute('aria-invalid')) richEditor.setAttribute('aria-invalid', 'true'); else richEditor.removeAttribute('aria-invalid');
+  }
   function positionEditor(): void {
     const selection = engine.getSelection();
     if (!editor || !selection) return;
@@ -1847,9 +2016,10 @@ export function createGrid(options: GridOptions): Grid {
       editorPane.style.position = 'fixed'; editorPane.style.overflow = 'visible'; editorPane.style.zIndex = '9'; editorPane.style.clipPath = '';
       editorPane.style.left = `${left}px`; editorPane.style.top = `${top}px`; editorPane.style.width = `${Math.min(editorAnchor.width, win.innerWidth - left - 8)}px`; editorPane.style.height = `${Math.min(editorAnchor.height, win.innerHeight - top - 16)}px`;
       editor.style.left = '0px'; editor.style.top = '0px'; editor.style.width = editorPane.style.width; editor.style.height = editorPane.style.height;
-      if (editor instanceof win.HTMLTextAreaElement) {
+      if (editor instanceof win.HTMLTextAreaElement && !richEditor) {
         editor.style.height = '0px'; editor.style.height = `${Math.min(Math.max(editorAnchor.height, editor.scrollHeight + 4), win.innerHeight - top - 16)}px`;
       }
+      positionRichEditor(win.innerHeight - top - 16);
       const displaced=Math.abs(bounds.left+indexWidth+rect.x-editorAnchor.left)>.5 || Math.abs(bounds.top+headerHeight+rect.y-editorAnchor.top)>.5;
       editorLabel.hidden = options.editorOptions.showLabel === false || options.editorOptions.showLabel === 'scroll' && !displaced;
       if (choices && editor instanceof win.HTMLSelectElement) { choices.hidden = false; positionChoicePanel(choices, editor); }
@@ -1868,7 +2038,7 @@ export function createGrid(options: GridOptions): Grid {
     const hidden = rect.x + rect.width <= clip.x || rect.x >= clip.x + clip.width || rect.y + rect.height <= clip.y || rect.y >= clip.y + clip.height;
     editorPane.style.clipPath = hidden ? 'inset(100%)' : '';
     if (choices && editor instanceof win.HTMLSelectElement) { choices.hidden = hidden; positionChoicePanel(choices, editor); }
-    if (editor instanceof win.HTMLTextAreaElement) {
+    if (editor instanceof win.HTMLTextAreaElement && !richEditor) {
       context!.save(); context!.font = theme.font;
       let width = rect.width;
       for (const line of editor.value.split('\n')) width = Math.max(width, context!.measureText(line).width + 24);
@@ -1877,6 +2047,7 @@ export function createGrid(options: GridOptions): Grid {
       editor.style.height = '0px';
       editor.style.height = `${Math.min(Math.max(rect.height, editor.scrollHeight + 4), Math.max(1, clip.height - Math.max(0, rect.y - clip.y)))}px`;
     }
+    positionRichEditor(Math.max(1, clip.height - Math.max(0, rect.y - clip.y)));
     if (editorError.style.display !== 'none') {
       editorError.style.maxWidth = `${clip.width}px`;
       editorError.style.visibility = hidden ? 'hidden' : 'visible';
@@ -1895,7 +2066,7 @@ export function createGrid(options: GridOptions): Grid {
   function accessibleText(row: number, col: number, value: unknown): string {
     const column = columns[col]!; const label = options.getCellLabel?.(row, column.key, value);
     if (label !== undefined) return label;
-    return `${column.title}: ${imageColumns.has(column.key) ? value ? 'Image' : 'No image' : displayedText(value, column.key)}`;
+    return `${column.title}: ${imageColumns.has(column.key) ? value ? 'Image' : 'No image' : displayedText(value, column.key, engine.getFormat(row, col).contentFormat)}`;
   }
   function accessibleCell(row: number, col: number, value: unknown): HTMLElement {
     const key = `${row}:${col}`;
@@ -1907,14 +2078,14 @@ export function createGrid(options: GridOptions): Grid {
     node.setAttribute('aria-colspan',String(span?span.endColumn-span.startColumn+1:1));
     node.setAttribute('aria-readonly', String(!engine.canEdit(row, col)));
     node.setAttribute('aria-selected', String(getSelectionRanges().some(range => row >= range.startRow && row <= range.endRow && col >= range.startColumn && col <= range.endColumn)));
-    node.setAttribute('aria-description', [...stateLabels(row, col), ...(linksForValue(value, columns[col]!.key).length ? ['Contains links. Alt+Enter opens links.'] : [])].join('; '));
+    node.setAttribute('aria-description', [...stateLabels(row, col), ...(linksForValue(value, columns[col]!.key, engine.getFormat(row, col).contentFormat).length ? ['Contains links. Alt+Enter opens links.'] : [])].join('; '));
     node.textContent = accessibleText(row, col, value);
     return node;
   }
   function draw(): void {
     frame = undefined;
     if (destroyed) return;
-    if (options.autoRowHeight && !editor) for (const row of visibleIndices('row')) {
+    if (options.autoRowHeight && !editor && !resizing) for (const row of visibleIndices('row')) {
       if (engine.isRowHeightManual(row) || measuredRows.has(row)) continue;
       const height = measureRowHeight(row); measuredRows.add(row);
       if (height !== rowAxis.size(row)) engine.measureRowHeight(row, height);
@@ -2315,7 +2486,7 @@ export function createGrid(options: GridOptions): Grid {
     activeCell.setAttribute('aria-colspan',String(span?span.endColumn-span.startColumn+1:1));
     activeCell.setAttribute('aria-readonly', String(!engine.canEdit(selection.rowIndex, selection.columnIndex)));
     const content = accessibleText(selection.rowIndex, selection.columnIndex, value);
-    activeCell.setAttribute('aria-description', [...stateLabels(selection.rowIndex, selection.columnIndex), ...(linksForValue(value, selection.columnKey).length ? ['Contains links. Alt+Enter opens links.'] : [])].join('; '));
+    activeCell.setAttribute('aria-description', [...stateLabels(selection.rowIndex, selection.columnIndex), ...(linksForValue(value, selection.columnKey, engine.getFormat(selection.rowIndex, selection.columnIndex).contentFormat).length ? ['Contains links. Alt+Enter opens links.'] : [])].join('; '));
     if (activeCell.textContent !== content) activeCell.textContent = content;
     scroller.setAttribute('aria-activedescendant', activeCell.id);
     scroller.setAttribute('aria-label', `${viewportLabel}: row ${selection.rowIndex + 1}, ${content}`);
@@ -2423,8 +2594,8 @@ export function createGrid(options: GridOptions): Grid {
     setGroupCollapsed:(id:string,collapsed:boolean)=>structureAction(()=>engine.setGroupCollapsed(id,collapsed)),
     setView:(view:LocalViewOptions)=>structureAction(()=>{engine.setView(view);currentView=engine.view;}),
     get view(){return managesView ? engine.view : currentView ?? {};},
-    copySelectionBlocks:engine.copySelectionBlocks,
-    pasteSelectionBlocks:(text:string)=>structureAction(()=>engine.pasteSelectionBlocks(text)),
+    copySelectionBlocks,
+    pasteSelectionBlocks,
     get rowCount() { return rowCount; }, get columns() { return columns; },
     insertColumns:(index:number,added:readonly Column[])=>structureAction(()=>engine.insertColumns(index,added)),
     deleteColumns:(indices:readonly number[])=>structureAction(()=>engine.deleteColumns(indices)),
@@ -2493,6 +2664,7 @@ export function createGrid(options: GridOptions): Grid {
       dirty.clear();
       const input = editor;
       editor = null;
+      richEditor?.remove(); richEditor = null;
       input?.remove();
       onPointerEnd();
       root.removeEventListener('pointermove', onPointerMove);

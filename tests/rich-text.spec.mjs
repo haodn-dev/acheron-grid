@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('rich text paints partial styles, wraps, searches visible text and preserves source/history', async ({ page }) => {
+test('rich text paints partial styles, wraps, searches visible text and visually edits with history', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
     const { createGrid } = await import('/canvas/index.js');
@@ -24,11 +24,13 @@ test('rich text paints partial styles, wraps, searches visible text and preserve
   const viewport = page.getByLabel(/^Data grid viewport/);
   await viewport.press('Control+Home'); await viewport.press('F2');
   const editor = page.getByRole('textbox', { name: 'Edit row 1, Notes', exact: true });
-  await expect(editor).toHaveValue(await page.evaluate(() => window.raw));
-  await editor.fill('**Changed** and *part*'); await editor.press('Enter');
-  expect(await page.evaluate(() => window.source.getValue(0, 'notes'))).toBe('**Changed** and *part*');
+  await expect(editor).toHaveAttribute('contenteditable', 'true');
+  await expect(editor.locator('strong')).toHaveText('Bold');
+  expect(await editor.textContent()).not.toContain('**');
+  await editor.fill('Changed and part'); await editor.press('Enter');
+  expect(await page.evaluate(() => window.source.getValue(0, 'notes'))).toBe('**Changed and part**');
   await expect(page.getByRole('gridcell', { name: 'Notes: Changed and part', exact: true })).toBeAttached();
-  expect(await page.evaluate(() => window.grid.copySelection())).toBe('**Changed** and *part*');
+  expect(await page.evaluate(() => window.grid.copySelection())).toBe('Changed and part');
   await page.evaluate(() => window.grid.undo());
   expect(await page.evaluate(() => window.source.getValue(0, 'notes') === window.raw)).toBe(true);
   await viewport.press('Alt+Enter');

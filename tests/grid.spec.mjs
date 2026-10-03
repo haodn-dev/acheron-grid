@@ -238,13 +238,15 @@ test('paste validates the whole rectangle, preserves data on errors and leaves e
     return { paste: paste.defaultPrevented, copy: copy.defaultPrevented };
   })).toEqual({ paste: false, copy: false });
   await page.getByRole('textbox').press('Escape');
+  await viewport.click({ position: { x: 340, y: 16 } });
   await viewport.evaluate(el => {
-    const html = new DataTransfer(); html.setData('text/html', '<b>Ignored</b>');
+    const html = new DataTransfer(); html.setData('text/html', '<b>43</b>');
     const event = new ClipboardEvent('paste', { clipboardData: html, bubbles: true, cancelable: true });
     el.dispatchEvent(event);
-    window.htmlIgnored = !event.defaultPrevented;
+    window.htmlHandled = event.defaultPrevented;
   });
-  expect(await page.evaluate(() => window.htmlIgnored)).toBe(true);
+  expect(await page.evaluate(() => window.htmlHandled)).toBe(true);
+  expect(await page.evaluate(() => window.source.getValue(0, 'amount'))).toBe(43);
   expect(await page.evaluate(async () => {
     window.grid.destroy();
     const { createGrid } = await import('/canvas/index.js');

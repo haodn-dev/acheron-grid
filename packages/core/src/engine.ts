@@ -87,7 +87,7 @@ export function createGridEngine(options: GridEngineOptions) {
   let anchor: CellSelection | null = null;
   const retainedRanges: SelectionRange[] = [];
   type Change = CellUpdate & { previous: unknown; rowId: RowId };
-  type FormatEntry = { target: Readonly<CellFormatTarget>; bounds: Readonly<SelectionRange>; patch: Readonly<CellFormatPatch>; orders: Readonly<{ background?: number; textColor?: number }>; order: number };
+  type FormatEntry = { target: Readonly<CellFormatTarget>; bounds: Readonly<SelectionRange>; patch: Readonly<CellFormatPatch>; orders: Readonly<{ background?: number; textColor?: number; contentFormat?: number }>; order: number };
   type FormatChange = { key: string; previous: FormatEntry | undefined; value: FormatEntry | undefined };
   type StructureState = {
     merges: readonly Readonly<SelectionRange>[]; groups: readonly Readonly<RowGroup>[];
@@ -96,7 +96,7 @@ export function createGridEngine(options: GridEngineOptions) {
     manualRows:number[]; lockedRows: number[]; lockedColumns: number[]; lockedCells: string[]; formats: Map<string, FormatEntry>;
     frozenRows: number; frozenColumns: number;
   };
-  type HistoryCommand = { kind: 'values'; changes: Change[] } | { kind: 'format'; changes: FormatChange[] }
+  type HistoryCommand = { kind: 'values'; changes: Change[]; formats?: FormatChange[] } | { kind: 'format'; changes: FormatChange[] }
     | { kind: 'outline'; requests: readonly LayoutRequest[]; beforeMerges: readonly Readonly<SelectionRange>[]; afterMerges: readonly Readonly<SelectionRange>[]; beforeGroups: readonly Readonly<RowGroup>[]; afterGroups: readonly Readonly<RowGroup>[] }
     | { kind: 'resize'; axis: 'row' | 'column'; index: number; previous: number; size: number; previousManual:boolean }
     | { kind: 'freeze'; previousRows: number; previousColumns: number; rows: number; columns: number }
@@ -364,7 +364,7 @@ export function createGridEngine(options: GridEngineOptions) {
     else throw new Error('An atomic setValues method is required for batch writes.');
   }
 
-  function applyUpdates(updates: readonly CellUpdate[], source: GridChangeSource = 'api'): void {
+  function applyUpdates(updates: readonly CellUpdate[], source: GridChangeSource = 'api', formatChanges: FormatChange[] = []): void {
     assertAlive();
     const unique = new Map<string, CellUpdate>();
     for (const update of updates) {
@@ -375,14 +375,16 @@ export function createGridEngine(options: GridEngineOptions) {
     const changes: Change[] = [...unique.values()].map(update => ({ ...update,
       previous: dataSource.getValue(update.rowIndex, update.columnKey), rowId: dataSource.getRowId(update.rowIndex),
     })).filter(change => !Object.is(change.previous, change.value));
-    if (!changes.length) return;
+    if (!changes.length && !formatChanges.length) return;
     for (const change of changes) requirePermission(change.rowIndex, columnIndices.get(change.columnKey)!, 'writable');
-    write(changes);
-    past.push({ kind: 'values', changes });
+    if (changes.length) write(changes);
+    writeFormats(formatChanges);
+    past.push({ kind: 'values', changes, formats: formatChanges });
     // keep the latest 100 commands; large values remain shallow caller-owned references.
     if (past.length > 100) past.shift();
     future.length = 0;
-    notifyCells(changes, source);
+    if (changes.length) notifyCells(changes, source);
+    if (formatChanges.length) notifyFormats(formatChanges, source === 'paste' ? 'paste' : 'api');
   }
 
   function replay(redo: boolean): boolean {
@@ -436,6 +438,10 @@ export function createGridEngine(options: GridEngineOptions) {
       writeFormats(changes); from.pop(); to.push(entry); notifyFormats(changes, redo ? 'redo' : 'undo'); return true;
     }
     const changes = entry.changes;
+    for (const change of entry.formats ?? []) {
+      if (formats.get(change.key) !== (redo ? change.previous : change.value)) throw new Error('Formatting history conflicts with external changes.');
+      requireFormatPermission((change.value ?? change.previous)!.bounds);
+    }
     for (const change of changes) {
       if (dataSource.getRowId(change.rowIndex) !== change.rowId || !Object.is(dataSource.getValue(change.rowIndex, change.columnKey), redo ? change.previous : change.value)) {
         throw new Error('History conflicts with external data changes.');
@@ -443,10 +449,13 @@ export function createGridEngine(options: GridEngineOptions) {
     }
     for (const change of changes) requirePermission(change.rowIndex, columnIndices.get(change.columnKey)!, 'writable');
     const updates = changes.map(change => ({ ...change, previous: redo ? change.previous : change.value, value: redo ? change.value : change.previous }));
-    write(updates);
+    if (updates.length) write(updates);
+    const formatChanges = (entry.formats ?? []).map(change => ({ ...change, previous: redo ? change.previous : change.value, value: redo ? change.value : change.previous }));
+    writeFormats(formatChanges);
     from.pop();
     to.push(entry);
-    notifyCells(updates, redo ? 'redo' : 'undo');
+    if (updates.length) notifyCells(updates, redo ? 'redo' : 'undo');
+    if (formatChanges.length) notifyFormats(formatChanges, redo ? 'redo' : 'undo');
     return true;
   }
 
@@ -500,17 +509,19 @@ export function createGridEngine(options: GridEngineOptions) {
     return ranges.map(range=>{
       cells+=(range.endRow-range.startRow+1)*(range.endColumn-range.startColumn+1);
       if(cells>clipboardCellLimit)throw new RangeError('Selection has too many cells.');
-      const values:string[][]=[];
+      const values:string[][]=[],cellFormats:CellFormat[][]=[];
       for(let row=range.startRow;row<=range.endRow;row++) {
-        const line:string[]=[];
+        const line:string[]=[],formatLine:CellFormat[]=[];
         for(let col=range.startColumn;col<=range.endColumn;col++) {
           const index=sourceRow(row);requirePermission(index,col,'copyable');
           const span=mergeAt(index,col),value=span&&(index!==span.startRow||col!==span.startColumn)?null:dataSource.getValue(index,columns[col]!.key),text=value==null?'':String(value);
           length+=text.length;if(length>clipboardTextLimit)throw new RangeError('Selection text is too large.');line.push(text);
+          formatLine.push(getFormat(index,col));
         }
         values.push(line);
+        cellFormats.push(formatLine);
       }
-      return {row:range.startRow-firstRow,column:range.startColumn-firstColumn,values};
+      return {row:range.startRow-firstRow,column:range.startColumn-firstColumn,values,...(cellFormats.some(line=>line.some(format=>Object.keys(format).length)) ? {formats:cellFormats} : {})};
     });
   }
   function copySelection():string { return blocksToTsv(clipboardBlocks()); }
@@ -520,11 +531,11 @@ export function createGridEngine(options: GridEngineOptions) {
     if(!ranges.length)return;
     if(structured&&ranges.length>1&&ranges.length!==blocks.length)throw new Error('Clipboard and target range counts must match.');
     const placements=structured
-      ? ranges.length===1 ? blocks.map(block=>({row:ranges[0]!.startRow+block.row,col:ranges[0]!.startColumn+block.column,values:block.values}))
-        : blocks.map((block,i)=>({row:ranges[i]!.startRow,col:ranges[i]!.startColumn,values:block.values}))
-      : ranges.map(range=>({row:range.startRow,col:range.startColumn,values:blocks[0]!.values}));
+      ? ranges.length===1 ? blocks.map(block=>({...block,row:ranges[0]!.startRow+block.row,col:ranges[0]!.startColumn+block.column}))
+        : blocks.map((block,i)=>({...block,row:ranges[i]!.startRow,col:ranges[i]!.startColumn}))
+      : ranges.map(range=>({...blocks[0]!,row:range.startRow,col:range.startColumn}));
     let cells=0;
-    const texts=new Map<string,{rowIndex:number;columnKey:string;columnIndex:number;text:string}>();
+    const texts=new Map<string,{rowIndex:number;columnKey:string;columnIndex:number;text:string;format?:CellFormat}>();
     for(const place of placements) {
       const height=place.values.length,width=place.values[0]!.length;
       cells+=height*width;if(cells>clipboardCellLimit)throw new RangeError('Paste has too many cells.');
@@ -537,16 +548,31 @@ export function createGridEngine(options: GridEngineOptions) {
           continue;
         }
         if(previous&&previous.text!==text)throw new Error('Overlapping paste targets contain conflicting values.');
-        texts.set(key,{rowIndex,columnKey,columnIndex,text});
+        const format = place.formats?.[row]?.[col];
+        if (previous && JSON.stringify(previous.format) !== JSON.stringify(format)) throw new Error('Overlapping paste targets contain conflicting formats.');
+        texts.set(key,{rowIndex,columnKey,columnIndex,text,...(format ? { format } : {})});
       }
     }
-    for(const cell of texts.values())requirePermission(cell.rowIndex,cell.columnIndex,'pasteable');
+    for(const cell of texts.values()) {
+      requirePermission(cell.rowIndex,cell.columnIndex,'pasteable');
+      if (cell.format && Object.keys(cell.format).length) requireFormatPermission({ startRow: cell.rowIndex, endRow: cell.rowIndex, startColumn: cell.columnIndex, endColumn: cell.columnIndex });
+    }
     const updates=[...texts.values()].map(cell=>{
       const column=columns[cell.columnIndex]!,current=dataSource.getValue(cell.rowIndex,column.key);
       if(!column.parse&&current!=null&&typeof current!=='string')throw new Error('Column requires a parser: '+column.key);
       return {rowIndex:cell.rowIndex,columnKey:column.key,value:column.parse?column.parse(cell.text):cell.text};
     });
-    applyUpdates(updates,'paste');
+    const formatChanges: FormatChange[] = [];
+    for (const cell of texts.values()) if (cell.format && Object.keys(cell.format).length) {
+      const bounds = { startRow: cell.rowIndex, endRow: cell.rowIndex, startColumn: cell.columnIndex, endColumn: cell.columnIndex };
+      requireFormatPermission(bounds);
+      const target = { scope: 'cell' as const, rowIndex: cell.rowIndex, columnIndex: cell.columnIndex };
+      const key = JSON.stringify(['cell', cell.rowIndex, cell.rowIndex, cell.columnIndex, cell.columnIndex]);
+      const previous = formats.get(key), orders = { ...previous?.orders };
+      for (const property of Object.keys(cell.format) as (keyof CellFormat)[]) orders[property] = ++formatOrder;
+      formatChanges.push({ key, previous, value: { target, bounds: Object.freeze(bounds), patch: Object.freeze({ ...previous?.patch, ...cell.format }), orders: Object.freeze(orders), order: formatOrder } });
+    }
+    applyUpdates(updates,'paste',formatChanges);
   }
   function paste(text:string):void { pasteBlocks([{row:0,column:0,values:decodeTsv(text)}],false); }
 
@@ -678,13 +704,13 @@ export function createGridEngine(options: GridEngineOptions) {
   function getFormat(rowIndex: number, columnIndex: number): Readonly<CellFormat> {
     assertAlive(); validateLockTarget({ scope: 'cell', rowIndex, columnIndex });
     if (!orderedFormats.length) return emptyFormat;
-    const result: { background?: string; textColor?: string } = {};
-    const orders = { background: 0, textColor: 0 };
+    const result: Record<string, string> = {};
+    const orders = { background: 0, textColor: 0, contentFormat: 0 };
     // Scan sparse overlays; index regions if large formatting sets become costly.
     for (const entry of orderedFormats) {
       const range = entry.bounds;
       if (rowIndex < range.startRow || rowIndex > range.endRow || columnIndex < range.startColumn || columnIndex > range.endColumn) continue;
-      for (const key of ['background', 'textColor'] as const) {
+      for (const key of ['background', 'textColor', 'contentFormat'] as const) {
         if ((entry.orders[key] ?? 0) <= orders[key]) continue;
         orders[key] = entry.orders[key]!;
         const value = entry.patch[key];
@@ -699,7 +725,7 @@ export function createGridEngine(options: GridEngineOptions) {
     orderedFormats = [...formats.values()].sort((a, b) => a.order - b.order);
   }
 
-  function notifyFormats(changes: readonly FormatChange[], source: 'api' | 'undo' | 'redo'): void {
+  function notifyFormats(changes: readonly FormatChange[], source: 'api' | 'paste' | 'undo' | 'redo'): void {
     notify({ type: 'layout' }, Object.freeze({ type: 'format:change', source, changes: Object.freeze(changes.map(change => Object.freeze({ target: (change.value ?? change.previous)!.target, previous: change.previous?.patch ?? null, value: change.value?.patch ?? null }))) }));
   }
 
@@ -708,7 +734,7 @@ export function createGridEngine(options: GridEngineOptions) {
     if (patch !== null) {
       if (!patch || typeof patch !== 'object') throw new TypeError('Invalid formatting patch.');
       patch = Object.freeze({ ...patch });
-      for (const [key, value] of Object.entries(patch)) if (!['background', 'textColor'].includes(key) || (value !== null && (typeof value !== 'string' || !/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(value)))) throw new TypeError('Formatting colors must be hex colors or null.');
+      for (const [key, value] of Object.entries(patch)) if (!['contentFormat','background','textColor'].includes(key) || value !== null && (key === 'contentFormat' ? !['plain','html','markdown'].includes(value) : typeof value !== 'string' || !/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(value))) throw new TypeError('Invalid cell format.');
       if (!Object.keys(patch).length) return;
     }
     const unique = new Map<string, { target: CellFormatTarget; bounds: SelectionRange }>();
@@ -725,7 +751,7 @@ export function createGridEngine(options: GridEngineOptions) {
       const nextPatch = patch === null ? undefined : Object.freeze({ ...previous?.patch, ...patch });
       if ((!previous && !nextPatch) || (previous && previous === orderedFormats.at(-1) && JSON.stringify(previous.patch) === JSON.stringify(nextPatch))) continue;
       const orders = { ...previous?.orders };
-      if (patch) for (const key of ['background', 'textColor'] as const) if (patch[key] !== undefined) orders[key] = ++formatOrder;
+      if (patch) for (const key of ['background', 'textColor', 'contentFormat'] as const) if (patch[key] !== undefined) orders[key] = ++formatOrder;
       changes.push({ key, previous, value: nextPatch ? { ...entry, bounds: Object.freeze(entry.bounds), patch: nextPatch, orders: Object.freeze(orders), order: formatOrder } : undefined });
     }
     if (!changes.length) return;
@@ -839,7 +865,7 @@ export function createGridEngine(options: GridEngineOptions) {
           startColumn:target.scope==='column'||target.scope==='cell' ? target.columnIndex:0,endColumn:target.scope==='column'||target.scope==='cell' ? target.columnIndex:nextColumns.length-1};
         const nextKey=JSON.stringify([target.scope,bounds.startRow,bounds.endRow,bounds.startColumn,bounds.endColumn]);
         const existing=nextFormats.get(nextKey),patch={...existing?.patch},orders={...existing?.orders};
-        for(const property of ['background','textColor'] as const)if((entry.orders[property]??0)>(orders[property]??0)){orders[property]=entry.orders[property]!;patch[property]=entry.patch[property]!;}
+        for(const property of ['background','textColor','contentFormat'] as const)if((entry.orders[property]??0)>(orders[property]??0)){orders[property]=entry.orders[property]!;Object.assign(patch,{[property]:entry.patch[property]!});}
         nextFormats.set(nextKey,{...entry,target:Object.freeze(target),bounds:Object.freeze(bounds),patch:Object.freeze(patch),orders:Object.freeze(orders),order:Math.max(existing?.order??0,entry.order)});
       }
     }

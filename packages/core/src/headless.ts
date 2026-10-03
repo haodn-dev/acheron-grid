@@ -11,4 +11,6 @@ export { reorderedIndices } from './structure.js';
 export type { StructureRequest } from './structure.js';
 
 export { gridClipboardType } from './clipboard.js';
+export { encodeBlocks, decodeBlocks, blocksToTsv } from './clipboard.js';
+export type { ClipboardBlock } from './clipboard.js';
 export type { RowGroup, LayoutRequest } from './types.js';
