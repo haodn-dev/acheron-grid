@@ -464,3 +464,5 @@ Locking the table through `setLocked({ scope: 'table' }, true)` displays a non-b
 
 
 Canvas animates row/column reordering and group collapse/expand using temporary visible-strip snapshots. State, focus and hit testing update immediately. Freeze separators draw in; context menus and choice panels use short entrance/exit transitions. The default layout duration is 220ms; customize it with `motion: { duration: 300 }` (0–1000ms, 0 disables motion). Scrolling cancels layout snapshots, reduced motion is respected, and at most 64 visible strips participate per transition. Selection and ordinary scrolling do not animate. Very wide/tall viewports beyond that cap update the remaining strips immediately.
+
+Multi-cell selections use one uniform tint and an outer range border by default. Set `selectionStyle.activeCellBorderInRange: true` to also outline the active cell inside a range. Single-cell focus keeps its border.

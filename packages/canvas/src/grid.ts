@@ -80,7 +80,7 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
   choiceEditor?: ChoiceEditorOptions | false;
   motion?: boolean | { readonly duration?: number };
   tableLockNotice?: false | { readonly title?: string; readonly description?: string };
-  selectionStyle?: { readonly activeBorderWidth?: number; readonly headerTintOpacity?: number; readonly rangeBorderWidth?: number; readonly rangeTintOpacity?: number };
+  selectionStyle?: { readonly activeCellBorderInRange?: boolean; readonly activeBorderWidth?: number; readonly headerTintOpacity?: number; readonly rangeBorderWidth?: number; readonly rangeTintOpacity?: number };
   allowColumnChanges?:boolean;
   columnTypes?:readonly ColumnType[];
   onRowChange?: (request: Readonly<RowChangeRequest>) => void;
@@ -2583,7 +2583,7 @@ export function createGrid(options: GridOptions): Grid {
         Math.max(0, rowAxis.position(range.endRow + 1) - rowAxis.position(range.startRow) - rangeBorderWidth));
       }
       // Draw the active cell once in its own pane, above semantic cell colors.
-      if (!activeScope && !engine.getMerge(selection.rowIndex,selection.columnIndex) && selection.rowIndex >= region.rows.start && selection.rowIndex < region.rows.end && selection.columnIndex >= region.columns.start && selection.columnIndex < region.columns.end) {
+      if (!activeScope && (options.selectionStyle?.activeCellBorderInRange || !getSelectionRanges().some(range => (range.startRow !== range.endRow || range.startColumn !== range.endColumn) && selection.rowIndex >= range.startRow && selection.rowIndex <= range.endRow && selection.columnIndex >= range.startColumn && selection.columnIndex <= range.endColumn)) && !engine.getMerge(selection.rowIndex,selection.columnIndex) && selection.rowIndex >= region.rows.start && selection.rowIndex < region.rows.end && selection.columnIndex >= region.columns.start && selection.columnIndex < region.columns.end) {
         const x = columnAxis.position(selection.columnIndex) + region.offsetX;
         const y = headerHeight + rowAxis.position(selection.rowIndex) + region.offsetY;
         const width = columnAxis.size(selection.columnIndex); const height = rowAxis.size(selection.rowIndex);

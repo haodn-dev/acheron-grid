@@ -152,3 +152,18 @@ test('context menu clipboard preserves styles and visual editors save partial ma
   expect(await page.evaluate(() => window.source.getValue(0, 'plain'))).toContain('<strong>');
   await viewport.press('F2'); await expect(editor.locator('strong')).toHaveText('Modified'); await expect(editor.locator('em')).toHaveText('italic'); await editor.press('Escape');
 });
+
+
+test('multi-cell selection keeps one uniform tint without an inner active border', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: new LocalDataSource([{ id: 1, text: '' }, { id: 2, text: '' }, { id: 3, text: '' }], row => row.id), columns: [{ key: 'text', title: 'Text' }], indexColumn: false, rowHeight: 40, headerHeight: 30, columnWidth: 120, theme: { background: '#ffffff', selectionColor: '#ff6600' } });
+  });
+  const viewport = page.getByRole('grid'); await viewport.press('Control+Home'); await viewport.press('Shift+ArrowDown'); await viewport.press('Shift+ArrowDown');
+  expect(await page.evaluate(() => {
+    const canvas = document.querySelector('#grid canvas'); const ctx = canvas.getContext('2d'); const scale = canvas.width / canvas.clientWidth;
+    const pixel = y => [...ctx.getImageData(Math.round(60 * scale), Math.round(y * scale), 1, 1).data];
+    return pixel(112).join(',') === pixel(115).join(',');
+  })).toBe(true);
+});
