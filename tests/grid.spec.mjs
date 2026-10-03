@@ -2089,3 +2089,32 @@ test('selection at a frozen seam stays visible and clears its separator tint',as
  await expect(seam).toHaveCSS('background-image',/linear-gradient/);
  await page.getByRole('grid').press('Escape');await expect(seam).toHaveCSS('background-image','none');
 });
+
+
+test('adjacent Ctrl columns share one outline and horizontal scroll keeps automatic row heights', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
+    window.grid = createGrid({ container: document.querySelector('#grid'), accessibility: 'viewport',
+      dataSource: new LocalDataSource([{ id: 1, a: 'A', b: 'B', c: 'C', notes: 'One\nTwo\nThree\nFour\nFive' }], row => row.id),
+      columns: ['a', 'b', 'c', 'notes'].map(key => ({ key, title: key })), columnWidth: 220,
+      rowHeight: 28, autoRowHeight: true, wrapText: true });
+  });
+  const row = page.getByRole('button', { name: 'Select row 1', exact: true });
+  await expect.poll(() => row.evaluate(el => el.offsetHeight)).toBeGreaterThan(80);
+  const height = await row.evaluate(el => el.offsetHeight);
+  const header = name => page.getByRole('columnheader', { name, exact: true });
+  await header('a').click(); await header('b').click({ modifiers: ['Control'] }); await header('c').click({ modifiers: ['Control'] });
+  const pixels = () => page.evaluate(async () => {
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const canvas = document.querySelector('canvas'); return canvas.toDataURL();
+  });
+  const separate = await pixels();
+  expect(await page.evaluate(() => window.grid.getSelectionRanges().length)).toBe(3);
+  await header('a').click(); await header('c').click({ modifiers: ['Shift'] });
+  expect(await page.evaluate(() => window.grid.getSelectionRanges().length)).toBe(1);
+  expect(await pixels()).toBe(separate);
+  await page.getByRole('grid').evaluate(el => { el.scrollLeft = 400; });
+  await pixels(); expect(await row.evaluate(el => el.offsetHeight)).toBe(height);
+});

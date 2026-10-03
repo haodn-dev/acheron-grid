@@ -204,7 +204,6 @@ export function createGrid(options: GridOptions): Grid {
   }
   validateTheme(theme);
   const measuredRows = new Set<number>();
-  let measuredScrollLeft = 0;
   const indicatorPolicy = Object.freeze({ ...options.permissions });
   let headers = headerLayout(options.columns, options.headerGroups);
   const headerRowHeight = options.headerHeight ?? 36;
@@ -771,7 +770,7 @@ export function createGrid(options: GridOptions): Grid {
       ctx.font = theme.font;
       const metrics = ctx.measureText('M');
       const lineHeight = Math.ceil(metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent) || 18;
-      for (const col of visibleIndices('column')) {
+      for (let col = 0; col < columns.length; col++) {
         const key = columns[col]!.key;
         const value = engine.getValue(index, key);
         const custom = options.measureCellHeight?.(value, key, columnAxis.size(col));
@@ -2500,14 +2499,22 @@ export function createGrid(options: GridOptions): Grid {
   function drawSelection(regions: readonly ViewportRegion[]): void {
     const selection = engine.getSelection();
     const original = getSelectionRanges();
-    const wholeRows = original.filter(range => range.startColumn === 0 && range.endColumn === columns.length - 1).map(range => ({ ...range })).sort((a,b) => a.startRow - b.startRow);
-    const merged: SelectionRange[] = [];
-    for (const range of wholeRows) {
-      const previous = merged[merged.length - 1];
-      if (previous && range.startRow <= previous.endRow + 1) previous.endRow = Math.max(previous.endRow, range.endRow);
-      else merged.push(range);
+    const ranges: SelectionRange[] = [];
+    for (const axis of ['row', 'column'] as const) {
+      const full = (range: SelectionRange) => axis === 'row'
+        ? range.startColumn === 0 && range.endColumn === columns.length - 1
+        : range.startRow === 0 && range.endRow === rowCount - 1 && !(range.startColumn === 0 && range.endColumn === columns.length - 1);
+      const start = axis === 'row' ? 'startRow' : 'startColumn';
+      const end = axis === 'row' ? 'endRow' : 'endColumn';
+      const merged: SelectionRange[] = [];
+      for (const range of original.filter(full).map(range => ({ ...range })).sort((a, b) => a[start] - b[start])) {
+        const previous = merged.at(-1);
+        if (previous && range[start] <= previous[end] + 1) previous[end] = Math.max(previous[end], range[end]);
+        else merged.push(range);
+      }
+      ranges.push(...merged);
     }
-    const ranges = [...merged, ...original.filter(range => !(range.startColumn === 0 && range.endColumn === columns.length - 1))];
+    ranges.push(...original.filter(range => !(range.startColumn === 0 && range.endColumn === columns.length - 1) && !(range.startRow === 0 && range.endRow === rowCount - 1)));
     if (!selection || !ranges.length) return;
     const activeScope = original.some(range => selection.rowIndex >= range.startRow && selection.rowIndex <= range.endRow && selection.columnIndex >= range.startColumn && selection.columnIndex <= range.endColumn && (range.startColumn === 0 && range.endColumn === columns.length - 1 || range.startRow === 0 && range.endRow === rowCount - 1));
     for (const region of regions) {
@@ -2563,7 +2570,6 @@ export function createGrid(options: GridOptions): Grid {
 
   function render(): void {
     if (destroyed) return;
-    if (options.autoRowHeight && measuredScrollLeft !== scroller.scrollLeft) { measuredRows.clear(); measuredScrollLeft = scroller.scrollLeft; }
     syncAccessibleCell();
     const view = viewport();
     freezeVertical.hidden = !engine.frozenColumns || view.frozenWidth >= view.width;
