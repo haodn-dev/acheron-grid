@@ -251,7 +251,7 @@ export function createGrid(options: GridOptions): Grid {
         columns=engine.columns; rowCount=engine.rowCount;
         const outline=engine.getRowGroups();
         const levels=outline.reduce((max,group)=>Math.max(max,outline.filter(other=>other.startRow<=group.startRow&&other.endRow>=group.endRow).length),0);
-        indexWidth=options.indexColumn===false ? 0:Math.max(48,String(engine.sourceRowCount).length*8+16)+levels*18;
+        indexWidth=options.indexColumn===false ? 0:Math.max(48,String(engine.sourceRowCount).length*8+16)+levels*24;
         scroller.style.left=headerSurface.style.left=canvas.style.left=indexGutter.style.width=String(indexWidth)+'px';
         headers=headerLayout(columns,reorderedHeaderGroups(columns,options.headerGroups));
         headerHeight=headerRowHeight*headers.levels;
@@ -332,6 +332,9 @@ export function createGrid(options: GridOptions): Grid {
     dialog[data-grid-dialog] button:first-child { border-color:var(--acheron-selection-color);font-weight:600 }
     dialog[data-grid-dialog] :disabled { opacity:.5;cursor:default }
     dialog[data-grid-dialog] :focus-visible { outline:2px solid var(--acheron-selection-color);outline-offset:2px }
+    [data-grid-row-group]:hover:not(:disabled) { background:color-mix(in srgb,var(--acheron-icon-color) 12%,var(--acheron-header-background))!important;color:var(--acheron-text-color)!important }
+    [data-grid-row-group]:focus-visible { outline:1px solid var(--acheron-selection-color);outline-offset:1px }
+    [data-grid-row-group]:disabled { opacity:.4;cursor:default!important }
     [data-grid-row-resize]:hover { background:var(--acheron-selection-color);opacity:.5 }
     [data-grid-header-cell]:focus-visible { outline:2px solid var(--acheron-selection-color);outline-offset:-3px }
     [data-grid-search]:not([hidden]) { display:flex;align-items:center;flex-wrap:wrap;gap:4px }
@@ -2402,18 +2405,18 @@ export function createGrid(options: GridOptions): Grid {
         button.append(resizeHandle);
         reorderHandle(button, 'row', row);
         pane.append(button);
-        if(outline.length)button.style.paddingLeft=`${levels*18}px`;
+        if(outline.length)button.style.paddingLeft=`${levels*24}px`;
         for(const group of outline.filter(group=>!group.collapsed&&group.startRow<=sourceIndex&&group.endRow>=sourceIndex)){
           const depth=depths.get(group.id)!;
-          const line=doc.createElement('span');line.setAttribute('aria-hidden','true');line.style.cssText=`position:absolute;left:${depth*18+10}px;top:${rowAxis.position(row)+band.offset-band.y+(group.startRow===sourceIndex?rowAxis.size(row)/2+10:0)}px;width:7px;height:${group.startRow===sourceIndex?Math.max(0,rowAxis.size(row)/2-10):rowAxis.size(row)}px;box-sizing:border-box;border-left:1px solid var(--acheron-icon-color);opacity:.45;${group.endRow===sourceIndex?'border-bottom:1px solid var(--acheron-icon-color);':''}pointer-events:none`;pane.append(line);
+          const line=doc.createElement('span');line.setAttribute('aria-hidden','true');line.style.cssText=`position:absolute;left:${depth*24+12}px;top:${rowAxis.position(row)+band.offset-band.y+(group.startRow===sourceIndex?rowAxis.size(row)/2+10:0)}px;width:6px;height:${group.startRow===sourceIndex?Math.max(0,rowAxis.size(row)/2-10):group.endRow===sourceIndex?rowAxis.size(row)/2:rowAxis.size(row)}px;box-sizing:border-box;border-left:1px solid var(--acheron-grid-line-color);${group.endRow===sourceIndex?'border-bottom:1px solid var(--acheron-grid-line-color);border-bottom-left-radius:4px;':''}pointer-events:none`;pane.append(line);
         }
         for(const group of outline.filter(group=>group.startRow===sourceIndex).sort((a,b)=>b.endRow-a.endRow)) {
           const depth=depths.get(group.id)!;
           const toggle=doc.createElement('button');toggle.type='button';toggle.dataset.gridRowGroup=group.id;
           toggle.setAttribute('aria-label',`${group.collapsed?'Expand':'Collapse'} rows ${group.startRow+1}–${group.endRow+1}`);toggle.setAttribute('aria-expanded',String(!group.collapsed));
           toggle.disabled=!engine.canChangeLayout({kind:group.collapsed?'expand':'collapse',group});
-          toggle.title=toggle.getAttribute('aria-label')!+' · '+(group.endRow-group.startRow+1)+' rows';const glyph=svgIcon('chevron-down');if(group.collapsed)glyph.setAttribute('style','transform:rotate(-90deg)');toggle.append(glyph);
-          toggle.style.cssText=`position:absolute;left:${depth*18+2}px;top:${rowAxis.position(row)+band.offset-band.y+Math.max(0,(rowAxis.size(row)-20)/2)}px;width:18px;height:20px;display:flex;align-items:center;justify-content:center;padding:2px;border:1px solid var(--acheron-grid-line-color);border-radius:4px;background:var(--acheron-background);color:var(--acheron-icon-color);cursor:pointer`;
+          toggle.title=toggle.getAttribute('aria-label')!+' · '+(group.endRow-group.startRow+1)+' rows';const glyph=svgIcon('chevron-down');if(group.collapsed)glyph.setAttribute('style','transform:rotate(-90deg)');glyph.setAttribute('width','12');glyph.setAttribute('height','12');toggle.append(glyph);
+          toggle.style.cssText=`position:absolute;left:${depth*24+3}px;top:${rowAxis.position(row)+band.offset-band.y+Math.max(0,(rowAxis.size(row)-20)/2)}px;width:18px;height:20px;display:flex;align-items:center;justify-content:center;padding:2px;border:0;border-radius:5px;background:var(--acheron-header-background);color:var(--acheron-icon-color);cursor:pointer`;
           toggle.addEventListener('pointerdown',event=>{event.stopPropagation();});
           toggle.addEventListener('click',event=>{event.stopPropagation();try{structureAction(()=>engine.setGroupCollapsed(group.id,!group.collapsed), 'row');}catch(error){actionError.textContent=error instanceof Error?error.message:'Unable to toggle row group.';actionError.style.display='block';}});
           pane.append(toggle);
