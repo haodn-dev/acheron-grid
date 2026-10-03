@@ -148,6 +148,27 @@ export function createGrid(options: GridOptions): Grid {
   const root = doc.createElement('div');
   root.style.cssText = 'position:relative;width:100%;height:100%;overflow:hidden;background:var(--acheron-background)';
   for (const [key, value] of Object.entries(theme)) root.style.setProperty('--acheron-' + key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase()), value);
+  const dialogStyles = doc.createElement('style');
+  dialogStyles.textContent = `
+    dialog[data-grid-dialog] { position:fixed;inset:0;margin:auto;width:min(420px,calc(100% - 32px));max-width:none;max-height:calc(100% - 32px);overflow:auto;box-sizing:border-box;padding:24px;border:1px solid var(--acheron-grid-line-color);border-radius:12px;box-shadow:0 16px 48px #0f172a33;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);line-height:1.5 }
+    dialog[data-grid-dialog][open], dialog[data-grid-dialog] form { display:flex;flex-direction:column;gap:14px }
+    dialog[data-grid-dialog]::backdrop { background:#0f172a55 }
+    dialog[data-grid-dialog] p { margin:0 }
+    dialog[data-grid-dialog] > p:first-child { font-size:16px;font-weight:600 }
+    dialog[data-grid-dialog] [role=alert]:empty { display:none }
+    dialog[data-grid-dialog] [role=alert] { color:#9f1239 }
+    dialog[data-grid-dialog] label { display:flex;align-items:center;gap:8px;flex-wrap:wrap }
+    dialog[data-grid-dialog] input, dialog[data-grid-dialog] select, dialog[data-grid-dialog] button { box-sizing:border-box;font:inherit;color:inherit;border:1px solid var(--acheron-grid-line-color);border-radius:6px;background:var(--acheron-background);padding:8px 12px }
+    dialog[data-grid-dialog] input:not([type=checkbox]):not([type=color]), dialog[data-grid-dialog] select { width:100%;min-width:0 }
+    dialog[data-grid-dialog] input[type=checkbox] { width:16px;height:16px;padding:0;accent-color:var(--acheron-selection-color) }
+    dialog[data-grid-dialog] input[type=color] { width:48px;height:36px;padding:3px }
+    dialog[data-grid-dialog] button { cursor:pointer;background:var(--acheron-header-background);margin:0 }
+    dialog[data-grid-dialog] button:first-child { border-color:var(--acheron-selection-color);font-weight:600 }
+    dialog[data-grid-dialog] :disabled { opacity:.5;cursor:default }
+    dialog[data-grid-dialog] :focus-visible { outline:2px solid var(--acheron-selection-color);outline-offset:2px }
+    dialog[data-grid-dialog] [data-dialog-actions] { display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:4px }
+  `;
+  root.append(dialogStyles);
   const scroller = doc.createElement('div');
   const viewportLabel = dataSource.setValue && columns.some(column => column.editable) ? 'Data grid viewport' : 'Read-only data grid viewport';
   scroller.style.cssText = `position:absolute;inset:${headerHeight}px 0 0 ${indexWidth}px;overflow:auto;overscroll-behavior:contain`;
@@ -347,20 +368,20 @@ export function createGrid(options: GridOptions): Grid {
     activeDialog?.remove();
     activeDialog = dialog;
     dialog.setAttribute('aria-label', label);
-    dialog.style.cssText = 'padding:20px;border:1px solid var(--acheron-grid-line-color);border-radius:8px;box-shadow:0 8px 24px #0f172a26;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font)';
+    dialog.dataset.gridDialog = '';
     const form = doc.createElement('form');
     const fieldLabel = doc.createElement('label');
     fieldLabel.textContent = `${label} (px) `;
     const input = doc.createElement('input');
     input.type = 'number'; input.min = '1'; input.step = 'any'; input.required = true;
     input.value = String(current);
-    input.style.cssText = 'width:100px;padding:6px;margin:0 0 16px 8px';
+
     fieldLabel.append(input);
     const save = doc.createElement('button');
     save.type = 'submit'; save.textContent = 'Apply';
     const cancel = doc.createElement('button');
     cancel.type = 'button'; cancel.textContent = 'Cancel';
-    for (const button of [save, cancel]) button.style.cssText = 'padding:6px 14px;margin-right:8px';
+
     cancel.addEventListener('click', () => dialog.close());
     input.addEventListener('input', () => input.setCustomValidity(''));
     form.addEventListener('submit', event => {
@@ -368,7 +389,8 @@ export function createGrid(options: GridOptions): Grid {
       try { apply(input.valueAsNumber); dialog.close(); }
       catch (error) { input.setCustomValidity(error instanceof Error ? error.message : 'Invalid size.'); input.reportValidity(); }
     });
-    form.append(fieldLabel, doc.createElement('br'), save, cancel);
+    const actions = doc.createElement('div'); actions.dataset.dialogActions = ''; actions.append(save, cancel);
+    form.append(fieldLabel, actions);
     dialog.append(form);
     dialog.addEventListener('close', () => {
       dialog.remove();
@@ -390,7 +412,7 @@ export function createGrid(options: GridOptions): Grid {
     const ranges = getSelectionRanges();
     const dialog = doc.createElement('dialog'); activeDialog?.remove(); activeDialog = dialog;
     dialog.setAttribute('aria-label', 'Format cells');
-    dialog.style.cssText = 'padding:20px;border:1px solid var(--acheron-grid-line-color);border-radius:8px;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font)';
+    dialog.dataset.gridDialog = '';
     const form = doc.createElement('form');
     const scopeLabel = doc.createElement('label'); scopeLabel.textContent = 'Apply to ';
     const scope = doc.createElement('select');
@@ -411,7 +433,7 @@ export function createGrid(options: GridOptions): Grid {
     const save = doc.createElement('button'); save.type = 'submit'; save.textContent = 'Apply';
     const clear = doc.createElement('button'); clear.type = 'button'; clear.textContent = 'Clear formatting';
     const cancel = doc.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel';
-    for (const button of [save, clear, cancel]) button.style.cssText = 'padding:6px 12px;margin-right:8px';
+
     function targets(): CellFormatTarget[] {
       if (scope.value === 'row') return [{ scope: 'row', rowIndex: row }];
       if (scope.value === 'column') return [{ scope: 'column', columnIndex: col }];
@@ -435,7 +457,8 @@ export function createGrid(options: GridOptions): Grid {
     clear.addEventListener('click', () => apply({ background: null, textColor: null }));
     cancel.addEventListener('click', () => dialog.close());
     dialog.addEventListener('close', () => { dialog.remove(); if (activeDialog === dialog) activeDialog = null; if (!destroyed && !editor) scroller.focus({ preventScroll: true }); });
-    form.append(error, save, clear, cancel); dialog.append(form); root.append(dialog); checkPermission(); dialog.showModal(); scope.focus();
+    const actions = doc.createElement('div'); actions.dataset.dialogActions = ''; actions.append(save, clear, cancel);
+    form.append(error, actions); dialog.append(form); root.append(dialog); checkPermission(); dialog.showModal(); scope.focus();
   }
 
   function setLocked(target: CellLockTarget, locked: boolean): void {
@@ -587,7 +610,7 @@ export function createGrid(options: GridOptions): Grid {
     if (!options.onViewChange || activeDialog?.open) return;
     const dialog = doc.createElement('dialog'); activeDialog = dialog;
     dialog.setAttribute('aria-label', sort ? 'Change row view' : 'Filter column');
-    dialog.style.cssText = 'max-width:380px;padding:20px;border:1px solid var(--acheron-grid-line-color);border-radius:8px;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font)';
+    dialog.dataset.gridDialog = '';
     const title = doc.createElement('p'); title.textContent = sort === 'clear' ? 'Show all rows in source order' : `${sort ? `Sort ${sort === 'asc' ? 'ascending' : 'descending'}` : 'Filter'}: ${columns[col]!.title}`;
     const note = doc.createElement('p'); note.textContent = 'Values stay. Changing the view resets selection, undo history, custom colors, user locks and custom sizing. Admin permissions still apply.';
     const input = doc.createElement('input'); input.type = 'search'; input.setAttribute('aria-label', 'Contains text');
@@ -615,7 +638,7 @@ export function createGrid(options: GridOptions): Grid {
       catch (error) { status.textContent = error instanceof Error ? error.message : 'Unable to change view.'; }
     };
     apply.addEventListener('click', commit); input.addEventListener('keydown', event => { if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); commit(); } });
-    dialog.append(title, note); if (!sort) dialog.append(condition, input); dialog.append(status, apply, cancel); root.append(dialog);
+    dialog.append(title, note); if (!sort) dialog.append(condition, input); const actions = doc.createElement('div'); actions.dataset.dialogActions = ''; actions.append(apply, cancel); dialog.append(status, actions); root.append(dialog);
     dialog.addEventListener('close', () => { dialog.remove(); if (activeDialog === dialog) activeDialog = null; if (!destroyed && !editor) scroller.focus({ preventScroll: true }); });
     dialog.showModal(); (sort ? apply : input).focus();
   }

@@ -31,6 +31,7 @@ test('vanilla app edits, replays and remounts without Laravel or duplicated grid
 test('column menus apply local sort and combined filters, map edits, and recover an empty view', async ({ page }) => {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto('/');
+  await page.addStyleTag({ content: 'dialog { margin:0; padding:0; border:0 } button,input,select { border:0; padding:0; background:transparent }' });
   const viewport = page.getByRole('grid'); const cell = page.getByRole('gridcell');
   const header = async (x = 240) => { const bounds = await viewport.boundingBox(); await page.mouse.click(bounds.x + x, bounds.y - 18, { button: 'right' }); };
   await header(); await page.getByRole('menuitem', { name: 'Sort descending…', exact: true }).click();
@@ -39,6 +40,14 @@ test('column menus apply local sort and combined filters, map edits, and recover
   await expect(page.getByRole('button', { name: 'Select row 1', exact: true })).toHaveText('1');
   await viewport.press('F2'); await page.getByRole('textbox', { name: 'Edit row 1, Name' }).fill('Mapped edit'); await page.getByRole('textbox', { name: 'Edit row 1, Name' }).press('Enter');
   await header(); await page.getByRole('menuitem', { name: 'Filter column…', exact: true }).click();
+  const filterDialog = page.getByRole('dialog', { name: 'Filter column' });
+  const layout = await filterDialog.evaluate(el => {
+    const b = el.getBoundingClientRect(); const input = el.querySelector('input').getBoundingClientRect();
+    const buttons = [...el.querySelectorAll('button')].map(button => button.getBoundingClientRect());
+    return { centered: Math.abs(b.x + b.width / 2 - innerWidth / 2) < 2 && Math.abs(b.y + b.height / 2 - innerHeight / 2) < 2,
+      contained: input.x >= b.x && input.right <= b.right, separated: buttons[1].x >= buttons[0].right + 7 };
+  });
+  expect(layout).toEqual({ centered: true, contained: true, separated: true });
   await page.getByRole('combobox', { name: 'Filter condition' }).selectOption('equals'); await page.getByRole('searchbox', { name: 'Contains text' }).fill('Mapped edit');
   await page.getByRole('button', { name: 'Apply view', exact: true }).click(); await expect(viewport).toHaveAttribute('aria-rowcount', '1');
   await expect(page.locator('[data-grid-index] button')).toHaveCount(1); await expect(page.locator('[data-grid-index] button')).toHaveText('1');
