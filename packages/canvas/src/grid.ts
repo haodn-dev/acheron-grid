@@ -857,7 +857,7 @@ export function createGrid(options: GridOptions): Grid {
 
   function selectHeaderGroup(first: number, last: number, event: PointerEvent | KeyboardEvent): void {
     if (!rowCount || !finishEdit(true)) return;
-    const anchor = event.shiftKey ? axisAnchor?.index ?? engine.getSelection()?.columnIndex ?? first : first;
+    const anchor = event.shiftKey ? (axisAnchor?.axis === 'column' ? axisAnchor.index : engine.getSelection()?.columnIndex ?? first) : first;
     selectScope(axisRange('column', anchor, anchor > last ? first : last), event.shiftKey ? 'extend' : event.ctrlKey || event.metaKey ? 'add' : 'replace');
     axisAnchor = { axis: 'column', index: anchor }; scroller.focus({ preventScroll: true });
   }

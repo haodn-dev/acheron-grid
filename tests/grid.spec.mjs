@@ -1762,6 +1762,9 @@ test('grouped headers share frozen geometry, leaf actions and accessible row spa
   const row = page.getByRole('button', { name: 'Select row 1', exact: true });
   await expect.poll(() => row.evaluate(el => el.offsetHeight)).toBeGreaterThan(50);
   await page.getByRole('columnheader', { name: 'Mobile', exact: true }).first().click(); expect(await page.evaluate(() => window.grid.getSelectionRange())).toMatchObject({ startRow: 0, endRow: 999, startColumn: 1, endColumn: 2 });
+  await page.evaluate(() => window.grid.selectRow(900));
+  await page.getByRole('columnheader', { name: 'Mobile', exact: true }).first().press('Shift+Enter');
+  expect(await page.evaluate(() => window.grid.getSelectionRange())).toMatchObject({startRow:0,endRow:999,endColumn:2});
   const leaf = page.getByRole('columnheader', { name: 'ios', exact: true }); await leaf.press('Enter');
   expect(await page.evaluate(() => window.grid.getSelection().columnIndex)).toBe(1);
   await leaf.press('Shift+F10'); await expect(page.getByRole('menuitem', { name: 'Sort ascending' })).toBeVisible(); await page.keyboard.press('Escape');
