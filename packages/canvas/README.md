@@ -367,7 +367,7 @@ autoRowHeight: true,
 wrapText: true,
 ```
 
-Groups must contain unique, existing leaf keys in the same contiguous order as `columns`; depth is capped at 16. Group labels are structural, while leaf headers retain selection, keyboard actions, sort/filter and resize. Group geometry follows column sizes and frozen/scrolling panes. Viewport accessibility exposes header rows and row/column spans; group fragments may repeat when split by a frozen boundary.
+Groups must contain unique, existing leaf keys in the same contiguous order as `columns`; depth is capped at 16. Click or press Enter/Space on a group header to select its complete column span. Shift extends the active axis range; Ctrl/Cmd adds it. Leaf headers retain sort/filter and resize actions. Group geometry follows column sizes and frozen/scrolling panes. Viewport accessibility exposes header rows and row/column spans; group fragments may repeat when split by a frozen boundary.
 
 `autoRowHeight` measures visible rows against visible columns, after edits, column resizing, horizontal scrolling and font/theme changes. It uses sparse row sizes, caps height at 1000px and preserves explicit `setRowHeight`/drag/auto-fit sizes. It does not scan the whole dataset or offscreen columns. Custom renderers can supply `measureCellHeight(value, columnKey, width)`: return a positive finite height, or `undefined` for built-in text measurement. This callback must be synchronous and side-effect free. With automatic height enabled, font changes can resize rows that were not manually sized.
 
@@ -388,3 +388,10 @@ Customize `placeholder`, `maxHeight`, `applyLabel`, `cancelLabel`, `emptyLabel` 
 Providing `onReorder(request)` enables dragging selected whole rows/columns directly from their visible index/header, with a grab cursor and no extra icon. Dragging moves all selected items of that axis. Selected group headers move their complete contiguous block. Drop on the first/second half of a target to insert before/after it. Focus a selected index/header and press Alt+arrow to move its item/group one position with the keyboard. Native HTML drag requires a pointer; touch reordering is not implemented.
 
 `request` contains `axis: 'row' | 'column'`, immutable `indices` and `beforeIndex`, an insertion boundary in the current order **before removal**. `canReorder(request)` can veto the operation. `reorderedIndices(count, indices, beforeIndex)` validates the request and returns a stable index permutation. The host owns source/column ordering, row identity, grouped-header constraints and reconciliation of selection, locks, formatting, sizes and history; Canvas does not silently mutate these coordinate-based states. Omit `onReorder` to disable reordering entirely.
+
+
+`editorOptions: { pinned: true, showLabel: true, guardNavigation: true }` keeps the active editor at its initial screen position while either the grid or page scrolls. It remains inside the browser viewport, with a label showing column title, row number and stable row ID. In pinned mode, blur alone does not save the draft; Enter, Escape, Apply/Cancel or selecting another cell use the existing commit/cancel pipeline. Pinned layout is opt-in; the default editor follows its cell. `showLabel: false` hides the label.
+
+While an editor is open, `beforeunload` requests the browser's native leave/close confirmation. The listener is removed on commit, cancel or destroy. Set `guardNavigation: false` to disable it. Browsers control whether the prompt appears and its text; forced process termination cannot be blocked. Choice search fields use a neutral border without an accent focus ring.
+
+Custom renderer clipping includes the full cell rectangle. Grid boundary strokes paint after the renderer and selection tint, so full-cell semantic colors do not leave an inset gap. Returning false or throwing clears custom paint before drawing the default fallback.

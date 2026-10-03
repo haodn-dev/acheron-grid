@@ -530,7 +530,7 @@ test('single cell selection, navigation, scrolling and cleanup', async ({ page }
   await expect(viewport).toBeFocused();
   await expect.poll(() => page.locator('canvas').evaluate(canvas => {
     const ratio = devicePixelRatio;
-    return [...canvas.getContext('2d').getImageData(161 * ratio, 80 * ratio, 1, 1).data];
+    return [...canvas.getContext('2d').getImageData(160 * ratio, 80 * ratio, 1, 1).data];
   })).toEqual([37, 99, 235, 255]);
   await page.keyboard.press('ArrowRight');
   expect((await selection()).columnIndex).toBe(2);
@@ -825,7 +825,7 @@ test('custom renderer keeps raw metadata, clipping, fallback and partial pixels 
     const defaultGrid = createGrid({ container: document.querySelector('#grid'), columns, dataSource: source, frozenRows: 1, frozenColumns: 1,
       renderCell(ctx, cell) {
         if (cell.columnKey !== 'custom') return false;
-        ctx.fillStyle = '#ff0000'; ctx.fillRect(cell.x + 1, cell.y + 1, cell.width - 2, cell.height - 2); return true;
+        ctx.fillStyle = '#ff0000'; ctx.fillRect(cell.x, cell.y, cell.width, cell.height); return true;
       } });
     await next();
     const fallbackMatches = baseline === document.querySelector('canvas').toDataURL();
@@ -1761,7 +1761,7 @@ test('grouped headers share frozen geometry, leaf actions and accessible row spa
   await expect(page.getByRole('columnheader', { name: 'ios', exact: true })).toHaveAttribute('aria-colindex', '2');
   const row = page.getByRole('button', { name: 'Select row 1', exact: true });
   await expect.poll(() => row.evaluate(el => el.offsetHeight)).toBeGreaterThan(50);
-  await page.getByRole('columnheader', { name: 'Mobile', exact: true }).first().click(); expect(await page.evaluate(() => window.grid.getSelection())).toBeNull();
+  await page.getByRole('columnheader', { name: 'Mobile', exact: true }).first().click(); expect(await page.evaluate(() => window.grid.getSelectionRange())).toMatchObject({ startRow: 0, endRow: 999, startColumn: 1, endColumn: 2 });
   const leaf = page.getByRole('columnheader', { name: 'ios', exact: true }); await leaf.press('Enter');
   expect(await page.evaluate(() => window.grid.getSelection().columnIndex)).toBe(1);
   await leaf.press('Shift+F10'); await expect(page.getByRole('menuitem', { name: 'Sort ascending' })).toBeVisible(); await page.keyboard.press('Escape');
@@ -1842,4 +1842,31 @@ test('active cell tints all ancestor headers and leaves unrelated headers unchan
   const pixels=async()=>page.evaluate(()=>{const canvas=document.querySelector('canvas'), ctx=canvas.getContext('2d'), scale=canvas.width/parseFloat(canvas.style.width); return [[10,5],[10,29],[10,53],[210,5]].map(([x,y])=>[...ctx.getImageData(x*scale,y*scale,1,1).data]);});
   const before=await pixels(); await page.getByRole('grid').press('Control+Home'); await expect.poll(pixels).not.toEqual(before);
   const after=await pixels(); for(let i=0;i<3;i++) expect(after[i]).not.toEqual(before[i]); expect(after[3]).toEqual(before[3]);
+});
+
+
+test('pinned editor keeps screen position, labels identity and guards navigation only while editing', async ({ page }) => {
+  await page.goto('/'); await page.evaluate(async () => {
+    const {createGrid}=await import('/canvas/index.js'); const {LocalDataSource}=await import('/core/index.js');
+    document.body.style.minHeight='2000px';
+    window.grid=createGrid({container:document.querySelector('#grid'),dataSource:new LocalDataSource(Array.from({length:100},(_,id)=>({id,name:'Draft'})),row=>row.id),columns:[{key:'name',title:'Name',editable:true}],editorOptions:{pinned:true},multilineEditor:true});
+  });
+  const grid=page.getByRole('grid'); await grid.press('Control+Home'); await grid.press('F2');
+  const editor=page.getByRole('textbox',{name:'Edit row 1, Name',exact:true}); await editor.fill('Unsaved');
+  await expect(page.locator('[data-grid-editor-label]')).toHaveText('Name · Row 1 · 0');
+  const before=await editor.boundingBox();
+  await grid.evaluate(el=>{el.scrollTop=800;}); await page.evaluate(()=>window.scrollTo(0,100));
+  await expect.poll(async()=>{const b=await editor.boundingBox();return {x:b.x,y:b.y};}).toEqual({x:before.x,y:before.y});
+  expect(await page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;})).toBe(true);
+  await editor.press('Escape');
+  expect(await page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;})).toBe(false);
+  expect(await page.evaluate(()=>window.grid.getSelection() && document.querySelector('[data-grid-editor-label]').hidden)).toBe(true);
+});
+
+test('custom backgrounds reach cell edges with only one grid boundary pixel', async ({page})=>{
+  await page.goto('/'); await page.evaluate(async()=>{
+    const {createGrid}=await import('/canvas/index.js'); const {LocalDataSource}=await import('/core/index.js');
+    window.grid=createGrid({container:document.querySelector('#grid'),indexColumn:false,rowHeight:40,headerHeight:24,columnWidth:100,dataSource:new LocalDataSource([{id:1,a:'A',b:'B'}],row=>row.id),columns:[{key:'a',title:'A'},{key:'b',title:'B'}],theme:{gridLineColor:'#888888'},renderCell:(ctx,cell)=>{ctx.fillStyle='#ff0000';ctx.fillRect(cell.x,cell.y,cell.width,cell.height);return true;}});
+  });
+  await expect.poll(()=>page.evaluate(()=>{const canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d'),scale=canvas.width/parseFloat(canvas.style.width);return [0,1,98,100,101].map(x=>[...ctx.getImageData(x*scale,30*scale,1,1).data].slice(0,3));})).toEqual(Array.from({length:5},()=>[255,0,0]));
 });

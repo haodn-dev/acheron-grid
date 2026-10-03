@@ -12,7 +12,7 @@ export function choicePanel(select: HTMLSelectElement, root: HTMLElement, option
   const doc = root.ownerDocument; const panel = doc.createElement('div'); panel.dataset.gridChoices = '';
   panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', select.getAttribute('aria-label') ?? 'Choose values');
   panel.style.cssText = 'position:fixed;z-index:10;box-sizing:border-box;width:260px;padding:10px;border:1px solid var(--acheron-grid-line-color);border-radius:8px;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);box-shadow:0 8px 24px #0f172a25';
-  const query = doc.createElement('input'); query.type = 'search'; query.placeholder = options.placeholder ?? 'Search options'; query.setAttribute('aria-label', 'Search options'); query.style.cssText = 'width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--acheron-grid-line-color);border-radius:4px;background:inherit;color:inherit;font:inherit';
+  const query = doc.createElement('input'); query.type = 'search'; query.placeholder = options.placeholder ?? 'Search options'; query.setAttribute('aria-label', 'Search options'); query.style.cssText = 'outline:none;box-shadow:none;width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--acheron-grid-line-color);border-radius:4px;background:inherit;color:inherit;font:inherit';
   const list = doc.createElement('div'); list.style.cssText = `overflow:auto;max-height:${Math.min(options.maxHeight ?? 220, Math.max(80, doc.defaultView!.innerHeight - 180))}px;margin:8px 0;scrollbar-width:thin`;
   const summary = doc.createElement('div'); summary.setAttribute('role', 'status'); summary.style.cssText = 'font-size:11px;opacity:.7;margin-bottom:8px';
   function draw(): void {
