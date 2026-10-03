@@ -979,7 +979,7 @@ test('themes isolate mounts and keep editor/menu styles and translucent partial 
     const defaults = [...document.querySelectorAll('canvas')][1].getContext('2d').getImageData(100, 15, 1, 1).data;
     return { header, match, defaults: [...defaults], roots: document.querySelectorAll('#grid > div').length };
   });
-  expect(result.header).toEqual([171, 205, 239, 255]);
+  expect(result.header).toEqual([181, 180, 210, 255]);
   expect(result.defaults).toEqual([237, 242, 247, 255]);
   expect(result.match).toBe(true);
   expect(result.roots).toBe(1);
@@ -1741,4 +1741,57 @@ test('narrow grids keep search, link popovers and dialogs inside the viewport', 
   await popup.getByRole('button', { name: 'Close' }).click(); await viewport.press('Shift+F10'); await page.getByRole('menuitem', { name: 'Resize column…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Column width' }); await expect(dialog).toBeVisible(); const db = await dialog.boundingBox(); expect(db.x).toBeGreaterThanOrEqual(0); expect(db.x + db.width).toBeLessThanOrEqual(360);
   await page.getByRole('button', { name: 'Cancel', exact: true }).click(); await expect(viewport).toBeFocused();
+});
+
+
+test('grouped headers share frozen geometry, leaf actions and accessible row spans; automatic heights retain manual resize', async ({ page }) => {
+  const errors = []; page.on('pageerror', error => errors.push(error.message)); await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.events = []; window.source = new LocalDataSource(Array.from({ length: 1000 }, (_, id) => ({ id, steps: 'First line\nSecond line\nThird line', ios: 'OK', android: '', chrome: 'OK' })), row => row.id);
+    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source, accessibility: 'viewport', frozenColumns: 2, frozenRows: 1,
+      columns: [{ key: 'steps', title: 'Steps', editable: true }, ...['ios', 'android', 'chrome'].map(key => ({ key, title: key, editable: true }))],
+      headerHeight: 24, headerGroups: [{ title: 'Result', children: [{ title: 'Mobile', children: ['ios', 'android'] }, { title: 'Desktop', children: ['chrome'] }] }],
+      wrapText: true, autoRowHeight: true, rowHeight: 28, columnWidth: 100,
+      columnEditors: { android: { type: 'select', values: ['', 'OK'] } }, onEvent: event => window.events.push(event),
+    });
+  });
+  const grid = page.getByRole('grid'); await expect(grid).toHaveAttribute('aria-rowcount', '1003');
+  await expect(page.getByRole('columnheader', { name: 'Steps', exact: true })).toHaveAttribute('aria-rowspan', '3');
+  await expect(page.getByRole('columnheader', { name: 'ios', exact: true })).toHaveAttribute('aria-colindex', '2');
+  const row = page.getByRole('button', { name: 'Select row 1', exact: true });
+  await expect.poll(() => row.evaluate(el => el.offsetHeight)).toBeGreaterThan(50);
+  await page.getByRole('columnheader', { name: 'Mobile', exact: true }).first().click(); expect(await page.evaluate(() => window.grid.getSelection())).toBeNull();
+  const leaf = page.getByRole('columnheader', { name: 'ios', exact: true }); await leaf.press('Enter');
+  expect(await page.evaluate(() => window.grid.getSelection().columnIndex)).toBe(1);
+  await leaf.press('Shift+F10'); await expect(page.getByRole('menuitem', { name: 'Sort ascending' })).toBeVisible(); await page.keyboard.press('Escape');
+  await page.evaluate(() => window.grid.setRowHeight(0, 120));
+  await page.evaluate(() => window.grid.updateCells([{ rowIndex: 0, columnKey: 'steps', value: 'Short' }]));
+  await expect(row).toHaveCSS('height', '120px');
+  await page.evaluate(() => window.grid.updateCells([{ rowIndex: 1, columnKey: 'steps', value: 'A\nB\nC\nD\nE' }]));
+  await expect.poll(() => page.getByRole('button', { name: 'Select row 2', exact: true }).evaluate(el => el.offsetHeight)).toBeGreaterThan(80);
+  await page.getByRole('columnheader', { name: 'android', exact: true }).press('Enter'); await grid.press('F2');
+  const select = page.getByRole('combobox', { name: 'Edit row 1, android' }); await expect(select).toHaveValue(''); await select.selectOption('OK'); await select.press('Enter');
+  expect(await page.evaluate(() => window.source.getValue(0, 'android'))).toBe('OK');
+  const b = await leaf.evaluate(el => { const { x, y, width, height } = el.getBoundingClientRect(); return { x, y, width, height }; }); await page.mouse.move(b.x + b.width - 1, b.y + b.height / 2); await page.mouse.down(); await page.mouse.move(b.x + b.width + 39, b.y + b.height / 2); await page.mouse.up();
+  expect(await page.evaluate(() => window.events.some(event => event.type === 'column:resize'))).toBe(true);
+  await grid.press('Control+Home'); await grid.press('ArrowRight');
+  const handle = page.getByRole('button', { name: 'Adjust selection end', exact: true }); await expect(handle).toBeVisible(); const h = await handle.boundingBox();
+  await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2); await page.mouse.down(); await page.mouse.move(h.x + 65, h.y - 10); await page.mouse.up();
+  expect(await page.evaluate(() => window.grid.getSelectionRange().endColumn)).toBeGreaterThanOrEqual(2);
+  await page.evaluate(() => window.grid.setFrozen(0, 1)); await grid.evaluate(el => { el.scrollLeft = 150; });
+  await expect(page.getByRole('columnheader', { name: 'Steps', exact: true })).toBeVisible(); expect(errors).toEqual([]);
+});
+
+
+test('automatic wrapped frozen code retains its pixels after horizontal scrolling through groups', async ({ page }) => {
+  await page.goto('/'); await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: new LocalDataSource([{ id: 'DEMO-00001', notes: 'Lorem ipsum\nDolor sit amet\nConsectetur', online: 'Available', onsite: 'Pending', shipping: 'Available' }], row => row.id),
+      columns: ['id','notes','online','onsite','shipping'].map(key => ({ key, title: key })), autoRowHeight: true, wrapText: true, frozenColumns: 1, columnWidth: 120, headerHeight: 28,
+      headerGroups: [{ title: 'Availability', children: [{ title: 'Channels', children: ['online','onsite'] }, { title: 'Delivery', children: ['shipping'] }] }],
+    }); window.grid.setColumnWidth(1, 300);
+  });
+  const read = () => page.evaluate(async () => { await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); const canvas = document.querySelector('canvas'); return [...canvas.getContext('2d').getImageData(2, 86, 116, 20).data]; });
+  const before = await read(); await page.getByRole('grid').press('Control+Home'); await page.getByRole('grid').press('End'); const after = await read(); expect(after).toEqual(before);
 });

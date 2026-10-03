@@ -351,3 +351,24 @@ Touch-drag index/header selects axes; touching body cells preserves native scrol
 ## Runtime appearance
 
 `grid.setTheme(patch)` validates concrete CSS colors/fonts before applying a snapshot. Canvas, native controls, dialogs, links and icon colors repaint without remounting. Selection, locks, formatting, sizes, frozen panes and value history remain. Per-cell colors retain precedence; font changes do not automatically resize cells. The examples include Light/Teal/Dark palettes. Custom renderers own their colors and the host remains responsible for contrast.
+
+
+## Grouped headers and content height
+
+Keep `columns` flat; pass `headerGroups` to describe contiguous groups by column key. Ungrouped columns span the full header height. `headerHeight` is the height of **one header row**, with one row by default.
+
+```ts
+headerGroups: [{ title: 'Result', children: [
+  { title: 'Mobile', children: ['ios', 'android'] },
+  { title: 'Desktop', children: ['chrome'] },
+] }],
+headerHeight: 28,
+autoRowHeight: true,
+wrapText: true,
+```
+
+Groups must contain unique, existing leaf keys in the same contiguous order as `columns`; depth is capped at 16. Group labels are structural, while leaf headers retain selection, keyboard actions, sort/filter and resize. Group geometry follows column sizes and frozen/scrolling panes. Viewport accessibility exposes header rows and row/column spans; group fragments may repeat when split by a frozen boundary.
+
+`autoRowHeight` measures visible rows against visible columns, after edits, column resizing, horizontal scrolling and font/theme changes. It uses sparse row sizes, caps height at 1000px and preserves explicit `setRowHeight`/drag/auto-fit sizes. It does not scan the whole dataset or offscreen columns. Custom renderers can supply `measureCellHeight(value, columnKey, width)`: return a positive finite height, or `undefined` for built-in text measurement. This callback must be synchronous and side-effect free. With automatic height enabled, font changes can resize rows that were not manually sized.
+
+Select editor lists may include `''` as an optional empty value; all values remain unique strings and the list must be nonempty. Parsers still validate commits. A desktop corner handle adjusts the selected range through the same pointer/permission pipeline as touch handles; it does not autofill values.

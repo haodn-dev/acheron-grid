@@ -3,3 +3,5 @@ export type { ColumnEditor, GridOptions, Grid, GridTheme, CellRenderer, CellRend
 
 export { detectLinks } from './links.js';
 export type { CellLink } from './links.js';
+
+export type { HeaderGroup } from './headers.js';
