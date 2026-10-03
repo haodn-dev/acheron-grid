@@ -501,3 +501,21 @@ test('local views combine filters, stable numeric sorting and mapped atomic writ
   const readonly = new LocalDataView({ getRowCount: () => 1, getRowId: () => 0, getValue: () => 'x' });
   assert.equal(readonly.setValue, undefined); assert.equal(readonly.setValues, undefined);
 });
+
+
+test('axis ranges add and extend atomically without source reads or losing retained ranges', () => {
+  const { engine, source } = fixture(); let reads = 0; source.getValue = () => { reads++; return ''; };
+  const first = { startRow: 0, endRow: 0, startColumn: 0, endColumn: 1 };
+  const second = { startRow: 1, endRow: 1, startColumn: 0, endColumn: 1 };
+  engine.selectRange(first); engine.selectRange(second, 'add');
+  assert.deepEqual(engine.getSelectionRanges(), [first, second]);
+  engine.selectRange({ ...second, startRow: 0 }, 'extend');
+  assert.deepEqual(engine.getSelectionRanges(), [first, { ...second, startRow: 0 }]);
+  assert.throws(() => engine.selectRange(first, 'invalid'), TypeError);
+  for (let i = 2; i < 128; i++) engine.selectRange(first, 'add');
+  const before = engine.getSelectionRanges();
+  assert.throws(() => engine.selectRange(second, 'add'), RangeError);
+  assert.deepEqual(engine.getSelectionRanges(), before); assert.equal(reads, 0);
+  engine.selectRange(second); assert.deepEqual(engine.getSelectionRanges(), [second]);
+  engine.destroy();
+});

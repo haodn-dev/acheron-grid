@@ -102,3 +102,5 @@ Formula evaluation, charts, pivot tables, multi-sheet workbooks, Excel calculati
 Acheron Grid is available under the [MIT License](LICENSE). Copyright (c) 2026 Hao Duong. You may use, modify and redistribute it, including in commercial applications, subject to the license terms and preservation of the required notices.
 
 The Canvas package embeds Lucide SVG assets under their existing ISC/MIT terms. Their attribution and license text are included in [LICENSE.lucide](packages/canvas/LICENSE.lucide); these terms cover those assets, not the entire project.
+
+Canvas also provides detected web links, additive whole-axis selection, touch selection handles, runtime theme updates and an opt-in bounded viewport accessibility tree. See the [Canvas guide](packages/canvas/README.md).

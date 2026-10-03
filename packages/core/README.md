@@ -119,7 +119,7 @@ The last applied property wins across intersecting targets. Updating only backgr
 
 ## Explicit rectangular selection
 
-`engine.selectRange({startRow, endRow, startColumn, endColumn})` replaces all ranges atomically and emits at most one selection event. Bounds are inclusive safe integer coordinates. Start and end cells must both be selectable; interior checks remain operation-specific. The active cell is the start corner, anchor the end corner. This is sparse and reads no source values, even for a whole million-row column. Invalid input or denied endpoints preserve prior selection. Plain navigation returns to its normal single-cell behavior.
+`engine.selectRange({startRow, endRow, startColumn, endColumn}, mode?)` accepts `'replace'` (default), `'add'` or `'extend'`. Replace discards existing ranges; add retains the previous active range; extend updates the active rectangle while keeping retained ranges. The 128-range cap applies atomically to add. It updates selection atomically and emits at most one selection event. Bounds are inclusive safe integer coordinates. Start and end cells must both be selectable; interior checks remain operation-specific. The active cell is the start corner, anchor the end corner. This is sparse and reads no source values, even for a whole million-row column. Invalid input or denied endpoints preserve prior selection. Plain navigation returns to its normal single-cell behavior.
 
 ## Local row views
 

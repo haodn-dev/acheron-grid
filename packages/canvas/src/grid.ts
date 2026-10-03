@@ -1,3 +1,4 @@
+import { detectLinks } from './links.js';
 import { createGridEngine } from '@acheron-grid/core';
 import type { CellUpdate, DataSource, Column, CellSelection, SelectionRange, CellPermission, CellLockTarget, CellFormatTarget, CellFormat, CellFormatPatch, LocalViewOptions, GridEngineOptions, ViewportRegion } from '@acheron-grid/core';
 
@@ -32,6 +33,7 @@ export interface GridTheme {
   selectionColor: string;
   font: string;
   headerFont: string;
+  linkColor: string;
 }
 export type ColumnEditor = { readonly type: 'select'; readonly values: readonly string[] } | { readonly type: 'checkbox' };
 export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 'resolveCellPermission' | 'onEvent' | 'allowLockChanges' | 'frozenRows' | 'frozenColumns'> {
@@ -42,6 +44,10 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
   columnEditors?: Readonly<Record<string, ColumnEditor>>;
   multilineEditor?: boolean;
   wrapText?: boolean;
+  detectLinks?: boolean;
+  allowOpenLinks?: boolean;
+  accessibility?: 'active' | 'viewport';
+  getCellLabel?: (rowIndex: number, columnKey: string, value: unknown) => string | undefined;
   renderCell?: CellRenderer;
   createEditor?: CellEditorFactory;
   onSelectionChange?: (selection: CellSelection | null) => void;
@@ -57,6 +63,7 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
 }
 export interface Grid {
   render(): void;
+  setTheme(theme: Partial<GridTheme>): void;
   openSearch(): void;
   selectColumn(index: number): void;
   selectRow(index: number): void;
@@ -100,15 +107,18 @@ export function createGrid(options: GridOptions): Grid {
   const { container, dataSource } = options;
   const doc = container.ownerDocument;
   const win = doc.defaultView!;
-  const theme = Object.freeze({ background: '#ffffff', textColor: '#0f172a', headerBackground: '#edf2f7',
+  let theme = Object.freeze({ background: '#ffffff', textColor: '#0f172a', headerBackground: '#edf2f7',
     headerTextColor: '#334155', gridLineColor: '#e2e8f0', selectionColor: '#2563eb',
-    font: '400 13px system-ui, sans-serif', headerFont: '600 13px system-ui, sans-serif', ...options.theme });
-  for (const [key, value] of Object.entries(theme)) {
-    const property = key === 'font' || key === 'headerFont' ? 'font' : 'color';
-    if (typeof value !== 'string' || /var\(|currentcolor|^(inherit|initial|unset|revert)/i.test(value.trim()) || !win.CSS.supports(property, value)) {
-      throw new TypeError(`Invalid grid theme ${key}. Use a concrete CSS ${property} value.`);
+    linkColor: '#2563eb', font: '400 13px system-ui, sans-serif', headerFont: '600 13px system-ui, sans-serif', ...options.theme });
+  function validateTheme(candidate: GridTheme): void {
+    for (const [key, value] of Object.entries(candidate)) {
+      const property = key === 'font' || key === 'headerFont' ? 'font' : 'color';
+      if (typeof value !== 'string' || /var\(|currentcolor|^(inherit|initial|unset|revert)/i.test(value.trim()) || !win.CSS.supports(property, value)) {
+        throw new TypeError(`Invalid grid theme ${key}. Use a concrete CSS ${property} value.`);
+      }
     }
   }
+  validateTheme(theme);
   const indicatorPolicy = Object.freeze({ ...options.permissions });
   const headerHeight = options.headerHeight ?? 36;
   if (!Number.isFinite(headerHeight) || headerHeight <= 0) throw new RangeError('Grid sizes must be positive finite numbers.');
@@ -148,6 +158,8 @@ export function createGrid(options: GridOptions): Grid {
       columnEditors.set(key, Object.freeze({ type: 'checkbox' }));
     }
   }
+  const viewportAccessibility = options.accessibility === 'viewport';
+  if (options.accessibility !== undefined && !['active', 'viewport'].includes(options.accessibility)) throw new TypeError('Invalid accessibility mode.');
   const root = doc.createElement('div');
   root.style.cssText = 'position:relative;width:100%;height:100%;overflow:hidden;background:var(--acheron-background)';
   for (const [key, value] of Object.entries(theme)) root.style.setProperty('--acheron-' + key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase()), value);
@@ -169,6 +181,8 @@ export function createGrid(options: GridOptions): Grid {
     dialog[data-grid-dialog] button:first-child { border-color:var(--acheron-selection-color);font-weight:600 }
     dialog[data-grid-dialog] :disabled { opacity:.5;cursor:default }
     dialog[data-grid-dialog] :focus-visible { outline:2px solid var(--acheron-selection-color);outline-offset:2px }
+    [data-grid-header-cell]:focus-visible { outline:2px solid var(--acheron-selection-color);outline-offset:-3px }
+    [data-grid-search]:not([hidden]) { display:flex;align-items:center;flex-wrap:wrap;gap:4px }
     dialog[data-grid-dialog] [data-dialog-actions] { display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:4px }
   `;
   root.append(dialogStyles);
@@ -177,9 +191,9 @@ export function createGrid(options: GridOptions): Grid {
   scroller.style.cssText = `position:absolute;inset:${headerHeight}px 0 0 ${indexWidth}px;overflow:auto;overscroll-behavior:contain`;
   scroller.tabIndex = 0;
   scroller.setAttribute('aria-label', viewportLabel);
-  scroller.setAttribute('aria-keyshortcuts', 'Shift+F8 Control+f Meta+f');
+  scroller.setAttribute('aria-keyshortcuts', 'Shift+F8 Control+f Meta+f Control+a Meta+a Alt+Enter');
   scroller.setAttribute('role', 'grid');
-  scroller.setAttribute('aria-rowcount', String(rowCount));
+  scroller.setAttribute('aria-rowcount', String(rowCount + (viewportAccessibility ? 1 : 0)));
   scroller.setAttribute('aria-colcount', String(columns.length));
   scroller.setAttribute('aria-multiselectable', 'true');
   const activeRow = doc.createElement('div');
@@ -187,16 +201,23 @@ export function createGrid(options: GridOptions): Grid {
   activeRow.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);pointer-events:none';
   activeRow.hidden = true;
   const activeCell = doc.createElement('div');
-  activeCell.id = `acheron-active-cell-${++gridId}`;
+  const instanceId = ++gridId;
+  activeCell.id = `acheron-active-cell-${instanceId}`;
   activeCell.setAttribute('role', 'gridcell');
   activeCell.setAttribute('aria-selected', 'true');
   activeRow.append(activeCell);
+  const accessibleBody = doc.createElement('div');
+  accessibleBody.style.cssText = activeRow.style.cssText;
+  const accessibleCells = new Map<string, HTMLElement>();
+  const headerSurface = doc.createElement('div');
+  headerSurface.style.cssText = `position:absolute;top:0;left:${indexWidth}px;right:0;height:${headerHeight}px;overflow:hidden;touch-action:none`;
+  if (viewportAccessibility) { headerSurface.id = `acheron-header-${instanceId}`; headerSurface.setAttribute('role', 'row'); headerSurface.setAttribute('aria-rowindex', '1'); accessibleBody.id = `acheron-body-${instanceId}`; accessibleBody.setAttribute('role', 'rowgroup'); activeRow.id = `acheron-active-row-${instanceId}`; scroller.setAttribute('aria-owns', `${headerSurface.id} ${accessibleBody.id} ${activeRow.id}`); }
   const spacer = doc.createElement('div');
   spacer.setAttribute('aria-hidden', 'true');
   spacer.style.width = `${columnAxis.position(columns.length)}px`;
   spacer.style.position = 'relative';
   spacer.style.height = `${rowAxis.position(rowCount)}px`;
-  scroller.append(spacer, activeRow);
+  scroller.append(spacer, accessibleBody, activeRow);
   const canvas = doc.createElement('canvas');
   canvas.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none';
   canvas.style.left = `${indexWidth}px`;
@@ -208,7 +229,8 @@ export function createGrid(options: GridOptions): Grid {
   indexGutter.hidden = indexWidth === 0;
   indexGutter.style.cssText = `position:absolute;left:0;top:0;width:${indexWidth}px;overflow:hidden;background:var(--acheron-header-background);color:var(--acheron-header-text-color);font:var(--acheron-font)`;
   indexGutter.setAttribute('aria-label', 'Row index');
-  root.append(scroller, canvas, indexGutter);
+  indexGutter.style.touchAction = 'none';
+  root.append(scroller, canvas, headerSurface, indexGutter);
   container.append(root);
   let frame: number | undefined;
   let destroyed = false;
@@ -230,6 +252,18 @@ export function createGrid(options: GridOptions): Grid {
   let axisDrag: { axis: 'row' | 'column'; index: number } | null = null;
   let dragPosition: { clientX: number; clientY: number } | null = null;
   let dragFrame: number | undefined;
+  let handleAnchor: { row: number; col: number } | null = null;
+  let touchSelection = false;
+  const selectionHandles = (['start', 'end'] as const).map(endpoint => {
+    const button = doc.createElement('button'); button.type = 'button'; button.hidden = true; button.tabIndex = -1; button.setAttribute('aria-label', `Adjust selection ${endpoint}`);
+    button.style.cssText = 'position:absolute;width:20px;height:20px;padding:0;margin:0;border:3px solid var(--acheron-background);border-radius:50%;background:var(--acheron-selection-color);z-index:2;touch-action:none;cursor:crosshair';
+    button.addEventListener('pointerdown', event => {
+      const range = getSelectionRange(); if (event.button !== 0 || !range || !finishEdit(true)) return;
+      event.preventDefault(); event.stopPropagation();
+      handleAnchor = endpoint === 'start' ? { row: range.endRow, col: range.endColumn } : { row: range.startRow, col: range.startColumn };
+      axisDrag = null; dragPointer = event.pointerId; dragPosition = event; root.setPointerCapture(event.pointerId);
+    }); root.append(button); return button;
+  });
   let addNextSelection = false;
   let editor: CellEditor | null = null;
   const editorPane = doc.createElement('div');
@@ -267,13 +301,14 @@ export function createGrid(options: GridOptions): Grid {
 
   const searchBar = doc.createElement('div');
   searchBar.hidden = true;
+  searchBar.dataset.gridSearch = '';
   searchBar.setAttribute('role', 'search');
   searchBar.setAttribute('aria-label', 'Find in grid');
   searchBar.style.cssText = 'position:absolute;top:4px;right:20px;max-width:calc(100% - 24px);z-index:4;padding:6px;border:1px solid var(--acheron-grid-line-color);border-radius:6px;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);box-shadow:0 4px 12px #0f172a26';
   const searchInput = doc.createElement('input');
   searchInput.type = 'search';
   searchInput.setAttribute('aria-label', 'Find in grid');
-  searchInput.style.cssText = 'width:140px;max-width:35vw;padding:4px;font:inherit';
+  searchInput.style.cssText = 'width:140px;min-width:80px;max-width:100%;padding:6px;font:inherit;color:inherit;background:var(--acheron-background);border:1px solid var(--acheron-grid-line-color);border-radius:4px';
   const searchStatus = doc.createElement('span');
   searchStatus.setAttribute('role', 'status');
   searchStatus.style.cssText = 'display:inline-block;padding:0 8px';
@@ -281,7 +316,9 @@ export function createGrid(options: GridOptions): Grid {
   const searchNext = doc.createElement('button');
   const searchClose = doc.createElement('button');
   for (const [button, label, text] of [[searchPrevious, 'Previous match', '↑'], [searchNext, 'Next match', '↓'], [searchClose, 'Close search', '×']] as const) {
-    button.type = 'button'; button.textContent = text; button.setAttribute('aria-label', label);
+    button.type = 'button'; button.setAttribute('aria-label', label);
+    const svg = new win.DOMParser().parseFromString(text === '↑' ? stateIconSvg['arrow-up'] : text === '↓' ? stateIconSvg['arrow-down'] : '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>', 'image/svg+xml').documentElement;
+    svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); svg.setAttribute('aria-hidden', 'true'); button.append(doc.importNode(svg, true));
     button.style.cssText = 'padding:4px 8px;margin-left:2px;font:inherit;color:inherit;background:var(--acheron-background);border:1px solid var(--acheron-grid-line-color);border-radius:3px';
   }
   searchBar.append(searchInput, searchStatus, searchPrevious, searchNext, searchClose);
@@ -608,6 +645,7 @@ export function createGrid(options: GridOptions): Grid {
       item('Select row', true, () => selectRow(row));
       item('Select column', true, () => selectColumn(col));
     }
+    if (!header && rowCount && cellLinks(row, col).length) item('Open links…', options.allowOpenLinks !== false, () => openLinks(row, col, x, y));
     item('Auto-fit column', true, () => autoFitColumn(col));
     item('Auto-fit row', rowCount > 0, () => autoFitRow(row));
     item('Edit cell', rowCount > 0 && engine.canEdit(selection.rowIndex, selection.columnIndex), beginEdit);
@@ -770,7 +808,7 @@ export function createGrid(options: GridOptions): Grid {
 
   function onHeaderPointerDown(event: PointerEvent): void {
     if (resizing) { event.preventDefault(); return; }
-    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || (event.target !== root && !(event.target instanceof win.Node && (scroller.contains(event.target) || indexGutter.contains(event.target))))) return;
+    if (event.button !== 0 || event.altKey || (event.target !== root && !(event.target instanceof win.Node && (scroller.contains(event.target) || indexGutter.contains(event.target) || headerSurface.contains(event.target))))) return;
     const bounds = root.getBoundingClientRect();
     if (indexWidth && event.clientX < bounds.left + indexWidth && event.clientY < bounds.top + headerHeight) {
       event.preventDefault(); selectAll(); scroller.focus({ preventScroll: true }); return;
@@ -813,6 +851,7 @@ export function createGrid(options: GridOptions): Grid {
       : column !== null ? 'Drag the column boundary to resize width'
       : event.clientY - bounds.top < headerHeight && event.clientX >= bounds.left + indexWidth && headerColumn >= 0 && headerColumn < columns.length ? stateLabels(null, headerColumn).join('; ')
       : indexRow(event) !== null ? [`Select row ${indexRow(event)! + 1}`, ...rowLabels(indexRow(event)!)].join('; ') : cell ? stateLabels(cell.row, cell.col).join('; ') : '';
+    if (!resizing && cell && event.altKey && options.allowOpenLinks !== false && cellLinks(cell.row, cell.col).length) { root.style.cursor = 'pointer'; root.title = 'Alt+click to open links'; }
     if (resizing?.pointerId === event.pointerId) {
       resizing.proposed = Math.max(24, Math.min(1000, resizing.size + (resizing.axis === 'column' ? event.clientX : event.clientY) - resizing.start));
       showResizeGuide();
@@ -1025,11 +1064,11 @@ export function createGrid(options: GridOptions): Grid {
     if (previousRanges !== JSON.stringify(getSelectionRanges())) options.onSelectionRangesChange?.(getSelectionRanges());
   }
 
-  function selectScope(range: SelectionRange): void {
+  function selectScope(range: SelectionRange, mode: 'replace' | 'add' | 'extend' = 'replace'): void {
     if (destroyed) throw new Error('Grid is destroyed.');
     if (!finishEdit(true)) return;
     const previous = engine.getSelection();
-    if (!engine.selectRange(range)) return;
+    if (!engine.selectRange(range, mode)) return;
     addNextSelection = false; announceSelection();
     const selection = engine.getSelection();
     if (previous?.rowIndex !== selection?.rowIndex || previous?.columnIndex !== selection?.columnIndex) options.onSelectionChange?.(selection);
@@ -1055,14 +1094,16 @@ export function createGrid(options: GridOptions): Grid {
     return axis === 'row' ? { startRow: Math.min(anchor, end), endRow: Math.max(anchor, end), startColumn: 0, endColumn: columns.length - 1 }
       : { startRow: 0, endRow: rowCount - 1, startColumn: Math.min(anchor, end), endColumn: Math.max(anchor, end) };
   }
-  function startAxisSelection(axis: 'row' | 'column', index: number, event: PointerEvent): void {
+  function startAxisSelection(axis: 'row' | 'column', index: number, event: PointerEvent | KeyboardEvent): void {
     if (!rowCount || !columns.length) return;
     const active = engine.getSelection();
     const anchor = event.shiftKey ? (axisAnchor?.axis === axis ? axisAnchor.index : axis === 'row' ? active?.rowIndex ?? index : active?.columnIndex ?? index) : index;
     const range = axisRange(axis, anchor, index);
     if (!engine.getCellPermission(range.startRow, range.startColumn).selectable || !engine.getCellPermission(range.endRow, range.endColumn).selectable) return;
-    axisAnchor = { axis, index: anchor }; selectScope(range); scroller.focus({ preventScroll: true });
-    if (event.pointerType !== 'touch') { axisDrag = axisAnchor; dragPointer = event.pointerId; dragPosition = event; root.setPointerCapture(event.pointerId); }
+    try { selectScope(range, event.shiftKey ? 'extend' : event.ctrlKey || event.metaKey || addNextSelection ? 'add' : 'replace'); }
+    catch (error) { actionError.textContent = error instanceof Error ? error.message : 'Unable to add selection.'; actionError.style.display = 'block'; return; }
+    axisAnchor = { axis, index: anchor }; scroller.focus({ preventScroll: true });
+    if (event instanceof win.PointerEvent) { axisDrag = axisAnchor; dragPointer = event.pointerId; dragPosition = event; root.setPointerCapture(event.pointerId); }
   }
 
   function pointerCell(event: Pick<MouseEvent, 'clientX' | 'clientY'>, clamp = false): { row: number; col: number } | null {
@@ -1080,8 +1121,15 @@ export function createGrid(options: GridOptions): Grid {
     return { row, col };
   }
 
+  function onLinkClick(event: MouseEvent): void {
+    if (!event.altKey || event.target === editor) return;
+    const cell = pointerCell(event);
+    if (cell && cellLinks(cell.row, cell.col).length && finishEdit(true)) { event.preventDefault(); select(cell.row, cell.col, false, false); openLinks(cell.row, cell.col, event.clientX, event.clientY); }
+  }
   function onPointerDown(event: PointerEvent): void {
-    if (event.defaultPrevented || event.target === editor || event.button !== 0 || event.altKey) return;
+    if (event.defaultPrevented || event.target === editor || event.button !== 0) return;
+    if (event.altKey) return;
+    touchSelection = event.pointerType === 'touch';
     const cell = pointerCell(event);
     if (!cell) return;
     event.preventDefault();
@@ -1114,7 +1162,8 @@ export function createGrid(options: GridOptions): Grid {
     if (!dragPosition) return;
     const cell = pointerCell(dragPosition, true);
     if (!cell) return;
-    if (axisDrag) selectScope(axisRange(axisDrag.axis, axisDrag.index, axisDrag.axis === 'row' ? cell.row : cell.col));
+    if (handleAnchor) selectScope({ startRow: Math.min(handleAnchor.row, cell.row), endRow: Math.max(handleAnchor.row, cell.row), startColumn: Math.min(handleAnchor.col, cell.col), endColumn: Math.max(handleAnchor.col, cell.col) }, 'extend');
+    else if (axisDrag) selectScope(axisRange(axisDrag.axis, axisDrag.index, axisDrag.axis === 'row' ? cell.row : cell.col), 'extend');
     else select(cell.row, cell.col, true, false);
   }
   function dragScroll(): void {
@@ -1137,7 +1186,7 @@ export function createGrid(options: GridOptions): Grid {
   }
   function onPointerEnd(): void {
     const pointer = dragPointer;
-    dragPointer = null; axisDrag = null; dragPosition = null;
+    dragPointer = null; axisDrag = null; handleAnchor = null; dragPosition = null;
     if (dragFrame !== undefined) win.cancelAnimationFrame(dragFrame);
     dragFrame = undefined;
     if (pointer !== null) for (const target of [root, scroller]) if (target.hasPointerCapture(pointer)) target.releasePointerCapture(pointer);
@@ -1153,6 +1202,7 @@ export function createGrid(options: GridOptions): Grid {
         bounds.top + Math.min(rect.clip.y + rect.clip.height, rect.y + rect.height));
       return;
     }
+    if (event.altKey && event.key === 'Enter' && selection) { event.preventDefault(); const rect = viewport().cellRect(selection.rowIndex, selection.columnIndex); const bounds = scroller.getBoundingClientRect(); openLinks(selection.rowIndex, selection.columnIndex, bounds.left + rect.x, bounds.top + rect.y + rect.height); return; }
     if (event.isComposing || event.altKey) return;
     const control = event.ctrlKey || event.metaKey;
     if (control && event.key.toLowerCase() === 'a') { event.preventDefault(); onPointerEnd(); selectAll(); return; }
@@ -1234,12 +1284,33 @@ export function createGrid(options: GridOptions): Grid {
     return labels;
   }
 
+  function cellLinks(row: number, col: number) {
+    return options.detectLinks === false || imageColumns.has(columns[col]!.key) ? [] : detectLinks(engine.getValue(row, columns[col]!.key));
+  }
+  function openLinks(row: number, col: number, x: number, y: number): void {
+    if (options.allowOpenLinks === false || !engine.getCellPermission(row, col).selectable) return;
+    const links = cellLinks(row, col);
+    if (!links.length) return;
+    closeMenu();
+    const popup = doc.createElement('div'); menu = popup; popup.popover = 'auto'; popup.setAttribute('role', 'dialog'); popup.setAttribute('aria-label', 'Cell links');
+    popup.style.cssText = 'position:fixed;margin:0;padding:12px;max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);overflow:auto;border:1px solid var(--acheron-grid-line-color);border-radius:8px;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);box-shadow:0 8px 24px #0f172a26';
+    for (const link of links) {
+      const anchor = doc.createElement('a'); anchor.textContent = link.text; anchor.href = link.href; anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; anchor.referrerPolicy = 'no-referrer';
+      anchor.style.cssText = 'display:block;padding:8px;color:var(--acheron-link-color);text-decoration:underline;overflow-wrap:anywhere'; popup.append(anchor);
+    }
+    const close = doc.createElement('button'); close.type = 'button'; close.textContent = 'Close'; close.style.cssText = 'margin:8px;padding:6px 12px;border:1px solid var(--acheron-grid-line-color);border-radius:4px;background:var(--acheron-header-background);color:inherit;font:inherit'; close.addEventListener('click', () => closeMenu(true)); popup.append(close);
+    popup.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeMenu(true); } });
+    popup.addEventListener('toggle', () => { if (!popup.matches(':popover-open') && menu === popup) closeMenu(); });
+    root.append(popup); popup.showPopover();
+    const bounds = popup.getBoundingClientRect(); popup.style.left = `${Math.max(8, Math.min(x, win.innerWidth - bounds.width - 8))}px`; popup.style.top = `${Math.max(8, Math.min(y, win.innerHeight - bounds.height - 8))}px`; popup.querySelector('a')?.focus();
+  }
+
   function cell(value: unknown, x: number, y: number, width: number, height: number, header: boolean, rowIndex = 0, columnIndex = 0): void {
     paintCell(value, x, y, width, height, header, rowIndex, columnIndex);
     const labels = stateLabels(header ? null : rowIndex, columnIndex);
     const ctx = context!;
     ctx.save(); ctx.beginPath(); ctx.rect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2)); ctx.clip();
-    const range = getSelectionRange();
+    const range = getSelectionRanges().find(range => rowIndex >= range.startRow && rowIndex <= range.endRow && columnIndex >= range.startColumn && columnIndex <= range.endColumn && ((range.startRow === 0 && range.endRow === rowCount - 1) || (range.startColumn === 0 && range.endColumn === columns.length - 1)));
     if (!header && range && rowIndex >= range.startRow && rowIndex <= range.endRow && columnIndex >= range.startColumn && columnIndex <= range.endColumn &&
       ((range.startRow === 0 && range.endRow === rowCount - 1) || (range.startColumn === 0 && range.endColumn === columns.length - 1))) {
       ctx.globalAlpha = .1; ctx.fillStyle = theme.selectionColor; ctx.fillRect(x, y, width, height); ctx.globalAlpha = 1;
@@ -1276,7 +1347,7 @@ export function createGrid(options: GridOptions): Grid {
     ctx.fillStyle = header ? theme.headerBackground : background;
     ctx.fillRect(x, y, width, height);
     const range = getSelectionRange();
-    const wholeColumn = range && range.startRow === 0 && range.endRow === rowCount - 1 && columnIndex >= range.startColumn && columnIndex <= range.endColumn;
+    const wholeColumn = getSelectionRanges().some(range => range.startRow === 0 && range.endRow === rowCount - 1 && columnIndex >= range.startColumn && columnIndex <= range.endColumn);
     if (header && engine.isLocked({ scope: 'column', columnIndex })) {
       ctx.save(); ctx.globalAlpha = .08; ctx.fillStyle = theme.headerTextColor; ctx.fillRect(x, y, width, height); ctx.restore();
     }
@@ -1324,20 +1395,32 @@ export function createGrid(options: GridOptions): Grid {
     ctx.font = header ? theme.headerFont : theme.font;
     ctx.textBaseline = 'middle';
     const text = value == null ? '' : String(value);
+    const links = !header && options.detectLinks !== false ? detectLinks(value) : [];
+    const paintText = (line: string, offset: number, top: number, lineHeight = 0) => {
+      let left = x + 10; let position = 0;
+      for (const link of links) {
+        const start = Math.max(0, link.start - offset); const end = Math.min(line.length, link.end - offset);
+        if (end <= start || start >= line.length) continue;
+        const plain = line.slice(position, start); ctx.fillStyle = textColor; ctx.fillText(plain, left, top); left += ctx.measureText(plain).width;
+        const part = line.slice(start, end); ctx.fillStyle = format?.textColor ?? theme.linkColor; ctx.fillText(part, left, top); const w = ctx.measureText(part).width;
+        ctx.fillRect(left, top + (lineHeight ? lineHeight - 1 : 8), w, 1); left += w; position = end;
+      }
+      ctx.fillStyle = header ? theme.headerTextColor : textColor; ctx.fillText(line.slice(position), left, top);
+    };
     if (!header && options.wrapText) {
       ctx.textBaseline = 'top';
       const metrics = ctx.measureText('M');
       const lineHeight = Math.ceil(metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent) || 18;
-      let line = ''; let top = y + 4;
+      let line = ''; let top = y + 4; let offset = 0;
       for (const character of text) {
         if (top + lineHeight > y + height) break;
         if (character === '\n' || (line && ctx.measureText(line + character).width > Math.max(0, width - 20))) {
-          ctx.fillText(line, x + 10, top); top += lineHeight; line = '';
+          paintText(line, offset, top, lineHeight); offset += line.length + (character === '\n' ? 1 : 0); top += lineHeight; line = '';
         }
         if (character !== '\n') line += character;
       }
-      if (top + lineHeight <= y + height) ctx.fillText(line, x + 10, top);
-    } else ctx.fillText(text, x + 10, y + height / 2);
+      if (top + lineHeight <= y + height) paintText(line, offset, top, lineHeight);
+    } else paintText(text, 0, y + height / 2);
     ctx.restore();
     if (!header) highlightSearch(x, y, width, height, rowIndex, columnIndex);
   }
@@ -1428,6 +1511,22 @@ export function createGrid(options: GridOptions): Grid {
     context!.clip();
   }
 
+  function accessibleText(row: number, col: number, value: unknown): string {
+    const column = columns[col]!; const label = options.getCellLabel?.(row, column.key, value);
+    if (label !== undefined) return label;
+    return `${column.title}: ${imageColumns.has(column.key) ? value ? 'Image' : 'No image' : value == null ? '' : String(value)}`;
+  }
+  function accessibleCell(row: number, col: number, value: unknown): HTMLElement {
+    const key = `${row}:${col}`;
+    let node = accessibleCells.get(key);
+    if (!node) { node = doc.createElement('div'); node.id = `acheron-visible-${instanceId}-${row}-${col}`; node.setAttribute('role', 'gridcell'); accessibleCells.set(key, node); }
+    node.setAttribute('aria-colindex', String(col + 1));
+    node.setAttribute('aria-readonly', String(!engine.canEdit(row, col)));
+    node.setAttribute('aria-selected', String(getSelectionRanges().some(range => row >= range.startRow && row <= range.endRow && col >= range.startColumn && col <= range.endColumn)));
+    node.setAttribute('aria-description', [...stateLabels(row, col), ...(options.detectLinks !== false && !imageColumns.has(columns[col]!.key) && detectLinks(value).length ? ['Contains links. Alt+Enter opens links.'] : [])].join('; '));
+    node.textContent = accessibleText(row, col, value);
+    return node;
+  }
   function draw(): void {
     frame = undefined;
     if (destroyed) return;
@@ -1446,6 +1545,7 @@ export function createGrid(options: GridOptions): Grid {
         context!.rect(rect.x, headerHeight + rect.y, rect.width, rect.height);
         context!.clip();
         const value = engine.getValue(change.rowIndex, change.columnKey);
+        if (viewportAccessibility) accessibleCell(change.rowIndex, col, value);
         cell(value, rect.x, headerHeight + rect.y, rect.width, rect.height, false, change.rowIndex, col);
         drawSelection(view.regions);
         context!.restore();
@@ -1454,6 +1554,7 @@ export function createGrid(options: GridOptions): Grid {
       return;
     }
     fullDraw = false;
+    const accessibleRows = new Map<number, HTMLElement>(); const seenCells = new Set<string>(); const headerNodes: HTMLElement[] = [];
     visibleImages.clear();
     dirty.clear();
     const ratio = win.devicePixelRatio || 1;
@@ -1470,6 +1571,11 @@ export function createGrid(options: GridOptions): Grid {
       for (let row = region.rows.start; row < region.rows.end; row++) {
         for (let col = region.columns.start; col < region.columns.end; col++) {
           const value = engine.getValue(row, columns[col]!.key);
+          if (viewportAccessibility) {
+            let rowNode = accessibleRows.get(row);
+            if (!rowNode) { rowNode = doc.createElement('div'); rowNode.setAttribute('role', 'row'); rowNode.setAttribute('aria-rowindex', String(row + 2)); accessibleRows.set(row, rowNode); }
+            seenCells.add(`${row}:${col}`); rowNode.append(accessibleCell(row, col, value));
+          }
           cell(value, columnAxis.position(col) + region.offsetX,
             headerHeight + rowAxis.position(row) + region.offsetY, columnAxis.size(col), rowAxis.size(row), false, row, col);
         }
@@ -1488,8 +1594,29 @@ export function createGrid(options: GridOptions): Grid {
       context!.beginPath();
       context!.rect(band.x, 0, band.width, headerHeight);
       context!.clip();
-      for (let col = band.start; col < band.end; col++) cell(columns[col]!.title, columnAxis.position(col) + band.offset, 0, columnAxis.size(col), headerHeight, true, 0, col);
+      for (let col = band.start; col < band.end; col++) {
+        cell(columns[col]!.title, columnAxis.position(col) + band.offset, 0, columnAxis.size(col), headerHeight, true, 0, col);
+        const header = doc.createElement('div'); header.dataset.gridHeaderCell = String(col); header.tabIndex = 0;
+        header.setAttribute('role', viewportAccessibility ? 'columnheader' : 'button'); header.setAttribute('aria-label', viewportAccessibility ? columns[col]!.title : `Select column ${columns[col]!.title}`);
+        header.addEventListener('keydown', event => {
+          if (event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey) { event.preventDefault(); const bounds = header.getBoundingClientRect(); openMenu(0, col, bounds.left, bounds.bottom, true); }
+          else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (rowCount && finishEdit(true)) { startAxisSelection('column', col, event); scroller.focus({ preventScroll: true }); } }
+        });
+        header.style.cssText = `position:absolute;left:${Math.max(band.x, columnAxis.position(col) + band.offset)}px;top:0;width:${Math.max(0, Math.min(band.x + band.width, columnAxis.position(col + 1) + band.offset) - Math.max(band.x, columnAxis.position(col) + band.offset))}px;height:100%`;
+        if (viewportAccessibility) { header.setAttribute('role', 'columnheader'); header.setAttribute('aria-colindex', String(col + 1)); header.setAttribute('aria-label', columns[col]!.title); header.setAttribute('aria-description', stateLabels(null, col).join('; ')); const sort = options.view?.sort; header.setAttribute('aria-sort', sort?.columnKey === columns[col]!.key ? sort.direction === 'asc' ? 'ascending' : 'descending' : 'none'); }
+        headerNodes.push(header);
+      }
       context!.restore();
+    }
+    const focusedHeader = headerSurface.contains(doc.activeElement) ? (doc.activeElement as HTMLElement).dataset.gridHeaderCell : undefined;
+    headerSurface.replaceChildren(...headerNodes);
+    if (focusedHeader !== undefined) headerNodes.find(node => node.dataset.gridHeaderCell === focusedHeader)?.focus({ preventScroll: true });
+    if (viewportAccessibility) {
+      for (const key of accessibleCells.keys()) if (!seenCells.has(key)) accessibleCells.delete(key);
+      accessibleBody.replaceChildren(...[...accessibleRows.entries()].sort(([a], [b]) => a - b).map(([, row]) => row));
+      const selection = engine.getSelection(); const node = selection && accessibleCells.get(`${selection.rowIndex}:${selection.columnIndex}`);
+      if (node) { activeRow.hidden = true; scroller.setAttribute('aria-activedescendant', node.id); }
+      else if (selection) { activeRow.hidden = false; scroller.setAttribute('aria-activedescendant', activeCell.id); }
     }
     drawIndex();
     releaseUnusedImages();
@@ -1543,7 +1670,7 @@ export function createGrid(options: GridOptions): Grid {
           icon.setAttribute('style', 'position:absolute;right:3px;top:4px;pointer-events:none');
           button.append(doc.importNode(icon, true));
         }
-        const selected = !!range && range.startColumn === 0 && range.endColumn === columns.length - 1 && row >= range.startRow && row <= range.endRow;
+        const selected = getSelectionRanges().some(range => range.startColumn === 0 && range.endColumn === columns.length - 1 && row >= range.startRow && row <= range.endRow);
         button.setAttribute('aria-pressed', String(selected));
         button.style.cssText = `position:absolute;left:0;top:${rowAxis.position(row) + band.offset - band.y}px;width:100%;height:${rowAxis.size(row)}px;box-sizing:border-box;border:0;border-right:1px solid var(--acheron-grid-line-color);border-bottom:1px solid var(--acheron-grid-line-color);background:var(--acheron-header-background);color:inherit;font:inherit;cursor:pointer;${selected ? 'box-shadow:inset 0 0 0 9999px color-mix(in srgb,var(--acheron-selection-color) 16%,transparent)' : ''}`;
         if (locked) { button.style.background = 'color-mix(in srgb,var(--acheron-header-text-color) 8%,var(--acheron-header-background))'; button.style.padding = '0 16px 0 2px'; }
@@ -1599,16 +1726,15 @@ export function createGrid(options: GridOptions): Grid {
       return;
     }
     const value = engine.getValue(selection.rowIndex, selection.columnKey);
-    const text = value == null ? '' : String(value);
-    const title = columns[selection.columnIndex]!.title;
-    activeRow.setAttribute('aria-rowindex', String(selection.rowIndex + 1));
+    activeRow.setAttribute('aria-rowindex', String(selection.rowIndex + (viewportAccessibility ? 2 : 1)));
     activeCell.setAttribute('aria-colindex', String(selection.columnIndex + 1));
     activeCell.setAttribute('aria-readonly', String(!engine.canEdit(selection.rowIndex, selection.columnIndex)));
-    const content = `${title}: ${text}`;
-    activeCell.setAttribute('aria-description', stateLabels(selection.rowIndex, selection.columnIndex).join('; '));
+    const content = accessibleText(selection.rowIndex, selection.columnIndex, value);
+    activeCell.setAttribute('aria-description', [...stateLabels(selection.rowIndex, selection.columnIndex), ...(options.detectLinks !== false && !imageColumns.has(selection.columnKey) && detectLinks(value).length ? ['Contains links. Alt+Enter opens links.'] : [])].join('; '));
     if (activeCell.textContent !== content) activeCell.textContent = content;
     scroller.setAttribute('aria-activedescendant', activeCell.id);
-    scroller.setAttribute('aria-label', `${viewportLabel}: row ${selection.rowIndex + 1}, ${title}, ${text}`);
+    scroller.setAttribute('aria-label', `${viewportLabel}: row ${selection.rowIndex + 1}, ${content}`);
+    if (viewportAccessibility && accessibleCells.has(`${selection.rowIndex}:${selection.columnIndex}`)) { const node = accessibleCell(selection.rowIndex, selection.columnIndex, value); activeRow.hidden = true; scroller.setAttribute('aria-activedescendant', node.id); }
   }
 
   function render(): void {
@@ -1621,6 +1747,14 @@ export function createGrid(options: GridOptions): Grid {
     freezeHorizontal.style.top = `${headerHeight + Math.max(0, view.frozenHeight - 1)}px`; freezeHorizontal.style.left = '0px'; freezeHorizontal.style.height = '2px'; freezeHorizontal.style.width = `${indexWidth + view.width}px`;
     endResize();
     positionEditor();
+    const range = getSelectionRange();
+    selectionHandles.forEach((button, i) => {
+      button.hidden = !touchSelection || !range || !!editor; if (button.hidden || !range) return;
+      const rect = view.cellRect(i === 0 ? range.startRow : range.endRow, i === 0 ? range.startColumn : range.endColumn);
+      const x = rect.x + (i ? rect.width : 0); const y = rect.y + (i ? rect.height : 0);
+      button.hidden = x < rect.clip.x || x > rect.clip.x + rect.clip.width || y < rect.clip.y || y > rect.clip.y + rect.clip.height;
+      button.style.left = `${indexWidth + Math.max(10, Math.min(view.width - 10, x)) - 10}px`; button.style.top = `${headerHeight + Math.max(10, Math.min(view.height - 10, y)) - 10}px`;
+    });
     closeMenu();
     fullDraw = true;
     schedule();
@@ -1637,6 +1771,7 @@ export function createGrid(options: GridOptions): Grid {
   observer.observe(root);
   scroller.addEventListener('scroll', render, { passive: true });
   scroller.addEventListener('pointerdown', onPointerDown);
+  scroller.addEventListener('click', onLinkClick);
   scroller.addEventListener('contextmenu', onContextMenu);
   root.addEventListener('contextmenu', onHeaderContextMenu);
   root.addEventListener('keydown', searchShortcut, true);
@@ -1665,6 +1800,16 @@ export function createGrid(options: GridOptions): Grid {
     if (event.target !== editor && cell && selection?.rowIndex === cell.row && selection.columnIndex === cell.col && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) beginEdit();
   }
   return {
+    setTheme(patch) {
+      if (destroyed) throw new Error('Grid is destroyed.');
+      const next = Object.freeze({ ...theme, ...patch }); validateTheme(next); theme = next;
+      for (const [key, value] of Object.entries(theme)) root.style.setProperty('--acheron-' + key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase()), value);
+      for (const [name, image] of Object.entries(stateIcons)) {
+        const color = theme.headerTextColor.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        image.src = `data:image/svg+xml,${encodeURIComponent(stateIconSvg[name as keyof typeof stateIconSvg].replace('currentColor', color))}`;
+      }
+      render();
+    },
     render: () => { if (!searchBar.hidden) refreshSearch(); else render(); },
     openSearch,
     selectColumn, selectRow, selectAll, autoFitColumn, autoFitRow,
@@ -1723,6 +1868,7 @@ export function createGrid(options: GridOptions): Grid {
       scroller.removeEventListener('paste', onPaste);
       scroller.removeEventListener('dblclick', onDoubleClick);
       scroller.removeEventListener('pointerdown', onPointerDown);
+      scroller.removeEventListener('click', onLinkClick);
       scroller.removeEventListener('keydown', onKeyDown);
       if (frame !== undefined) win.cancelAnimationFrame(frame);
       observer.disconnect();

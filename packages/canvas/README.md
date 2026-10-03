@@ -69,7 +69,7 @@ Give the container explicit dimensions, such as `width: 100%; height: 480px`. Mo
 
 ## Basic themes
 
-Pass `theme?: Partial<GridTheme>` at construction. Supported fields are `background`, `textColor`, `headerBackground`, `headerTextColor`, `gridLineColor`, `selectionColor`, `font` and `headerFont`. Omitted fields keep the default light palette and 13px system font. Font values use the CSS font shorthand. Values are validated before mounting; use concrete CSS colors/fonts, without CSS variables, inheritance keywords or `currentColor`.
+Pass `theme?: Partial<GridTheme>` at construction. Supported fields are `background`, `textColor`, `headerBackground`, `headerTextColor`, `gridLineColor`, `selectionColor`, `font`, `headerFont` and `linkColor`. Omitted fields keep the default light palette and 13px system font. Font values use the CSS font shorthand. Values are validated before mounting; use concrete CSS colors/fonts, without CSS variables, inheritance keywords or `currentColor`.
 
 ```ts
 theme: {
@@ -80,7 +80,7 @@ theme: {
 }
 ```
 
-Each grid snapshots its theme independently. Canvas cells, headers, lines and selection use the theme; native editor, menu and resize-dialog surfaces inherit matching CSS variables scoped to that grid. Native browser control chrome and semantic error alerts keep their own appearance. Custom renderers own their drawing colors/fonts. Transparent backgrounds are supported: dirty cell repaint clears old pixels before drawing. Theme changes after construction have no effect; runtime switching, automatic dark mode, theme presets are not provided. Use the formatting API for local per-cell colors. Theme fonts do not resize rows/columns; configure geometry separately.
+Each grid snapshots its theme independently. Canvas cells, headers, lines and selection use the theme; native editor, menu and resize-dialog surfaces inherit matching CSS variables scoped to that grid. Native browser control chrome and semantic error alerts keep their own appearance. Custom renderers own their drawing colors/fonts. Transparent backgrounds are supported: dirty cell repaint clears old pixels before drawing. Mutating the original theme object has no effect; use `grid.setTheme(patch)` for validated runtime updates. The host controls theme choice; automatic dark mode is not provided. Use the formatting API for local per-cell colors. Theme fonts do not resize rows/columns; configure geometry separately.
 
 ## Custom cell drawing
 
@@ -294,9 +294,9 @@ Default text, checkbox strokes, cell backgrounds and native editor colors use ef
 
 ## Active-cell accessibility
 
-The focusable viewport exposes `role="grid"`, total data row/column counts and multi-selection support. A single visually hidden row/gridcell mirrors the active cell, with one-based row/column indices, column title, raw value, selected and read-only state. `aria-activedescendant` references that owned cell while keyboard focus remains on the viewport. Native editors retain their own focus/validation; Escape clears the mirror, and destroy removes it. IDs are unique across mounts. No per-dataset DOM tree is created.
+The focusable viewport exposes `role="grid"`, total data row/column counts and multi-selection support. In the default active accessibility mode, a single visually hidden row/gridcell mirrors the active cell, with one-based row/column indices, column title, raw value, selected and read-only state. `aria-activedescendant` references that owned cell while keyboard focus remains on the viewport. Native editors retain their own focus/validation; Escape clears the mirror, and destroy removes it. IDs are unique across mounts. No per-dataset DOM tree is created.
 
-Selection, value edits/undo/redo, locks and `grid.render()` refresh this mirror. It retains the active cell when scrolled offscreen; application-owned value/permission changes require `grid.render()`. This adds bounded active-cell reads, rather than scanning the dataset. Images/custom paint still expose raw values; no inferred image alt text or custom visual descriptions are provided. Selection status announces range count but does not mirror every selected cell. Browser semantics are tested; NVDA/JAWS/VoiceOver announcements and complete browse-mode row/header traversal remain unverified. The approach follows [W3C grid and focus guidance](https://www.w3.org/WAI/ARIA/apg/patterns/grid/).
+Selection, value edits/undo/redo, locks and `grid.render()` refresh this mirror. It retains the active cell when scrolled offscreen; application-owned value/permission changes require `grid.render()`. This adds bounded active-cell reads, rather than scanning the dataset. Images default to an image label, while custom paint defaults to raw text. Supply `getCellLabel` for meaningful image/custom visual descriptions. Selection status announces range count but does not mirror every selected cell. Browser semantics are tested; NVDA/JAWS/VoiceOver announcements and complete browse-mode row/header traversal remain unverified. The approach follows [W3C grid and focus guidance](https://www.w3.org/WAI/ARIA/apg/patterns/grid/).
 
 ## State indicators
 
@@ -333,3 +333,21 @@ Original Acheron Grid code is licensed under [MIT](LICENSE). Copyright (c) 2026 
 `grid.autoFitColumn(index)` measures the header and current visible/frozen rows; `grid.autoFitRow(index)` measures current visible/frozen columns. Double-click a resize boundary or use the corresponding context-menu action. Fit commands use the existing resize pipeline/events, preserving selection and value history. They reject invalid indexes and calls while editing/destroyed.
 
 Sizes clamp to 24–1000 CSS pixels. Text width uses the mount's fonts and explicit newlines; row height accounts for wrapping when `wrapText: true`. Checkbox and image columns use bounded control/image slots. Offscreen values outside the measured axis are not scanned. Custom drawings may need explicit sizing, because their arbitrary output cannot be measured from raw values. Row heights do not grow automatically after edits; reapply fit when content changes.
+
+## Links
+
+`detectLinks(value)` is an exported, DOM-independent module returning `{ text, href, start, end }` records. It recognizes HTTP(S) and `www.` URLs inside text, trims sentence punctuation, preserves balanced parentheses and normalizes `www.` to HTTPS. HTML, relative URLs, other schemes and URLs containing credentials are not interpreted. No requests are made during detection.
+
+The default painter colors and underlines detected spans with `theme.linkColor`; custom renderers own their drawing. Ordinary click selects and F2/double-click edits. Alt+click, Alt+Enter or **Open links…** in the cell menu opens a bounded popover of native links. Each uses `_blank`, `noopener noreferrer` and `no-referrer`. Multiple links retain their original text; raw data, clipboard and history stay unchanged. Image columns retain their image behavior. Set `detectLinks: false` to disable recognition, or `allowOpenLinks: false` to keep the visual links while disabling grid link actions. These options are mount policies, not browser security restrictions.
+
+## Keyboard, touch and viewport accessibility
+
+Visible headers are keyboard focusable: Tab to a header, Enter/Space selects its column, Shift+F10 opens column actions. Ctrl/Cmd+click on index/header or Shift+F8 adds a separate axis range; Shift-click/drag extends only the active range. All ranges use the same endpoint permissions and 128-range limit. Copy/paste still require one range.
+
+Touch-drag index/header selects axes; touching body cells preserves native scrolling. After a touch cell selection, two handles adjust the active range and support edge auto-scroll, including across frozen panes. Handles disappear when selection clears or an editor opens.
+
+`accessibility: 'viewport'` exposes bounded visible/frozen rows, cells and headers through an ARIA grid tree. It reuses values read by Canvas, with selected/read-only/state descriptions and correct sparse row/column indexes. Row count includes the header in this mode. An offscreen active cell retains a separate mirror; visible active cells use their viewport node. `getCellLabel(rowIndex, columnKey, value)` may return an accessible label for custom drawings or images, or `undefined` for the default. Images default to an image label rather than reading their URL. The default `'active'` mode retains the compact active-cell mirror and its data-only row count. Both modes retain native editor focus. Browser semantics are tested; NVDA/JAWS/VoiceOver behavior still needs manual verification.
+
+## Runtime appearance
+
+`grid.setTheme(patch)` validates concrete CSS colors/fonts before applying a snapshot. Canvas, native controls, dialogs, links and icon colors repaint without remounting. Selection, locks, formatting, sizes, frozen panes and value history remain. Per-cell colors retain precedence; font changes do not automatically resize cells. The examples include Light/Teal/Dark palettes. Custom renderers own their colors and the host remains responsible for contrast.
