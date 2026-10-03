@@ -236,7 +236,7 @@ export function createGrid(options: GridOptions): Grid {
     if (change.type === 'cells') { if (engine.getMergedCells().length) fullDraw=true; if (options.autoRowHeight) { change.cells.forEach(cell => measuredRows.delete(cell.rowIndex)); fullDraw = true; } invalidate(change.cells); if (!searchBar.hidden) refreshSearch(); }
     else if (change.type === 'layout' || change.type === 'structure') {
       if (change.type === 'structure') {
-        hoveredChoice=null; hoveredLinks=null;
+        hoveredChoice=null; hoveredLinks=null; linkBadgeValue=null;
         if(managesView)currentView=engine.view;
         if(axisAnchor) {
           const map=axisAnchor.axis==='row'?change.rowMap:change.columnMap,next=map[axisAnchor.index];
@@ -402,6 +402,7 @@ export function createGrid(options: GridOptions): Grid {
 
   let hoveredChoice:{row:number;col:number}|null=null;
   let hoveredLinks: { row: number; col: number } | null = null;
+  let linkBadgeValue: { row: number; col: number; value: unknown } | null = null;
   const linkBadges = doc.createElement('div');
   linkBadges.dataset.gridLinkBadges = '';
   linkBadges.setAttribute('aria-label', 'Cell link shortcuts');
@@ -414,7 +415,9 @@ export function createGrid(options: GridOptions): Grid {
     const cell = hoveredLinks ?? (selection ? { row: selection.rowIndex, col: selection.columnIndex } : null);
     linkBadges.hidden = true; linkBadges.style.display = 'none';
     if (!cell || cell.row < 0 || cell.row >= rowCount || cell.col < 0 || cell.col >= columns.length || editor || options.allowOpenLinks === false || !engine.getCellPermission(cell.row, cell.col).selectable) return;
-    const links = cellLinks(cell.row, cell.col), rect = viewport().cellRect(cell.row, cell.col);
+    const links = linkBadgeValue?.row === cell.row && linkBadgeValue.col === cell.col
+      ? linksForValue(linkBadgeValue.value, columns[cell.col]!.key, engine.getFormat(cell.row, cell.col).contentFormat) : cellLinks(cell.row, cell.col);
+    const rect = viewport().cellRect(cell.row, cell.col);
     const left = Math.max(rect.x, rect.clip.x), top = Math.max(rect.y, rect.clip.y);
     const width = Math.min(rect.x + rect.width, rect.clip.x + rect.clip.width) - left;
     const height = Math.min(rect.y + rect.height, rect.clip.y + rect.clip.height) - top;
@@ -431,6 +434,7 @@ export function createGrid(options: GridOptions): Grid {
     }
     linkBadges.style.left = `${indexWidth + left + 1}px`; linkBadges.style.top = `${headerHeight + top + 1}px`;
     linkBadges.style.maxWidth = `${width - 2}px`; linkBadges.style.maxHeight = `${height - 2}px`; linkBadges.hidden = false; linkBadges.style.display = 'flex';
+    linkBadges.style.left = `${indexWidth + left + width - linkBadges.offsetWidth - 1}px`;
   }
   function clearChoiceHover():void {
     if(!hoveredChoice)return;const old=hoveredChoice;hoveredChoice=null;
@@ -825,7 +829,7 @@ export function createGrid(options: GridOptions): Grid {
     const range = getSelectionRange();
     if (rowCount && !getSelectionRanges().some(range => row >= range.startRow && row <= range.endRow && col >= range.startColumn && col <= range.endColumn)) select(row, col, false, false);
     if (destroyed || (rowCount > 0 && !engine.getCellPermission(row, col).selectable)) return;
-    header ||= getSelectionRanges().some(range => range.startRow === 0 && range.endRow === rowCount - 1 && col >= range.startColumn && col <= range.endColumn && (rowCount > 1 || axisAnchor?.axis === 'column'));
+    header ||= axisAnchor?.axis === 'column' && getSelectionRanges().some(range => range.startRow === 0 && range.endRow === rowCount - 1 && col >= range.startColumn && col <= range.endColumn);
     const selection = engine.getSelection() ?? (header || !rowCount && options.onRowChange ? { rowIndex: 0, columnIndex: col, columnKey: columns[col]!.key, rowId: 0 } : null);
     if (!selection) return;
     const popup = doc.createElement('div');
@@ -1903,6 +1907,9 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function paintCell(value: unknown, x: number, y: number, width: number, height: number, header: boolean, rowIndex = 0, columnIndex = 0): void {
+    const selection = engine.getSelection();
+    const badgeCell = hoveredLinks ?? (selection ? { row: selection.rowIndex, col: selection.columnIndex } : null);
+    if (!header && badgeCell?.row === rowIndex && badgeCell.col === columnIndex) linkBadgeValue = { row: rowIndex, col: columnIndex, value };
     const ctx = context!;
     ctx.clearRect(x, y, width, height);
     const format = header ? null : engine.getFormat(rowIndex, columnIndex);
@@ -2141,7 +2148,6 @@ export function createGrid(options: GridOptions): Grid {
     return node;
   }
   function draw(): void {
-    updateLinkBadges();
     frame = undefined;
     if (destroyed) return;
     if (options.autoRowHeight && !editor && !resizing) for (const row of visibleIndices('row')) {
@@ -2170,6 +2176,7 @@ export function createGrid(options: GridOptions): Grid {
         context!.restore();
       }
       dirty.clear();
+      updateLinkBadges();
       return;
     }
     fullDraw = false;
@@ -2277,6 +2284,7 @@ export function createGrid(options: GridOptions): Grid {
     }
     drawIndex();
     releaseUnusedImages();
+    updateLinkBadges();
   }
 
   function indexRow(event: MouseEvent): number | null {
