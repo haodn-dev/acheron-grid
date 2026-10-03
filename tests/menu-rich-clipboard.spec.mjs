@@ -9,6 +9,36 @@ async function setup(page) {
   });
 }
 
+test('link badges expose each safe link on hover and cell selection only', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: new LocalDataSource([{ id: 1, text: 'https://example.com/one https://example.org/two' }, { id: 2, text: 'plain' }], row => row.id), columns: [{ key: 'text', title: 'Text' }], columnWidth: 400 });
+  });
+  const badges = page.locator('[data-grid-link-badges]'), viewport = page.getByRole('grid');
+  await viewport.hover({ position: { x: 200, y: 16 } }); await expect(badges).toBeVisible(); await expect(badges.getByRole('link')).toHaveCount(2);
+  await expect(badges.getByRole('link').nth(1)).toHaveAttribute('href', 'https://example.org/two');
+  await page.mouse.move(1000, 700); await expect(badges).toBeHidden();
+  await viewport.press('Control+Home'); await expect(badges).toBeVisible();
+  await viewport.press('ArrowDown'); await expect(badges).toBeHidden();
+});
+
+test('selected-cell font shortcuts toggle metadata, preserve data and replay history', async ({ page }) => {
+  await setup(page); const viewport = page.getByRole('grid');
+  await viewport.press('Control+Home'); await viewport.press('Control+b'); await viewport.press('Control+i');
+  expect(await page.evaluate(() => window.grid.getFormat(0, 0))).toMatchObject({ fontWeight: 'bold', fontStyle: 'italic' });
+  expect(await page.evaluate(() => window.source.getValue(0, 'md'))).toBe('**Bold** and *italic*');
+  await viewport.press('Control+b'); expect(await page.evaluate(() => window.grid.getFormat(0, 0).fontWeight)).toBe('normal');
+  await viewport.press('Control+z'); expect(await page.evaluate(() => window.grid.getFormat(0, 0).fontWeight)).toBe('bold');
+  await viewport.press('Control+z'); expect(await page.evaluate(() => window.grid.getFormat(0, 0).fontStyle)).toBeUndefined();
+  await viewport.press('Control+y'); expect(await page.evaluate(() => window.grid.getFormat(0, 0).fontStyle)).toBe('italic');
+  const data = await viewport.evaluate(el => { const clipboardData = new DataTransfer(); el.dispatchEvent(new ClipboardEvent('copy', { bubbles: true, cancelable: true, clipboardData })); window.fontClipboard = clipboardData; return clipboardData.getData('text/html'); });
+  expect(data).toContain('fontWeight');
+  await viewport.press('ArrowRight'); await viewport.press('ArrowRight');
+  await viewport.evaluate(el => el.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: window.fontClipboard })));
+  expect(await page.evaluate(() => window.grid.getFormat(0, 2))).toMatchObject({ fontWeight: 'bold', fontStyle: 'italic' });
+});
+
 test('keyboard context menus suppress the browser menu on focused popup controls', async ({ page }) => {
   await setup(page);
   const viewport = page.getByLabel(/^Data grid viewport/);

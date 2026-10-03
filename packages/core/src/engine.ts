@@ -87,7 +87,7 @@ export function createGridEngine(options: GridEngineOptions) {
   let anchor: CellSelection | null = null;
   const retainedRanges: SelectionRange[] = [];
   type Change = CellUpdate & { previous: unknown; rowId: RowId };
-  type FormatEntry = { target: Readonly<CellFormatTarget>; bounds: Readonly<SelectionRange>; patch: Readonly<CellFormatPatch>; orders: Readonly<{ background?: number; textColor?: number; contentFormat?: number }>; order: number };
+  type FormatEntry = { target: Readonly<CellFormatTarget>; bounds: Readonly<SelectionRange>; patch: Readonly<CellFormatPatch>; orders: Readonly<{ background?: number; textColor?: number; contentFormat?: number; fontWeight?: number; fontStyle?: number }>; order: number };
   type FormatChange = { key: string; previous: FormatEntry | undefined; value: FormatEntry | undefined };
   type StructureState = {
     merges: readonly Readonly<SelectionRange>[]; groups: readonly Readonly<RowGroup>[];
@@ -705,12 +705,12 @@ export function createGridEngine(options: GridEngineOptions) {
     assertAlive(); validateLockTarget({ scope: 'cell', rowIndex, columnIndex });
     if (!orderedFormats.length) return emptyFormat;
     const result: Record<string, string> = {};
-    const orders = { background: 0, textColor: 0, contentFormat: 0 };
+    const orders = { background: 0, textColor: 0, contentFormat: 0, fontWeight: 0, fontStyle: 0 };
     // Scan sparse overlays; index regions if large formatting sets become costly.
     for (const entry of orderedFormats) {
       const range = entry.bounds;
       if (rowIndex < range.startRow || rowIndex > range.endRow || columnIndex < range.startColumn || columnIndex > range.endColumn) continue;
-      for (const key of ['background', 'textColor', 'contentFormat'] as const) {
+      for (const key of ['background', 'textColor', 'contentFormat', 'fontWeight', 'fontStyle'] as const) {
         if ((entry.orders[key] ?? 0) <= orders[key]) continue;
         orders[key] = entry.orders[key]!;
         const value = entry.patch[key];
@@ -734,7 +734,7 @@ export function createGridEngine(options: GridEngineOptions) {
     if (patch !== null) {
       if (!patch || typeof patch !== 'object') throw new TypeError('Invalid formatting patch.');
       patch = Object.freeze({ ...patch });
-      for (const [key, value] of Object.entries(patch)) if (!['contentFormat','background','textColor'].includes(key) || value !== null && (key === 'contentFormat' ? !['plain','html','markdown'].includes(value) : typeof value !== 'string' || !/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(value))) throw new TypeError('Invalid cell format.');
+      for (const [key, value] of Object.entries(patch)) if (!['contentFormat','background','textColor','fontWeight','fontStyle'].includes(key) || value !== null && (key === 'fontWeight' ? !['normal','bold'].includes(value) : key === 'fontStyle' ? !['normal','italic'].includes(value) : key === 'contentFormat' ? !['plain','html','markdown'].includes(value) : typeof value !== 'string' || !/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(value))) throw new TypeError('Invalid cell format.');
       if (!Object.keys(patch).length) return;
     }
     const unique = new Map<string, { target: CellFormatTarget; bounds: SelectionRange }>();
@@ -751,7 +751,7 @@ export function createGridEngine(options: GridEngineOptions) {
       const nextPatch = patch === null ? undefined : Object.freeze({ ...previous?.patch, ...patch });
       if ((!previous && !nextPatch) || (previous && previous === orderedFormats.at(-1) && JSON.stringify(previous.patch) === JSON.stringify(nextPatch))) continue;
       const orders = { ...previous?.orders };
-      if (patch) for (const key of ['background', 'textColor', 'contentFormat'] as const) if (patch[key] !== undefined) orders[key] = ++formatOrder;
+      if (patch) for (const key of ['background', 'textColor', 'contentFormat', 'fontWeight', 'fontStyle'] as const) if (patch[key] !== undefined) orders[key] = ++formatOrder;
       changes.push({ key, previous, value: nextPatch ? { ...entry, bounds: Object.freeze(entry.bounds), patch: nextPatch, orders: Object.freeze(orders), order: formatOrder } : undefined });
     }
     if (!changes.length) return;
@@ -865,7 +865,7 @@ export function createGridEngine(options: GridEngineOptions) {
           startColumn:target.scope==='column'||target.scope==='cell' ? target.columnIndex:0,endColumn:target.scope==='column'||target.scope==='cell' ? target.columnIndex:nextColumns.length-1};
         const nextKey=JSON.stringify([target.scope,bounds.startRow,bounds.endRow,bounds.startColumn,bounds.endColumn]);
         const existing=nextFormats.get(nextKey),patch={...existing?.patch},orders={...existing?.orders};
-        for(const property of ['background','textColor','contentFormat'] as const)if((entry.orders[property]??0)>(orders[property]??0)){orders[property]=entry.orders[property]!;Object.assign(patch,{[property]:entry.patch[property]!});}
+        for(const property of ['background','textColor','contentFormat','fontWeight','fontStyle'] as const)if((entry.orders[property]??0)>(orders[property]??0)){orders[property]=entry.orders[property]!;Object.assign(patch,{[property]:entry.patch[property]!});}
         nextFormats.set(nextKey,{...entry,target:Object.freeze(target),bounds:Object.freeze(bounds),patch:Object.freeze(patch),orders:Object.freeze(orders),order:Math.max(existing?.order??0,entry.order)});
       }
     }

@@ -27,7 +27,7 @@ export function decodeBlocks(text:string):ClipboardBlock[] {
           if (!format || typeof format !== 'object') throw new TypeError('Invalid clipboard format.');
           const result: Record<string, string> = {};
           for (const [key, value] of Object.entries(format)) {
-            if (typeof value !== 'string' || (key === 'contentFormat' ? !['plain', 'html', 'markdown'].includes(value) : !['background', 'textColor'].includes(key) || !/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(value))) throw new TypeError('Invalid clipboard format.');
+            if (typeof value !== 'string' || (key === 'fontWeight' ? !['normal','bold'].includes(value) : key === 'fontStyle' ? !['normal','italic'].includes(value) : key === 'contentFormat' ? !['plain', 'html', 'markdown'].includes(value) : !['background', 'textColor'].includes(key) || !/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(value))) throw new TypeError('Invalid clipboard format.');
             result[key] = value;
           }
           return result;
