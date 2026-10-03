@@ -13,6 +13,8 @@ This is an experimental development preview. APIs may change, packages are not p
 | [@acheron-grid/core](packages/core/README.md) | Headless engine, synchronous sources and local row views; usable in Node.js | None |
 | [@acheron-grid/canvas](packages/canvas/README.md) | Browser rendering and interactions | @acheron-grid/core |
 | [@acheron-grid/markdown](packages/markdown/README.md) | Optional Markdown parsing adapter | marked |
+| [@acheron-grid/react](packages/react/README.md) | React lifecycle adapter | Canvas; React peer dependency |
+| [@acheron-grid/vue](packages/vue/README.md) | Vue 3 lifecycle adapter | Canvas; Vue peer dependency |
 
 Core does not import Canvas or framework code. `@acheron-grid/core/headless` remains an alias for the headless API.
 
@@ -80,7 +82,7 @@ Run commands from the repository root after `npm ci`:
 
 | Command | Purpose |
 | --- | --- |
-| `npm run build` | Build core, Canvas and the optional Markdown adapter; ESM and TypeScript declarations |
+| `npm run build` | Build core, Canvas, optional Markdown, React and Vue adapters; ESM and TypeScript declarations |
 | `npm run typecheck` | Check all packages and the headless dependency boundary |
 | `npm test` | Build and run Node.js tests |
 | `npm run test:browser` | Build and run Chromium grid integration tests |
@@ -95,7 +97,7 @@ See [Contributing](CONTRIBUTING.md) for changes and bug reports.
 
 Data sources and validation are synchronous. Rows and columns can change through structural commands with state remapping and undo/redo; external source structure changes require a new view/mount. Local values, user state and history are in memory. Persistence and backend authorization belong to the application.
 
-Native browser scroll dimensions impose practical limits. Remote/async data, React/Vue adapters, multi-column sorting and complete assistive-technology coverage are not implemented. Only Chromium is currently covered by browser tests.
+Native browser scroll dimensions impose practical limits. Remote/async data, multi-column sorting and complete assistive-technology coverage are not implemented. Only Chromium is currently covered by browser tests.
 
 Formula evaluation, charts, pivot tables, multi-sheet workbooks, Excel calculation compatibility and real-time collaboration are outside the current scope.
 
