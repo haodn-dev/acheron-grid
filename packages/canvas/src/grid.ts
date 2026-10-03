@@ -280,6 +280,11 @@ export function createGrid(options: GridOptions): Grid {
     [data-grid-viewport]::-webkit-scrollbar-thumb, dialog[data-grid-dialog]::-webkit-scrollbar-thumb { background:var(--acheron-scrollbar-color);border:2px solid var(--acheron-header-background);border-radius:8px }
     [data-grid-viewport]::-webkit-scrollbar-track, [data-grid-viewport]::-webkit-scrollbar-corner { background:var(--acheron-header-background) }
     [data-grid-viewport]::-webkit-scrollbar-button { display:none }
+    .acheron-context-menu { scrollbar-width:thin;scrollbar-color:var(--acheron-scrollbar-color) transparent }
+    .acheron-context-menu::-webkit-scrollbar { width:6px;height:6px }
+    .acheron-context-menu::-webkit-scrollbar-thumb { background:var(--acheron-scrollbar-color);border-radius:6px }
+    .acheron-context-menu::-webkit-scrollbar-track { background:transparent }
+    .acheron-context-menu::-webkit-scrollbar-button { display:none }
     dialog[data-grid-dialog]::backdrop { background:#0f172a55 }
     dialog[data-grid-dialog] p { margin:0 }
     dialog[data-grid-dialog] > p:first-child { font-size:16px;font-weight:600 }
