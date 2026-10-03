@@ -1,3 +1,6 @@
+import { choicePanel, positionChoicePanel } from './choices.js';
+import type { ChoiceEditorOptions } from './choices.js';
+import type { ReorderRequest } from './reorder.js';
 import { headerLayout } from './headers.js';
 import type { HeaderGroup } from './headers.js';
 import { detectLinks } from './links.js';
@@ -54,6 +57,10 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
   getCellLabel?: (rowIndex: number, columnKey: string, value: unknown) => string | undefined;
   renderCell?: CellRenderer;
   createEditor?: CellEditorFactory;
+  choiceEditor?: ChoiceEditorOptions | false;
+  selectionStyle?: { readonly activeBorderWidth?: number; readonly headerTintOpacity?: number };
+  onReorder?: (request: Readonly<ReorderRequest>) => void;
+  canReorder?: (request: Readonly<ReorderRequest>) => boolean;
   onSelectionChange?: (selection: CellSelection | null) => void;
   onSelectionRangesChange?: (ranges: readonly SelectionRange[]) => void;
   onSelectionRangeChange?: (range: SelectionRange | null) => void;
@@ -112,6 +119,9 @@ const stateIconSvg = {
 /** Mount a grid. The caller owns the container and its dimensions. */
 export function createGrid(options: GridOptions): Grid {
   const { container, dataSource } = options;
+  const activeBorderWidth = options.selectionStyle?.activeBorderWidth ?? 1;
+  const headerTintOpacity = options.selectionStyle?.headerTintOpacity ?? .12;
+  if (!Number.isFinite(activeBorderWidth) || activeBorderWidth < 1 || activeBorderWidth > 4 || !Number.isFinite(headerTintOpacity) || headerTintOpacity < 0 || headerTintOpacity > 1) throw new RangeError('Invalid selection style.');
   const doc = container.ownerDocument;
   const win = doc.defaultView!;
   let theme = Object.freeze({ background: '#ffffff', textColor: '#0f172a', headerBackground: '#edf2f7',
@@ -287,6 +297,7 @@ export function createGrid(options: GridOptions): Grid {
   });
   let addNextSelection = false;
   let editor: CellEditor | null = null;
+  let choices: HTMLElement | null = null;
   const editorPane = doc.createElement('div');
   editorPane.style.cssText = 'position:absolute;overflow:hidden;pointer-events:none;z-index:1';
   root.append(editorPane);
@@ -838,6 +849,8 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function onHeaderPointerDown(event: PointerEvent): void {
+    const moveTarget = event.target instanceof win.Element ? event.target.closest<HTMLElement>('[data-grid-reorder]') : null;
+    if (moveTarget?.draggable && !event.shiftKey && !event.ctrlKey && !event.metaKey && columnEdge(event) === null && rowEdge(event) === null) return;
     if (resizing) { event.preventDefault(); return; }
     if (event.button !== 0 || event.altKey || (event.target !== root && !(event.target instanceof win.Node && (scroller.contains(event.target) || indexGutter.contains(event.target) || headerSurface.contains(event.target))))) return;
     const bounds = root.getBoundingClientRect();
@@ -946,12 +959,13 @@ export function createGrid(options: GridOptions): Grid {
         editorError.textContent = error instanceof Error ? error.message : 'Unable to save cell.';
         editorError.style.display = 'block';
         positionEditor();
-        editor.focus({ preventScroll: true });
+        (choices?.querySelector<HTMLInputElement>('input') ?? editor).focus({ preventScroll: true });
         return false;
       }
     }
     const input = editor;
     editor = null;
+    choices?.remove(); choices = null;
     input.remove();
     editorError.style.display = 'none';
     editorError.textContent = '';
@@ -974,6 +988,7 @@ export function createGrid(options: GridOptions): Grid {
       if (!custom && (configured?.type === 'select' || configured?.type === 'multiselect')) {
         const select = doc.createElement('select');
         for (const value of configured.values) { const option = doc.createElement('option'); option.value = option.textContent = value; select.append(option); }
+        select.dataset.gridChoiceEditor = '';
         select.multiple = configured.type === 'multiselect'; select.size = select.multiple ? Math.min(8, configured.values.length) : 0;
         select.required = !select.multiple && !configured.values.includes(''); editor = select;
       } else if (!custom && configured?.type === 'checkbox') {
@@ -1030,11 +1045,15 @@ export function createGrid(options: GridOptions): Grid {
         if (finishEdit(event.key === 'Enter')) scroller.focus({ preventScroll: true });
       } else if (event.key === 'Tab' && !finishEdit(true)) event.preventDefault();
     });
-    editor.addEventListener('blur', () => finishEdit(true));
+    editor.addEventListener('blur', () => { if (!choices && !(editor instanceof win.HTMLSelectElement && editor.dataset.gridChoiceEditor !== undefined && options.choiceEditor)) finishEdit(true); });
     editorPane.append(editor);
     positionEditor();
     editor.focus({ preventScroll: true });
     if (editor.tagName !== 'SELECT' && 'select' in editor) editor.select();
+    if (editor instanceof win.HTMLSelectElement && editor.dataset.gridChoiceEditor !== undefined && options.choiceEditor) {
+      choices = choicePanel(editor, root, options.choiceEditor, commit => { const done = finishEdit(commit); if (done) scroller.focus({ preventScroll: true }); return done; });
+      editor.style.opacity = '0'; editor.style.pointerEvents = 'none'; editor.tabIndex = -1; editor.setAttribute('aria-hidden', 'true');
+    }
   }
 
   const getSelection = engine.getSelection;
@@ -1386,7 +1405,7 @@ export function createGrid(options: GridOptions): Grid {
       ctx.save(); ctx.globalAlpha = .08; ctx.fillStyle = theme.headerTextColor; ctx.fillRect(x, y, width, height); ctx.restore();
     }
     if (header && (wholeColumn || engine.getSelection()?.columnIndex === columnIndex)) {
-      ctx.save(); ctx.globalAlpha = .12; ctx.fillStyle = theme.selectionColor; ctx.fillRect(x, y, width, height); ctx.globalAlpha = 1; ctx.fillRect(x + 1, y + height - 3, Math.max(0, width - 2), 3); ctx.restore();
+      ctx.save(); ctx.globalAlpha = headerTintOpacity; ctx.fillStyle = theme.selectionColor; ctx.fillRect(x, y, width, height); ctx.restore();
     }
     ctx.strokeStyle = theme.gridLineColor;
     ctx.lineWidth = 1;
@@ -1519,9 +1538,10 @@ export function createGrid(options: GridOptions): Grid {
     editor.style.left = `${rect.x - clip.x}px`;
     editor.style.top = `${rect.y - clip.y}px`;
     editor.style.width = `${rect.width}px`;
-    editor.style.height = `${editor instanceof win.HTMLSelectElement && editor.multiple ? Math.min(220, Math.max(rect.height, editor.size * 24 + 8), Math.max(1, clip.height - Math.max(0, rect.y - clip.y))) : rect.height}px`;
+    editor.style.height = `${editor instanceof win.HTMLSelectElement && editor.multiple && !options.choiceEditor ? Math.min(220, Math.max(rect.height, editor.size * 24 + 8), Math.max(1, clip.height - Math.max(0, rect.y - clip.y))) : rect.height}px`;
     const hidden = rect.x + rect.width <= clip.x || rect.x >= clip.x + clip.width || rect.y + rect.height <= clip.y || rect.y >= clip.y + clip.height;
     editorPane.style.clipPath = hidden ? 'inset(100%)' : '';
+    if (choices && editor instanceof win.HTMLSelectElement) { choices.hidden = hidden; positionChoicePanel(choices, editor); }
     if (editor instanceof win.HTMLTextAreaElement) {
       context!.save(); context!.font = theme.font;
       let width = rect.width;
@@ -1647,6 +1667,7 @@ export function createGrid(options: GridOptions): Grid {
         header.dataset.headerLevel = String(layout.level);
         header.setAttribute('aria-rowspan', String(layout.rowSpan));
         if (viewportAccessibility) { header.setAttribute('role', 'columnheader'); header.setAttribute('aria-colindex', String(col + 1)); header.setAttribute('aria-label', columns[col]!.title); header.setAttribute('aria-description', stateLabels(null, col).join('; ')); const sort = options.view?.sort; header.setAttribute('aria-sort', sort?.columnKey === columns[col]!.key ? sort.direction === 'asc' ? 'ascending' : 'descending' : 'none'); }
+        reorderHandle(header, 'column', col);
         headerNodes.push(header);
       }
       for (const group of headers.cells.filter(cell => !cell.leaf && cell.start < band.end && cell.end > band.start)) {
@@ -1654,6 +1675,10 @@ export function createGrid(options: GridOptions): Grid {
         const width = columnAxis.position(group.end) - columnAxis.position(group.start);
         const y = group.level * headerRowHeight;
         context!.fillStyle = theme.headerBackground; context!.fillRect(x, y, width, headerRowHeight);
+        const activeColumn = engine.getSelection()?.columnIndex;
+        if (activeColumn !== undefined && activeColumn >= group.start && activeColumn < group.end || getSelectionRanges().some(range => range.startRow === 0 && range.endRow === rowCount - 1 && range.startColumn < group.end && range.endColumn >= group.start)) {
+          context!.save(); context!.globalAlpha = headerTintOpacity; context!.fillStyle = theme.selectionColor; context!.fillRect(x, y, width, headerRowHeight); context!.restore();
+        }
         context!.strokeStyle = theme.gridLineColor; context!.lineWidth = 1; context!.strokeRect(x + .5, y + .5, width, headerRowHeight);
         context!.save(); context!.beginPath(); context!.rect(x + 6, y, Math.max(0, width - 12), headerRowHeight); context!.clip();
         context!.font = theme.headerFont; context!.fillStyle = theme.headerTextColor; context!.textAlign = 'center'; context!.textBaseline = 'middle';
@@ -1661,6 +1686,7 @@ export function createGrid(options: GridOptions): Grid {
         const node = doc.createElement('div'); node.dataset.gridHeaderGroup = group.title; node.dataset.headerLevel = String(group.level);
         node.setAttribute('role', 'columnheader'); node.setAttribute('aria-label', group.title); node.setAttribute('aria-colindex', String(group.start + 1)); node.setAttribute('aria-colspan', String(group.end - group.start));
         node.style.cssText = `position:absolute;left:${Math.max(band.x, x)}px;top:${y}px;width:${Math.max(0, Math.min(band.x + band.width, x + width) - Math.max(band.x, x))}px;height:${headerRowHeight}px`;
+        reorderHandle(node, 'column', group.start, group.end - 1);
         headerNodes.push(node);
       }
       context!.restore();
@@ -1744,11 +1770,54 @@ export function createGrid(options: GridOptions): Grid {
         resizeHandle.title = 'Drag to resize row; double-click to fit';
         resizeHandle.style.cssText = 'position:absolute;bottom:0;left:0;width:100%;height:5px;cursor:row-resize';
         button.append(resizeHandle);
+        reorderHandle(button, 'row', row);
         pane.append(button);
       }
       children.push(pane);
     }
     indexGutter.replaceChildren(...children);
+  }
+
+  let reorderDrag: { axis: 'row' | 'column'; indices: number[] } | null = null;
+  function reorderHandle(node: HTMLElement, axis: 'row' | 'column', first: number, last = first): void {
+    if (!options.onReorder) return;
+    const handle = node;
+    handle.dataset.gridReorder = axis;
+    const selectedAxis = getSelectionRanges().some(range => axis === 'row'
+      ? range.startColumn === 0 && range.endColumn === columns.length - 1 && first >= range.startRow && last <= range.endRow
+      : range.startRow === 0 && range.endRow === rowCount - 1 && first >= range.startColumn && last <= range.endColumn);
+    handle.draggable = selectedAxis;
+    if (selectedAxis) { handle.style.cursor = 'grab'; handle.title = 'Drag selected items to move; Alt+arrow moves one position'; }
+    handle.addEventListener('dragstart', event => {
+      if (!selectedAxis || !finishEdit(true)) { event.preventDefault(); return; }
+      const selected = new Set<number>();
+      for (const range of getSelectionRanges()) {
+        if (axis === 'row' && range.startColumn === 0 && range.endColumn === columns.length - 1) for (let i = range.startRow; i <= range.endRow; i++) selected.add(i);
+        if (axis === 'column' && range.startRow === 0 && range.endRow === rowCount - 1) for (let i = range.startColumn; i <= range.endColumn; i++) selected.add(i);
+      }
+      const indices = selected.has(first) && first === last ? [...selected].sort((a, b) => a - b) : Array.from({ length: last - first + 1 }, (_, i) => first + i);
+      reorderDrag = { axis, indices }; event.dataTransfer?.setData('text/plain', `Move ${axis}`); if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+    });
+    handle.addEventListener('keydown', event => {
+      const backward = axis === 'row' ? 'ArrowUp' : 'ArrowLeft'; const forward = axis === 'row' ? 'ArrowDown' : 'ArrowRight';
+      if (!selectedAxis || !event.altKey || (event.key !== backward && event.key !== forward)) return;
+      event.preventDefault(); event.stopPropagation(); if (!finishEdit(true)) return;
+      const beforeIndex = event.key === backward ? Math.max(0, first - 1) : Math.min(axis === 'row' ? rowCount : columns.length, last + 2);
+      const request = Object.freeze({ axis, indices: Object.freeze(Array.from({ length: last - first + 1 }, (_, i) => first + i)), beforeIndex });
+      try { if (options.canReorder?.(request) !== false) options.onReorder?.(request); } catch (error) { actionError.textContent = error instanceof Error ? error.message : 'Unable to move items.'; actionError.style.display = 'block'; }
+    });
+    handle.addEventListener('dragend', () => { reorderDrag = null; });
+    node.addEventListener('dragover', event => {
+      if (reorderDrag?.axis !== axis) return; event.preventDefault(); node.style.outline = '2px solid var(--acheron-selection-color)'; node.style.outlineOffset = '-2px';
+    });
+    node.addEventListener('dragleave', () => { node.style.outline = ''; });
+    node.addEventListener('drop', event => {
+      node.style.outline = ''; if (reorderDrag?.axis !== axis) return; event.preventDefault(); event.stopPropagation();
+      const bounds = node.getBoundingClientRect(); const after = axis === 'row' ? event.clientY > bounds.top + bounds.height / 2 : event.clientX > bounds.left + bounds.width / 2;
+      const request = Object.freeze({ axis, indices: Object.freeze([...reorderDrag.indices]), beforeIndex: after ? last + 1 : first }); reorderDrag = null;
+      try { if (options.canReorder?.(request) === false) return; options.onReorder?.(request); }
+      catch (error) { actionError.textContent = error instanceof Error ? error.message : 'Unable to move items.'; actionError.style.display = 'block'; }
+    });
   }
 
   function releaseUnusedImages(): void {
@@ -1766,19 +1835,20 @@ export function createGrid(options: GridOptions): Grid {
       clipRegion(region);
       context!.strokeStyle = theme.selectionColor;
       context!.lineWidth = 2;
-      for (const range of ranges) context!.strokeRect(columnAxis.position(range.startColumn) + region.offsetX + 1,
+      for (const range of ranges) {
+        if (range.startRow === range.endRow && range.startColumn === range.endColumn && range.startRow === selection.rowIndex && range.startColumn === selection.columnIndex) continue;
+        context!.strokeRect(columnAxis.position(range.startColumn) + region.offsetX + 1,
         headerHeight + rowAxis.position(range.startRow) + region.offsetY + 1,
         Math.max(0, columnAxis.position(range.endColumn + 1) - columnAxis.position(range.startColumn) - 2),
         Math.max(0, rowAxis.position(range.endRow + 1) - rowAxis.position(range.startRow) - 2));
+      }
       // Draw the active cell once in its own pane, above semantic cell colors.
       if (selection.rowIndex >= region.rows.start && selection.rowIndex < region.rows.end && selection.columnIndex >= region.columns.start && selection.columnIndex < region.columns.end) {
         const x = columnAxis.position(selection.columnIndex) + region.offsetX;
         const y = headerHeight + rowAxis.position(selection.rowIndex) + region.offsetY;
         const width = columnAxis.size(selection.columnIndex); const height = rowAxis.size(selection.rowIndex);
-        context!.strokeStyle = '#ffffff'; context!.lineWidth = 1;
-        context!.strokeRect(x + 3.5, y + 3.5, Math.max(0, width - 7), Math.max(0, height - 7));
-        context!.strokeStyle = theme.selectionColor; context!.lineWidth = 3;
-        context!.strokeRect(x + 1.5, y + 1.5, Math.max(0, width - 3), Math.max(0, height - 3));
+        context!.strokeStyle = theme.selectionColor; context!.lineWidth = activeBorderWidth;
+        context!.strokeRect(x + activeBorderWidth / 2, y + activeBorderWidth / 2, Math.max(0, width - activeBorderWidth), Math.max(0, height - activeBorderWidth));
       }
       context!.restore();
     }
@@ -1909,6 +1979,7 @@ export function createGrid(options: GridOptions): Grid {
     setRowHeight: (index, height) => resizeAxis(rowAxis, index, height),
     destroy() {
       if (destroyed) return;
+      choices?.remove(); choices = null;
       engine.destroy();
       destroyed = true;
       for (const image of Object.values(stateIcons)) image.onload = null;

@@ -1795,3 +1795,51 @@ test('automatic wrapped frozen code retains its pixels after horizontal scrollin
   const read = () => page.evaluate(async () => { await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); const canvas = document.querySelector('canvas'); return [...canvas.getContext('2d').getImageData(2, 86, 116, 20).data]; });
   const before = await read(); await page.getByRole('grid').press('Control+Home'); await page.getByRole('grid').press('End'); const after = await read(); expect(after).toEqual(before);
 });
+
+
+test('choice panel searches, applies multiple values and cancels without mutation', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.source = new LocalDataSource([{ id: 1, tags: 'Idea' }], row => row.id);
+    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source, columns: [{key:'tags', title:'Tags', editable:true}], columnEditors: {tags: {type:'multiselect', values:['Idea','Design','Public']}}, choiceEditor: {} });
+  });
+  const grid = page.getByRole('grid'); await grid.press('Control+Home'); await grid.press('F2');
+  const panel = page.locator('[data-grid-choices]'); await expect(panel).toBeVisible();
+  await panel.getByRole('searchbox').fill('Des'); await expect(panel.getByRole('checkbox')).toHaveCount(1);
+  await panel.getByRole('checkbox', { name:'Design', exact:true }).check(); await panel.getByRole('button',{name:'Apply',exact:true}).click();
+  expect(await page.evaluate(() => window.source.getValue(0,'tags'))).toBe('Idea, Design');
+  await grid.press('F2'); await panel.getByRole('checkbox',{name:'Public',exact:true}).check(); await panel.getByRole('button',{name:'Cancel',exact:true}).click();
+  expect(await page.evaluate(() => window.source.getValue(0,'tags'))).toBe('Idea, Design');
+});
+
+test('dragging selected rows/columns emits host requests and admin veto works', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.requests=[]; window.allowed=true;
+    window.grid=createGrid({container:document.querySelector('#grid'), accessibility:'viewport', dataSource:new LocalDataSource(Array.from({length:5},(_,id)=>({id,a:'A',b:'B',c:'C'})),row=>row.id),columns:['a','b','c'].map(key=>({key,title:key})), onReorder: request=>window.requests.push(request), canReorder:()=>window.allowed });
+    window.grid.selectRow(0);
+  });
+  await page.getByRole('button',{name:'Select row 2',exact:true}).click({modifiers:['Shift']});
+  await page.getByRole('button',{name:'Select row 1',exact:true}).dragTo(page.getByRole('button',{name:'Select row 4',exact:true}));
+  expect(await page.evaluate(()=>window.requests[0])).toMatchObject({axis:'row',indices:[0,1]});
+  await page.evaluate(()=>window.grid.selectColumn(0));
+  await page.getByRole('columnheader',{name:'b',exact:true}).click({modifiers:['Shift']});
+  await page.getByRole('columnheader',{name:'a',exact:true}).dragTo(page.getByRole('columnheader',{name:'c',exact:true}));
+  expect(await page.evaluate(()=>window.requests[1])).toMatchObject({axis:'column',indices:[0,1]});
+  await page.evaluate(()=>window.allowed=false);
+  await page.getByRole('columnheader',{name:'a',exact:true}).press('Alt+ArrowRight');
+  expect(await page.evaluate(()=>window.requests.length)).toBe(2);
+});
+
+
+test('active cell tints all ancestor headers and leaves unrelated headers unchanged', async ({ page }) => {
+  await page.goto('/'); await page.evaluate(async () => {
+    const {createGrid}=await import('/canvas/index.js'); const {LocalDataSource}=await import('/core/index.js');
+    window.grid=createGrid({container:document.querySelector('#grid'),dataSource:new LocalDataSource([{id:1,a:'A',b:'B',c:'C'}],row=>row.id),columns:['a','b','c'].map(key=>({key,title:key})),headerHeight:24,columnWidth:100,headerGroups:[{title:'Parent',children:[{title:'Child',children:['a','b']}]}]});
+  });
+  const pixels=async()=>page.evaluate(()=>{const canvas=document.querySelector('canvas'), ctx=canvas.getContext('2d'), scale=canvas.width/parseFloat(canvas.style.width); return [[10,5],[10,29],[10,53],[210,5]].map(([x,y])=>[...ctx.getImageData(x*scale,y*scale,1,1).data]);});
+  const before=await pixels(); await page.getByRole('grid').press('Control+Home'); await expect.poll(pixels).not.toEqual(before);
+  const after=await pixels(); for(let i=0;i<3;i++) expect(after[i]).not.toEqual(before[i]); expect(after[3]).toEqual(before[3]);
+});
