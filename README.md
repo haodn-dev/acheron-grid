@@ -12,6 +12,7 @@ This is an experimental development preview. APIs may change, packages are not p
 | --- | --- | --- |
 | [@acheron-grid/core](packages/core/README.md) | Headless engine, synchronous sources and local row views; usable in Node.js | None |
 | [@acheron-grid/canvas](packages/canvas/README.md) | Browser rendering and interactions | @acheron-grid/core |
+| [@acheron-grid/markdown](packages/markdown/README.md) | Optional Markdown parsing adapter | marked |
 
 Core does not import Canvas or framework code. `@acheron-grid/core/headless` remains an alias for the headless API.
 
@@ -20,6 +21,7 @@ Core does not import Canvas or framework code. `@acheron-grid/core/headless` rem
 - Virtualized rows and columns, sparse sizes, resize guides and runtime frozen panes.
 - A default fixed row index, whole-row/column selection, rectangular and multiple ranges, keyboard navigation and TSV clipboard operations.
 - Native text/select/checkbox editors, multiline overlays, parsing/validation, image cells and custom cell drawing.
+- Optional per-column HTML text formatting and Markdown through a separate adapter; editing retains source strings.
 - Atomic local value updates, partial cell repaint, delta undo/redo and typed domain events.
 - Capability permissions, cell/row/column/table value locks, sparse formatting and application control over formatting.
 - Local search, opt-in column sort/filter views, themes and native dialogs that tolerate host CSS resets.
@@ -78,8 +80,8 @@ Run commands from the repository root after `npm ci`:
 
 | Command | Purpose |
 | --- | --- |
-| `npm run build` | Build core, then Canvas; ESM and TypeScript declarations |
-| `npm run typecheck` | Check both packages and the headless dependency boundary |
+| `npm run build` | Build core, Canvas and the optional Markdown adapter; ESM and TypeScript declarations |
+| `npm run typecheck` | Check all packages and the headless dependency boundary |
 | `npm test` | Build and run Node.js tests |
 | `npm run test:browser` | Build and run Chromium grid integration tests |
 | `npm run test:playground` | Build and verify the standalone example |

@@ -15,6 +15,7 @@ An experimental Canvas browser renderer for the headless @acheron-grid/core engi
 - Default fixed row index, runtime freeze/unfreeze, scoped locks and sparse formatting.
 - Validated text/select/checkbox editing, multiline overlays, images, search and opt-in local sort/filter views.
 - TSV copy/paste, atomic local batches, delta undo/redo and typed events.
+- Per-column rich text with HTML or an optional host-provided Markdown adapter.
 
 This package is a development preview, not a published release. Remote data sources and framework adapters are not implemented. The active cell has a bounded ARIA grid mirror; full screen-reader coverage has not been verified. A headless render-callback benchmark is available; end-to-end frame rate has not been verified.
 
@@ -409,6 +410,26 @@ Selection is a translucent Canvas overlay; it never changes cell formatting. Adj
 
 Selected row/column dragging shows a theme-colored insertion line across the viewport and a compact count/destination preview. Denied destinations hide the line and show a disabled message; drop permissions are checked again before dispatch. Ending or cancelling a native drag clears the preview.
 
+
+## Rich text columns
+
+Set `richTextColumns: { description: 'html', notes: 'markdown' }` to render portions of cell text in bold or italic, with inline code, links and line breaks. HTML also supports `<u>`. Core and Canvas have no Markdown parser dependency: Markdown columns require a synchronous `markdownToHtml(source): string` callback, supplied by your application or the optional [@acheron-grid/markdown adapter](../markdown/README.md). Without a callback, grid creation rejects Markdown configuration.
+
+Canvas reads markup in an inert template and paints text. It never mounts parsed elements, applies embedded CSS/event handlers, or loads rich-text images; image alt text remains visible. Script/style/iframe/object/SVG content is excluded. HTTP(S) links reject credentials and control characters. This restricted display projection is not an HTML sanitizer for export or arbitrary DOM insertion. Custom adapters must disable raw HTML if that is their Markdown policy; the supplied adapter does so.
+
+Editing, TSV clipboard, paste and undo/redo retain the original string. Use `multilineEditor: true` for source editing. Search and accessibility use displayed text; auto-fit and wrapping measure formatted runs. Core sort/filter still operates on source values. Existing `renderCell` callbacks take priority over rich-text painting, and `measureCellHeight` overrides automatic measurement.
+
+Formatting is a text projection, not a document layout engine: headings use the normal cell font, lists retain markers, code uses a monospace font, and images display alt text. Cache holds at most 256 source strings of at most 4,096 characters each. Sources exceeding 100,000 characters fall back to plain text; HTML traversal stops beyond 128 nested elements. Trusted Types policies that prohibit parsing fall back to source text. No WYSIWYG editor or toolbar is provided.
+
+## Rich text columns
+
+Set `richTextColumns: { description: 'html', notes: 'markdown' }` to render portions of cell text in bold or italic, with inline code, links and line breaks. HTML also supports `<u>`. Core and Canvas have no Markdown parser dependency: Markdown columns require a synchronous `markdownToHtml(source): string` callback, supplied by your application or the optional [@acheron-grid/markdown adapter](../markdown/README.md). Without a callback, grid creation rejects Markdown configuration.
+
+Canvas reads markup in an inert template and paints text. It never mounts parsed elements, applies embedded CSS/event handlers, or loads rich-text images; image alt text remains visible. Script/style/iframe/object/SVG content is excluded. HTTP(S) links reject credentials and control characters. This restricted display projection is not an HTML sanitizer for export or arbitrary DOM insertion. Custom adapters must disable raw HTML if that is their Markdown policy; the supplied adapter does so.
+
+Editing, TSV clipboard, paste and undo/redo retain the original string. Use `multilineEditor: true` for source editing. Search and accessibility use displayed text; auto-fit and wrapping measure formatted runs. Core sort/filter still operates on source values. Existing `renderCell` callbacks take priority over rich-text painting, and `measureCellHeight` overrides automatic measurement.
+
+Formatting is a text projection, not a document layout engine: headings use the normal cell font, lists retain markers, code uses a monospace font, and images display alt text. Cache holds at most 256 source strings of at most 4,096 characters each. Sources exceeding 100,000 characters fall back to plain text; HTML traversal stops beyond 128 nested elements. Trusted Types policies that prohibit parsing fall back to source text. No WYSIWYG editor or toolbar is provided.
 
 ## Runtime structure
 

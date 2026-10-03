@@ -1,6 +1,15 @@
 /** A detected HTTP(S) URL and its offsets in the original text. */
 export interface CellLink { readonly text: string; readonly href: string; readonly start: number; readonly end: number; }
 
+export function safeWebUrl(value: string): string | undefined {
+  if (value.trim() !== value || /[\u0000-\u001f\u007f]/.test(value)) return undefined;
+  try {
+    const url = new URL(/^www\./i.test(value) ? 'https://' + value : value);
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) return undefined;
+    return url.href;
+  } catch { return undefined; }
+}
+
 /** Recognize explicit web URLs without interpreting HTML or relative paths. */
 export function detectLinks(value: unknown): CellLink[] {
   if (typeof value !== 'string') return [];
@@ -24,12 +33,8 @@ export function detectLinks(value: unknown): CellLink[] {
       else break;
     }
     text = text.slice(0, end);
-    if (/[\u0000-\u001f\u007f]/.test(text)) continue;
-    try {
-      const url = new URL(/^www\./i.test(text) ? 'https://' + text : text);
-      if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) continue;
-      links.push(Object.freeze({ text, href: url.href, start, end: start + text.length }));
-    } catch { /* Incomplete URLs stay ordinary text. */ }
+    const href = safeWebUrl(text);
+    if (href) links.push(Object.freeze({ text, href, start, end: start + text.length }));
   }
   return links;
 }

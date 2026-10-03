@@ -6,6 +6,8 @@ import type { ReorderRequest, RowChangeRequest } from './reorder.js';
 import { headerLayout, reorderedHeaderGroups } from './headers.js';
 import type { HeaderGroup } from './headers.js';
 import { detectLinks } from './links.js';
+import { readHtml, layoutRichText } from './rich-text.js';
+import type { RichText, RichTextFormat } from './rich-text.js';
 import { createGridEngine, gridClipboardType } from '@acheron-grid/core';
 import type { CellUpdate, DataRow, DataSource, Column, CellSelection, SelectionRange, CellPermission, CellLockTarget, CellFormatTarget, CellFormat, CellFormatPatch, LocalViewOptions, GridEngineOptions, ViewportRegion, RowGroup } from '@acheron-grid/core';
 
@@ -62,6 +64,8 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
   theme?: Partial<GridTheme>;
   imageColumns?: readonly string[];
   columnEditors?: Readonly<Record<string, ColumnEditor>>;
+  richTextColumns?: Readonly<Record<string, RichTextFormat>>;
+  markdownToHtml?: (source: string) => string;
   multilineEditor?: boolean;
   editorOptions?: { readonly pinned?: boolean; readonly showLabel?: boolean | 'scroll' | 'always'; readonly guardNavigation?: boolean };
   wrapText?: boolean;
@@ -161,6 +165,29 @@ export function createGrid(options: GridOptions): Grid {
   const headerTintOpacity = options.selectionStyle?.headerTintOpacity ?? .12;
   if (!Number.isFinite(activeBorderWidth) || activeBorderWidth < 1 || activeBorderWidth > 4 || !Number.isFinite(headerTintOpacity) || headerTintOpacity < 0 || headerTintOpacity > 1) throw new RangeError('Invalid selection style.');
   const doc = container.ownerDocument;
+  const richTextColumns = new Map(Object.entries(options.richTextColumns ?? {}));
+  for (const format of richTextColumns.values()) {
+    if (format !== 'html' && format !== 'markdown') throw new TypeError('Unsupported rich text format.');
+    if (format === 'markdown' && !options.markdownToHtml) throw new TypeError('Markdown columns require a markdownToHtml adapter.');
+  }
+  const richCache = new Map<string, RichText>();
+  function richText(value: unknown, key: string): RichText | undefined {
+    const format = richTextColumns.get(key);
+    if (!format || typeof value !== 'string') return undefined;
+    if (value.length > 100_000) return { text: value, runs: [{ text: value }] };
+    const cacheKey = format + ':' + value;
+    let rich = richCache.get(cacheKey);
+    if (!rich) {
+      try { rich = readHtml(format === 'markdown' ? options.markdownToHtml!(value) : value, doc); }
+      catch { rich = { text: value, runs: [{ text: value }] }; }
+      if (value.length <= 4096) {
+        if (richCache.size >= 256) richCache.delete(richCache.keys().next().value!);
+        richCache.set(cacheKey, rich);
+      }
+    }
+    return rich;
+  }
+  function displayedText(value: unknown, key: string): string { return richText(value, key)?.text ?? String(value ?? ''); }
   const win = doc.defaultView!;
   let theme = Object.freeze({ background: '#ffffff', textColor: '#0f172a', headerBackground: '#edf2f7',
     headerTextColor: '#334155', iconColor: '#475569', searchHighlightColor: '#f59e0b', gridLineColor: '#e2e8f0', selectionColor: '#2563eb',
@@ -480,7 +507,7 @@ export function createGrid(options: GridOptions): Grid {
       if (query) for (let row = 0; row < rowCount; row++) for (let col = 0; col < columns.length; col++) {
         const span=engine.getMerge(row,col);if(span&&(span.startRow!==row||span.startColumn!==col))continue;
         const value = engine.getValue(row, columns[col]!.key);
-        if (value != null && String(value).toLocaleLowerCase().includes(query) && engine.getCellPermission(row, col).selectable) searchMatches.add(row * columns.length + col);
+        if (value != null && displayedText(value, columns[col]!.key).toLocaleLowerCase().includes(query) && engine.getCellPermission(row, col).selectable) searchMatches.add(row * columns.length + col);
       }
       if (!searchMatches.has(searchCurrent)) searchCurrent = searchMatches.values().next().value ?? -1;
       updateSearchStatus();
@@ -684,7 +711,12 @@ export function createGrid(options: GridOptions): Grid {
         const value = engine.getValue(row, column.key);
         if (imageColumns.has(column.key)) width = Math.max(width, 64);
         else if (columnEditors.get(column.key)?.type === 'checkbox') width = Math.max(width, 36);
-        else for (const line of String(value ?? '').split('\n')) width = Math.max(width, ctx.measureText(line).width + 20);
+        else {
+          const rich = richText(value, column.key);
+          if (rich) width = Math.max(width, layoutRichText(ctx, rich, theme.font, Infinity, false).width + 20);
+          else for (const line of String(value ?? '').split('\n')) width = Math.max(width, ctx.measureText(line).width + 20);
+          ctx.font = theme.font;
+        }
       }
     } finally { ctx.restore(); }
     resizeAxis(columnAxis, index, Math.max(24, Math.min(1000, Math.ceil(width))));
@@ -710,6 +742,11 @@ export function createGrid(options: GridOptions): Grid {
           height = Math.max(height, custom); continue;
         }
         if (imageColumns.has(key)) { height = Math.max(height, 56); continue; }
+        const rich = richText(value, key);
+        if (rich) {
+          const layout = layoutRichText(ctx, rich, theme.font, Math.max(0, columnAxis.size(col) - 20), !!options.wrapText, Math.ceil(1000 / lineHeight));
+          height = Math.max(height, Math.min(1000, layout.lines * layout.lineHeight + 12)); ctx.font = theme.font; continue;
+        }
         let lines = 1; let line = '';
         if (options.wrapText) for (const character of String(value ?? '')) {
           if (character === '\n' || (line && ctx.measureText(line + character).width > Math.max(0, columnAxis.size(col) - 20))) {
@@ -1582,7 +1619,19 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function cellLinks(row: number, col: number) {
-    return options.detectLinks === false || imageColumns.has(columns[col]!.key) ? [] : detectLinks(engine.getValue(row, columns[col]!.key));
+    return linksForValue(engine.getValue(row, columns[col]!.key), columns[col]!.key);
+  }
+  function linksForValue(value: unknown, key: string) {
+    if (options.detectLinks === false || imageColumns.has(key)) return [];
+    const rich = richText(value, key);
+    if (!rich) return detectLinks(value);
+    const links = detectLinks(rich.text);
+    let offset = 0;
+    for (const run of rich.runs) {
+      if (run.href) links.push({ text: run.text, href: run.href, start: offset, end: offset + run.text.length });
+      offset += run.text.length;
+    }
+    return links.filter((link, index) => links.findIndex(other => other.href === link.href && other.start === link.start) === index);
   }
   function openLinks(row: number, col: number, x: number, y: number): void {
     if (options.allowOpenLinks === false || !engine.getCellPermission(row, col).selectable) return;
@@ -1679,6 +1728,22 @@ export function createGrid(options: GridOptions): Grid {
       if (size > 0) {
         ctx.strokeRect(left + .5, top + .5, size - 1, size - 1);
         if (value) { ctx.beginPath(); ctx.moveTo(left + size * .2, top + size * .5); ctx.lineTo(left + size * .45, top + size * .75); ctx.lineTo(left + size * .8, top + size * .25); ctx.lineWidth = 2; ctx.stroke(); }
+      }
+      ctx.restore(); highlightSearch(x, y, width, height, rowIndex, columnIndex); return;
+    }
+    const rich = !header ? richText(value, columns[columnIndex]!.key) : undefined;
+    if (rich) {
+      ctx.save(); ctx.beginPath(); ctx.rect(x + 8, y, Math.max(0, width - 16), height); ctx.clip();
+      ctx.font = theme.font; const metrics = ctx.measureText('M');
+      const lineHeight = Math.ceil(metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent) || 18;
+      const layout = layoutRichText(ctx, rich, theme.font, Math.max(0, width - 20), !!options.wrapText, Math.max(1, Math.floor((height - 4) / lineHeight)));
+      ctx.textBaseline = 'top';
+      for (const piece of layout.pieces) {
+        const top = y + (options.wrapText || layout.lines > 1 ? 4 : (height - layout.lineHeight) / 2) + piece.line * layout.lineHeight;
+        if (top + layout.lineHeight > y + height) break;
+        ctx.font = piece.font; ctx.fillStyle = piece.run.href && options.detectLinks !== false ? format?.textColor ?? theme.linkColor : textColor;
+        ctx.fillText(piece.text, x + 10 + piece.x, top);
+        if (piece.run.underline || (piece.run.href && options.detectLinks !== false)) ctx.fillRect(x + 10 + piece.x, top + layout.lineHeight - 1, piece.width, 1);
       }
       ctx.restore(); highlightSearch(x, y, width, height, rowIndex, columnIndex); return;
     }
@@ -1830,7 +1895,7 @@ export function createGrid(options: GridOptions): Grid {
   function accessibleText(row: number, col: number, value: unknown): string {
     const column = columns[col]!; const label = options.getCellLabel?.(row, column.key, value);
     if (label !== undefined) return label;
-    return `${column.title}: ${imageColumns.has(column.key) ? value ? 'Image' : 'No image' : value == null ? '' : String(value)}`;
+    return `${column.title}: ${imageColumns.has(column.key) ? value ? 'Image' : 'No image' : displayedText(value, column.key)}`;
   }
   function accessibleCell(row: number, col: number, value: unknown): HTMLElement {
     const key = `${row}:${col}`;
@@ -1842,7 +1907,7 @@ export function createGrid(options: GridOptions): Grid {
     node.setAttribute('aria-colspan',String(span?span.endColumn-span.startColumn+1:1));
     node.setAttribute('aria-readonly', String(!engine.canEdit(row, col)));
     node.setAttribute('aria-selected', String(getSelectionRanges().some(range => row >= range.startRow && row <= range.endRow && col >= range.startColumn && col <= range.endColumn)));
-    node.setAttribute('aria-description', [...stateLabels(row, col), ...(options.detectLinks !== false && !imageColumns.has(columns[col]!.key) && detectLinks(value).length ? ['Contains links. Alt+Enter opens links.'] : [])].join('; '));
+    node.setAttribute('aria-description', [...stateLabels(row, col), ...(linksForValue(value, columns[col]!.key).length ? ['Contains links. Alt+Enter opens links.'] : [])].join('; '));
     node.textContent = accessibleText(row, col, value);
     return node;
   }
@@ -2250,7 +2315,7 @@ export function createGrid(options: GridOptions): Grid {
     activeCell.setAttribute('aria-colspan',String(span?span.endColumn-span.startColumn+1:1));
     activeCell.setAttribute('aria-readonly', String(!engine.canEdit(selection.rowIndex, selection.columnIndex)));
     const content = accessibleText(selection.rowIndex, selection.columnIndex, value);
-    activeCell.setAttribute('aria-description', [...stateLabels(selection.rowIndex, selection.columnIndex), ...(options.detectLinks !== false && !imageColumns.has(selection.columnKey) && detectLinks(value).length ? ['Contains links. Alt+Enter opens links.'] : [])].join('; '));
+    activeCell.setAttribute('aria-description', [...stateLabels(selection.rowIndex, selection.columnIndex), ...(linksForValue(value, selection.columnKey).length ? ['Contains links. Alt+Enter opens links.'] : [])].join('; '));
     if (activeCell.textContent !== content) activeCell.textContent = content;
     scroller.setAttribute('aria-activedescendant', activeCell.id);
     scroller.setAttribute('aria-label', `${viewportLabel}: row ${selection.rowIndex + 1}, ${content}`);
@@ -2410,6 +2475,7 @@ export function createGrid(options: GridOptions): Grid {
       closeMenu();
       if (searchTimer !== undefined) win.clearTimeout(searchTimer);
       searchMatches.clear();
+      richCache.clear();
       visibleImages.clear(); releaseUnusedImages();
       root.removeEventListener('contextmenu', onHeaderContextMenu);
       root.removeEventListener('keydown', searchShortcut, true);

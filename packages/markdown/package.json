@@ -1,0 +1,27 @@
+{
+  "name": "@acheron-grid/markdown",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Optional Marked adapter for Acheron Grid rich text",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "license": "MIT",
+  "author": "Hao Duong",
+  "dependencies": {
+    "marked": "^18.0.5"
+  }
+}

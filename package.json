@@ -6,8 +6,8 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspace @acheron-grid/core && npm run build --workspace @acheron-grid/canvas",
-    "typecheck": "npm run typecheck --workspace @acheron-grid/core && npm run typecheck --workspace @acheron-grid/canvas",
+    "build": "npm run build --workspace @acheron-grid/core && npm run build --workspace @acheron-grid/canvas && npm run build --workspace @acheron-grid/markdown",
+    "typecheck": "npm run typecheck --workspace @acheron-grid/core && npm run typecheck --workspace @acheron-grid/canvas && npm run typecheck --workspace @acheron-grid/markdown",
     "test": "npm run build && node --test packages/core/tests/*.test.mjs packages/canvas/tests/*.test.mjs",
     "test:browser": "npm run build && playwright test",
     "benchmark": "npm run build && playwright test --config benchmark.config.mjs",

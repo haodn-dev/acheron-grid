@@ -10,3 +10,4 @@ export { reorderedIndices } from './reorder.js';
 export type { ReorderRequest, RowChangeRequest } from './reorder.js';
 
 export type { ChoiceEditorOptions, ChoiceInfo } from './choices.js';
+export type { RichTextFormat } from './rich-text.js';
