@@ -1038,7 +1038,10 @@ export function createGrid(options: GridOptions): Grid {
   }
   function onHeaderPointerDown(event: PointerEvent): void {
     const moveTarget = event.target instanceof win.Element ? event.target.closest<HTMLElement>('[data-grid-reorder]') : null;
-    if (moveTarget?.draggable && !event.shiftKey && !event.ctrlKey && !event.metaKey && columnEdge(event) === null && rowEdge(event) === null) return;
+    if (moveTarget?.draggable && !event.shiftKey && !event.ctrlKey && !event.metaKey && columnEdge(event) === null && rowEdge(event) === null) {
+      if(event.pointerType==='touch')startTouchReorder(event,moveTarget);
+      return;
+    }
     if (resizing) { event.preventDefault(); return; }
     if (event.button !== 0 || event.altKey || (event.target !== root && !(event.target instanceof win.Node && (scroller.contains(event.target) || indexGutter.contains(event.target) || headerSurface.contains(event.target))))) return;
     const bounds = root.getBoundingClientRect();
@@ -1075,6 +1078,7 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function onHeaderPointerMove(event: PointerEvent): void {
+    if(touchReorder)return;
     root.style.cursor = resizing ? (resizing.axis === 'column' ? 'col-resize' : 'row-resize')
       : columnEdge(event) !== null ? 'col-resize' : rowEdge(event) !== null ? 'row-resize' : '';
     const column = columnEdge(event);
@@ -1117,6 +1121,7 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function cancelResizeKey(event: KeyboardEvent): void {
+    if(touchReorder&&event.key==='Escape'){event.preventDefault();event.stopPropagation();clearReorder();return;}
     if (resizing && event.key === 'Escape') {
       event.preventDefault(); event.stopPropagation(); endResize();
     }
@@ -1413,6 +1418,7 @@ export function createGrid(options: GridOptions): Grid {
 
   function extendDrag(): void {
     if (!dragPosition) return;
+    if(touchReorder){updateTouchReorder(dragPosition);return;}
     const cell = pointerCell(dragPosition, true);
     if (!cell) return;
     if (handleAnchor) selectScope({ startRow: Math.min(handleAnchor.row, cell.row), endRow: Math.max(handleAnchor.row, cell.row), startColumn: Math.min(handleAnchor.col, cell.col), endColumn: Math.max(handleAnchor.col, cell.col) }, 'extend');
@@ -1424,8 +1430,9 @@ export function createGrid(options: GridOptions): Grid {
     if (dragPointer === null || !dragPosition || destroyed) return;
     const bounds = scroller.getBoundingClientRect(); const view = viewport();
     const step = (position: number, start: number, size: number) => position < start + 24 ? -16 : position > start + size - 24 ? 16 : 0;
-    const dx = axisDrag?.axis === 'row' || view.width <= view.frozenWidth ? 0 : step(dragPosition.clientX, bounds.left + view.frozenWidth, view.width - view.frozenWidth);
-    const dy = axisDrag?.axis === 'column' || view.height <= view.frozenHeight ? 0 : step(dragPosition.clientY, bounds.top + view.frozenHeight, view.height - view.frozenHeight);
+    const activeAxis=touchReorder ? reorderDrag?.axis : axisDrag?.axis;
+    const dx = activeAxis === 'row' || view.width <= view.frozenWidth ? 0 : step(dragPosition.clientX, bounds.left + view.frozenWidth, view.width - view.frozenWidth);
+    const dy = activeAxis === 'column' || view.height <= view.frozenHeight ? 0 : step(dragPosition.clientY, bounds.top + view.frozenHeight, view.height - view.frozenHeight);
     const previousLeft = scroller.scrollLeft; const previousTop = scroller.scrollTop;
     scroller.scrollLeft += dx; scroller.scrollTop += dy;
     if (scroller.scrollLeft !== previousLeft || scroller.scrollTop !== previousTop) {
@@ -1438,6 +1445,7 @@ export function createGrid(options: GridOptions): Grid {
     if (dragFrame === undefined) dragFrame = win.requestAnimationFrame(dragScroll);
   }
   function onPointerEnd(): void {
+    if(touchReorder)clearReorder();
     const pointer = dragPointer;
     dragPointer = null; axisDrag = null; handleAnchor = null; dragPosition = null;
     if (dragFrame !== undefined) win.cancelAnimationFrame(dragFrame);
@@ -1997,6 +2005,7 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   let reorderDrag: { axis: 'row' | 'column'; indices: number[] } | null = null;
+  let touchReorder:{pointerId:number;startX:number;startY:number;moved:boolean;beforeIndex:number}|null=null;
   const reorderGuide = doc.createElement('div');
   reorderGuide.dataset.gridReorderGuide = '';
   reorderGuide.setAttribute('aria-hidden', 'true');
@@ -2007,6 +2016,8 @@ export function createGrid(options: GridOptions): Grid {
   reorderBadge.style.cssText = 'display:none;position:absolute;pointer-events:none;z-index:9;padding:6px 10px;border:1px solid var(--acheron-grid-line-color);border-radius:5px;background:var(--acheron-background);color:var(--acheron-text-color);box-shadow:0 3px 10px #0002;font:12px system-ui;white-space:nowrap';
   root.append(reorderGuide, reorderBadge);
   function clearReorder(): void {
+    const pointer=touchReorder?.pointerId;touchReorder=null;
+    if(pointer!==undefined){dragPointer=null;dragPosition=null;if(dragFrame!==undefined)win.cancelAnimationFrame(dragFrame);dragFrame=undefined;if(root.hasPointerCapture(pointer))root.releasePointerCapture(pointer);}
     reorderDrag = null; reorderGuide.style.display = reorderBadge.style.display = 'none';
     root.style.cursor = '';
   }
@@ -2015,10 +2026,56 @@ export function createGrid(options: GridOptions): Grid {
     return (axis === 'row' ? event.clientY > bounds.top + bounds.height / 2 : event.clientX > bounds.left + bounds.width / 2) ? last + 1 : first;
   }
 
+  function previewReorder(event:Pick<MouseEvent,'clientX'|'clientY'>,axis:'row'|'column',first:number,last:number,bounds:DOMRect):{beforeIndex:number;allowed:boolean} {
+    const beforeIndex=(axis==='row'?event.clientY>bounds.top+bounds.height/2:event.clientX>bounds.left+bounds.width/2)?last+1:first;
+    reorderBadge.style.display='block';
+    const request=Object.freeze({axis,indices:Object.freeze([...reorderDrag!.indices]),beforeIndex});
+    let allowed=false;try{allowed=options.canReorder?.(request)!==false;}catch{allowed=false;}
+      const origin = root.getBoundingClientRect();
+      const after = beforeIndex === last + 1;
+      const edge = axis === 'row' ? (after ? bounds.bottom : bounds.top) - origin.top : (after ? bounds.right : bounds.left) - origin.left;
+      reorderGuide.style.display = allowed ? 'block' : 'none';
+      reorderGuide.style.left = axis === 'row' ? '0px' : `${Math.max(0, Math.min(root.clientWidth - 2, edge - 1))}px`;
+      reorderGuide.style.top = axis === 'column' ? '0px' : `${Math.max(0, Math.min(root.clientHeight - 2, edge - 1))}px`;
+      reorderGuide.style.width = axis === 'row' ? `${root.clientWidth}px` : '2px';
+      reorderGuide.style.height = axis === 'column' ? `${root.clientHeight}px` : '2px';
+      reorderBadge.textContent = allowed ? `Move ${reorderDrag!.indices.length} ${axis}${reorderDrag!.indices.length > 1 ? 's' : ''} · ${after ? 'after' : 'before'} ${last === first ? first + 1 : `${first + 1}–${last + 1}`}` : 'Moving here is disabled';
+      reorderBadge.style.left = `${Math.max(4, Math.min(root.clientWidth - reorderBadge.offsetWidth - 4, event.clientX - origin.left + 14))}px`;
+      reorderBadge.style.top = `${Math.max(4, Math.min(root.clientHeight - reorderBadge.offsetHeight - 4, event.clientY - origin.top + 14))}px`;
+    reorderBadge.style.display='block';return {beforeIndex,allowed};
+  }
+  function startTouchReorder(event:PointerEvent,node:HTMLElement):void {
+    if(!finishEdit(true))return;
+    event.preventDefault();event.stopPropagation();onPointerEnd();closeMenu();clearChoiceHover();
+    const axis=node.dataset.gridReorder as 'row'|'column',first=Number(node.dataset.reorderFirst),last=Number(node.dataset.reorderLast);
+    const indices=first===last?selectedAxisIndices(axis,first):Array.from({length:last-first+1},(_,i)=>first+i);
+    reorderDrag={axis,indices};touchReorder={pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,moved:false,beforeIndex:first};
+    dragPointer=event.pointerId;dragPosition=event;root.setPointerCapture(event.pointerId);scroller.focus({preventScroll:true});root.style.cursor='grabbing';
+  }
+  function updateTouchReorder(position:Pick<MouseEvent,'clientX'|'clientY'>):void {
+    if(!touchReorder||!reorderDrag)return;
+    if(!touchReorder.moved && Math.hypot(position.clientX-touchReorder.startX,position.clientY-touchReorder.startY)<6)return;
+    touchReorder.moved=true;
+    const bounds=scroller.getBoundingClientRect(),view=viewport();
+    const hit=view.hitTest(Math.max(0,Math.min(view.width-.1,position.clientX-bounds.left)),Math.max(0,Math.min(view.height-.1,position.clientY-bounds.top)));
+    if(!hit)return;
+    const rect=view.cellRect(hit.row,hit.col),index=reorderDrag.axis==='row'?hit.row:hit.col;
+    touchReorder.beforeIndex=previewReorder(position,reorderDrag.axis,index,index,new win.DOMRect(bounds.left+rect.x,bounds.top+rect.y,rect.width,rect.height)).beforeIndex;
+  }
+  function commitTouchReorder(event:PointerEvent):void {
+    if(event.pointerId!==touchReorder?.pointerId||!reorderDrag)return;
+    event.preventDefault();event.stopPropagation();updateTouchReorder(event);
+    const request=Object.freeze({axis:reorderDrag.axis,indices:Object.freeze([...reorderDrag.indices]),beforeIndex:touchReorder.beforeIndex}),moved=touchReorder.moved;
+    clearReorder();
+    if(!moved)return;
+    try{if(options.canReorder?.(request)!==false)options.onReorder?.(request);}catch(error){actionError.textContent=error instanceof Error?error.message:'Unable to move items.';actionError.style.display='block';}
+  }
+
   function reorderHandle(node: HTMLElement, axis: 'row' | 'column', first: number, last = first): void {
     if (!options.onReorder) return;
     const handle = node;
     handle.dataset.gridReorder = axis;
+    handle.dataset.reorderFirst=String(first);handle.dataset.reorderLast=String(last);
     const selectedAxis = getSelectionRanges().some(range => axis === 'row'
       ? range.startColumn === 0 && range.endColumn === columns.length - 1 && first >= range.startRow && last <= range.endRow
       : range.startRow === 0 && range.endRow === rowCount - 1 && first >= range.startColumn && last <= range.endColumn);
@@ -2045,25 +2102,10 @@ export function createGrid(options: GridOptions): Grid {
       try { if (options.canReorder?.(request) !== false) options.onReorder?.(request); } catch (error) { actionError.textContent = error instanceof Error ? error.message : 'Unable to move items.'; actionError.style.display = 'block'; }
     });
     handle.addEventListener('dragend', clearReorder);
-    node.addEventListener('dragover', event => {
-      if (reorderDrag?.axis !== axis) return;
-      event.preventDefault();
-      const beforeIndex = reorderTarget(event, node, axis, first, last);
-      const request = Object.freeze({ axis, indices: Object.freeze([...reorderDrag.indices]), beforeIndex });
-      let allowed = false;
-      try { allowed = options.canReorder?.(request) !== false; } catch { allowed = false; }
-      if (event.dataTransfer) event.dataTransfer.dropEffect = allowed ? 'move' : 'none';
-      const bounds = node.getBoundingClientRect(), origin = root.getBoundingClientRect();
-      const after = beforeIndex === last + 1;
-      const edge = axis === 'row' ? (after ? bounds.bottom : bounds.top) - origin.top : (after ? bounds.right : bounds.left) - origin.left;
-      reorderGuide.style.display = allowed ? 'block' : 'none';
-      reorderGuide.style.left = axis === 'row' ? '0px' : `${Math.max(0, Math.min(root.clientWidth - 2, edge - 1))}px`;
-      reorderGuide.style.top = axis === 'column' ? '0px' : `${Math.max(0, Math.min(root.clientHeight - 2, edge - 1))}px`;
-      reorderGuide.style.width = axis === 'row' ? `${root.clientWidth}px` : '2px';
-      reorderGuide.style.height = axis === 'column' ? `${root.clientHeight}px` : '2px';
-      reorderBadge.textContent = allowed ? `Move ${reorderDrag.indices.length} ${axis}${reorderDrag.indices.length > 1 ? 's' : ''} · ${after ? 'after' : 'before'} ${last === first ? first + 1 : `${first + 1}–${last + 1}`}` : 'Moving here is disabled';
-      reorderBadge.style.left = `${Math.max(4, Math.min(root.clientWidth - reorderBadge.offsetWidth - 4, event.clientX - origin.left + 14))}px`;
-      reorderBadge.style.top = `${Math.max(4, Math.min(root.clientHeight - reorderBadge.offsetHeight - 4, event.clientY - origin.top + 14))}px`;
+    node.addEventListener('dragover',event=>{
+      if(reorderDrag?.axis!==axis)return;event.preventDefault();
+      const preview=previewReorder(event,axis,first,last,node.getBoundingClientRect());
+      if(event.dataTransfer)event.dataTransfer.dropEffect=preview.allowed?'move':'none';
     });
     node.addEventListener('dragleave', event => {
       if (!(event.relatedTarget instanceof win.Node) || !node.contains(event.relatedTarget)) reorderGuide.style.display = 'none';
@@ -2196,6 +2238,7 @@ export function createGrid(options: GridOptions): Grid {
   root.addEventListener('pointercancel', endResize);
   root.addEventListener('lostpointercapture', endResize);
   root.addEventListener('pointermove', onPointerMove);
+  root.addEventListener('pointerup',commitTouchReorder,true);
   root.addEventListener('pointerup', onPointerEnd);
   root.addEventListener('pointercancel', onPointerEnd);
   root.addEventListener('lostpointercapture', onPointerEnd);
@@ -2291,6 +2334,7 @@ export function createGrid(options: GridOptions): Grid {
       input?.remove();
       onPointerEnd();
       root.removeEventListener('pointermove', onPointerMove);
+      root.removeEventListener('pointerup',commitTouchReorder,true);
       root.removeEventListener('pointerup', onPointerEnd);
       root.removeEventListener('pointercancel', onPointerEnd);
       root.removeEventListener('lostpointercapture', onPointerEnd);
