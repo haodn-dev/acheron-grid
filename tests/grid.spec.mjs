@@ -1423,7 +1423,7 @@ test('state icons and hover distinguish scoped locks, permissions and frozen bou
   });
   const viewport = page.getByRole('grid'); const root = page.locator('#grid > div'); const bounds = await viewport.boundingBox();
   await page.mouse.move(bounds.x + 240, bounds.y + 48);
-  await expect(root).toHaveAttribute('title', 'Cell disabled by permissions');
+  await expect(root.getByRole('tooltip')).toHaveText('Cell disabled by permissions');
   await viewport.click({ position: { x: 240, y: 48 } });
   await expect(viewport.getByRole('gridcell')).toHaveAttribute('aria-description', 'Cell disabled by permissions');
   await page.evaluate(() => {
@@ -1432,7 +1432,7 @@ test('state icons and hover distinguish scoped locks, permissions and frozen bou
     window.grid.setFrozen(1, 2);
   });
   await page.mouse.move(bounds.x + 240, bounds.y - 18);
-  await expect(root).toHaveAttribute('title', 'Column locked; Column frozen');
+  await expect(root.getByRole('tooltip')).toHaveText('Column locked; Column frozen');
   const rowIndex = page.getByRole('button', { name: 'Select row 1', exact: true });
   await expect(rowIndex).toHaveAttribute('aria-description', 'Row locked; Row frozen');
   await expect(rowIndex.locator('svg')).toHaveCount(1);
@@ -1441,7 +1441,7 @@ test('state icons and hover distinguish scoped locks, permissions and frozen bou
   await viewport.press('F2'); await expect(page.getByRole('textbox')).toHaveCount(0);
 
   await page.mouse.move(bounds.x + 80, bounds.y + 16);
-  await expect(root).toHaveAttribute('title', 'Column frozen; Row locked; Row frozen');
+  await expect(root.getByRole('tooltip')).toHaveText('Column frozen; Row locked; Row frozen');
   await viewport.click({ position: { x: 80, y: 16 } });
   await expect(viewport.getByRole('gridcell')).toHaveAttribute('aria-description', 'Column frozen; Row locked; Row frozen');
   expect(await page.evaluate(async () => {
@@ -1453,9 +1453,9 @@ test('state icons and hover distinguish scoped locks, permissions and frozen bou
     await frame(); return before !== snapshot();
   })).toBe(true);
   await expect(rowIndex.locator('svg')).toHaveCount(0);
-  await page.mouse.move(bounds.x + 240, bounds.y - 18); await expect(root).toHaveAttribute('title', '');
-  await page.mouse.move(bounds.x + 240, bounds.y + 48); await expect(root).toHaveAttribute('title', 'Cell disabled by permissions');
-  await page.mouse.move(bounds.x + 160, bounds.y - 18); await expect(root).toHaveAttribute('title', 'Drag the column boundary to resize width');
+  await page.mouse.move(bounds.x + 240, bounds.y - 18); await expect(root.getByRole('tooltip')).toBeHidden();
+  await page.mouse.move(bounds.x + 240, bounds.y + 48); await expect(root.getByRole('tooltip')).toHaveText('Cell disabled by permissions');
+  await page.mouse.move(bounds.x + 160, bounds.y - 18); await expect(root.getByRole('tooltip')).toHaveText('Drag the column boundary to resize width');
 });
 
 

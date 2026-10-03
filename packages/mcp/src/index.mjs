@@ -1,0 +1,64 @@
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { ListResourcesRequestSchema, ReadResourceRequestSchema, ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+
+export function createGridMcpServer({ engine, documents = {}, authorize, validateWrite, allowWrites = false }) {
+    if (engine && typeof authorize !== 'function') throw new TypeError('Grid access requires an authorize callback.');
+    if (allowWrites && typeof validateWrite !== 'function') throw new TypeError('Writes require host validation.');
+    const server = new Server({ name: 'acheron-grid', version: '0.0.0' }, { capabilities: { resources: {}, tools: {} } });
+    const resources = Object.entries(documents).map(([name, text]) => {
+        if (!/^[a-z0-9-]+$/.test(name) || typeof text !== 'string') throw new TypeError('Invalid document.');
+        return { uri: `acheron://docs/${name}`, name, mimeType: 'text/markdown', text };
+    });
+    server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: resources.map(({ text, ...resource }) => resource) }));
+    server.setRequestHandler(ReadResourceRequestSchema, async ({ params }) => {
+        const resource = resources.find(item => item.uri === params.uri);
+        if (!resource) throw new Error('Unknown resource.');
+        return { contents: [{ uri: resource.uri, mimeType: resource.mimeType, text: resource.text }] };
+    });
+    const cellProperties = { rowId: { type: ['string', 'number'] }, columnKey: { type: 'string' }, expected: { type: ['string', 'number', 'boolean', 'null'] }, value: { type: ['string', 'number', 'boolean', 'null'] } };
+    const cellList = writing => ({ type: 'array', minItems: 1, maxItems: 100, items: { type: 'object', properties: writing ? cellProperties : { rowId: cellProperties.rowId, columnKey: cellProperties.columnKey }, required: writing ? ['rowId','columnKey','expected','value'] : ['rowId','columnKey'], additionalProperties: false } });
+    const tools = engine ? [
+        { name: 'grid_schema', description: 'Read host-approved columns and visible row count.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'grid_read', description: 'Read up to 100 host-approved cells by stable row ID and column key.', inputSchema: { type: 'object', properties: { cells: cellList(false) }, required: ['cells'], additionalProperties: false } },
+        ...(allowWrites ? [{ name: 'grid_update', description: 'Atomically update up to 100 cells, requiring expected values and host validation.', inputSchema: { type: 'object', properties: { cells: cellList(true) }, required: ['cells'], additionalProperties: false } }] : []),
+    ] : [];
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
+    server.setRequestHandler(CallToolRequestSchema, async ({ params }) => {
+        try {
+            if (!tools.some(tool => tool.name === params.name)) throw new Error('Unknown or disabled tool.');
+            if (params.name === 'grid_schema') {
+                if (authorize({ operation: 'schema' }) !== true) throw new Error('Access denied.');
+                const columns = engine.columns.filter(column => authorize({ operation: 'read', columnKey: column.key }) === true).map(({ key, title }) => ({ key, title }));
+                return result({ columns, rowCount: engine.rowCount });
+            }
+            const input = params.arguments;
+            if (!input || !Array.isArray(input.cells) || !input.cells.length || input.cells.length > 100) throw new Error('Expected 1–100 cells.');
+            const writing = params.name === 'grid_update';
+            const seen = new Set();
+            const updates = input.cells.map(cell => {
+                if (!cell || typeof cell !== 'object' || !['string', 'number'].includes(typeof cell.rowId) || typeof cell.columnKey !== 'string') throw new Error('Invalid cell identity.');
+                const identity = JSON.stringify([cell.rowId, cell.columnKey]);
+                if (seen.has(identity)) throw new Error('Duplicate cell.');
+                seen.add(identity);
+                const columnIndex = engine.columns.findIndex(column => column.key === cell.columnKey);
+                let rowIndex = -1;
+                for (let row = 0; row < engine.rowCount; row++) if (Object.is(engine.getRowId(row), cell.rowId)) { rowIndex = row; break; }
+                if (columnIndex < 0 || rowIndex < 0 || authorize({ operation: 'read', rowId: cell.rowId, columnKey: cell.columnKey }) !== true) throw new Error('Cell unavailable.');
+                const previous = engine.getValue(rowIndex, cell.columnKey);
+                if (!writing) return { rowId: cell.rowId, columnKey: cell.columnKey, value: previous };
+                if (!Object.hasOwn(cell, 'expected') || !Object.hasOwn(cell, 'value')) throw new Error('Expected and value are required.');
+                if (authorize({ operation: 'write', rowId: cell.rowId, columnKey: cell.columnKey }) !== true || !engine.getCellPermission(rowIndex, columnIndex).writable) throw new Error('Write denied.');
+                if (!Object.is(previous, cell.expected)) throw new Error('Conflict: cell changed since read.');
+                for (const value of [cell.expected, cell.value]) if (!(value === null || ['string','boolean'].includes(typeof value) || typeof value === 'number' && Number.isFinite(value))) throw new Error('Writes require finite JSON scalar values.');
+                if (validateWrite({ rowId: cell.rowId, columnKey: cell.columnKey, value: cell.value }) !== undefined) throw new Error('Validation must be synchronous and return no value.');
+                return { rowIndex, columnKey: cell.columnKey, value: cell.value };
+            });
+            if (writing) engine.updateCells(updates);
+            return result(writing ? { updated: updates.length } : { cells: updates });
+        } catch (error) {
+            return { isError: true, content: [{ type: 'text', text: error instanceof Error ? error.message : 'Operation failed.' }] };
+        }
+    });
+    return server;
+}
+function result(value) { return { content: [{ type: 'text', text: JSON.stringify(value) }] }; }

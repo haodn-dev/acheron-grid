@@ -12,7 +12,8 @@
     "test:browser": "npm run build && playwright test",
     "benchmark": "npm run build && playwright test --config benchmark.config.mjs",
     "playground": "npm run build && node examples/vanilla/server.mjs",
-    "test:playground": "npm run build && playwright test --config playground.config.mjs"
+    "test:playground": "npm run build && playwright test --config playground.config.mjs",
+    "test:mcp": "npm run test --workspace @acheron-grid/mcp"
   },
   "engines": {
     "node": ">=22"

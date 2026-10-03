@@ -1,3 +1,4 @@
+import { installTooltips } from './tooltips.js';
 import { icons } from './icons.js';
 import { choicePanel, positionChoicePanel } from './choices.js';
 import type { ChoiceEditorOptions } from './choices.js';
@@ -2315,7 +2316,7 @@ export function createGrid(options: GridOptions): Grid {
     const corner = doc.createElement('button'); corner.type = 'button'; corner.tabIndex = -1; corner.textContent = '#'; corner.title = 'Select all cells'; corner.setAttribute('aria-label', 'Select all cells'); corner.disabled = !rowCount || !columns.length;
     corner.setAttribute('aria-pressed', String(!!range && range.startRow === 0 && range.endRow === rowCount - 1 && range.startColumn === 0 && range.endColumn === columns.length - 1));
     corner.addEventListener('click', event => { if (event.detail === 0) { selectAll(); scroller.focus({ preventScroll: true }); } });
-    corner.style.cssText = `width:100%;padding:0;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;height:${headerHeight}px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--acheron-grid-line-color);box-sizing:border-box`;
+    corner.style.cssText = `width:100%;padding:0;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;height:${headerHeight}px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--acheron-grid-line-color);border-right:1px solid var(--acheron-grid-line-color);box-sizing:border-box`;
     const children: HTMLElement[] = [corner];
     const fixed = rowAxis.range(0, view.frozenHeight);
     const moving = rowAxis.range(rowAxis.position(engine.frozenRows) + view.scrollTop, view.height - view.frozenHeight);
@@ -2632,6 +2633,7 @@ export function createGrid(options: GridOptions): Grid {
   root.addEventListener('pointercancel', endResize);
   root.addEventListener('lostpointercapture', endResize);
   root.addEventListener('pointermove', onPointerMove);
+  const removeTooltips = installTooltips(root);
   root.addEventListener('pointerup',commitTouchReorder,true);
   root.addEventListener('pointerup', onPointerEnd);
   root.addEventListener('pointercancel', onPointerEnd);
@@ -2737,6 +2739,7 @@ export function createGrid(options: GridOptions): Grid {
       richEditor?.remove(); richEditor = null;
       input?.remove();
       onPointerEnd();
+      removeTooltips();
       root.removeEventListener('pointermove', onPointerMove);
       root.removeEventListener('pointerup',commitTouchReorder,true);
       root.removeEventListener('pointerup', onPointerEnd);
