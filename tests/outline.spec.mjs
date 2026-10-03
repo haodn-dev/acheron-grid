@@ -54,3 +54,25 @@ test('row group controls collapse nested groups and keep visible edits tied to s
   expect(await page.evaluate(()=>window.grid.rowCount)).toBe(100);
   await page.evaluate(()=>window.grid.undo());expect(await page.evaluate(()=>window.grid.rowCount)).toBe(98);
 });
+
+
+test('table lock notice follows locks, can be customized or disabled, and preserves selection', async ({ page }) => {
+  await setup(page);
+  await page.evaluate(() => window.grid.setLocked({ scope: 'table' }, true));
+  await expect(page.locator('[data-grid-lock-notice]')).toContainText('Table locked');
+  await expect(page.locator('[data-grid-lock-notice]')).toBeVisible();
+  await page.evaluate(() => window.grid.selectRow(2));
+  expect(await page.evaluate(() => window.grid.getSelection().rowIndex)).toBe(2);
+  await page.evaluate(() => window.grid.setLocked({ scope: 'table' }, false));
+  await expect(page.locator('[data-grid-lock-notice]')).toBeHidden();
+  for (const notice of [false, { title: 'Read only', description: 'Custom message' }]) {
+    await page.evaluate(async value => {
+      window.grid.destroy();
+      const { createGrid } = await import('/canvas/index.js');
+      window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source, columns: [{ key: 'a', title: 'A', editable: true }], tableLockNotice: value, motion: false });
+      window.grid.setLocked({ scope: 'table' }, true);
+    }, notice);
+    if (notice === false) await expect(page.locator('[data-grid-lock-notice]')).toBeHidden();
+    else await expect(page.locator('[data-grid-lock-notice]')).toHaveText('Read onlyCustom message');
+  }
+});

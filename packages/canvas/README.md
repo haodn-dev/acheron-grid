@@ -458,3 +458,6 @@ Select a rectangular range and use **Merge cells** / **Unmerge cells** in the co
 Hosts can disable these features with `allowMerging: false`, `allowRowGrouping: false`, or veto commands with `canChangeLayout`. Options, themes, custom renderers and editor factories remain available. Source values under a merge are retained on unmerge. Sorting/filtering requires removing merges and groups; expand groups before insert/delete/reorder and unmerge intersecting cells before collapse. See the core README for clipboard, structural and projection limits.
 
 Automatic row height measures all columns for each visible row and caches the result, so horizontal scrolling does not change row geometry. For very wide schemas, use fixed/manual row heights to avoid measuring every column. Adjacent whole-row or whole-column selections share one outer outline; Ctrl-added ranges remain separate in selection state.
+
+
+Locking the table through `setLocked({ scope: 'table' }, true)` displays a non-blocking notice for four seconds. It uses the grid theme; it does not change selection or clipboard permissions. Configure `tableLockNotice: { title: 'Read only', description: 'Custom host message' }` or set `tableLockNotice: false` to hide it. `motion: false` disables the notice animation; reduced-motion preferences are respected automatically. Headless core has no visual notifications.

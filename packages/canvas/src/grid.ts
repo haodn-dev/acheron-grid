@@ -78,6 +78,8 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
   renderCell?: CellRenderer;
   createEditor?: CellEditorFactory;
   choiceEditor?: ChoiceEditorOptions | false;
+  motion?: boolean;
+  tableLockNotice?: false | { readonly title?: string; readonly description?: string };
   selectionStyle?: { readonly activeBorderWidth?: number; readonly headerTintOpacity?: number; readonly rangeBorderWidth?: number; readonly rangeTintOpacity?: number };
   allowColumnChanges?:boolean;
   columnTypes?:readonly ColumnType[];
@@ -490,6 +492,14 @@ export function createGrid(options: GridOptions): Grid {
   actionError.setAttribute('role', 'alert');
   actionError.style.cssText = 'display:none;position:absolute;bottom:20px;left:12px;right:24px;z-index:2;padding:10px;background:#fff1f2;color:#9f1239;border:1px solid #fda4af;border-radius:6px;font:13px system-ui';
   root.append(actionError);
+  const lockNotice = doc.createElement('div');
+  lockNotice.dataset.gridLockNotice = ''; lockNotice.setAttribute('role', 'status'); lockNotice.hidden = true;
+  lockNotice.style.cssText = 'position:absolute;top:48px;left:16px;right:16px;z-index:12;padding:16px;background:var(--acheron-background);color:var(--acheron-text-color);border:1px solid var(--acheron-grid-line-color);box-shadow:0 8px 24px #0002;font:var(--acheron-font);pointer-events:none';
+  const lockTitle = doc.createElement('strong'); lockTitle.style.cssText = 'display:flex;align-items:center;gap:8px'; lockTitle.append(svgIcon('lock'), options.tableLockNotice && options.tableLockNotice.title || 'Table locked');
+  const lockDescription = doc.createElement('div'); lockDescription.style.cssText = 'margin-top:8px;opacity:.8'; lockDescription.textContent = options.tableLockNotice && options.tableLockNotice.description || 'Editing is disabled while the table is locked.';
+  lockNotice.append(lockTitle, lockDescription); root.append(lockNotice);
+  let lockNoticeTimer: number | undefined;
+
   const editorError = doc.createElement('div');
   editorError.id = `acheron-editor-error-${++editorId}`;
   editorError.setAttribute('role', 'alert');
@@ -710,7 +720,16 @@ export function createGrid(options: GridOptions): Grid {
   function setLocked(target: CellLockTarget, locked: boolean): void {
     if (destroyed) throw new Error('Grid is destroyed.');
     if (editor) throw new Error('Finish editing before changing locks.');
+    const wasLocked = engine.isLocked(target);
     engine.setLocked(target, locked);
+    if (target.scope === 'table') {
+      win.clearTimeout(lockNoticeTimer); lockNotice.hidden = true;
+      if (locked && !wasLocked && options.tableLockNotice !== false) {
+        lockNotice.hidden = false;
+        if (options.motion !== false && !win.matchMedia('(prefers-reduced-motion: reduce)').matches) lockNotice.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'translateY(0)', offset: .045 }, { opacity: 1, offset: .95 }, { opacity: 0 }], { duration: 4000, easing: 'ease-out' });
+        lockNoticeTimer = win.setTimeout(() => { lockNotice.hidden = true; }, 4000);
+      }
+    }
   }
 
   function setFrozen(rows: number, columns: number): void {
@@ -2361,17 +2380,17 @@ export function createGrid(options: GridOptions): Grid {
         reorderHandle(button, 'row', row);
         pane.append(button);
         if(outline.length)button.style.paddingLeft=`${levels*18}px`;
-        for(const group of outline.filter(group=>!group.collapsed&&group.startRow<sourceIndex&&group.endRow>=sourceIndex)){
+        for(const group of outline.filter(group=>!group.collapsed&&group.startRow<=sourceIndex&&group.endRow>=sourceIndex)){
           const depth=depths.get(group.id)!;
-          const line=doc.createElement('span');line.setAttribute('aria-hidden','true');line.style.cssText=`position:absolute;left:${depth*18+10}px;top:${rowAxis.position(row)+band.offset-band.y}px;width:7px;height:${rowAxis.size(row)}px;box-sizing:border-box;border-left:1px solid var(--acheron-grid-line-color);${group.endRow===sourceIndex?'border-bottom:1px solid var(--acheron-grid-line-color);':''}pointer-events:none`;pane.append(line);
+          const line=doc.createElement('span');line.setAttribute('aria-hidden','true');line.style.cssText=`position:absolute;left:${depth*18+10}px;top:${rowAxis.position(row)+band.offset-band.y+(group.startRow===sourceIndex?rowAxis.size(row)/2+10:0)}px;width:7px;height:${group.startRow===sourceIndex?Math.max(0,rowAxis.size(row)/2-10):rowAxis.size(row)}px;box-sizing:border-box;border-left:1px solid var(--acheron-icon-color);opacity:.45;${group.endRow===sourceIndex?'border-bottom:1px solid var(--acheron-icon-color);':''}pointer-events:none`;pane.append(line);
         }
         for(const group of outline.filter(group=>group.startRow===sourceIndex).sort((a,b)=>b.endRow-a.endRow)) {
           const depth=depths.get(group.id)!;
           const toggle=doc.createElement('button');toggle.type='button';toggle.dataset.gridRowGroup=group.id;
           toggle.setAttribute('aria-label',`${group.collapsed?'Expand':'Collapse'} rows ${group.startRow+1}–${group.endRow+1}`);toggle.setAttribute('aria-expanded',String(!group.collapsed));
           toggle.disabled=!engine.canChangeLayout({kind:group.collapsed?'expand':'collapse',group});
-          toggle.title=toggle.getAttribute('aria-label')!;const glyph=svgIcon('chevron-down');if(group.collapsed)glyph.setAttribute('style','transform:rotate(-90deg)');toggle.append(glyph);
-          toggle.style.cssText=`position:absolute;left:${depth*18+2}px;top:${rowAxis.position(row)+band.offset-band.y+Math.max(0,(rowAxis.size(row)-20)/2)}px;width:18px;height:20px;display:flex;align-items:center;justify-content:center;padding:0;border:0;background:var(--acheron-header-background);color:var(--acheron-icon-color);cursor:pointer`;
+          toggle.title=toggle.getAttribute('aria-label')!+' · '+(group.endRow-group.startRow+1)+' rows';const glyph=svgIcon('chevron-down');if(group.collapsed)glyph.setAttribute('style','transform:rotate(-90deg)');toggle.append(glyph);
+          toggle.style.cssText=`position:absolute;left:${depth*18+2}px;top:${rowAxis.position(row)+band.offset-band.y+Math.max(0,(rowAxis.size(row)-20)/2)}px;width:18px;height:20px;display:flex;align-items:center;justify-content:center;padding:2px;border:1px solid var(--acheron-grid-line-color);border-radius:4px;background:var(--acheron-background);color:var(--acheron-icon-color);cursor:pointer`;
           toggle.addEventListener('pointerdown',event=>{event.stopPropagation();});
           toggle.addEventListener('click',event=>{event.stopPropagation();try{structureAction(()=>engine.setGroupCollapsed(group.id,!group.collapsed));}catch(error){actionError.textContent=error instanceof Error?error.message:'Unable to toggle row group.';actionError.style.display='block';}});
           pane.append(toggle);
@@ -2724,6 +2743,7 @@ export function createGrid(options: GridOptions): Grid {
     setRowHeight: (index, height) => resizeAxis(rowAxis, index, height),
     destroy() {
       if (destroyed) return;
+      win.clearTimeout(lockNoticeTimer);
       choices?.remove(); choices = null; win.removeEventListener('beforeunload', guardEditNavigation);
       clearReorder();
       engine.destroy();
