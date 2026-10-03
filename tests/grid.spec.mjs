@@ -1423,6 +1423,13 @@ test('state icons and hover distinguish scoped locks, permissions and frozen bou
   });
   await page.mouse.move(bounds.x + 240, bounds.y - 18);
   await expect(root).toHaveAttribute('title', 'Column locked; Column frozen');
+  const rowIndex = page.getByRole('button', { name: 'Select row 1', exact: true });
+  await expect(rowIndex).toHaveAttribute('aria-description', 'Row locked; Row frozen');
+  await expect(rowIndex.locator('svg')).toHaveCount(1);
+  await rowIndex.click();
+  expect(await page.evaluate(() => window.grid.copySelection())).toBe('0\tAda');
+  await viewport.press('F2'); await expect(page.getByRole('textbox')).toHaveCount(0);
+
   await page.mouse.move(bounds.x + 80, bounds.y + 16);
   await expect(root).toHaveAttribute('title', 'Column frozen; Row locked; Row frozen');
   await viewport.click({ position: { x: 80, y: 16 } });
@@ -1435,6 +1442,7 @@ test('state icons and hover distinguish scoped locks, permissions and frozen bou
     window.grid.setLocked({ scope: 'row', rowIndex: 0 }, false); window.grid.setLocked({ scope: 'column', columnIndex: 1 }, false); window.grid.setFrozen(0, 0);
     await frame(); return before !== snapshot();
   })).toBe(true);
+  await expect(rowIndex.locator('svg')).toHaveCount(0);
   await page.mouse.move(bounds.x + 240, bounds.y - 18); await expect(root).toHaveAttribute('title', '');
   await page.mouse.move(bounds.x + 240, bounds.y + 48); await expect(root).toHaveAttribute('title', 'Cell disabled by permissions');
   await page.mouse.move(bounds.x + 160, bounds.y - 18); await expect(root).toHaveAttribute('title', 'Drag the column boundary to resize width');

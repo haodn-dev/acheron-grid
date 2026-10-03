@@ -216,6 +216,7 @@ export function createGrid(options: GridOptions): Grid {
     image.src = `data:image/svg+xml,${encodeURIComponent(svg.replace('currentColor', color))}`;
     return [name, image];
   }));
+  const rowLockSvg = new win.DOMParser().parseFromString(stateIconSvg.lock, 'image/svg+xml').documentElement;
   function stateIcon(name: keyof typeof stateIconSvg, x: number, y: number): void {
     const image = stateIcons[name]!;
     if (image.complete && image.naturalWidth) context!.drawImage(image, x, y, 16, 16);
@@ -737,7 +738,7 @@ export function createGrid(options: GridOptions): Grid {
     root.title = root.style.cursor === 'row-resize' ? 'Drag the row boundary to resize height'
       : column !== null ? 'Drag the column boundary to resize width'
       : event.clientY - bounds.top < headerHeight && event.clientX >= bounds.left + indexWidth && headerColumn >= 0 && headerColumn < columns.length ? stateLabels(null, headerColumn).join('; ')
-      : indexRow(event) !== null ? `Select row ${indexRow(event)! + 1}` : cell ? stateLabels(cell.row, cell.col).join('; ') : '';
+      : indexRow(event) !== null ? [`Select row ${indexRow(event)! + 1}`, ...rowLabels(indexRow(event)!)].join('; ') : cell ? stateLabels(cell.row, cell.col).join('; ') : '';
     if (resizing?.pointerId === event.pointerId) {
       resizing.proposed = Math.max(24, Math.min(1000, resizing.size + (resizing.axis === 'column' ? event.clientX : event.clientY) - resizing.start));
       showResizeGuide();
@@ -1135,7 +1136,7 @@ export function createGrid(options: GridOptions): Grid {
     }
     const leading = columnIndex === 0 || (x <= 0 && x + width > 0);
     const locked = header ? labels.some(label => label.endsWith('locked'))
-      : engine.isLocked({ scope: 'cell', rowIndex, columnIndex }) || (leading && labels.includes('Row locked'));
+      : engine.isLocked({ scope: 'cell', rowIndex, columnIndex }) || (!indexWidth && leading && labels.includes('Row locked'));
     if (locked && width >= 24 && height >= 20) {
       const left = x + width - 18; const top = y + 4;
       ctx.fillStyle = header ? theme.headerBackground : theme.background; ctx.fillRect(left - 1, top - 1, 18, 18);
@@ -1154,6 +1155,9 @@ export function createGrid(options: GridOptions): Grid {
     ctx.fillRect(x, y, width, height);
     const range = getSelectionRange();
     const wholeColumn = range && range.startRow === 0 && range.endRow === rowCount - 1 && columnIndex >= range.startColumn && columnIndex <= range.endColumn;
+    if (header && engine.isLocked({ scope: 'column', columnIndex })) {
+      ctx.save(); ctx.globalAlpha = .08; ctx.fillStyle = theme.headerTextColor; ctx.fillRect(x, y, width, height); ctx.restore();
+    }
     if (header && wholeColumn) {
       ctx.save(); ctx.globalAlpha = .12; ctx.fillStyle = theme.selectionColor; ctx.fillRect(x, y, width, height); ctx.restore();
     }
@@ -1379,6 +1383,14 @@ export function createGrid(options: GridOptions): Grid {
     return row < rowCount ? row : null;
   }
 
+  function rowLabels(row: number): string[] {
+    const labels: string[] = [];
+    if (engine.isLocked({ scope: 'table' })) labels.push('Table locked');
+    if (engine.isLocked({ scope: 'row', rowIndex: row })) labels.push('Row locked');
+    if (row < engine.frozenRows) labels.push('Row frozen');
+    return labels;
+  }
+
   function drawIndex(): void {
     if (!indexWidth) return;
     const view = viewport(); const range = getSelectionRange();
@@ -1398,9 +1410,19 @@ export function createGrid(options: GridOptions): Grid {
       for (let row = band.start; row < band.end; row++) {
         const button = doc.createElement('button'); button.type = 'button'; button.tabIndex = -1;
         button.textContent = String(row + 1); button.setAttribute('aria-label', `Select row ${row + 1}`);
+        const labels = rowLabels(row); const locked = labels.includes('Row locked');
+        button.title = [`Select row ${row + 1}`, ...labels].join('; ');
+        button.setAttribute('aria-description', labels.join('; '));
+        if (locked) {
+          const icon = rowLockSvg.cloneNode(true) as Element;
+          icon.setAttribute('width', '12'); icon.setAttribute('height', '12'); icon.setAttribute('aria-hidden', 'true');
+          icon.setAttribute('style', 'position:absolute;right:3px;top:4px;pointer-events:none');
+          button.append(doc.importNode(icon, true));
+        }
         const selected = !!range && range.startColumn === 0 && range.endColumn === columns.length - 1 && row >= range.startRow && row <= range.endRow;
         button.setAttribute('aria-pressed', String(selected));
         button.style.cssText = `position:absolute;left:0;top:${rowAxis.position(row) + band.offset - band.y}px;width:100%;height:${rowAxis.size(row)}px;box-sizing:border-box;border:0;border-right:1px solid var(--acheron-grid-line-color);border-bottom:1px solid var(--acheron-grid-line-color);background:var(--acheron-header-background);color:inherit;font:inherit;cursor:pointer;${selected ? 'box-shadow:inset 0 0 0 9999px color-mix(in srgb,var(--acheron-selection-color) 16%,transparent)' : ''}`;
+        if (locked) { button.style.background = 'color-mix(in srgb,var(--acheron-header-text-color) 8%,var(--acheron-header-background))'; button.style.padding = '0 16px 0 2px'; }
         button.addEventListener('click', event => { if (event.detail === 0 && finishEdit(true)) { selectRow(row); scroller.focus({ preventScroll: true }); } });
         pane.append(button);
       }
