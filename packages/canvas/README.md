@@ -11,7 +11,10 @@ An experimental Canvas browser renderer for the headless @acheron-grid/core engi
 - Optional custom cell drawing with clipping, fallback and partial repaint support.
 - Custom native cell editors: input, select or textarea.
 - Optional color and font theme shared by Canvas and editor/menu/dialog surfaces.
-- Single-cell, rectangular and multiple-range selection by pointer and keyboard, with automatic scrolling.
+- Single-cell, rectangular, whole-row/column and multiple-range selection by pointer and keyboard, with keyboard reveal of the active cell.
+- Default fixed row index, runtime freeze/unfreeze, scoped locks and sparse formatting.
+- Validated text/select/checkbox editing, multiline overlays, images, search and opt-in local sort/filter views.
+- TSV copy/paste, atomic local batches, delta undo/redo and typed events.
 
 This package is a development preview, not a published release. Remote data sources and framework adapters are not implemented. The active cell has a bounded ARIA grid mirror; full screen-reader coverage has not been verified. A headless render-callback benchmark is available; end-to-end frame rate has not been verified.
 
@@ -25,6 +28,59 @@ npm run build
 ```
 
 The package exports ESM JavaScript and TypeScript declarations from `dist/`. Its only runtime dependency is @acheron-grid/core.
+
+## Usage
+
+### Mounting a grid
+
+Install the built package from a local checkout in your consumer project:
+
+```sh
+npm install /path/to/acheron-grid-engine/packages/core /path/to/acheron-grid-engine/packages/canvas
+```
+
+```ts
+import { createGrid } from '@acheron-grid/canvas';
+import { LocalDataSource } from '@acheron-grid/core';
+
+const container = document.querySelector<HTMLElement>('#grid')!;
+const dataSource = new LocalDataSource([
+  { id: 'row-1', name: 'Ada', score: 42 },
+  { id: 'row-2', name: 'Lin', score: 57 },
+], row => row.id);
+
+const grid = createGrid({
+  container,
+  columns: [
+    { key: 'name', title: 'Name' },
+    { key: 'score', title: 'Score' },
+  ],
+  dataSource,
+  rowHeight: 32,
+  columnWidth: 160,
+  headerHeight: 36,
+});
+
+```
+
+Call `grid.destroy()` when the owning view unmounts.
+
+Give the container explicit dimensions, such as `width: 100%; height: 480px`. Mount in a browser with Canvas 2D and ResizeObserver support. Importing the package alone does not access the DOM.
+
+## Basic themes
+
+Pass `theme?: Partial<GridTheme>` at construction. Supported fields are `background`, `textColor`, `headerBackground`, `headerTextColor`, `gridLineColor`, `selectionColor`, `font` and `headerFont`. Omitted fields keep the default light palette and 13px system font. Font values use the CSS font shorthand. Values are validated before mounting; use concrete CSS colors/fonts, without CSS variables, inheritance keywords or `currentColor`.
+
+```ts
+theme: {
+  headerBackground: '#e0f2f1',
+  headerTextColor: '#115e59',
+  selectionColor: '#0f766e',
+  font: '14px system-ui',
+}
+```
+
+Each grid snapshots its theme independently. Canvas cells, headers, lines and selection use the theme; native editor, menu and resize-dialog surfaces inherit matching CSS variables scoped to that grid. Native browser control chrome and semantic error alerts keep their own appearance. Custom renderers own their drawing colors/fonts. Transparent backgrounds are supported: dirty cell repaint clears old pixels before drawing. Theme changes after construction have no effect; runtime switching, automatic dark mode, theme presets are not provided. Use the formatting API for local per-cell colors. Theme fonts do not resize rows/columns; configure geometry separately.
 
 ## Custom cell drawing
 
@@ -68,66 +124,13 @@ The factory initializes the control's value, options, type and constraints. The 
 
 Enter commits, Escape cancels, and blur commits; IME composition does not commit. Textareas accept Alt/Ctrl/Cmd+Enter for a newline; Tab/Shift+Tab save and move to the next/previous cell. Other controls retain native Tab behavior. Failed validation/parser/write keeps the draft with `aria-invalid` and an associated inline alert; input/change clears the error for retry. Native control keys and clipboard stay in the editor. Factory errors or invalid/attached/foreign-document elements produce an alert without mounting an editor. Destroy removes the editor and discards its draft. Factories must not mutate grid/source or install external listeners requiring cleanup; composite widgets, framework components, async validation and custom lifecycle callbacks are not supported.
 
-## Usage
-
-### Basic themes
-
-Pass `theme?: Partial<GridTheme>` at construction. Supported fields are `background`, `textColor`, `headerBackground`, `headerTextColor`, `gridLineColor`, `selectionColor`, `font` and `headerFont`. Omitted fields keep the default light palette and 13px system font. Font values use the CSS font shorthand. Values are validated before mounting; use concrete CSS colors/fonts, without CSS variables, inheritance keywords or `currentColor`.
-
-```ts
-theme: {
-  headerBackground: '#e0f2f1',
-  headerTextColor: '#115e59',
-  selectionColor: '#0f766e',
-  font: '14px system-ui',
-}
-```
-
-Each grid snapshots its theme independently. Canvas cells, headers, lines and selection use the theme; native editor, menu and resize-dialog surfaces inherit matching CSS variables scoped to that grid. Native browser control chrome and semantic error alerts keep their own appearance. Custom renderers own their drawing colors/fonts. Transparent backgrounds are supported: dirty cell repaint clears old pixels before drawing. Theme changes after construction have no effect; runtime switching, automatic dark mode, theme presets are not provided. Use the formatting API for local per-cell colors. Theme fonts do not resize rows/columns; configure geometry separately.
-
-### Mounting a grid
-
-Install the built package from a local checkout in your consumer project:
-
-```sh
-npm install /path/to/acheron-grid-engine/packages/core /path/to/acheron-grid-engine/packages/canvas
-```
-
-```ts
-import { createGrid } from '@acheron-grid/canvas';
-import { LocalDataSource } from '@acheron-grid/core';
-
-const container = document.querySelector<HTMLElement>('#grid')!;
-const dataSource = new LocalDataSource([
-  { id: 'row-1', name: 'Ada', score: 42 },
-  { id: 'row-2', name: 'Lin', score: 57 },
-], row => row.id);
-
-const grid = createGrid({
-  container,
-  columns: [
-    { key: 'name', title: 'Name' },
-    { key: 'score', title: 'Score' },
-  ],
-  dataSource,
-  rowHeight: 32,
-  columnWidth: 160,
-  headerHeight: 36,
-});
-
-// On unmount:
-grid.destroy();
-```
-
-Give the container explicit dimensions, such as `width: 100%; height: 480px`. Mount in a browser with Canvas 2D and ResizeObserver support. Importing the package alone does not access the DOM.
-
 ## API
 
 `LocalDataSource(rows, getRowId)` copies the row array and shallow-copies each row. IDs must be unique strings or finite numbers. Nested objects are not cloned. Use setValue(index, columnKey, value) to replace an existing field without mutating caller rows. Row IDs stay fixed at construction. Invalid indices and missing fields are rejected; missing properties return `undefined`, while invalid row indices throw `RangeError`.
 
 The `DataSource` interface exposes `getRowCount()`, `getRowId(index)`, and `getValue(index, columnKey)`. Grid dimensions use the row count at mount time; changing the row count requires remounting. Custom sources must provide synchronous values and valid counts.
 
-`createGrid(options)` returns `render()`, `updateCells(updates)`, `undo()`, `redo()`, `getCellPermission(rowIndex, columnIndex)`, `getSelection()`, `getSelectionRange()`, `copySelection()`, `paste(text)` and `destroy()`. `render()` schedules a viewport redraw, coalesced into the next animation frame. `destroy()` removes only the grid's own DOM and releases its listeners and observer; repeated calls are safe. Calls to `render()` after destruction do nothing.
+`createGrid(options)` returns `selectRow(index)`, `selectColumn(index)`, `openSearch()`, `setFrozen(rows, columns)`, `setLocked(target, locked)`, `format(targets, patch)`, size/query helpers, `render()`, `updateCells(updates)`, `undo()`, `redo()`, `getCellPermission(rowIndex, columnIndex)`, `getSelection()`, `getSelectionRange()`, `copySelection()`, `paste(text)` and `destroy()`. `render()` schedules a viewport redraw, coalesced into the next animation frame. `destroy()` removes only the grid's own DOM and releases its listeners and observer; repeated calls are safe. Calls to `render()` after destruction do nothing.
 
 Column keys must be unique. All cell dimensions must be positive finite numbers. Values are rendered as plain text using `String(value)`; `null` and `undefined` display as empty cells.
 
@@ -181,7 +184,7 @@ Value commands coalesce dirty cells into one animation frame. Offscreen changes 
 
 ## Range selection and clipboard
 
-Drag with a mouse/pen, Shift-click, or use Shift+Arrow/Home/End to extend a rectangular range from its anchor. Ctrl/Cmd+Shift+Home/End extends to the first/last grid cell. Ordinary clicks or navigation collapse the range; Escape clears it. Dragging captures the pointer and clamps to viewport/data bounds. Stationary edge auto-scroll, touch range dragging and multiple ranges are not implemented.
+Drag with a mouse/pen, Shift-click, or use Shift+Arrow/Home/End to extend a rectangular range from its anchor. Ctrl/Cmd+Shift+Home/End extends to the first/last grid cell. Ordinary clicks or navigation collapse the range; Escape clears it. Dragging captures the pointer and clamps to viewport/data bounds. Stationary edge auto-scroll and touch range dragging are not implemented. Multiple ranges are supported; clipboard operations require one rectangle.
 
 `getSelection()` still returns the active endpoint. `getSelectionRange()` returns a fresh normalized `{ startRow, endRow, startColumn, endColumn }` object or `null`; bounds are zero-based and inclusive. `onSelectionRangeChange(range)` receives a copy when bounds change, or `null` on clear. The grid draws both the outer range and active-cell borders. Editing changes the active cell while keeping the range.
 
@@ -205,9 +208,9 @@ grid.setRowHeight(0, 48);
 
 Sizes are finite positive CSS pixel values; indices are zero-based integers. Invalid indices/sizes are rejected before layout changes. Calls throw while editing or after destruction. Sizes default to `columnWidth`/`rowHeight`, with sparse per-index overrides; rows do not require a size array. Resizing updates scroll dimensions and fully redraws, keeping hit testing, editor placement and selection aligned. Layout changes are in memory and are outside data undo/redo.
 
-Drag within 5 CSS pixels of a header edge to resize that column (24–1000px). Right-click a cell and choose **Resize column…** or **Resize row…** for a native DOM dialog with a labeled number input, Apply and Cancel. The dialog accepts sizes of at least 1px. Row-edge dragging, row gutters, auto-fit and persisted layout are not implemented.
+Drag within 8 CSS pixels of a header edge to preview a column resize (24–1000px); release to apply. Row boundaries in the default index gutter also support resize preview. Right-click a cell and choose **Resize column…** or **Resize row…** for a native DOM dialog with a labeled number input, Apply and Cancel. The dialog accepts sizes of at least 1px. Auto-fit and persisted layout are not implemented.
 
-The built-in cell menu also provides **Copy**, **Paste**, **Edit cell**, **Undo** and **Redo**. Right-clicking within the range preserves it and its active endpoint; right-clicking elsewhere selects that cell without scrolling. Resize targets the clicked cell, while Edit targets the active cell. Header, blank space and editor inputs retain the browser's context menu.
+The built-in cell menu also provides **Copy**, **Paste**, **Edit cell**, **Undo** and **Redo**. Right-clicking within the range preserves it and its active endpoint; right-clicking elsewhere selects that cell without scrolling. Resize targets the clicked cell, while Edit targets the active cell. Headers open Column actions and suppress the browser menu. Index numbers open the existing row/cell actions. Blank space and editor inputs retain their native context menu.
 
 Shift+F10 or the ContextMenu key opens the menu for the active cell. Arrow keys, Home and End navigate enabled items; Enter/Space activates. Escape/Tab returns focus to the viewport. Outside clicks, scrolling, resizing and destruction dismiss the menu. The popover stays inside the browser window.
 
@@ -239,7 +242,7 @@ Ctrl/Cmd+click retains previous rectangles and starts a new active range. Shift/
 
 `getSelectionRanges()` returns copies, active range last; `getSelectionRange()` remains the active rectangle. `onSelectionRangesChange` receives copies when the list changes. Existing single-range/cell callbacks retain their semantics; domain `selection:change` now also carries a frozen `ranges` array. Editing preserves all ranges and changes the active cell. Right-click inside the active rectangle preserves the set; outside it selects a new single cell. Copy/paste are disabled for multiple ranges, and their APIs reject the operation before cell reads/writes. Borders use the same frozen-pane clips and partial repaint path; partial updates redraw borders only inside dirty cells, including translucent colors.
 
-The viewport exposes Shift+F8 via `aria-keyshortcuts` and announces active position, range count and pending-add mode through a polite status region. This is focused interaction support; Canvas cells still have no accessible grid tree, and screen-reader coverage is not complete.
+The viewport exposes Shift+F8 via `aria-keyshortcuts` and announces active position, range count and pending-add mode through a polite status region. This is focused interaction support; A bounded active-cell ARIA mirror exposes the active position/value; complete row/header traversal and screen-reader coverage remain unverified.
 
 ## Resize preview
 
@@ -297,13 +300,13 @@ Selection, value edits/undo/redo, locks and `grid.render()` refresh this mirror.
 
 ## State indicators
 
-Locked columns/tables show a small lock icon on their headers; explicit row locks show it in the leading visible cell, and individual cell locks show it in that cell. Permission-disabled cells are muted. Default noneditable display columns are not considered disabled. Native hover hints and the active ARIA description explain the scope; resize edges retain their resize hints. A lock takes priority over write-denial attribution, while selection denial still reports disabled. External policy changes require `grid.render()`.
+Locked columns/tables show a small lock icon on their headers; explicit row locks show a smaller SVG icon beside the index number (or in the leading visible cell when `indexColumn: false`), and individual cell locks show it in that cell. Locked index numbers and column headers have a light tint. Permission-disabled cells are muted. Default noneditable display columns are not considered disabled. Native hover hints and the active ARIA description explain the scope; resize edges retain their resize hints. A lock takes priority over write-denial attribution, while selection denial still reports disabled. External policy changes require `grid.render()`.
 
 Frozen boundaries are two continuous pointer-transparent DOM rules: a vertical rule spans header and body, and a horizontal rule spans the full viewport width. They move with geometry and disappear on unfreeze; boundaries beyond the viewport are hidden. No letter badges are painted inside cells. Narrow cells can clip the lock icon; custom renderers/images receive the same state overlay.
 
 ## Whole-row/column selection and header menus
 
-Click a column header to select all its data rows. Click within the leftmost 10px of a row (away from a resize boundary), use Shift+Space for the active row, or Ctrl/Cmd+Space for the active column. `grid.selectRow(index)` / `grid.selectColumn(index)` expose the same behavior. Selected axes receive a light tint and the existing range outline; the corresponding column header is highlighted. Empty axes do not create a selection. Endpoint selection permissions are checked atomically, and copy/paste retain their existing range/size/permission checks. These operations replace prior ranges and do not allocate per-cell state.
+Click a column header to select all its data rows. Click its index number (or within the leftmost 10px of a data row, away from a resize boundary), use Shift+Space for the active row, or Ctrl/Cmd+Space for the active column. `grid.selectRow(index)` / `grid.selectColumn(index)` expose the same behavior. Selected axes receive a light tint and the existing range outline; the corresponding column header is highlighted. Empty axes do not create a selection. Endpoint selection permissions are checked atomically, and copy/paste retain their existing range/size/permission checks. These operations replace prior ranges and do not allocate per-cell state.
 
 Header right-click suppresses the browser menu and opens Column actions, including select, sort, filter, locks, freeze and resize. Empty filtered views still expose sort/filter/clear actions. Native input/editor context menus remain available. Body menus also provide Select row/column.
 
@@ -316,3 +319,11 @@ Sort is single-column ascending/descending. Filters combine columns with AND, us
 State indicators use embedded [Lucide SVG icons](https://lucide.dev/icons), colored with `headerTextColor`. Four images are cached per mounted grid; no icon font, runtime library or external icon request is needed. Attribution and terms are included in `LICENSE.lucide`.
 
 A fixed row index gutter is shown by default (`indexColumn: false` hides it). Numbers start at 1 in the current view, including after sorting/filtering. Click a number to select its row, right-click for row/cell actions, or drag its lower boundary to resize the row. It is UI chrome: column indexes, frozen-column counts, data, search and clipboard content still refer only to supplied columns. Only visible row controls are created.
+
+## Dialogs
+
+Filter/sort, resize and formatting dialogs use native `showModal()` with grid-scoped styles for centering, a viewport-bounded width/height, backdrop, controls, focus rings and action spacing. Escape/Cancel dismiss the dialog and restore grid focus. They share the mount's theme and require a browser supporting native dialog and popover APIs.
+
+## License
+
+Original Acheron Grid code is licensed under [MIT](LICENSE). Copyright (c) 2026 Hao Duong. Embedded Lucide icons retain their ISC/MIT attribution in [LICENSE.lucide](LICENSE.lucide), included in this package's file list. Keep those notices when redistributing the assets or a bundle containing them.

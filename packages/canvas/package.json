@@ -7,7 +7,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE.lucide"
+    "LICENSE.lucide",
+    "LICENSE"
   ],
   "exports": {
     ".": {
@@ -22,5 +23,16 @@
   },
   "dependencies": {
     "@acheron-grid/core": "0.0.0"
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/haodn-dev/acheron-grid.git",
+    "directory": "packages/canvas"
+  },
+  "bugs": {
+    "url": "https://github.com/haodn-dev/acheron-grid/issues"
+  },
+  "homepage": "https://github.com/haodn-dev/acheron-grid#readme",
+  "author": "Hao Duong"
 }

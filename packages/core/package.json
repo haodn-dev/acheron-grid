@@ -6,7 +6,8 @@
   "description": "Headless TypeScript data grid engine",
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "exports": {
     ".": {
@@ -22,5 +23,16 @@
     "build": "node scripts/clean-browser-output.mjs && tsc -p tsconfig.headless.json && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.headless.json",
     "dev": "tsc -p tsconfig.json --watch"
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/haodn-dev/acheron-grid.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/haodn-dev/acheron-grid/issues"
+  },
+  "homepage": "https://github.com/haodn-dev/acheron-grid#readme",
+  "author": "Hao Duong"
 }

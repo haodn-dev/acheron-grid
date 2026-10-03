@@ -20,5 +20,15 @@
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "typescript": "~5.9.3"
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/haodn-dev/acheron-grid.git"
+  },
+  "bugs": {
+    "url": "https://github.com/haodn-dev/acheron-grid/issues"
+  },
+  "homepage": "https://github.com/haodn-dev/acheron-grid#readme",
+  "author": "Hao Duong"
 }

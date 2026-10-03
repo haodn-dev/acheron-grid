@@ -4,11 +4,24 @@ An experimental headless TypeScript data-grid engine. Core owns data, selection,
 
 ## Build
 
-From the engine repository root, use Node.js 22 or later: npm ci, npm run build, npm run typecheck, npm test. Build runs core before Canvas. Both packages remain private development previews, with no published release or selected license.
+From the engine repository root, use Node.js 22 or later:
+
+```sh
+npm ci
+npm run build
+npm run typecheck
+npm test
+```
+
+Build runs core before Canvas. This package exports ESM JavaScript and TypeScript declarations from `dist/`. It is not published; `private: true` prevents accidental npm publication. To use the built package in another project:
+
+```sh
+npm install /path/to/acheron-grid-engine/packages/core
+```
 
 ## Usage
 
-The root entry exports createGridEngine, LocalDataSource and their types. It runs in Node without DOM, Canvas or framework globals. The earlier @acheron-grid/core/headless subpath remains an alias. Browser rendering is provided by [@acheron-grid/canvas](../canvas/README.md).
+The root entry exports `createGridEngine`, `LocalDataSource`, `LocalDataView` and their public types. It runs in Node without DOM, Canvas or framework globals. The earlier @acheron-grid/core/headless subpath remains an alias. Browser rendering is provided by [@acheron-grid/canvas](../canvas/README.md).
 
 ```js
 import { createGridEngine, LocalDataSource } from '@acheron-grid/core';
@@ -36,9 +49,9 @@ Build/typecheck includes a separate ES2022-only TypeScript configuration with no
 
 DataSource exposes synchronous getRowCount/getRowId/getValue and optional setValue/setValues. Row count is fixed at construction. LocalDataSource copies the row array and shallow row snapshots, with unique stable row IDs; nested values remain caller-owned.
 
-updateCells accepts already-validated values and intentionally does not apply column parsers or the editor's editable flag. editCell and paste apply resolved editable/pasteable permissions and text parsers. All writes, including API updates and undo/redo, require writable permission. Batch setters must be synchronous and atomic, leaving data unchanged on failure. Validation completes before writes. Duplicate updates use the last value, Object.is no-ops preserve history, and undo/redo retain at most 100 delta commands with shallow value references. External writes are outside history; replay rejects row identity/current value conflicts. Resize is not in data history.
+updateCells accepts already-validated values and intentionally does not apply column parsers or the editor's editable flag. editCell and paste apply resolved editable/pasteable permissions and text parsers. All writes, including API updates and undo/redo, require writable permission. Batches with more than one changed cell require `setValues`; a source with only `setValue` can accept single-cell writes. Batch setters must be synchronous and atomic, leaving data unchanged on failure. Validation completes before writes. Duplicate updates use the last value, Object.is no-ops preserve history, and undo/redo retain at most 100 delta commands with shallow value references. External writes are outside history; replay rejects row identity/current value conflicts. Resize is not in data history.
 
-Clipboard processing is limited to 100,000 cells and 10 million UTF-16 code units. Async sources, framework adapters and multiple ranges are not implemented.
+Clipboard processing is limited to 100,000 cells and 10 million UTF-16 code units. Async sources and framework adapters are not implemented. Multiple selection ranges are supported; copy/paste require one rectangle.
 
 ## Browser import migration
 
@@ -66,6 +79,9 @@ Pass synchronous `onEvent(event)` to either factory. The discriminated `GridEven
 - `cell:change`: source `api/edit/paste/undo/redo`, one batch of `{ rowIndex, rowId, columnKey, previous, value }` changes.
 - `selection:change`: active `selection` and normalized `range`, plus frozen `ranges` in insertion order. Clear emits null active selection/range and an empty ranges array.
 - `column:resize` / `row:resize`: `index`, `previous`, `size`; layout stays outside data history.
+- `lock:change`: explicit `target` and `locked` state; locks stay outside history.
+- `freeze:change`: previous/current row and column prefix counts; layout stays outside history.
+- `format:change`: source `api/undo/redo` and sparse target/patch changes; formatting shares value history.
 
 State and history commit before renderer invalidation, then the domain event. Failures before commit and no-ops emit nothing. Both notification hooks are attempted even if one throws; the first error propagates after both, without rolling back committed state. Event envelopes/payload metadata are frozen; values remain shallow caller-owned references. Parser, resolver, setter and notification hooks cannot issue nested engine mutations; queries of committed state are allowed. Destroy silently releases hooks/history. Canvas legacy selection callbacks remain separate and are not duplicated by onEvent.
 
@@ -112,3 +128,7 @@ The last applied property wins across intersecting targets. Updating only backgr
 The view delegates identity/value reads and optional setters to original source indices. Atomic batch writes validate/map all indices before delegating. Read-only sources remain read-only. Row membership/order is fixed for a mount; edited values do not automatically resort/refilter. Build a new projection and remount to reapply criteria. This preserves the engine's fixed count/stable row-identity contract. New mounts reset their transient selection/history/geometry/locks/colors; host permission policies should use stable row IDs.
 
 This is O(source rows) index memory/filter work and O(matching rows log matching rows) sorting; it does not preserve virtualization while evaluating the full source. Only use it for local datasets sized for that cost. Source row order/count/identities must remain stable; column keys must be supplied by the application. No remote paging, async criteria or multi-column sort is implemented.
+
+## License
+
+Licensed under [MIT](LICENSE). Copyright (c) 2026 Hao Duong. No npm release is available. Lucide assets belong to the separate Canvas package and are not dependencies of this headless core.

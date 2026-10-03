@@ -1,51 +1,104 @@
-# Acheron Grid Engine
+# Acheron Grid
 
-> Spreadsheet UX. Data-grid semantics. Canvas performance.
+> Spreadsheet interactions for application data, with a headless TypeScript core and a Canvas renderer.
 
-Acheron Grid Engine is an early-stage project to build a framework-independent, Canvas-based data grid engine in TypeScript. Its focus is the rendering, interaction, and data primitives developers need to build editable grids for the web, with spreadsheet-style selection and keyboard navigation.
+Acheron Grid displays and edits tabular data without a framework dependency. The headless engine owns data commands, selection, permissions, layout and history. The browser package adds Canvas rendering, scrolling, editors, menus and dialogs.
 
-The planned architecture separates the core engine from framework integrations, with direct use in vanilla JavaScript and dedicated adapters for React and Vue.
+## Status
 
-## Project status
+This is an experimental development preview. APIs may change, packages are not published, and npm manifests are marked `private` to prevent accidental publication. Build and install from a local checkout. The project is licensed under [MIT](LICENSE).
 
-The first core preview implements read-only Canvas rendering, row and column virtualization, native scrolling, and a local data source. Single-cell selection and keyboard navigation are also available. It builds to an ESM package with TypeScript declarations. The API is experimental and may change.
+| Package | Purpose | Runtime dependencies |
+| --- | --- | --- |
+| [@acheron-grid/core](packages/core/README.md) | Headless engine, synchronous sources and local row views; usable in Node.js | None |
+| [@acheron-grid/canvas](packages/canvas/README.md) | Browser rendering and interactions | @acheron-grid/core |
 
-Start with the [Canvas browser guide](packages/canvas/README.md) or [headless core guide](packages/core/README.md) for local installation, an example, and API limitations. No package has been published. Opt-in DOM editing, custom native editors, basic color/font themes, atomic local batch updates, partial cell repaint and undo/redo are available. Rectangular and multiple-range selection, TSV copy/paste, individual row/column resize and a built-in context menu are available. Capability permissions, typed domain events and frozen leading rows/columns and custom Canvas cell drawing are available. Remote data sources and framework adapters remain planned. Canvas cell content is not yet accessible to screen readers. The V1 scope below remains the target, not a list of completed features.
+Core does not import Canvas or framework code. `@acheron-grid/core/headless` remains an alias for the headless API.
 
-@acheron-grid/core runs selection, layout, editing, clipboard and history without browser globals. @acheron-grid/canvas provides createGrid and depends on the public core entry. The earlier core/headless subpath remains supported; browser imports now use the Canvas package.
+## Implemented features
 
-## Design goals
+- Virtualized rows and columns, sparse sizes, resize guides and runtime frozen panes.
+- A default fixed row index, whole-row/column selection, rectangular and multiple ranges, keyboard navigation and TSV clipboard operations.
+- Native text/select/checkbox editors, multiline overlays, parsing/validation, image cells and custom cell drawing.
+- Atomic local value updates, partial cell repaint, delta undo/redo and typed domain events.
+- Capability permissions, cell/row/column/table value locks, sparse formatting and application control over formatting.
+- Local search, opt-in column sort/filter views, themes and native dialogs that tolerate host CSS resets.
+- An active-cell ARIA mirror and keyboard status announcements. Complete screen-reader support remains unverified.
 
-- **Canvas rendering:** draw grid content on Canvas, with DOM elements for editors, menus, overlays, and accessibility support.
-- **Viewport-based rendering:** virtualize both rows and columns to keep rendering work focused on visible data.
-- **Framework-independent core:** keep rendering, interaction, and data handling in plain TypeScript, with framework integration handled by adapters.
-- **Explicit data identity:** address data through row IDs and column keys, with data sources for local and remotely loaded records.
-- **Incremental updates:** support targeted invalidation and batched changes to avoid unnecessary redraws.
-- **Extensibility:** provide custom cell renderers, editors, themes, and plugin APIs.
+Sorting/filtering use a host-managed local projection and remount; values persist in the source, while selection, history, user locks, colors and custom sizing reset. Rendering virtualization does not make filtering or in-memory storage independent of dataset size.
 
-A reproducible headless Canvas callback benchmark is available via npm run benchmark. End-to-end frame rate and memory targets remain unverified.
+## Quick start
 
-## Planned V1 scope
+Use Node.js 22 or later to build the repository:
 
-| Area | Planned capabilities |
+```sh
+npm ci
+npm run build
+npm run playground
+```
+
+Open [the standalone playground](http://127.0.0.1:4180). It uses browser import maps and local packages, without a framework or CDN. Stop the server with Ctrl+C. See [the example guide](examples/vanilla/README.md).
+
+In a separate application with an ESM-capable bundler, install both built packages:
+
+```sh
+npm install /path/to/acheron-grid-engine/packages/core /path/to/acheron-grid-engine/packages/canvas
+```
+
+Provide a container with explicit dimensions:
+
+```html
+<div id="grid" style="width:100%;height:480px"></div>
+```
+
+```ts
+import { createGrid } from '@acheron-grid/canvas';
+import { LocalDataSource } from '@acheron-grid/core';
+
+const dataSource = new LocalDataSource([
+  { id: 'row-1', name: 'Ada' },
+  { id: 'row-2', name: 'Lin' },
+], row => row.id);
+
+const grid = createGrid({
+  container: document.querySelector<HTMLElement>('#grid')!,
+  columns: [{ key: 'name', title: 'Name', editable: true }],
+  dataSource,
+});
+
+```
+
+Call `grid.destroy()` when the owning view unmounts to release its DOM, listeners, observer and pending work.
+
+For server-side or renderer-independent use, start with [`createGridEngine`](packages/core/README.md#usage). For browser options, contracts and keyboard behavior, read [the Canvas guide](packages/canvas/README.md).
+
+## Development and verification
+
+Run commands from the repository root after `npm ci`:
+
+| Command | Purpose |
 | --- | --- |
-| Rendering and layout | Row and column virtualization, resizing, frozen panes |
-| Interaction | Cell and range selection, multiple ranges, keyboard navigation |
-| Editing | Inline editors, clipboard operations, undo and redo |
-| Data | Local and asynchronous data sources, partial updates, batched updates |
-| Customization | Custom renderers and editors, basic themes |
-| Integration | Vanilla JavaScript API, React and Vue adapters |
+| `npm run build` | Build core, then Canvas; ESM and TypeScript declarations |
+| `npm run typecheck` | Check both packages and the headless dependency boundary |
+| `npm test` | Build and run Node.js tests |
+| `npm run test:browser` | Build and run Chromium grid integration tests |
+| `npm run test:playground` | Build and verify the standalone example |
+| `npm run benchmark` | Measure headless Chromium render-callback cost and source reads |
 
-V1 focuses on displaying and editing tabular application data. Formula evaluation, charts, pivot tables, multi-sheet workbooks, Excel calculation compatibility, and real-time collaboration are outside its scope.
+Install the test browser with `npx playwright install chromium` before running browser tests. Benchmarks measure callback CPU time; they do not establish end-to-end FPS, GPU cost or peak memory. Browser tests and benchmarks share port 4179; the playground uses port 4180. Run suites using the same port sequentially and stop a manual playground server before its tests.
 
-## Repository structure
+See [Contributing](CONTRIBUTING.md) for changes and bug reports.
 
-[`packages/core/`](packages/core/README.md) contains the headless engine and unit tests; [packages/canvas](packages/canvas/README.md) contains browser rendering and interactions. Browser integration tests live in `tests/`. Framework adapters remain planned. The [vanilla playground](examples/vanilla/README.md) runs independently with local packages and demonstrates themes and interactions. The Canvas preview includes a render-callback benchmark in headless Chromium.
+## Limits and planned work
 
-## Development
+Data sources and validation are synchronous. Row count and row identities/order remain stable for a mounted engine; changing them requires a new view/mount. Local values, user state and history are in memory. Persistence and backend authorization belong to the application.
 
-Use Node.js 22 or later. Run `npm ci`, then `npm run build`. Check types with `npm run typecheck` and run unit tests with `npm test`. For browser tests, install Chromium with `npx playwright install chromium` and run `npm run test:browser`. Run `npm run playground` for the standalone preview at http://127.0.0.1:4180; check it with `npm run test:playground`.
+Native browser scroll dimensions impose practical limits. Remote/async data, React/Vue adapters, multi-column sorting, layout undo and complete assistive-technology coverage are not implemented. Only Chromium is currently covered by browser tests.
+
+Formula evaluation, charts, pivot tables, multi-sheet workbooks, Excel calculation compatibility and real-time collaboration are outside the current scope.
 
 ## License
 
-A license has not yet been selected. Licensing information will be added before the first library release.
+Acheron Grid is available under the [MIT License](LICENSE). Copyright (c) 2026 Hao Duong. You may use, modify and redistribute it, including in commercial applications, subject to the license terms and preservation of the required notices.
+
+The Canvas package embeds Lucide SVG assets under their existing ISC/MIT terms. Their attribution and license text are included in [LICENSE.lucide](packages/canvas/LICENSE.lucide); these terms cover those assets, not the entire project.
