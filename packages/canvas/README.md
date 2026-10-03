@@ -126,7 +126,7 @@ Enter commits, Escape cancels, and blur commits; IME composition does not commit
 
 ## API
 
-`LocalDataSource(rows, getRowId)` copies the row array and shallow-copies each row. IDs must be unique strings or finite numbers. Nested objects are not cloned. Use setValue(index, columnKey, value) to replace an existing field without mutating caller rows. Row IDs stay fixed at construction. Invalid indices and missing fields are rejected; missing properties return `undefined`, while invalid row indices throw `RangeError`.
+`LocalDataSource(rows, getRowId)` copies the row array and shallow-copies each row. IDs must be unique strings or finite numbers. Nested objects are not cloned. Use setValue(index, columnKey, value) to replace an existing field without mutating caller rows. Row IDs stay stable through structural commands. Invalid indices and missing fields are rejected; missing properties return `undefined`, while invalid row indices throw `RangeError`.
 
 The `DataSource` interface exposes `getRowCount()`, `getRowId(index)`, and `getValue(index, columnKey)`. Grid dimensions use the row count at mount time; changing the row count requires remounting. Custom sources must provide synchronous values and valid counts.
 
@@ -234,7 +234,7 @@ Pass `frozenRows: 1, frozenColumns: 1` to `createGrid` to keep the first data ro
 
 Canvas uses one native scroller and one Canvas, clipping the corner/top/left/body regions. Sparse resize, dirty-cell updates, selection/range borders and hit testing use the [core viewport contract](../core/README.md#frozen-panes-and-viewport-geometry). Keyboard navigation reveals only non-frozen dimensions in the remaining scrollable area. Non-selectable targets retain selection as before. Right-click/keyboard menu and header-edge resize target the visible cell/column, including at the frozen seam.
 
-The single DOM editor uses a clipped overlay following its pane. A frozen editor stays fixed on that dimension; a scrolling editor cannot cover a frozen pane. Scrolling the edited cell offscreen clips the input while preserving its draft/focus, without committing or cancelling it. Commit still rechecks permissions. Frozen counts/resize are outside data history. Right/bottom freezing and layout history are not implemented. Native browser scroll-size and accessibility limitations remain.
+The single DOM editor uses a clipped overlay following its pane. A frozen editor stays fixed on that dimension; a scrolling editor cannot cover a frozen pane. Scrolling the edited cell offscreen clips the input while preserving its draft/focus, without committing or cancelling it. Commit still rechecks permissions. Explicit frozen-count and resize changes share undo/redo history. Right/bottom freezing is not implemented. Native browser scroll-size and accessibility limitations remain.
 
 ## Multiple selection ranges
 
@@ -387,7 +387,7 @@ Customize `placeholder`, `maxHeight`, `applyLabel`, `cancelLabel`, `emptyLabel` 
 
 Providing `onReorder(request)` enables dragging selected whole rows/columns directly from their visible index/header, with a grab cursor and no extra icon. Dragging moves all selected items of that axis. Selected group headers move their complete contiguous block. Drop on the first/second half of a target to insert before/after it. Focus a selected index/header and press Alt+arrow to move its item/group one position with the keyboard. Native HTML drag requires a pointer; touch reordering is not implemented.
 
-`request` contains `axis: 'row' | 'column'`, immutable `indices` and `beforeIndex`, an insertion boundary in the current order **before removal**. `canReorder(request)` can veto the operation. `reorderedIndices(count, indices, beforeIndex)` validates the request and returns a stable index permutation. The host owns source/column ordering, row identity, grouped-header constraints and reconciliation of selection, locks, formatting, sizes and history; Canvas does not silently mutate these coordinate-based states. Omit `onReorder` to disable reordering entirely.
+`request` contains `axis: 'row' | 'column'`, immutable `indices` and `beforeIndex`, an insertion boundary in the current order **before removal**. `canReorder(request)` can veto the operation. `reorderedIndices(count, indices, beforeIndex)` validates the request and returns a stable index permutation. The host can call the structural APIs to apply ordering with state reconciliation and history, or handle external mutations itself. Omit `onReorder` to disable reordering entirely.
 
 
 `editorOptions: { pinned: true, showLabel: true, guardNavigation: true }` keeps the active editor at its initial screen position while either the grid or page scrolls. It remains inside the browser viewport, with a label showing column title, row number and stable row ID. In pinned mode, blur alone does not save the draft; Enter, Escape, Apply/Cancel or selecting another cell use the existing commit/cancel pipeline. Pinned layout is opt-in; the default editor follows its cell. `showLabel: false` hides the label.
@@ -401,8 +401,15 @@ Custom renderer clipping includes the full cell rectangle. Grid boundary strokes
 
 Providing `onRowChange(request)` enables Insert row above/below, Insert rows… (1–1000) and Delete selected rows in the cell/index context menu. Requests are immutable: `{ kind: 'insert', beforeIndex, count }` or `{ kind: 'delete', indices }`. `canRowChange(request)` controls availability and is checked again before dispatch. Right-clicking a selected row preserves all selected whole-row ranges; deletion includes their unique indices in ascending order. An empty grid supports inserting its first row from the viewport menu.
 
-With `onReorder`, **Move rows to…** and **Move columns to…** accept a one-based final position for the first moved item; the selected items form a stable block. The existing `canReorder` veto applies. Host callbacks own structural mutations, row IDs, persistence, history and coordinate-state reconciliation. Structural row changes are not added to cell-edit history automatically.
+With `onReorder`, **Move rows to…** and **Move columns to…** accept a one-based final position for the first moved item; the selected items form a stable block. The existing `canReorder` veto applies. Host callbacks supply row IDs/defaults and choose structural APIs or external mutations. Calling the core structural APIs preserves state and adds shared undo/redo; external mutations need host reconciliation.
 
 Selection is a translucent Canvas overlay; it never changes cell formatting. Adjacent selected whole-row ranges share one visual outer boundary, while the underlying ranges and clipboard rules remain unchanged. `selectionStyle.rangeBorderWidth` (1–4px, default 1) and `rangeTintOpacity` (0–1, default 0.06) customize the appearance. Whole-axis selections omit the extra active-cell outline.
 
 Selected row/column dragging shows a theme-colored insertion line across the viewport and a compact count/destination preview. Denied destinations hide the line and show a disabled message; drop permissions are checked again before dispatch. Ending or cancelling a native drag clears the preview.
+
+
+## Runtime structure
+
+Canvas exposes insertRows/deleteRows/moveRows/insertColumns/deleteColumns/moveColumns and current rowCount/columns getters, matching the [core structural contract](../core/README.md#structural-commands-and-layout-history). They retain the mount and mapped domain state, reject calls while editing, update header/index/accessibility geometry and share undo/redo. Grouped columns must stay contiguous; leaves may reorder inside groups, and deleted groups are pruned. Undo restores their structure.
+
+Keep onRowChange/onReorder for menu/drag intents and call these APIs from the callbacks to create core history. External callback mutations remain host-owned. canChangeStructure applies host/admin policy to API and replay. New row IDs/defaults and column definitions remain host choices. Initial columnWidths configures sizes by key without history commands. Explicit resize/freeze are undoable; automatic row measurement is excluded.

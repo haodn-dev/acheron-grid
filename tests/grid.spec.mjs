@@ -1170,7 +1170,11 @@ test('right-click freeze/unfreeze changes pane geometry without remounting or cl
   expect(await page.evaluate(() => window.grid.getSelection())).toMatchObject({ rowIndex: 1, columnIndex: 1 });
   await viewport.press('F2'); const editor = page.getByRole('textbox'); await expect(editor).toHaveValue('Edited');
   expect(await page.evaluate(() => { try { window.grid.setFrozen(0, 0); } catch (e) { return e.message; } })).toMatch(/Finish editing/);
-  await editor.press('Escape'); await viewport.press('Control+z'); expect(await page.evaluate(() => window.source.getValue(1, 'name'))).toBe('Name 1');
+  await editor.press('Escape'); await viewport.press('Control+z');
+  expect(await page.evaluate(()=>[window.grid.frozenRows,window.grid.frozenColumns])).toEqual([0,0]);
+  expect(await page.evaluate(()=>window.source.getValue(1,'name'))).toBe('Edited');
+  await viewport.press('Control+z');expect(await page.evaluate(()=>window.source.getValue(1,'name'))).toBe('Name 1');
+  await page.evaluate(()=>{window.grid.redo();window.grid.redo();});
   await viewport.click({ position: { x: 180, y: 48 }, button: 'right' }); await page.getByRole('menuitem', { name: 'Unfreeze rows', exact: true }).click();
   expect(await page.evaluate(() => [window.grid.frozenRows, window.grid.frozenColumns])).toEqual([0, 2]);
   await viewport.click({ position: { x: 180, y: 48 }, button: 'right' });
@@ -1719,10 +1723,10 @@ test('runtime themes repaint Canvas and controls without resetting sizes, locks,
   await expect(page.getByRole('button', { name: 'Select row 1', exact: true })).toHaveAttribute('aria-pressed', 'true');
   const result = await page.evaluate(() => {
     let rejected = false; try { window.grid.setTheme({ background: 'var(--host-color)' }); } catch { rejected = true; }
-    const locked = window.grid.isLocked({ scope: 'row', rowIndex: 0 }); window.grid.setLocked({ scope: 'row', rowIndex: 0 }, false); window.grid.undo();
+    const locked = window.grid.isLocked({ scope: 'row', rowIndex: 0 }); window.grid.setLocked({ scope: 'row', rowIndex: 0 }, false); window.grid.undo(); window.grid.undo(); window.grid.redo(); window.grid.redo();
     return { rejected, locked, value: window.source.getValue(0, 'name'), theme: document.querySelector('[role=grid]').parentElement.style.getPropertyValue('--acheron-background') };
   });
-  expect(result).toEqual({ rejected: true, locked: true, value: 'Ada', theme: '#111827' });
+  expect(result).toEqual({ rejected: true, locked: true, value: 'Grace', theme: '#111827' });
   await page.getByRole('grid').press('F2'); await expect(page.getByRole('textbox')).toHaveCSS('width', '240px'); await expect(page.getByRole('textbox')).toHaveCSS('color', 'rgb(229, 231, 235)');
 });
 
@@ -1942,4 +1946,34 @@ test('reorder preview shows insertion edge and clears after cancellation or deni
   await target.dispatchEvent('drop',{dataTransfer:transfer,clientX:bounds.x+5,clientY:bounds.y+2});
   expect(await page.evaluate(()=>window.requests.length)).toBe(0);
   await expect(page.locator('[data-grid-reorder-badge]')).toBeHidden();
+});
+
+
+test('structural core APIs update one Canvas mount, grouped headers, editor and history',async({page})=>{
+  await page.goto('/');
+  await page.evaluate(async()=>{
+    const {createGrid}=await import('/canvas/index.js'),{LocalDataSource}=await import('/core/index.js');
+    window.source=new LocalDataSource([{id:1,a:'One',b:'B',c:'C'},{id:2,a:'Two',b:'B',c:'C'}],r=>r.id);
+    window.grid=createGrid({container:document.querySelector('#grid'),dataSource:window.source,columns:['a','b','c'].map(key=>({key,title:key,editable:true})),headerGroups:[{title:'Group',children:['b','c']}],accessibility:'viewport'});
+    window.originalCanvas=document.querySelector('canvas');
+    window.grid.selectRow(1);window.grid.setRowHeight(1,64);window.grid.format([{scope:'cell',rowIndex:1,columnIndex:0}],{background:'#abc'});
+    window.grid.insertRows(0,[{id:3,values:{a:'New',b:'B',c:'C'}}]);
+  });
+  await expect(page.getByRole('grid')).toHaveAttribute('aria-rowcount','5');
+  await expect(page.getByRole('gridcell',{name:'a: Two',exact:true}).locator('..')).toHaveAttribute('aria-rowindex','5');
+  expect(await page.evaluate(()=>document.querySelector('canvas')===window.originalCanvas)).toBe(true);
+  await page.evaluate(()=>{window.grid.moveRows([2],0);window.grid.moveColumns([2],1);});
+  await expect(page.getByRole('columnheader',{name:'Group',exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>window.grid.columns.map(c=>c.key))).toEqual(['a','c','b']);
+  expect(await page.evaluate(()=>window.grid.getSelection().rowId)).toBe(2);
+  await page.evaluate(()=>{window.grid.deleteColumns([1,2]);});
+  await expect(page.getByRole('grid')).toHaveAttribute('aria-colcount','1');
+  await expect(page.getByRole('grid')).toHaveAttribute('aria-rowcount','4');
+  await page.evaluate(()=>window.grid.undo());
+  await expect(page.getByRole('grid')).toHaveAttribute('aria-rowcount','5');
+  await page.evaluate(()=>{window.grid.undo();window.grid.undo();window.grid.undo();});
+  await expect(page.getByRole('grid')).toHaveAttribute('aria-rowcount','4');
+  expect(await page.evaluate(()=>window.grid.getFormat(1,0).background)).toBe('#abc');
+  await page.evaluate(()=>{window.grid.insertColumns(1,[{key:'new',title:'New',editable:true}]);window.grid.updateCells([{rowIndex:0,columnKey:'new',value:'Added'}]);});
+  await expect(page.getByRole('columnheader',{name:'New',exact:true})).toBeVisible();
 });

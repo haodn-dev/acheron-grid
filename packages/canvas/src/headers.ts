@@ -37,3 +37,17 @@ export function headerLayout(columns: readonly Column[], groups: readonly Header
   columns.forEach((column, index) => { if (!used.has(index)) cells.push({ title: column.title, start: index, end: index + 1, level: 0, rowSpan: levels, leaf: true }); });
   return { levels, cells: cells.map(cell => cell.leaf ? { ...cell, rowSpan: levels - cell.level } : cell) };
 }
+
+
+export function reorderedHeaderGroups(columns: readonly Column[], groups: readonly HeaderGroup[] = []): HeaderGroup[] {
+  const keys=columns.map(column=>column.key);
+  const first=(item:string|HeaderGroup):number=>typeof item==='string' ? keys.indexOf(item) : Math.min(...item.children.map(first));
+  const sort=(group:HeaderGroup):HeaderGroup=>({title:group.title,children:group.children.map(item=>typeof item==='string' ? item : sort(item)).sort((a,b)=>first(a)-first(b))});
+  const prune=(group:HeaderGroup):HeaderGroup|null=>{
+    const children=group.children.flatMap<string|HeaderGroup>(item=>{if(typeof item==='string')return keys.includes(item)?[item]:[];const nested=prune(item);return nested?[nested]:[];});
+    return children.length ? {title:group.title,children}:null;
+  };
+  const result=groups.flatMap(group=>{const kept=prune(group);return kept?[sort(kept)]:[];}).sort((a,b)=>first(a)-first(b));
+  headerLayout(columns,result);
+  return result;
+}

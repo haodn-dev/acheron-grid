@@ -91,9 +91,9 @@ See [Contributing](CONTRIBUTING.md) for changes and bug reports.
 
 ## Limits and planned work
 
-Data sources and validation are synchronous. Row count and row identities/order remain stable for a mounted engine; changing them requires a new view/mount. Local values, user state and history are in memory. Persistence and backend authorization belong to the application.
+Data sources and validation are synchronous. Rows and columns can change through structural commands with state remapping and undo/redo; external source structure changes require a new view/mount. Local values, user state and history are in memory. Persistence and backend authorization belong to the application.
 
-Native browser scroll dimensions impose practical limits. Remote/async data, React/Vue adapters, multi-column sorting, layout undo and complete assistive-technology coverage are not implemented. Only Chromium is currently covered by browser tests.
+Native browser scroll dimensions impose practical limits. Remote/async data, React/Vue adapters, multi-column sorting and complete assistive-technology coverage are not implemented. Only Chromium is currently covered by browser tests.
 
 Formula evaluation, charts, pivot tables, multi-sheet workbooks, Excel calculation compatibility and real-time collaboration are outside the current scope.
 

@@ -1,8 +1,17 @@
 export type RowId = string | number;
 export interface CellUpdate { rowIndex: number; columnKey: string; value: unknown; }
 
+export interface DataRow { readonly id: RowId; readonly values: Readonly<Record<string, unknown>>; }
+export interface RowSplice { readonly index: number; readonly deleteCount: number; readonly rows: readonly DataRow[]; }
+
 export interface DataSource {
   getRowCount(): number;
+  /** Full shallow row snapshot, including fields outside the visible columns. */
+  getRow?(index: number): DataRow;
+  /** Initialize missing fields atomically; existing hidden column values are retained. */
+  addColumns?(keys: readonly string[]): void;
+  /** Apply sequential splices atomically, preserving unique row IDs. */
+  spliceRows?(splices: readonly RowSplice[]): void;
   getRowId(index: number): RowId;
   getValue(index: number, columnKey: string): unknown;
   setValue?(index: number, columnKey: string, value: unknown): void;
@@ -12,8 +21,9 @@ export interface DataSource {
 
 /** A shallow snapshot of local rows. Nested values remain caller-owned. */
 export class LocalDataSource<T extends Record<string, unknown>> implements DataSource {
-  private readonly rows: Readonly<T>[];
-  private readonly ids: RowId[];
+  private rows: Readonly<T>[];
+  private ids: RowId[];
+  private readonly addedColumns=new Set<string>();
 
   constructor(rows: readonly T[], getRowId: (row: T, index: number) => RowId) {
     this.rows = rows.map(row => Object.freeze({ ...row }));
@@ -50,10 +60,36 @@ export class LocalDataSource<T extends Record<string, unknown>> implements DataS
     const next = new Map<number, Readonly<T>>();
     for (const { rowIndex, columnKey, value } of updates) {
       this.assertIndex(rowIndex);
-      if (!Object.hasOwn(this.rows[rowIndex]!, columnKey)) throw new Error(`Unknown column: ${columnKey}`);
+      if (!Object.hasOwn(this.rows[rowIndex]!, columnKey) && !this.addedColumns.has(columnKey)) throw new Error(`Unknown column: ${columnKey}`);
       next.set(rowIndex, Object.freeze({ ...(next.get(rowIndex) ?? this.rows[rowIndex]!), [columnKey]: value }));
     }
     for (const [index, row] of next) this.rows[index] = row;
+  }
+
+  addColumns(keys: readonly string[]): void {
+    if(keys.some(key=>typeof key!=='string'||!key||['__proto__','constructor','prototype'].includes(key)))throw new TypeError('Invalid added column key.');
+    for(const key of keys)this.addedColumns.add(key);
+  }
+
+  getRow(index: number): DataRow {
+    this.assertIndex(index);
+    return Object.freeze({ id: this.ids[index]!, values: this.rows[index]! });
+  }
+
+  spliceRows(splices: readonly RowSplice[]): void {
+    let rows = this.rows.slice(), ids = this.ids.slice();
+    for (const splice of splices) {
+      if (!Number.isSafeInteger(splice.index) || splice.index < 0 || splice.index > rows.length || !Number.isSafeInteger(splice.deleteCount) || splice.deleteCount < 0 || splice.deleteCount > rows.length - splice.index || !Array.isArray(splice.rows)) throw new RangeError('Invalid row splice.');
+      const added = splice.rows.map(row => {
+        if (!row || (typeof row.id !== 'string' && typeof row.id !== 'number') || typeof row.id === 'number' && !Number.isFinite(row.id) || !row.values || typeof row.values !== 'object' || Array.isArray(row.values)) throw new TypeError('Invalid inserted row.');
+        return Object.freeze({ ...row.values }) as Readonly<T>;
+      });
+      // Slice/concat avoids argument limits when inserting large batches.
+      rows=rows.slice(0,splice.index).concat(added,rows.slice(splice.index+splice.deleteCount));
+      ids=ids.slice(0,splice.index).concat(splice.rows.map(row=>row.id),ids.slice(splice.index+splice.deleteCount));
+    }
+    if (new Set(ids).size !== ids.length) throw new Error('Duplicate row ID.');
+    this.rows=rows; this.ids=ids;
   }
 
   private assertIndex(index: number): void {

@@ -1,11 +1,12 @@
 import { choicePanel, positionChoicePanel } from './choices.js';
 import type { ChoiceEditorOptions } from './choices.js';
+import { reorderedIndices } from './reorder.js';
 import type { ReorderRequest, RowChangeRequest } from './reorder.js';
-import { headerLayout } from './headers.js';
+import { headerLayout, reorderedHeaderGroups } from './headers.js';
 import type { HeaderGroup } from './headers.js';
 import { detectLinks } from './links.js';
 import { createGridEngine } from '@acheron-grid/core';
-import type { CellUpdate, DataSource, Column, CellSelection, SelectionRange, CellPermission, CellLockTarget, CellFormatTarget, CellFormat, CellFormatPatch, LocalViewOptions, GridEngineOptions, ViewportRegion } from '@acheron-grid/core';
+import type { CellUpdate, DataRow, DataSource, Column, CellSelection, SelectionRange, CellPermission, CellLockTarget, CellFormatTarget, CellFormat, CellFormatPatch, LocalViewOptions, GridEngineOptions, ViewportRegion } from '@acheron-grid/core';
 
 let editorId = 0;
 let gridId = 0;
@@ -43,7 +44,7 @@ export interface GridTheme {
   linkColor: string;
 }
 export type ColumnEditor = { readonly type: 'select' | 'multiselect'; readonly values: readonly string[] } | { readonly type: 'checkbox' };
-export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 'resolveCellPermission' | 'onEvent' | 'allowLockChanges' | 'frozenRows' | 'frozenColumns'> {
+export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 'resolveCellPermission' | 'onEvent' | 'allowLockChanges' | 'frozenRows' | 'frozenColumns' | 'canChangeStructure' | 'columnWidths'> {
   view?: LocalViewOptions;
   onViewChange?: (view: LocalViewOptions) => void;
   theme?: Partial<GridTheme>;
@@ -79,6 +80,14 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
   indexColumn?: boolean;
 }
 export interface Grid {
+  readonly rowCount: number;
+  readonly columns: readonly Column[];
+  insertColumns(index:number,columns:readonly Column[]):void;
+  deleteColumns(indices:readonly number[]):void;
+  insertRows(index: number, rows: readonly DataRow[]): void;
+  deleteRows(indices: readonly number[]): void;
+  moveRows(indices: readonly number[], beforeIndex: number): void;
+  moveColumns(indices: readonly number[], beforeIndex: number): void;
   render(): void;
   setTheme(theme: Partial<GridTheme>): void;
   openSearch(): void;
@@ -143,17 +152,24 @@ export function createGrid(options: GridOptions): Grid {
   }
   validateTheme(theme);
   const measuredRows = new Set<number>();
-  const manualRows = new Set<number>();
   let measuredScrollLeft = 0;
   const indicatorPolicy = Object.freeze({ ...options.permissions });
-  const headers = headerLayout(options.columns, options.headerGroups);
+  let headers = headerLayout(options.columns, options.headerGroups);
   const headerRowHeight = options.headerHeight ?? 36;
-  const headerHeight = headerRowHeight * headers.levels;
-  const leafHeaders = headers.cells.filter(cell => cell.leaf).sort((a, b) => a.start - b.start);
+  let headerHeight = headerRowHeight * headers.levels;
+  let leafHeaders = headers.cells.filter(cell => cell.leaf).sort((a, b) => a.start - b.start);
   if (!Number.isFinite(headerHeight) || headerHeight <= 0) throw new RangeError('Grid sizes must be positive finite numbers.');
   const engine = createGridEngine({ columns: options.columns, dataSource,
     ...(options.rowHeight === undefined ? {} : { rowHeight: options.rowHeight }),
+    ...(options.columnWidths === undefined ? {} : { columnWidths:options.columnWidths }),
     ...(options.columnWidth === undefined ? {} : { columnWidth: options.columnWidth }),
+    canChangeStructure: request => {
+      if(options.canChangeStructure?.(request)===false)return false;
+      if(request.axis==='column') {
+        try { const next=request.columns ?? (request.order ?? reorderedIndices(engine.columns.length,request.indices,request.beforeIndex)).map(i=>engine.columns[i]!); reorderedHeaderGroups(next,options.headerGroups); } catch { return false; }
+      }
+      return true;
+    },
     ...(options.permissions === undefined ? {} : { permissions: options.permissions }),
     ...(options.resolveCellPermission === undefined ? {} : { resolveCellPermission: options.resolveCellPermission }),
     ...(options.onEvent === undefined ? {} : { onEvent: options.onEvent }),
@@ -162,14 +178,40 @@ export function createGrid(options: GridOptions): Grid {
     ...(options.frozenColumns === undefined ? {} : { frozenColumns: options.frozenColumns }),
     onInvalidate(change) {
     if (change.type === 'cells') { if (options.autoRowHeight) { change.cells.forEach(cell => measuredRows.delete(cell.rowIndex)); fullDraw = true; } invalidate(change.cells); if (!searchBar.hidden) refreshSearch(); }
-    else if (change.type === 'layout') {
+    else if (change.type === 'layout' || change.type === 'structure') {
+      if (change.type === 'structure') {
+        if(axisAnchor) {
+          const map=axisAnchor.axis==='row'?change.rowMap:change.columnMap,next=map[axisAnchor.index];
+          axisAnchor=next!==undefined&&next>=0 ? {...axisAnchor,index:next}:null;
+        }
+        onPointerEnd();
+        columns=engine.columns; rowCount=engine.rowCount;
+        indexWidth=options.indexColumn===false ? 0:Math.max(48,String(rowCount).length*8+16);
+        scroller.style.left=headerSurface.style.left=canvas.style.left=indexGutter.style.width=String(indexWidth)+'px';
+        headers=headerLayout(columns,reorderedHeaderGroups(columns,options.headerGroups));
+        headerHeight=headerRowHeight*headers.levels;
+        headerSurface.style.height=scroller.style.top=`${headerHeight}px`;
+        if(viewportAccessibility){headerSurface.setAttribute('role',headers.levels>1?'rowgroup':'row');if(headers.levels===1)headerSurface.setAttribute('aria-rowindex','1');else headerSurface.removeAttribute('aria-rowindex');}
+        leafHeaders=headers.cells.filter(cell=>cell.leaf).sort((a,b)=>a.start-b.start);
+        if(headerSurface.contains(doc.activeElement)||indexGutter.contains(doc.activeElement))scroller.focus({preventScroll:true});
+        headerSurface.replaceChildren();indexGutter.replaceChildren();clearReorder();
+        measuredRows.clear(); accessibleCells.clear(); accessibleBody.replaceChildren();
+        scroller.setAttribute('aria-rowcount',String(rowCount+(viewportAccessibility ? headers.levels:0)));
+        scroller.setAttribute('aria-colcount',String(columns.length));
+        if(!searchBar.hidden)refreshSearch();
+        syncAccessibleCell();
+        options.onSelectionChange?.(engine.getSelection());
+        options.onSelectionRangesChange?.(engine.getSelectionRanges());
+        options.onSelectionRangeChange?.(engine.getSelectionRange());
+      }
       spacer.style.width = String(columnAxis.position(columns.length)) + 'px';
       spacer.style.height = String(rowAxis.position(rowCount)) + 'px';
       render();
     } else render();
   } });
-  const { columns, rowCount, rows: rowAxis, columnsLayout: columnAxis } = engine;
-  const indexWidth = options.indexColumn === false ? 0 : Math.max(48, String(rowCount).length * 8 + 16);
+  let columns=engine.columns, rowCount=engine.rowCount;
+  const { rows:rowAxis, columnsLayout:columnAxis }=engine;
+  let indexWidth = options.indexColumn === false ? 0 : Math.max(48, String(rowCount).length * 8 + 16);
   if (options.imageColumns !== undefined && !Array.isArray(options.imageColumns)) throw new TypeError('Image columns must be column keys.');
   const imageColumns = new Set(options.imageColumns ?? []);
   for (const key of imageColumns) if (!columns.some(column => column.key === key)) throw new TypeError('Unknown image column.');
@@ -565,7 +607,7 @@ export function createGrid(options: GridOptions): Grid {
   function resizeAxis(axis: typeof rowAxis, index: number, size: number): void {
     if (destroyed) throw new Error('Grid is destroyed.');
     if (editor) throw new Error('Finish editing before resizing cells.');
-    if (axis === rowAxis) { engine.setRowHeight(index, size); manualRows.add(index); }
+    if (axis === rowAxis) { engine.setRowHeight(index, size); }
     else { engine.setColumnWidth(index, size); measuredRows.clear(); }
   }
 
@@ -1659,9 +1701,9 @@ export function createGrid(options: GridOptions): Grid {
     frame = undefined;
     if (destroyed) return;
     if (options.autoRowHeight && !editor) for (const row of visibleIndices('row')) {
-      if (manualRows.has(row) || measuredRows.has(row)) continue;
+      if (engine.isRowHeightManual(row) || measuredRows.has(row)) continue;
       const height = measureRowHeight(row); measuredRows.add(row);
-      if (height !== rowAxis.size(row)) engine.setRowHeight(row, height);
+      if (height !== rowAxis.size(row)) engine.measureRowHeight(row, height);
     }
     const view = viewport();
     if (!fullDraw) {
@@ -2067,7 +2109,18 @@ export function createGrid(options: GridOptions): Grid {
     if (cell && columnEditors.get(columns[cell.col]!.key)?.type === 'checkbox') return;
     if (event.target !== editor && cell && selection?.rowIndex === cell.row && selection.columnIndex === cell.col && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) beginEdit();
   }
+  function structureAction(run:()=>void):void {
+    if(editor||destroyed)throw new Error('Save or cancel the editor before changing structure.');
+    run();
+  }
   return {
+    get rowCount() { return rowCount; }, get columns() { return columns; },
+    insertColumns:(index:number,added:readonly Column[])=>structureAction(()=>engine.insertColumns(index,added)),
+    deleteColumns:(indices:readonly number[])=>structureAction(()=>engine.deleteColumns(indices)),
+    insertRows: (index:number,rows:readonly DataRow[])=>structureAction(()=>engine.insertRows(index,rows)),
+    deleteRows: (indices:readonly number[])=>structureAction(()=>engine.deleteRows(indices)),
+    moveRows: (indices:readonly number[],beforeIndex:number)=>structureAction(()=>engine.moveRows(indices,beforeIndex)),
+    moveColumns: (indices:readonly number[],beforeIndex:number)=>structureAction(()=>engine.moveColumns(indices,beforeIndex)),
     setTheme(patch) {
       if (destroyed) throw new Error('Grid is destroyed.');
       const next = Object.freeze({ ...theme, ...patch }); validateTheme(next); theme = next; measuredRows.clear();
