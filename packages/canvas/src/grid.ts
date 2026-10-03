@@ -33,6 +33,8 @@ export interface GridTheme {
   headerTextColor: string;
   gridLineColor: string;
   selectionColor: string;
+  freezeColor: string;
+  scrollbarColor: string;
   font: string;
   headerFont: string;
   linkColor: string;
@@ -114,7 +116,7 @@ export function createGrid(options: GridOptions): Grid {
   const win = doc.defaultView!;
   let theme = Object.freeze({ background: '#ffffff', textColor: '#0f172a', headerBackground: '#edf2f7',
     headerTextColor: '#334155', gridLineColor: '#e2e8f0', selectionColor: '#2563eb',
-    linkColor: '#2563eb', font: '400 13px system-ui, sans-serif', headerFont: '600 13px system-ui, sans-serif', ...options.theme });
+    freezeColor: '#94a3b8', scrollbarColor: '#a8b6c8', linkColor: '#2563eb', font: '400 13px system-ui, sans-serif', headerFont: '600 13px system-ui, sans-serif', ...options.theme });
   function validateTheme(candidate: GridTheme): void {
     for (const [key, value] of Object.entries(candidate)) {
       const property = key === 'font' || key === 'headerFont' ? 'font' : 'color';
@@ -178,6 +180,11 @@ export function createGrid(options: GridOptions): Grid {
   dialogStyles.textContent = `
     dialog[data-grid-dialog] { position:fixed;inset:0;margin:auto;width:min(420px,calc(100% - 32px));max-width:none;max-height:calc(100% - 32px);overflow:auto;box-sizing:border-box;padding:24px;border:1px solid var(--acheron-grid-line-color);border-radius:12px;box-shadow:0 16px 48px #0f172a33;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);line-height:1.5 }
     dialog[data-grid-dialog][open], dialog[data-grid-dialog] form { display:flex;flex-direction:column;gap:14px }
+    [data-grid-viewport], dialog[data-grid-dialog] { scrollbar-width:thin;scrollbar-color:var(--acheron-scrollbar-color) var(--acheron-header-background) }
+    [data-grid-viewport]::-webkit-scrollbar, dialog[data-grid-dialog]::-webkit-scrollbar { width:8px;height:8px }
+    [data-grid-viewport]::-webkit-scrollbar-thumb, dialog[data-grid-dialog]::-webkit-scrollbar-thumb { background:var(--acheron-scrollbar-color);border:2px solid var(--acheron-header-background);border-radius:8px }
+    [data-grid-viewport]::-webkit-scrollbar-track, [data-grid-viewport]::-webkit-scrollbar-corner { background:var(--acheron-header-background) }
+    [data-grid-viewport]::-webkit-scrollbar-button { display:none }
     dialog[data-grid-dialog]::backdrop { background:#0f172a55 }
     dialog[data-grid-dialog] p { margin:0 }
     dialog[data-grid-dialog] > p:first-child { font-size:16px;font-weight:600 }
@@ -201,6 +208,7 @@ export function createGrid(options: GridOptions): Grid {
   const scroller = doc.createElement('div');
   const viewportLabel = dataSource.setValue && columns.some(column => column.editable) ? 'Data grid viewport' : 'Read-only data grid viewport';
   scroller.style.cssText = `position:absolute;inset:${headerHeight}px 0 0 ${indexWidth}px;overflow:auto;overscroll-behavior:contain`;
+  scroller.dataset.gridViewport = '';
   scroller.tabIndex = 0;
   scroller.setAttribute('aria-label', viewportLabel);
   scroller.setAttribute('aria-keyshortcuts', 'Shift+F8 Control+f Meta+f Control+a Meta+a Alt+Enter');
@@ -294,7 +302,7 @@ export function createGrid(options: GridOptions): Grid {
   const freezeVertical = doc.createElement('div');
   const freezeHorizontal = doc.createElement('div');
   for (const line of [freezeVertical, freezeHorizontal]) {
-    line.setAttribute('aria-hidden', 'true'); line.style.cssText = 'position:absolute;pointer-events:none;z-index:2;background:var(--acheron-selection-color);opacity:.7'; root.append(line);
+    line.setAttribute('aria-hidden', 'true'); line.style.cssText = 'position:absolute;pointer-events:none;z-index:2;background:var(--acheron-freeze-color)'; root.append(line);
   }
   freezeVertical.dataset.gridFreezeLine = 'column'; freezeHorizontal.dataset.gridFreezeLine = 'row';
   const actionError = doc.createElement('div');

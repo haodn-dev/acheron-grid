@@ -372,3 +372,6 @@ Groups must contain unique, existing leaf keys in the same contiguous order as `
 `autoRowHeight` measures visible rows against visible columns, after edits, column resizing, horizontal scrolling and font/theme changes. It uses sparse row sizes, caps height at 1000px and preserves explicit `setRowHeight`/drag/auto-fit sizes. It does not scan the whole dataset or offscreen columns. Custom renderers can supply `measureCellHeight(value, columnKey, width)`: return a positive finite height, or `undefined` for built-in text measurement. This callback must be synchronous and side-effect free. With automatic height enabled, font changes can resize rows that were not manually sized.
 
 Select editor lists may include `''` as an optional empty value; all values remain unique strings and the list must be nonempty. Parsers still validate commits. A desktop corner handle adjusts the selected range through the same pointer/permission pipeline as touch handles; it does not autofill values.
+
+
+Scrollbars use native thin styling, with `scrollbarColor` for the thumb and `headerBackground` for the track. Frozen boundaries use the independent `freezeColor`, keeping them distinct from selection. Both colors support `setTheme`; scrollbar thickness follows browser/platform support with an 8px WebKit fallback.
