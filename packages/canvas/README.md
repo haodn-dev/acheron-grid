@@ -395,3 +395,14 @@ Providing `onReorder(request)` enables dragging selected whole rows/columns dire
 While an editor is open, `beforeunload` requests the browser's native leave/close confirmation. The listener is removed on commit, cancel or destroy. Set `guardNavigation: false` to disable it. Browsers control whether the prompt appears and its text; forced process termination cannot be blocked. Choice search fields use a neutral border without an accent focus ring.
 
 Custom renderer clipping includes the full cell rectangle. Grid boundary strokes paint after the renderer and selection tint, so full-cell semantic colors do not leave an inset gap. Returning false or throwing clears custom paint before drawing the default fallback.
+
+
+### Row actions and selection appearance
+
+Providing `onRowChange(request)` enables Insert row above/below, Insert rows… (1–1000) and Delete selected rows in the cell/index context menu. Requests are immutable: `{ kind: 'insert', beforeIndex, count }` or `{ kind: 'delete', indices }`. `canRowChange(request)` controls availability and is checked again before dispatch. Right-clicking a selected row preserves all selected whole-row ranges; deletion includes their unique indices in ascending order. An empty grid supports inserting its first row from the viewport menu.
+
+With `onReorder`, **Move rows to…** and **Move columns to…** accept a one-based final position for the first moved item; the selected items form a stable block. The existing `canReorder` veto applies. Host callbacks own structural mutations, row IDs, persistence, history and coordinate-state reconciliation. Structural row changes are not added to cell-edit history automatically.
+
+Selection is a translucent Canvas overlay; it never changes cell formatting. Adjacent selected whole-row ranges share one visual outer boundary, while the underlying ranges and clipboard rules remain unchanged. `selectionStyle.rangeBorderWidth` (1–4px, default 1) and `rangeTintOpacity` (0–1, default 0.06) customize the appearance. Whole-axis selections omit the extra active-cell outline.
+
+Selected row/column dragging shows a theme-colored insertion line across the viewport and a compact count/destination preview. Denied destinations hide the line and show a disabled message; drop permissions are checked again before dispatch. Ending or cancelling a native drag clears the preview.

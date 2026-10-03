@@ -1,6 +1,6 @@
 import { choicePanel, positionChoicePanel } from './choices.js';
 import type { ChoiceEditorOptions } from './choices.js';
-import type { ReorderRequest } from './reorder.js';
+import type { ReorderRequest, RowChangeRequest } from './reorder.js';
 import { headerLayout } from './headers.js';
 import type { HeaderGroup } from './headers.js';
 import { detectLinks } from './links.js';
@@ -59,7 +59,9 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
   renderCell?: CellRenderer;
   createEditor?: CellEditorFactory;
   choiceEditor?: ChoiceEditorOptions | false;
-  selectionStyle?: { readonly activeBorderWidth?: number; readonly headerTintOpacity?: number };
+  selectionStyle?: { readonly activeBorderWidth?: number; readonly headerTintOpacity?: number; readonly rangeBorderWidth?: number; readonly rangeTintOpacity?: number };
+  onRowChange?: (request: Readonly<RowChangeRequest>) => void;
+  canRowChange?: (request: Readonly<RowChangeRequest>) => boolean;
   onReorder?: (request: Readonly<ReorderRequest>) => void;
   canReorder?: (request: Readonly<ReorderRequest>) => boolean;
   onSelectionChange?: (selection: CellSelection | null) => void;
@@ -121,6 +123,9 @@ const stateIconSvg = {
 export function createGrid(options: GridOptions): Grid {
   const { container, dataSource } = options;
   const activeBorderWidth = options.selectionStyle?.activeBorderWidth ?? 1;
+  const rangeBorderWidth = options.selectionStyle?.rangeBorderWidth ?? 1;
+  const rangeTintOpacity = options.selectionStyle?.rangeTintOpacity ?? .06;
+  if (!Number.isFinite(rangeBorderWidth) || rangeBorderWidth < 1 || rangeBorderWidth > 4 || !Number.isFinite(rangeTintOpacity) || rangeTintOpacity < 0 || rangeTintOpacity > 1) throw new RangeError('Invalid range selection style.');
   const headerTintOpacity = options.selectionStyle?.headerTintOpacity ?? .12;
   if (!Number.isFinite(activeBorderWidth) || activeBorderWidth < 1 || activeBorderWidth > 4 || !Number.isFinite(headerTintOpacity) || headerTintOpacity < 0 || headerTintOpacity > 1) throw new RangeError('Invalid selection style.');
   const doc = container.ownerDocument;
@@ -447,7 +452,7 @@ export function createGrid(options: GridOptions): Grid {
     selectionStatus.textContent = `${selection ? `Row ${selection.rowIndex + 1}, ${columns[selection.columnIndex]!.title}. ${getSelectionRanges().length} selected range(s).` : 'Selection cleared.'}${addNextSelection ? ' Next click or navigation adds a range.' : ''}`;
   }
 
-  function openSizeDialog(label: string, current: number, apply: (size: number) => void): void {
+  function openSizeDialog(label: string, current: number, apply: (size: number) => void, units: string | null = 'px'): void {
     const dialog = doc.createElement('dialog');
     activeDialog?.remove();
     activeDialog = dialog;
@@ -455,9 +460,9 @@ export function createGrid(options: GridOptions): Grid {
     dialog.dataset.gridDialog = '';
     const form = doc.createElement('form');
     const fieldLabel = doc.createElement('label');
-    fieldLabel.textContent = `${label} (px) `;
+    fieldLabel.textContent = `${label}${units ? ` (${units})` : ''} `;
     const input = doc.createElement('input');
-    input.type = 'number'; input.min = '1'; input.step = 'any'; input.required = true;
+    input.type = 'number'; input.min = '1'; input.step = units ? 'any' : '1'; input.required = true;
     input.value = String(current);
 
     fieldLabel.append(input);
@@ -640,12 +645,24 @@ export function createGrid(options: GridOptions): Grid {
     if (focus && !destroyed) scroller.focus({ preventScroll: true });
   }
 
+  function selectedAxisIndices(axis: 'row' | 'column', index: number): number[] {
+    const ranges = getSelectionRanges().filter(range => axis === 'row' ? range.startColumn === 0 && range.endColumn === columns.length - 1 : range.startRow === 0 && range.endRow === rowCount - 1);
+    if (!ranges.some(range => axis === 'row' ? index >= range.startRow && index <= range.endRow : index >= range.startColumn && index <= range.endColumn)) return [index];
+    const indices = new Set<number>();
+    for (const range of ranges) for (let i = axis === 'row' ? range.startRow : range.startColumn; i <= (axis === 'row' ? range.endRow : range.endColumn); i++) indices.add(i);
+    return [...indices].sort((a, b) => a - b);
+  }
+  function changeRows(request: Readonly<RowChangeRequest>): void {
+    if (!finishEdit(true)) return;
+    if (options.canRowChange?.(request) === false) throw new Error('Changing rows is disabled.');
+    options.onRowChange?.(request);
+  }
   function openMenu(row: number, col: number, x: number, y: number, header = false): void {
     closeMenu();
     const range = getSelectionRange();
-    if (rowCount && (!range || row < range.startRow || row > range.endRow || col < range.startColumn || col > range.endColumn)) select(row, col, false, false);
+    if (rowCount && !getSelectionRanges().some(range => row >= range.startRow && row <= range.endRow && col >= range.startColumn && col <= range.endColumn)) select(row, col, false, false);
     if (destroyed || (rowCount > 0 && !engine.getCellPermission(row, col).selectable)) return;
-    const selection = engine.getSelection() ?? (header ? { rowIndex: 0, columnIndex: col, columnKey: columns[col]!.key, rowId: 0 } : null);
+    const selection = engine.getSelection() ?? (header || !rowCount && options.onRowChange ? { rowIndex: 0, columnIndex: col, columnKey: columns[col]!.key, rowId: 0 } : null);
     if (!selection) return;
     const popup = doc.createElement('div');
     menu = popup;
@@ -690,9 +707,32 @@ export function createGrid(options: GridOptions): Grid {
       item('Filter column…', !!options.onViewChange, () => openViewDialog(col));
       item('Clear sort and filters…', !!options.onViewChange, () => openViewDialog(col, 'clear'));
     } else {
-      item('Select row', true, () => selectRow(row));
+      item('Select row', rowCount > 0, () => selectRow(row));
       item('Select column', true, () => selectColumn(col));
     }
+    const indices = selectedAxisIndices(header ? 'column' : 'row', header ? col : row);
+    if (!header && options.onRowChange) {
+      const above = Object.freeze({ kind: 'insert' as const, beforeIndex: indices[0]!, count: 1 });
+      const below = Object.freeze({ kind: 'insert' as const, beforeIndex: rowCount ? indices[indices.length - 1]! + 1 : 0, count: 1 });
+      const deletion = Object.freeze({ kind: 'delete' as const, indices: Object.freeze(indices) });
+      item('Insert row above', options.canRowChange?.(above) !== false, () => changeRows(above));
+      item('Insert row below', options.canRowChange?.(below) !== false, () => changeRows(below));
+      item('Insert rows…', options.canRowChange?.(above) !== false, () => openSizeDialog('Number of rows', 1, count => {
+        if (!Number.isSafeInteger(count) || count < 1 || count > 1000) throw new RangeError('Choose 1–1000 rows.');
+        changeRows(Object.freeze({ ...above, count }));
+      }, null));
+      item(indices.length > 1 ? `Delete ${indices.length} selected rows` : 'Delete row', rowCount > 0 && options.canRowChange?.(deletion) !== false, () => changeRows(deletion));
+    }
+    if (options.onReorder) item(header ? 'Move columns to…' : 'Move rows to…', (header || rowCount > 0) && options.canReorder?.({ axis: header ? 'column' : 'row', indices, beforeIndex: indices[0]! }) !== false, () => {
+      const axis = header ? 'column' : 'row'; const count = header ? columns.length : rowCount;
+      openSizeDialog(header ? 'Destination column' : 'Destination row', indices[0]! + 1, destination => {
+        if (!Number.isSafeInteger(destination) || destination < 1 || destination > count - indices.length + 1) throw new RangeError(`Choose a position from 1 to ${count - indices.length + 1}.`);
+        const moved = new Set(indices); const remaining = Array.from({ length: count }, (_, i) => i).filter(i => !moved.has(i));
+        const request = Object.freeze({ axis, indices: Object.freeze(indices), beforeIndex: remaining[destination - 1] ?? count });
+        if (options.canReorder?.(request) === false) throw new Error('Moving items is disabled.');
+        options.onReorder?.(request);
+      }, null);
+    });
     if (!header && rowCount && cellLinks(row, col).length) item('Open links…', options.allowOpenLinks !== false, () => openLinks(row, col, x, y));
     item('Auto-fit column', true, () => autoFitColumn(col));
     item('Auto-fit row', rowCount > 0, () => autoFitRow(row));
@@ -751,7 +791,7 @@ export function createGrid(options: GridOptions): Grid {
     if (indexWidth && event.clientX >= bounds.left && event.clientX < bounds.left + indexWidth && event.clientY >= bounds.top + headerHeight) {
       event.preventDefault(); event.stopPropagation();
       const row = indexRow(event);
-      if (row !== null && finishEdit(true)) { selectRow(row); openMenu(row, 0, event.clientX, event.clientY); }
+      if (row !== null && finishEdit(true)) { if (!getSelectionRanges().some(range => range.startColumn === 0 && range.endColumn === columns.length - 1 && row >= range.startRow && row <= range.endRow)) selectRow(row); openMenu(row, 0, event.clientX, event.clientY); }
       return;
     }
     if (event.clientY < bounds.top || event.clientY >= bounds.top + headerHeight) return;
@@ -803,7 +843,7 @@ export function createGrid(options: GridOptions): Grid {
   function onContextMenu(event: MouseEvent): void {
     if (event.target === editor) return;
     const cell = pointerCell(event);
-    if (!cell) return;
+    if (!cell) { if (!rowCount && columns.length && options.onRowChange) { event.preventDefault(); if (finishEdit(true)) openMenu(0, 0, event.clientX, event.clientY); } return; }
     event.preventDefault();
     if (!finishEdit(true)) return;
     openMenu(cell.row, cell.col, event.clientX, event.clientY);
@@ -1381,10 +1421,10 @@ export function createGrid(options: GridOptions): Grid {
     paintCell(value, x, y, width, height, header, rowIndex, columnIndex);
     const labels = stateLabels(header ? null : rowIndex, columnIndex);
     const ctx = context!;
-    ctx.save(); ctx.beginPath(); ctx.rect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2)); ctx.clip();
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y, width, height); ctx.clip();
     const range = getSelectionRanges().find(range => rowIndex >= range.startRow && rowIndex <= range.endRow && columnIndex >= range.startColumn && columnIndex <= range.endColumn );
     if (!header && range && rowIndex >= range.startRow && rowIndex <= range.endRow && columnIndex >= range.startColumn && columnIndex <= range.endColumn) {
-      ctx.globalAlpha = .1; ctx.fillStyle = theme.selectionColor; ctx.fillRect(x, y, width, height); ctx.globalAlpha = 1;
+      ctx.globalAlpha = rangeTintOpacity; ctx.fillStyle = theme.selectionColor; ctx.fillRect(x, y, width, height); ctx.globalAlpha = 1;
     }
     if (header) {
       if (options.view?.sort?.columnKey === columns[columnIndex]!.key) {
@@ -1814,6 +1854,24 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   let reorderDrag: { axis: 'row' | 'column'; indices: number[] } | null = null;
+  const reorderGuide = doc.createElement('div');
+  reorderGuide.dataset.gridReorderGuide = '';
+  reorderGuide.setAttribute('aria-hidden', 'true');
+  reorderGuide.style.cssText = 'display:none;position:absolute;pointer-events:none;z-index:8;background:var(--acheron-selection-color);box-shadow:0 0 0 1px var(--acheron-background)';
+  const reorderBadge = doc.createElement('div');
+  reorderBadge.dataset.gridReorderBadge = '';
+  reorderBadge.setAttribute('aria-hidden', 'true');
+  reorderBadge.style.cssText = 'display:none;position:absolute;pointer-events:none;z-index:9;padding:6px 10px;border:1px solid var(--acheron-grid-line-color);border-radius:5px;background:var(--acheron-background);color:var(--acheron-text-color);box-shadow:0 3px 10px #0002;font:12px system-ui;white-space:nowrap';
+  root.append(reorderGuide, reorderBadge);
+  function clearReorder(): void {
+    reorderDrag = null; reorderGuide.style.display = reorderBadge.style.display = 'none';
+    root.style.cursor = '';
+  }
+  function reorderTarget(event: DragEvent, node: HTMLElement, axis: 'row' | 'column', first: number, last: number): number {
+    const bounds = node.getBoundingClientRect();
+    return (axis === 'row' ? event.clientY > bounds.top + bounds.height / 2 : event.clientX > bounds.left + bounds.width / 2) ? last + 1 : first;
+  }
+
   function reorderHandle(node: HTMLElement, axis: 'row' | 'column', first: number, last = first): void {
     if (!options.onReorder) return;
     const handle = node;
@@ -1825,13 +1883,15 @@ export function createGrid(options: GridOptions): Grid {
     if (selectedAxis) { handle.style.cursor = 'grab'; handle.title = 'Drag selected items to move; Alt+arrow moves one position'; }
     handle.addEventListener('dragstart', event => {
       if (!selectedAxis || !finishEdit(true)) { event.preventDefault(); return; }
-      const selected = new Set<number>();
-      for (const range of getSelectionRanges()) {
-        if (axis === 'row' && range.startColumn === 0 && range.endColumn === columns.length - 1) for (let i = range.startRow; i <= range.endRow; i++) selected.add(i);
-        if (axis === 'column' && range.startRow === 0 && range.endRow === rowCount - 1) for (let i = range.startColumn; i <= range.endColumn; i++) selected.add(i);
+      const indices = first === last ? selectedAxisIndices(axis, first) : Array.from({ length: last - first + 1 }, (_, i) => first + i);
+      reorderDrag = { axis, indices };
+      reorderBadge.textContent = `Move ${indices.length} ${axis}${indices.length > 1 ? 's' : ''}`;
+      reorderBadge.style.display = 'block'; reorderBadge.style.left = '8px'; reorderBadge.style.top = '8px';
+      root.style.cursor = 'grabbing';
+      if (event.dataTransfer) {
+        event.dataTransfer.setData('text/plain', `Move ${axis}`); event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setDragImage(reorderBadge, 16, 14);
       }
-      const indices = selected.has(first) && first === last ? [...selected].sort((a, b) => a - b) : Array.from({ length: last - first + 1 }, (_, i) => first + i);
-      reorderDrag = { axis, indices }; event.dataTransfer?.setData('text/plain', `Move ${axis}`); if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
     });
     handle.addEventListener('keydown', event => {
       const backward = axis === 'row' ? 'ArrowUp' : 'ArrowLeft'; const forward = axis === 'row' ? 'ArrowDown' : 'ArrowRight';
@@ -1841,15 +1901,35 @@ export function createGrid(options: GridOptions): Grid {
       const request = Object.freeze({ axis, indices: Object.freeze(Array.from({ length: last - first + 1 }, (_, i) => first + i)), beforeIndex });
       try { if (options.canReorder?.(request) !== false) options.onReorder?.(request); } catch (error) { actionError.textContent = error instanceof Error ? error.message : 'Unable to move items.'; actionError.style.display = 'block'; }
     });
-    handle.addEventListener('dragend', () => { reorderDrag = null; });
+    handle.addEventListener('dragend', clearReorder);
     node.addEventListener('dragover', event => {
-      if (reorderDrag?.axis !== axis) return; event.preventDefault(); node.style.outline = '2px solid var(--acheron-selection-color)'; node.style.outlineOffset = '-2px';
+      if (reorderDrag?.axis !== axis) return;
+      event.preventDefault();
+      const beforeIndex = reorderTarget(event, node, axis, first, last);
+      const request = Object.freeze({ axis, indices: Object.freeze([...reorderDrag.indices]), beforeIndex });
+      let allowed = false;
+      try { allowed = options.canReorder?.(request) !== false; } catch { allowed = false; }
+      if (event.dataTransfer) event.dataTransfer.dropEffect = allowed ? 'move' : 'none';
+      const bounds = node.getBoundingClientRect(), origin = root.getBoundingClientRect();
+      const after = beforeIndex === last + 1;
+      const edge = axis === 'row' ? (after ? bounds.bottom : bounds.top) - origin.top : (after ? bounds.right : bounds.left) - origin.left;
+      reorderGuide.style.display = allowed ? 'block' : 'none';
+      reorderGuide.style.left = axis === 'row' ? '0px' : `${Math.max(0, Math.min(root.clientWidth - 2, edge - 1))}px`;
+      reorderGuide.style.top = axis === 'column' ? '0px' : `${Math.max(0, Math.min(root.clientHeight - 2, edge - 1))}px`;
+      reorderGuide.style.width = axis === 'row' ? `${root.clientWidth}px` : '2px';
+      reorderGuide.style.height = axis === 'column' ? `${root.clientHeight}px` : '2px';
+      reorderBadge.textContent = allowed ? `Move ${reorderDrag.indices.length} ${axis}${reorderDrag.indices.length > 1 ? 's' : ''} · ${after ? 'after' : 'before'} ${last === first ? first + 1 : `${first + 1}–${last + 1}`}` : 'Moving here is disabled';
+      reorderBadge.style.left = `${Math.max(4, Math.min(root.clientWidth - reorderBadge.offsetWidth - 4, event.clientX - origin.left + 14))}px`;
+      reorderBadge.style.top = `${Math.max(4, Math.min(root.clientHeight - reorderBadge.offsetHeight - 4, event.clientY - origin.top + 14))}px`;
     });
-    node.addEventListener('dragleave', () => { node.style.outline = ''; });
+    node.addEventListener('dragleave', event => {
+      if (!(event.relatedTarget instanceof win.Node) || !node.contains(event.relatedTarget)) reorderGuide.style.display = 'none';
+    });
     node.addEventListener('drop', event => {
-      node.style.outline = ''; if (reorderDrag?.axis !== axis) return; event.preventDefault(); event.stopPropagation();
-      const bounds = node.getBoundingClientRect(); const after = axis === 'row' ? event.clientY > bounds.top + bounds.height / 2 : event.clientX > bounds.left + bounds.width / 2;
-      const request = Object.freeze({ axis, indices: Object.freeze([...reorderDrag.indices]), beforeIndex: after ? last + 1 : first }); reorderDrag = null;
+      if (reorderDrag?.axis !== axis) return;
+      event.preventDefault(); event.stopPropagation();
+      const request = Object.freeze({ axis, indices: Object.freeze([...reorderDrag.indices]), beforeIndex: reorderTarget(event, node, axis, first, last) });
+      clearReorder();
       try { if (options.canReorder?.(request) === false) return; options.onReorder?.(request); }
       catch (error) { actionError.textContent = error instanceof Error ? error.message : 'Unable to move items.'; actionError.style.display = 'block'; }
     });
@@ -1863,22 +1943,31 @@ export function createGrid(options: GridOptions): Grid {
 
   function drawSelection(regions: readonly ViewportRegion[]): void {
     const selection = engine.getSelection();
-    const ranges = getSelectionRanges();
+    const original = getSelectionRanges();
+    const wholeRows = original.filter(range => range.startColumn === 0 && range.endColumn === columns.length - 1).map(range => ({ ...range })).sort((a,b) => a.startRow - b.startRow);
+    const merged: SelectionRange[] = [];
+    for (const range of wholeRows) {
+      const previous = merged[merged.length - 1];
+      if (previous && range.startRow <= previous.endRow + 1) previous.endRow = Math.max(previous.endRow, range.endRow);
+      else merged.push(range);
+    }
+    const ranges = [...merged, ...original.filter(range => !(range.startColumn === 0 && range.endColumn === columns.length - 1))];
     if (!selection || !ranges.length) return;
+    const activeScope = original.some(range => selection.rowIndex >= range.startRow && selection.rowIndex <= range.endRow && selection.columnIndex >= range.startColumn && selection.columnIndex <= range.endColumn && (range.startColumn === 0 && range.endColumn === columns.length - 1 || range.startRow === 0 && range.endRow === rowCount - 1));
     for (const region of regions) {
       context!.save();
       clipRegion(region);
       context!.strokeStyle = theme.selectionColor;
-      context!.lineWidth = 2;
+      context!.lineWidth = rangeBorderWidth;
       for (const range of ranges) {
-        if (range.startRow === range.endRow && range.startColumn === range.endColumn && range.startRow === selection.rowIndex && range.startColumn === selection.columnIndex) continue;
-        context!.strokeRect(columnAxis.position(range.startColumn) + region.offsetX + 1,
-        headerHeight + rowAxis.position(range.startRow) + region.offsetY + 1,
-        Math.max(0, columnAxis.position(range.endColumn + 1) - columnAxis.position(range.startColumn) - 2),
-        Math.max(0, rowAxis.position(range.endRow + 1) - rowAxis.position(range.startRow) - 2));
+        if (!activeScope && range.startRow === range.endRow && range.startColumn === range.endColumn && range.startRow === selection.rowIndex && range.startColumn === selection.columnIndex) continue;
+        context!.strokeRect(columnAxis.position(range.startColumn) + region.offsetX + rangeBorderWidth / 2,
+        headerHeight + rowAxis.position(range.startRow) + region.offsetY + rangeBorderWidth / 2,
+        Math.max(0, columnAxis.position(range.endColumn + 1) - columnAxis.position(range.startColumn) - rangeBorderWidth),
+        Math.max(0, rowAxis.position(range.endRow + 1) - rowAxis.position(range.startRow) - rangeBorderWidth));
       }
       // Draw the active cell once in its own pane, above semantic cell colors.
-      if (selection.rowIndex >= region.rows.start && selection.rowIndex < region.rows.end && selection.columnIndex >= region.columns.start && selection.columnIndex < region.columns.end) {
+      if (!activeScope && selection.rowIndex >= region.rows.start && selection.rowIndex < region.rows.end && selection.columnIndex >= region.columns.start && selection.columnIndex < region.columns.end) {
         const x = columnAxis.position(selection.columnIndex) + region.offsetX;
         const y = headerHeight + rowAxis.position(selection.rowIndex) + region.offsetY;
         const width = columnAxis.size(selection.columnIndex); const height = rowAxis.size(selection.rowIndex);
@@ -2015,6 +2104,7 @@ export function createGrid(options: GridOptions): Grid {
     destroy() {
       if (destroyed) return;
       choices?.remove(); choices = null; win.removeEventListener('beforeunload', guardEditNavigation);
+      clearReorder();
       engine.destroy();
       destroyed = true;
       for (const image of Object.values(stateIcons)) image.onload = null;

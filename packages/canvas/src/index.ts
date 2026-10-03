@@ -7,6 +7,6 @@ export type { CellLink } from './links.js';
 export type { HeaderGroup } from './headers.js';
 
 export { reorderedIndices } from './reorder.js';
-export type { ReorderRequest } from './reorder.js';
+export type { ReorderRequest, RowChangeRequest } from './reorder.js';
 
 export type { ChoiceEditorOptions, ChoiceInfo } from './choices.js';

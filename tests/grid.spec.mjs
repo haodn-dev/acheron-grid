@@ -1873,3 +1873,73 @@ test('custom backgrounds reach cell edges with only one grid boundary pixel', as
   });
   await expect.poll(()=>page.evaluate(()=>{const canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d'),scale=canvas.width/parseFloat(canvas.style.width);return [0,1,98,100,101].map(x=>[...ctx.getImageData(x*scale,30*scale,1,1).data].slice(0,3));})).toEqual(Array.from({length:5},()=>[255,0,0]));
 });
+
+
+test('row actions keep additive selection, dispatch immutable requests and move to final position', async ({page})=>{
+  await page.goto('/'); await page.evaluate(async()=>{
+    const {createGrid}=await import('/canvas/index.js'); const {LocalDataSource}=await import('/core/index.js');
+    window.requests=[];window.allowed=true;
+    window.grid=createGrid({container:document.querySelector('#grid'),dataSource:new LocalDataSource(Array.from({length:6},(_,id)=>({id,a:'A',b:'B'})),row=>row.id),columns:[{key:'a',title:'A'},{key:'b',title:'B'}],onRowChange:request=>window.requests.push(request),canRowChange:()=>window.allowed,onReorder:request=>window.requests.push(request)});
+    window.grid.selectRow(1);
+  });
+  await page.getByRole('button',{name:'Select row 3',exact:true}).click({modifiers:['Control']});
+  await page.getByRole('button',{name:'Select row 2',exact:true}).click({button:'right'});
+  await page.getByRole('menuitem',{name:'Delete 2 selected rows',exact:true}).click();
+  expect(await page.evaluate(()=>window.requests[0])).toEqual({kind:'delete',indices:[1,2]});
+  await page.getByRole('button',{name:'Select row 2',exact:true}).click({button:'right'});
+  await page.getByRole('menuitem',{name:'Insert row above',exact:true}).click();
+  expect(await page.evaluate(()=>window.requests[1])).toEqual({kind:'insert',beforeIndex:1,count:1});
+  await page.getByRole('button',{name:'Select row 2',exact:true}).click({button:'right'});
+  await page.getByRole('menuitem',{name:'Move rows to…',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Destination row'});await dialog.getByRole('spinbutton').fill('4');await dialog.getByRole('button',{name:'Apply',exact:true}).click();
+  expect(await page.evaluate(()=>window.requests[2])).toEqual({axis:'row',indices:[1,2],beforeIndex:5});
+  await page.evaluate(()=>window.allowed=false);
+  await page.getByRole('button',{name:'Select row 2',exact:true}).click({button:'right'});
+  await expect(page.getByRole('menuitem',{name:'Delete 2 selected rows',exact:true})).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await page.evaluate(async()=>{window.grid.destroy();const {createGrid}=await import('/canvas/index.js');const {LocalDataSource}=await import('/core/index.js');window.grid=createGrid({container:document.querySelector('#grid'),dataSource:new LocalDataSource([],row=>row.id),columns:[{key:'a',title:'A'}],onRowChange:request=>window.requests.push(request)});});
+  await page.getByRole('grid').click({button:'right',position:{x:20,y:40}});
+  await expect(page.getByRole('menuitem',{name:'Delete row',exact:true})).toBeDisabled();
+  await page.getByRole('menuitem',{name:'Insert row below',exact:true}).click();
+  expect(await page.evaluate(()=>window.requests[3])).toEqual({kind:'insert',beforeIndex:0,count:1});
+});
+
+test('adjacent whole-row ranges have a single outer outline and no green interior seams', async({page})=>{
+  await page.goto('/');await page.evaluate(async()=>{
+    const {createGrid}=await import('/canvas/index.js');const {LocalDataSource}=await import('/core/index.js');
+    window.grid=createGrid({container:document.querySelector('#grid'),columnWidth:100,rowHeight:40,headerHeight:24,dataSource:new LocalDataSource(Array.from({length:5},(_,id)=>({id,a:'',b:''})),row=>row.id),columns:[{key:'a',title:'A'},{key:'b',title:'B'}],theme:{selectionColor:'#00ff00'}});window.grid.selectRow(1);
+  });
+  await page.getByRole('button',{name:'Select row 3',exact:true}).click({modifiers:['Control']});
+  await expect.poll(()=>page.evaluate(()=>{const canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d'),scale=canvas.width/parseFloat(canvas.style.width);return [...ctx.getImageData(20*scale,104*scale,1,1).data].slice(0,3);})).not.toEqual([0,255,0]);
+  expect(await page.evaluate(()=>window.grid.getSelectionRanges().length)).toBe(2);
+});
+
+
+test('reorder preview shows insertion edge and clears after cancellation or denied drop', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const {createGrid}=await import('/canvas/index.js'); const {LocalDataSource}=await import('/core/index.js');
+    window.allowed=true; window.requests=[];
+    window.grid=createGrid({container:document.querySelector('#grid'),accessibility:'viewport',dataSource:new LocalDataSource(Array.from({length:5},(_,id)=>({id,a:'A',b:'B'})),row=>row.id),columns:['a','b'].map(key=>({key,title:key})),onReorder:r=>window.requests.push(r),canReorder:()=>window.allowed});
+    window.grid.selectRow(0);
+  });
+  const source=page.getByRole('button',{name:'Select row 1',exact:true}), target=page.getByRole('button',{name:'Select row 4',exact:true});
+  const transfer=await page.evaluateHandle(()=>new DataTransfer());
+  await source.dispatchEvent('dragstart',{dataTransfer:transfer});
+  const bounds=await target.boundingBox();
+  await target.dispatchEvent('dragover',{dataTransfer:transfer,clientX:bounds.x+5,clientY:bounds.y+bounds.height-2});
+  await expect(page.locator('[data-grid-reorder-guide]')).toBeVisible();
+  await expect(page.locator('[data-grid-reorder-badge]')).toHaveText('Move 1 row · after 4');
+  expect(await page.locator('[data-grid-reorder-guide]').evaluate(el=>el.offsetWidth)).toBeGreaterThan(100);
+  await source.dispatchEvent('dragend');
+  await expect(page.locator('[data-grid-reorder-guide]')).toBeHidden();
+  await expect(page.locator('[data-grid-reorder-badge]')).toBeHidden();
+  await source.dispatchEvent('dragstart',{dataTransfer:transfer});
+  await page.evaluate(()=>window.allowed=false);
+  await target.dispatchEvent('dragover',{dataTransfer:transfer,clientX:bounds.x+5,clientY:bounds.y+2});
+  await expect(page.locator('[data-grid-reorder-guide]')).toBeHidden();
+  await expect(page.locator('[data-grid-reorder-badge]')).toHaveText('Moving here is disabled');
+  await target.dispatchEvent('drop',{dataTransfer:transfer,clientX:bounds.x+5,clientY:bounds.y+2});
+  expect(await page.evaluate(()=>window.requests.length)).toBe(0);
+  await expect(page.locator('[data-grid-reorder-badge]')).toBeHidden();
+});

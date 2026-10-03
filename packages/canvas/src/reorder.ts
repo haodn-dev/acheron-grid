@@ -10,3 +10,7 @@ export function reorderedIndices(count: number, indices: readonly number[], befo
   const insertion = beforeIndex - indices.filter(index => index < beforeIndex).length;
   order.splice(insertion, 0, ...[...indices].sort((a, b) => a - b)); return order;
 }
+
+export type RowChangeRequest =
+  | { readonly kind: 'insert'; readonly beforeIndex: number; readonly count: number }
+  | { readonly kind: 'delete'; readonly indices: readonly number[] };
