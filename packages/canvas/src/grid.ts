@@ -411,7 +411,7 @@ export function createGrid(options: GridOptions): Grid {
   const linkBadges = doc.createElement('div');
   linkBadges.dataset.gridLinkBadges = '';
   linkBadges.setAttribute('aria-label', 'Cell link shortcuts');
-  linkBadges.style.cssText = 'position:absolute;z-index:8;display:flex;flex-wrap:wrap;gap:4px;overflow:auto;scrollbar-width:thin;padding:4px;background:var(--acheron-background);border-radius:5px;box-shadow:0 2px 8px #0002;font:var(--acheron-font)';
+  linkBadges.style.cssText = 'position:absolute;z-index:8;display:flex;flex-wrap:wrap;gap:3px;overflow:auto;scrollbar-width:thin;padding:2px;background:var(--acheron-background);border:1px solid var(--acheron-grid-line-color);border-radius:7px;box-shadow:0 3px 10px #0002;font:var(--acheron-font)';
   linkBadges.hidden = true; root.append(linkBadges);
   linkBadges.addEventListener('pointerdown', event => event.stopPropagation());
   linkBadges.addEventListener('click', event => event.stopPropagation());
@@ -433,8 +433,13 @@ export function createGrid(options: GridOptions): Grid {
     links.forEach((link, index) => {
       const anchor = doc.createElement('a'); anchor.href = link.href; anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; anchor.referrerPolicy = 'no-referrer';
       anchor.title = link.href; anchor.setAttribute('aria-label', `Open link ${index + 1}: ${link.text}`);
-      anchor.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;border:1px solid var(--acheron-grid-line-color);background:var(--acheron-header-background);color:var(--acheron-link-color);text-decoration:none;font-size:11px;white-space:nowrap';
-      anchor.append(svgIcon('external-link'), doc.createTextNode(String(index + 1))); linkBadges.append(anchor);
+      anchor.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:1px 5px;border-radius:4px;border:0;background:var(--acheron-header-background);color:var(--acheron-link-color);text-decoration:none;font-size:12px;line-height:16px;white-space:nowrap';
+      const icon = svgIcon('external-link'); icon.setAttribute('width', '13'); icon.setAttribute('height', '13');
+      anchor.append(icon, doc.createTextNode(String(index + 1))); linkBadges.append(anchor);
+      anchor.addEventListener('pointerenter', () => { anchor.style.background = 'color-mix(in srgb,var(--acheron-link-color) 14%,var(--acheron-background))'; });
+      anchor.addEventListener('pointerleave', () => { anchor.style.background = 'var(--acheron-header-background)'; });
+      anchor.addEventListener('focus', () => { anchor.style.outline = '1px solid var(--acheron-link-color)'; anchor.style.outlineOffset = '-1px'; });
+      anchor.addEventListener('blur', () => { anchor.style.outline = ''; });
     });
     }
     linkBadges.style.left = `${indexWidth + left + 1}px`; linkBadges.style.top = `${headerHeight + top + 1}px`;
