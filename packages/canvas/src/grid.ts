@@ -181,6 +181,7 @@ export function createGrid(options: GridOptions): Grid {
     dialog[data-grid-dialog] button:first-child { border-color:var(--acheron-selection-color);font-weight:600 }
     dialog[data-grid-dialog] :disabled { opacity:.5;cursor:default }
     dialog[data-grid-dialog] :focus-visible { outline:2px solid var(--acheron-selection-color);outline-offset:2px }
+    [data-grid-row-resize]:hover { background:var(--acheron-selection-color);opacity:.5 }
     [data-grid-header-cell]:focus-visible { outline:2px solid var(--acheron-selection-color);outline-offset:-3px }
     [data-grid-search]:not([hidden]) { display:flex;align-items:center;flex-wrap:wrap;gap:4px }
     dialog[data-grid-dialog] [data-dialog-actions] { display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:4px }
@@ -957,7 +958,7 @@ export function createGrid(options: GridOptions): Grid {
     actionError.style.display = 'none';
     editor.setAttribute('aria-label', `Edit row ${selection.rowIndex + 1}, ${column.title}`);
     editor.setAttribute('aria-errormessage', editorError.id);
-    editor.style.cssText = 'position:absolute;box-sizing:border-box;pointer-events:auto;border:2px solid var(--acheron-selection-color);background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);padding:0 8px';
+    editor.style.cssText = 'position:absolute;box-sizing:border-box;pointer-events:auto;outline:none;border:2px solid var(--acheron-selection-color);background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);padding:0 8px';
     const cellFormat = engine.getFormat(selection.rowIndex, selection.columnIndex);
     if (cellFormat.background) editor.style.background = cellFormat.background;
     if (cellFormat.textColor) editor.style.color = cellFormat.textColor;
@@ -1310,9 +1311,8 @@ export function createGrid(options: GridOptions): Grid {
     const labels = stateLabels(header ? null : rowIndex, columnIndex);
     const ctx = context!;
     ctx.save(); ctx.beginPath(); ctx.rect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2)); ctx.clip();
-    const range = getSelectionRanges().find(range => rowIndex >= range.startRow && rowIndex <= range.endRow && columnIndex >= range.startColumn && columnIndex <= range.endColumn && ((range.startRow === 0 && range.endRow === rowCount - 1) || (range.startColumn === 0 && range.endColumn === columns.length - 1)));
-    if (!header && range && rowIndex >= range.startRow && rowIndex <= range.endRow && columnIndex >= range.startColumn && columnIndex <= range.endColumn &&
-      ((range.startRow === 0 && range.endRow === rowCount - 1) || (range.startColumn === 0 && range.endColumn === columns.length - 1))) {
+    const range = getSelectionRanges().find(range => rowIndex >= range.startRow && rowIndex <= range.endRow && columnIndex >= range.startColumn && columnIndex <= range.endColumn );
+    if (!header && range && rowIndex >= range.startRow && rowIndex <= range.endRow && columnIndex >= range.startColumn && columnIndex <= range.endColumn) {
       ctx.globalAlpha = .1; ctx.fillStyle = theme.selectionColor; ctx.fillRect(x, y, width, height); ctx.globalAlpha = 1;
     }
     if (header) {
@@ -1452,7 +1452,7 @@ export function createGrid(options: GridOptions): Grid {
     ctx.save(); ctx.beginPath(); ctx.rect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2)); ctx.clip();
     if (item?.state === 'ready') {
       const image = item.image;
-      const ratio = Math.max(0, Math.min((width - 16) / image.naturalWidth, (height - 8) / image.naturalHeight));
+      const ratio = Math.max(0, Math.min(1, (width - 16) / image.naturalWidth, (height - 8) / image.naturalHeight));
       const w = image.naturalWidth * ratio; const h = image.naturalHeight * ratio;
       if (ratio > 0) ctx.drawImage(image, x + (width - w) / 2, y + (height - h) / 2, w, h);
     } else {
@@ -1675,6 +1675,12 @@ export function createGrid(options: GridOptions): Grid {
         button.style.cssText = `position:absolute;left:0;top:${rowAxis.position(row) + band.offset - band.y}px;width:100%;height:${rowAxis.size(row)}px;box-sizing:border-box;border:0;border-right:1px solid var(--acheron-grid-line-color);border-bottom:1px solid var(--acheron-grid-line-color);background:var(--acheron-header-background);color:inherit;font:inherit;cursor:pointer;${selected ? 'box-shadow:inset 0 0 0 9999px color-mix(in srgb,var(--acheron-selection-color) 16%,transparent)' : ''}`;
         if (locked) { button.style.background = 'color-mix(in srgb,var(--acheron-header-text-color) 8%,var(--acheron-header-background))'; button.style.padding = '0 16px 0 2px'; }
         button.addEventListener('click', event => { if (event.detail === 0 && finishEdit(true)) { selectRow(row); scroller.focus({ preventScroll: true }); } });
+        const resizeHandle = doc.createElement('span');
+        resizeHandle.dataset.gridRowResize = String(row);
+        resizeHandle.setAttribute('aria-hidden', 'true');
+        resizeHandle.title = 'Drag to resize row; double-click to fit';
+        resizeHandle.style.cssText = 'position:absolute;bottom:0;left:0;width:100%;height:5px;cursor:row-resize';
+        button.append(resizeHandle);
         pane.append(button);
       }
       children.push(pane);
