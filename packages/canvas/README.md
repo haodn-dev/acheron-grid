@@ -184,7 +184,7 @@ Value commands coalesce dirty cells into one animation frame. Offscreen changes 
 
 ## Range selection and clipboard
 
-Drag with a mouse/pen, Shift-click, or use Shift+Arrow/Home/End to extend a rectangular range from its anchor. Ctrl/Cmd+Shift+Home/End extends to the first/last grid cell. Ordinary clicks or navigation collapse the range; Escape clears it. Dragging captures the pointer and clamps to viewport/data bounds. Stationary edge auto-scroll and touch range dragging are not implemented. Multiple ranges are supported; clipboard operations require one rectangle.
+Drag with a mouse/pen, Shift-click, or use Shift+Arrow/Home/End to extend a rectangular range from its anchor. Ctrl/Cmd+Shift+Home/End extends to the first/last grid cell. Ordinary clicks or navigation collapse the range; Escape clears it. Dragging captures the pointer and clamps to viewport/data bounds. Mouse/pen dragging auto-scrolls while the pointer stays within 24px of a scrolling edge or outside the viewport, at 16 CSS pixels per animation frame. Release, cancellation, capture loss, Escape, window blur or destruction stops the loop. Touch range dragging is not implemented. Multiple ranges are supported; clipboard operations require one rectangle.
 
 `getSelection()` still returns the active endpoint. `getSelectionRange()` returns a fresh normalized `{ startRow, endRow, startColumn, endColumn }` object or `null`; bounds are zero-based and inclusive. `onSelectionRangeChange(range)` receives a copy when bounds change, or `null` on clear. The grid draws both the outer range and active-cell borders. Editing changes the active cell while keeping the range.
 
@@ -208,7 +208,7 @@ grid.setRowHeight(0, 48);
 
 Sizes are finite positive CSS pixel values; indices are zero-based integers. Invalid indices/sizes are rejected before layout changes. Calls throw while editing or after destruction. Sizes default to `columnWidth`/`rowHeight`, with sparse per-index overrides; rows do not require a size array. Resizing updates scroll dimensions and fully redraws, keeping hit testing, editor placement and selection aligned. Layout changes are in memory and are outside data undo/redo.
 
-Drag within 8 CSS pixels of a header edge to preview a column resize (24–1000px); release to apply. Row boundaries in the default index gutter also support resize preview. Right-click a cell and choose **Resize column…** or **Resize row…** for a native DOM dialog with a labeled number input, Apply and Cancel. The dialog accepts sizes of at least 1px. Auto-fit and persisted layout are not implemented.
+Drag within 8 CSS pixels of a header edge to preview a column resize (24–1000px); release to apply. Row boundaries in the default index gutter also support resize preview. Right-click a cell and choose **Resize column…** or **Resize row…** for a native DOM dialog with a labeled number input, Apply and Cancel. The dialog accepts sizes of at least 1px. Double-click a column/header or index-row boundary, or choose Auto-fit column/row from the menu, to fit visible content. Persisted layout is not implemented.
 
 The built-in cell menu also provides **Copy**, **Paste**, **Edit cell**, **Undo** and **Redo**. Right-clicking within the range preserves it and its active endpoint; right-clicking elsewhere selects that cell without scrolling. Resize targets the clicked cell, while Edit targets the active cell. Headers open Column actions and suppress the browser menu. Index numbers open the existing row/cell actions. Blank space and editor inputs retain their native context menu.
 
@@ -306,7 +306,7 @@ Frozen boundaries are two continuous pointer-transparent DOM rules: a vertical r
 
 ## Whole-row/column selection and header menus
 
-Click a column header to select all its data rows. Click its index number (or within the leftmost 10px of a data row, away from a resize boundary), use Shift+Space for the active row, or Ctrl/Cmd+Space for the active column. `grid.selectRow(index)` / `grid.selectColumn(index)` expose the same behavior. Selected axes receive a light tint and the existing range outline; the corresponding column header is highlighted. Empty axes do not create a selection. Endpoint selection permissions are checked atomically, and copy/paste retain their existing range/size/permission checks. These operations replace prior ranges and do not allocate per-cell state.
+Click a column header to select all its data rows. Click its index number (or within the leftmost 10px of a data row, away from a resize boundary), use Shift+Space for the active row, or Ctrl/Cmd+Space for the active column. `grid.selectRow(index)` / `grid.selectColumn(index)` expose the same behavior. Selected axes receive a light tint and the existing range outline; the corresponding column header is highlighted. Shift-click an index/header extends from the axis anchor; mouse/pen dragging selects adjacent axes and auto-scrolls only that axis. The corner # button or Ctrl/Cmd+A selects the whole data rectangle; `grid.selectAll()` exposes the same action. Empty axes do not create a selection. Endpoint selection permissions are checked atomically, and copy/paste retain their existing range/size/permission checks. These operations replace prior ranges and do not allocate per-cell state.
 
 Header right-click suppresses the browser menu and opens Column actions, including select, sort, filter, locks, freeze and resize. Empty filtered views still expose sort/filter/clear actions. Native input/editor context menus remain available. Body menus also provide Select row/column.
 
@@ -327,3 +327,9 @@ Filter/sort, resize and formatting dialogs use native `showModal()` with grid-sc
 ## License
 
 Original Acheron Grid code is licensed under [MIT](LICENSE). Copyright (c) 2026 Hao Duong. Embedded Lucide icons retain their ISC/MIT attribution in [LICENSE.lucide](LICENSE.lucide), included in this package's file list. Keep those notices when redistributing the assets or a bundle containing them.
+
+## Auto-fit visible content
+
+`grid.autoFitColumn(index)` measures the header and current visible/frozen rows; `grid.autoFitRow(index)` measures current visible/frozen columns. Double-click a resize boundary or use the corresponding context-menu action. Fit commands use the existing resize pipeline/events, preserving selection and value history. They reject invalid indexes and calls while editing/destroyed.
+
+Sizes clamp to 24–1000 CSS pixels. Text width uses the mount's fonts and explicit newlines; row height accounts for wrapping when `wrapText: true`. Checkbox and image columns use bounded control/image slots. Offscreen values outside the measured axis are not scanned. Custom drawings may need explicit sizing, because their arbitrary output cannot be measured from raw values. Row heights do not grow automatically after edits; reapply fit when content changes.

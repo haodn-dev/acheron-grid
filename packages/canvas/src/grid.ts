@@ -60,6 +60,9 @@ export interface Grid {
   openSearch(): void;
   selectColumn(index: number): void;
   selectRow(index: number): void;
+  selectAll(): void;
+  autoFitColumn(index: number): void;
+  autoFitRow(index: number): void;
   readonly frozenRows: number;
   readonly frozenColumns: number;
   setFrozen(rows: number, columns: number): void;
@@ -223,6 +226,10 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   let dragPointer: number | null = null;
+  let axisAnchor: { axis: 'row' | 'column'; index: number } | null = null;
+  let axisDrag: { axis: 'row' | 'column'; index: number } | null = null;
+  let dragPosition: { clientX: number; clientY: number } | null = null;
+  let dragFrame: number | undefined;
   let addNextSelection = false;
   let editor: CellEditor | null = null;
   const editorPane = doc.createElement('div');
@@ -481,6 +488,67 @@ export function createGrid(options: GridOptions): Grid {
     else engine.setColumnWidth(index, size);
   }
 
+  function visibleIndices(axis: 'row' | 'column'): Set<number> {
+    const indices = new Set<number>();
+    for (const region of viewport().regions) {
+      const range = axis === 'row' ? region.rows : region.columns;
+      for (let index = range.start; index < range.end; index++) indices.add(index);
+    }
+    return indices;
+  }
+  function autoFitColumn(index: number): void {
+    if (destroyed) throw new Error('Grid is destroyed.');
+    if (editor) throw new Error('Finish editing before resizing cells.');
+    columnAxis.size(index);
+    const column = columns[index]!; const ctx = context!;
+    ctx.save();
+    let width: number;
+    try {
+      ctx.font = theme.headerFont; width = ctx.measureText(column.title).width + 56;
+      ctx.font = theme.font;
+      for (const row of visibleIndices('row')) {
+        const value = engine.getValue(row, column.key);
+        if (imageColumns.has(column.key)) width = Math.max(width, 64);
+        else if (columnEditors.get(column.key)?.type === 'checkbox') width = Math.max(width, 36);
+        else for (const line of String(value ?? '').split('\n')) width = Math.max(width, ctx.measureText(line).width + 20);
+      }
+    } finally { ctx.restore(); }
+    resizeAxis(columnAxis, index, Math.max(24, Math.min(1000, Math.ceil(width))));
+  }
+  function autoFitRow(index: number): void {
+    if (destroyed) throw new Error('Grid is destroyed.');
+    if (editor) throw new Error('Finish editing before resizing cells.');
+    rowAxis.size(index);
+    const ctx = context!; ctx.save(); let height = 24;
+    try {
+      ctx.font = theme.font;
+      const metrics = ctx.measureText('M');
+      const lineHeight = Math.ceil(metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent) || 18;
+      for (const col of visibleIndices('column')) {
+        const key = columns[col]!.key;
+        if (imageColumns.has(key)) { height = Math.max(height, 56); continue; }
+        let lines = 1; let line = '';
+        if (options.wrapText) for (const character of String(engine.getValue(index, key) ?? '')) {
+          if (character === '\n' || (line && ctx.measureText(line + character).width > Math.max(0, columnAxis.size(col) - 20))) {
+            lines++; line = ''; if (lines * lineHeight >= 1000) break;
+          }
+          if (character !== '\n') line += character;
+        }
+        height = Math.max(height, lines * lineHeight + 8);
+      }
+    } finally { ctx.restore(); }
+    resizeAxis(rowAxis, index, Math.min(1000, height));
+  }
+  function onAxisDoubleClick(event: MouseEvent): void {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || !(event.target instanceof win.Node) || (event.target !== root && !scroller.contains(event.target) && !indexGutter.contains(event.target))) return;
+    const column = columnEdge(event); const row = column === null ? rowEdge(event) : null;
+    if (column === null && row === null) return;
+    event.preventDefault(); event.stopPropagation(); endResize(); onPointerEnd();
+    if (!finishEdit(true)) return;
+    try { if (column !== null) autoFitColumn(column); else autoFitRow(row!); }
+    catch (error) { actionError.textContent = error instanceof Error ? error.message : 'Unable to fit size.'; actionError.style.display = 'block'; }
+  }
+
   function closeMenu(focus = false): void {
     menu?.remove();
     menu = null;
@@ -540,6 +608,8 @@ export function createGrid(options: GridOptions): Grid {
       item('Select row', true, () => selectRow(row));
       item('Select column', true, () => selectColumn(col));
     }
+    item('Auto-fit column', true, () => autoFitColumn(col));
+    item('Auto-fit row', rowCount > 0, () => autoFitRow(row));
     item('Edit cell', rowCount > 0 && engine.canEdit(selection.rowIndex, selection.columnIndex), beginEdit);
     item('Undo', engine.canUndo(), () => { replay(false); });
     item('Redo', engine.canRedo(), () => { replay(true); });
@@ -653,7 +723,7 @@ export function createGrid(options: GridOptions): Grid {
     openMenu(cell.row, cell.col, event.clientX, event.clientY);
   }
 
-  function columnEdge(event: PointerEvent): number | null {
+  function columnEdge(event: MouseEvent): number | null {
     const bounds = root.getBoundingClientRect();
     const x = event.clientX - bounds.left - indexWidth;
     const y = event.clientY - bounds.top;
@@ -669,7 +739,7 @@ export function createGrid(options: GridOptions): Grid {
     return null;
   }
 
-  function rowEdge(event: PointerEvent): number | null {
+  function rowEdge(event: MouseEvent): number | null {
     const bounds = scroller.getBoundingClientRect();
     const x = event.clientX - bounds.left;
     const y = event.clientY - bounds.top;
@@ -700,14 +770,18 @@ export function createGrid(options: GridOptions): Grid {
 
   function onHeaderPointerDown(event: PointerEvent): void {
     if (resizing) { event.preventDefault(); return; }
-    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || (event.target !== root && !(event.target instanceof win.Node && (scroller.contains(event.target) || indexGutter.contains(event.target))))) return;
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || (event.target !== root && !(event.target instanceof win.Node && (scroller.contains(event.target) || indexGutter.contains(event.target))))) return;
+    const bounds = root.getBoundingClientRect();
+    if (indexWidth && event.clientX < bounds.left + indexWidth && event.clientY < bounds.top + headerHeight) {
+      event.preventDefault(); selectAll(); scroller.focus({ preventScroll: true }); return;
+    }
     const column = columnEdge(event);
     const row = column === null ? rowEdge(event) : null;
     if (column === null && row === null) {
       const row = indexRow(event);
-      if (row !== null && finishEdit(true)) { event.preventDefault(); selectRow(row); scroller.focus({ preventScroll: true }); return; }
+      if (row !== null && finishEdit(true)) { event.preventDefault(); startAxisSelection('row', row, event); return; }
       const col = headerColumn(event);
-      if (col !== null && rowCount && finishEdit(true)) { event.preventDefault(); selectColumn(col); scroller.focus({ preventScroll: true }); }
+      if (col !== null && rowCount && finishEdit(true)) { event.preventDefault(); startAxisSelection('column', col, event); }
       return;
     }
     event.preventDefault();
@@ -923,6 +997,7 @@ export function createGrid(options: GridOptions): Grid {
 
   function select(rowIndex: number, columnIndex: number, extend = false, reveal = true, add = false): void {
     if (destroyed || rowCount === 0 || columns.length === 0) return;
+    axisAnchor = null;
     const previous = engine.getSelection();
     const changed = previous?.rowIndex !== rowIndex || previous?.columnIndex !== columnIndex;
     const previousRange = JSON.stringify(getSelectionRange());
@@ -962,14 +1037,35 @@ export function createGrid(options: GridOptions): Grid {
   }
   function selectColumn(index: number): void {
     if (!Number.isSafeInteger(index) || index < 0 || index >= columns.length) throw new RangeError('Invalid column index.');
+    axisAnchor = { axis: 'column', index };
     if (rowCount) selectScope({ startRow: 0, endRow: rowCount - 1, startColumn: index, endColumn: index });
   }
   function selectRow(index: number): void {
     if (!Number.isSafeInteger(index) || index < 0 || index >= rowCount) throw new RangeError('Invalid row index.');
+    axisAnchor = { axis: 'row', index };
     if (columns.length) selectScope({ startRow: index, endRow: index, startColumn: 0, endColumn: columns.length - 1 });
   }
 
-  function pointerCell(event: MouseEvent, clamp = false): { row: number; col: number } | null {
+  function selectAll(): void {
+    if (destroyed) throw new Error('Grid is destroyed.');
+    axisAnchor = null;
+    if (rowCount && columns.length) selectScope({ startRow: 0, endRow: rowCount - 1, startColumn: 0, endColumn: columns.length - 1 });
+  }
+  function axisRange(axis: 'row' | 'column', anchor: number, end: number): SelectionRange {
+    return axis === 'row' ? { startRow: Math.min(anchor, end), endRow: Math.max(anchor, end), startColumn: 0, endColumn: columns.length - 1 }
+      : { startRow: 0, endRow: rowCount - 1, startColumn: Math.min(anchor, end), endColumn: Math.max(anchor, end) };
+  }
+  function startAxisSelection(axis: 'row' | 'column', index: number, event: PointerEvent): void {
+    if (!rowCount || !columns.length) return;
+    const active = engine.getSelection();
+    const anchor = event.shiftKey ? (axisAnchor?.axis === axis ? axisAnchor.index : axis === 'row' ? active?.rowIndex ?? index : active?.columnIndex ?? index) : index;
+    const range = axisRange(axis, anchor, index);
+    if (!engine.getCellPermission(range.startRow, range.startColumn).selectable || !engine.getCellPermission(range.endRow, range.endColumn).selectable) return;
+    axisAnchor = { axis, index: anchor }; selectScope(range); scroller.focus({ preventScroll: true });
+    if (event.pointerType !== 'touch') { axisDrag = axisAnchor; dragPointer = event.pointerId; dragPosition = event; root.setPointerCapture(event.pointerId); }
+  }
+
+  function pointerCell(event: Pick<MouseEvent, 'clientX' | 'clientY'>, clamp = false): { row: number; col: number } | null {
     if (!rowCount || !columns.length) return null;
     const bounds = scroller.getBoundingClientRect();
     let x = event.clientX - bounds.left;
@@ -1014,14 +1110,38 @@ export function createGrid(options: GridOptions): Grid {
     }
   }
 
-  function onPointerMove(event: PointerEvent): void {
-    // drag extends on pointer movement; a frame loop would enable stationary edge auto-scroll.
-    if (event.pointerId !== dragPointer) return;
-    const cell = pointerCell(event, true);
-    if (cell) select(cell.row, cell.col, true);
+  function extendDrag(): void {
+    if (!dragPosition) return;
+    const cell = pointerCell(dragPosition, true);
+    if (!cell) return;
+    if (axisDrag) selectScope(axisRange(axisDrag.axis, axisDrag.index, axisDrag.axis === 'row' ? cell.row : cell.col));
+    else select(cell.row, cell.col, true, false);
   }
-
-  function onPointerEnd(): void { dragPointer = null; }
+  function dragScroll(): void {
+    dragFrame = undefined;
+    if (dragPointer === null || !dragPosition || destroyed) return;
+    const bounds = scroller.getBoundingClientRect(); const view = viewport();
+    const step = (position: number, start: number, size: number) => position < start + 24 ? -16 : position > start + size - 24 ? 16 : 0;
+    const dx = axisDrag?.axis === 'row' || view.width <= view.frozenWidth ? 0 : step(dragPosition.clientX, bounds.left + view.frozenWidth, view.width - view.frozenWidth);
+    const dy = axisDrag?.axis === 'column' || view.height <= view.frozenHeight ? 0 : step(dragPosition.clientY, bounds.top + view.frozenHeight, view.height - view.frozenHeight);
+    const previousLeft = scroller.scrollLeft; const previousTop = scroller.scrollTop;
+    scroller.scrollLeft += dx; scroller.scrollTop += dy;
+    if (scroller.scrollLeft !== previousLeft || scroller.scrollTop !== previousTop) {
+      extendDrag(); dragFrame = win.requestAnimationFrame(dragScroll);
+    }
+  }
+  function onPointerMove(event: PointerEvent): void {
+    if (event.pointerId !== dragPointer) return;
+    dragPosition = event; extendDrag();
+    if (dragFrame === undefined) dragFrame = win.requestAnimationFrame(dragScroll);
+  }
+  function onPointerEnd(): void {
+    const pointer = dragPointer;
+    dragPointer = null; axisDrag = null; dragPosition = null;
+    if (dragFrame !== undefined) win.cancelAnimationFrame(dragFrame);
+    dragFrame = undefined;
+    if (pointer !== null) for (const target of [root, scroller]) if (target.hasPointerCapture(pointer)) target.releasePointerCapture(pointer);
+  }
 
   function onKeyDown(event: KeyboardEvent): void {
     const selection = engine.getSelection();
@@ -1035,6 +1155,7 @@ export function createGrid(options: GridOptions): Grid {
     }
     if (event.isComposing || event.altKey) return;
     const control = event.ctrlKey || event.metaKey;
+    if (control && event.key.toLowerCase() === 'a') { event.preventDefault(); onPointerEnd(); selectAll(); return; }
     if (event.key === ' ' && selection && (control || event.shiftKey)) {
       event.preventDefault(); control ? selectColumn(selection.columnIndex) : selectRow(selection.rowIndex); return;
     }
@@ -1058,6 +1179,7 @@ export function createGrid(options: GridOptions): Grid {
       return;
     }
     if (event.key === 'Escape') {
+      onPointerEnd(); axisAnchor = null;
       addNextSelection = false;
       if (selection) {
         event.preventDefault();
@@ -1395,8 +1517,10 @@ export function createGrid(options: GridOptions): Grid {
     if (!indexWidth) return;
     const view = viewport(); const range = getSelectionRange();
     indexGutter.style.height = `${headerHeight + view.height}px`;
-    const corner = doc.createElement('div'); corner.textContent = '#'; corner.title = 'Row index';
-    corner.style.cssText = `height:${headerHeight}px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--acheron-grid-line-color);box-sizing:border-box`;
+    const corner = doc.createElement('button'); corner.type = 'button'; corner.tabIndex = -1; corner.textContent = '#'; corner.title = 'Select all cells'; corner.setAttribute('aria-label', 'Select all cells'); corner.disabled = !rowCount || !columns.length;
+    corner.setAttribute('aria-pressed', String(!!range && range.startRow === 0 && range.endRow === rowCount - 1 && range.startColumn === 0 && range.endColumn === columns.length - 1));
+    corner.addEventListener('click', event => { if (event.detail === 0) { selectAll(); scroller.focus({ preventScroll: true }); } });
+    corner.style.cssText = `width:100%;padding:0;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;height:${headerHeight}px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--acheron-grid-line-color);box-sizing:border-box`;
     const children: HTMLElement[] = [corner];
     const fixed = rowAxis.range(0, view.frozenHeight);
     const moving = rowAxis.range(rowAxis.position(engine.frozenRows) + view.scrollTop, view.height - view.frozenHeight);
@@ -1516,20 +1640,22 @@ export function createGrid(options: GridOptions): Grid {
   scroller.addEventListener('contextmenu', onContextMenu);
   root.addEventListener('contextmenu', onHeaderContextMenu);
   root.addEventListener('keydown', searchShortcut, true);
+  root.addEventListener('dblclick', onAxisDoubleClick, true);
   root.addEventListener('pointerdown', onHeaderPointerDown, true);
   root.addEventListener('keydown', cancelResizeKey, true);
   root.addEventListener('pointermove', onHeaderPointerMove);
   root.addEventListener('pointerup', commitResize);
   root.addEventListener('pointercancel', endResize);
   root.addEventListener('lostpointercapture', endResize);
-  scroller.addEventListener('pointermove', onPointerMove);
-  scroller.addEventListener('pointerup', onPointerEnd);
-  scroller.addEventListener('pointercancel', onPointerEnd);
-  scroller.addEventListener('lostpointercapture', onPointerEnd);
+  root.addEventListener('pointermove', onPointerMove);
+  root.addEventListener('pointerup', onPointerEnd);
+  root.addEventListener('pointercancel', onPointerEnd);
+  root.addEventListener('lostpointercapture', onPointerEnd);
   scroller.addEventListener('copy', onCopy);
   scroller.addEventListener('paste', onPaste);
   scroller.addEventListener('keydown', onKeyDown);
   scroller.addEventListener('dblclick', onDoubleClick);
+  win.addEventListener('blur', onPointerEnd);
   win.addEventListener('resize', render);
   render();
   function onDoubleClick(event: MouseEvent): void {
@@ -1541,7 +1667,7 @@ export function createGrid(options: GridOptions): Grid {
   return {
     render: () => { if (!searchBar.hidden) refreshSearch(); else render(); },
     openSearch,
-    selectColumn, selectRow,
+    selectColumn, selectRow, selectAll, autoFitColumn, autoFitRow,
     get frozenRows() { return engine.frozenRows; },
     get frozenColumns() { return engine.frozenColumns; },
     setFrozen,
@@ -1576,6 +1702,7 @@ export function createGrid(options: GridOptions): Grid {
       activeDialog?.remove();
       activeDialog = null;
       endResize();
+      root.removeEventListener('dblclick', onAxisDoubleClick, true);
       root.removeEventListener('pointerdown', onHeaderPointerDown, true);
       root.removeEventListener('keydown', cancelResizeKey, true);
       root.removeEventListener('pointermove', onHeaderPointerMove);
@@ -1587,11 +1714,11 @@ export function createGrid(options: GridOptions): Grid {
       const input = editor;
       editor = null;
       input?.remove();
-      dragPointer = null;
-      scroller.removeEventListener('pointermove', onPointerMove);
-      scroller.removeEventListener('pointerup', onPointerEnd);
-      scroller.removeEventListener('pointercancel', onPointerEnd);
-      scroller.removeEventListener('lostpointercapture', onPointerEnd);
+      onPointerEnd();
+      root.removeEventListener('pointermove', onPointerMove);
+      root.removeEventListener('pointerup', onPointerEnd);
+      root.removeEventListener('pointercancel', onPointerEnd);
+      root.removeEventListener('lostpointercapture', onPointerEnd);
       scroller.removeEventListener('copy', onCopy);
       scroller.removeEventListener('paste', onPaste);
       scroller.removeEventListener('dblclick', onDoubleClick);
@@ -1600,6 +1727,7 @@ export function createGrid(options: GridOptions): Grid {
       if (frame !== undefined) win.cancelAnimationFrame(frame);
       observer.disconnect();
       scroller.removeEventListener('scroll', render);
+      win.removeEventListener('blur', onPointerEnd);
       win.removeEventListener('resize', render);
       root.remove();
     },

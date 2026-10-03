@@ -1507,7 +1507,7 @@ test('default row index stays fixed, selects and resizes rows without changing d
   await expect(page.getByRole('button', { name: 'Select row 3', exact: true })).toHaveCount(0);
   expect(await gutter.evaluate(el => el.getBoundingClientRect().x)).toBe(gutterBounds.x);
   expect(await gutter.getByRole('button').count()).toBeLessThan(30);
-  const firstMoving = gutter.getByRole('button').nth(1); const row = Number(await firstMoving.textContent()) - 1;
+  const firstMoving = gutter.getByRole('button', { name: /^Select row / }).nth(1); const row = Number(await firstMoving.textContent()) - 1;
   await firstMoving.click({ button: 'right' }); await expect(page.getByRole('menu')).toBeVisible();
   expect(await page.evaluate(() => window.grid.getSelectionRange())).toMatchObject({ startRow: row, endRow: row, startColumn: 0, endColumn: 1 });
   await page.getByRole('menu').press('Escape');
@@ -1515,4 +1515,95 @@ test('default row index stays fixed, selects and resizes rows without changing d
   await expect(gutter).toHaveCount(0);
   await page.evaluate(async () => { const { createGrid } = await import('/canvas/index.js'); window.grid = createGrid({ ...window.indexOptions, indexColumn: false }); });
   await expect(gutter).toBeHidden();
+});
+
+
+test('axis Shift-click and drag select inclusive ranges, corner and Ctrl+A select all with permission veto', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.grid = createGrid({ container: document.querySelector('#grid'), frozenRows: 1, frozenColumns: 1,
+      columns: Array.from({ length: 4 }, (_, col) => ({ key: `c${col}`, title: `Column ${col}` })),
+      dataSource: new LocalDataSource(Array.from({ length: 100 }, (_, id) => ({ id, c0: id, c1: 'a', c2: 'b', c3: 'c' })), row => row.id),
+      resolveCellPermission: cell => cell.rowIndex === 7 && cell.columnIndex === 3 ? { selectable: false } : undefined });
+  });
+  const viewport = page.getByRole('grid'); const bounds = await viewport.boundingBox();
+  const range = () => page.evaluate(() => window.grid.getSelectionRange());
+  await page.mouse.click(bounds.x + 240, bounds.y - 18); await page.keyboard.down('Shift');
+  await page.mouse.click(bounds.x + 400, bounds.y - 18); await page.keyboard.up('Shift');
+  expect(await range()).toEqual({ startRow: 0, endRow: 99, startColumn: 1, endColumn: 2 });
+  await page.keyboard.down('Shift'); await page.mouse.click(bounds.x + 80, bounds.y - 18); await page.keyboard.up('Shift');
+  expect(await range()).toMatchObject({ startColumn: 0, endColumn: 1 });
+  await page.mouse.move(bounds.x + 80, bounds.y - 18); await page.mouse.down(); await page.mouse.move(bounds.x + 400, bounds.y - 18); await page.mouse.up();
+  expect(await range()).toMatchObject({ startColumn: 0, endColumn: 2 });
+  await page.getByRole('button', { name: 'Select row 3', exact: true }).click();
+  await page.getByRole('button', { name: 'Select row 5', exact: true }).click({ modifiers: ['Shift'] });
+  expect(await range()).toEqual({ startRow: 2, endRow: 4, startColumn: 0, endColumn: 3 });
+  const before = await range(); await page.getByRole('button', { name: 'Select row 8', exact: true }).click({ modifiers: ['Shift'] }); expect(await range()).toEqual(before);
+  const start = await page.getByRole('button', { name: 'Select row 2', exact: true }).boundingBox();
+  const end = await page.getByRole('button', { name: 'Select row 6', exact: true }).boundingBox();
+  await page.mouse.move(start.x + 20, start.y + start.height / 2); await page.mouse.down(); await page.mouse.move(end.x + 20, end.y + end.height / 2); await page.mouse.up();
+  expect(await range()).toEqual({ startRow: 1, endRow: 5, startColumn: 0, endColumn: 3 });
+  await page.getByRole('button', { name: 'Select all cells', exact: true }).click();
+  expect(await range()).toEqual({ startRow: 0, endRow: 99, startColumn: 0, endColumn: 3 });
+  await expect(page.getByRole('button', { name: 'Select all cells', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await viewport.press('Escape'); await viewport.press('Control+a'); expect(await range()).toMatchObject({ endRow: 99, endColumn: 3 });
+});
+
+test('stationary edge dragging scrolls both axes and stops on Escape, pointer release and destroy', async ({ page }) => {
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    window.grid = createGrid({ container: document.querySelector('#grid'), frozenRows: 1, frozenColumns: 1,
+      columns: Array.from({ length: 20 }, (_, col) => ({ key: `c${col}`, title: `Column ${col}` })),
+      dataSource: { getRowCount: () => 1000, getRowId: row => row, getValue: (row, key) => `${row}:${key}` } });
+  });
+  const viewport = page.getByRole('grid'); const b = await viewport.boundingBox();
+  const offsets = () => viewport.evaluate(el => [el.scrollLeft, el.scrollTop]);
+  await page.mouse.move(b.x + 240, b.y + 80); await page.mouse.down(); await page.mouse.move(b.x + b.width + 20, b.y + b.height + 20);
+  await expect.poll(async () => (await offsets()).every(value => value > 64)).toBe(true);
+  expect(await page.evaluate(() => window.grid.getSelectionRange().endRow)).toBeGreaterThan(9);
+  await viewport.press('Escape'); const stopped = await offsets(); await page.waitForTimeout(120); expect(await offsets()).toEqual(stopped); await page.mouse.up();
+  await page.mouse.move(b.x + 240, b.y + 80); await page.mouse.down(); await page.mouse.move(b.x + b.width + 20, b.y + b.height + 20);
+  await expect.poll(async () => (await offsets())[1]).toBeGreaterThan(stopped[1]);
+  await page.mouse.up(); const released = await offsets(); await page.waitForTimeout(120); expect(await offsets()).toEqual(released);
+  const rowStart = await page.getByRole('button', { name: 'Select row 1', exact: true }).boundingBox();
+  await page.mouse.move(rowStart.x + 20, rowStart.y + rowStart.height / 2); await page.mouse.down(); await page.mouse.move(rowStart.x + 20, b.y + b.height + 20);
+  await expect.poll(async () => (await offsets())[1]).toBeGreaterThan(released[1]);
+  expect((await offsets())[0]).toBe(released[0]); await page.mouse.up();
+  const columnStart = await offsets();
+  await page.mouse.move(b.x + 80, b.y - 18); await page.mouse.down(); await page.mouse.move(b.x + b.width + 20, b.y - 18);
+  await expect.poll(async () => (await offsets())[0]).toBeGreaterThan(columnStart[0]);
+  expect((await offsets())[1]).toBe(columnStart[1]); await page.mouse.up();
+
+  await page.mouse.move(b.x + 240, b.y + 80); await page.mouse.down(); await page.mouse.move(b.x + b.width + 20, b.y + b.height + 20);
+  await page.evaluate(() => window.grid.destroy()); await page.mouse.up(); await page.waitForTimeout(120);
+  expect(errors).toEqual([]); await expect(page.locator('#grid canvas')).toHaveCount(0);
+});
+
+test('auto-fit measures visible content, handles multiline rows and shares resize menu and double-click paths', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.readRows = []; window.sizes = [];
+    const source = new LocalDataSource(Array.from({ length: 100 }, (_, id) => ({ id, name: id === 0 ? 'First line\nSecond line\nThird line' : id === 99 ? 'x'.repeat(800) : 'Short' })), row => row.id);
+    const read = source.getValue.bind(source); source.getValue = (row, key) => { window.readRows.push(row); return read(row, key); };
+    window.grid = createGrid({ container: document.querySelector('#grid'), wrapText: true,
+      columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true }], dataSource: source,
+      onEvent: event => { if (event.type.endsWith(':resize')) window.sizes.push(event); } });
+    window.grid.setColumnWidth(1, 40);
+  });
+  await page.evaluate(() => { window.readRows = []; window.grid.autoFitColumn(1); window.grid.autoFitRow(0); });
+  const result = await page.evaluate(() => ({ sizes: window.sizes, reads: window.readRows }));
+  const column = result.sizes.filter(event => event.type === 'column:resize').at(-1);
+  const row = result.sizes.filter(event => event.type === 'row:resize').at(-1);
+  expect(column.size).toBeGreaterThan(40); expect(column.size).toBeLessThan(300); expect(row.size).toBeGreaterThan(32); expect(result.reads).not.toContain(99);
+  const viewport = page.getByRole('grid'); const b = await viewport.boundingBox();
+  await page.evaluate(() => window.grid.setColumnWidth(1, 40));
+  await page.mouse.dblclick(b.x + 200, b.y - 18);
+  expect(await page.evaluate(() => window.sizes.filter(event => event.type === 'column:resize').at(-1).size)).toBe(column.size);
+  await viewport.click({ position: { x: 240, y: 16 }, button: 'right' });
+  await page.getByRole('menuitem', { name: 'Auto-fit row', exact: true }).click();
+  await viewport.press('F2'); await expect(page.getByRole('textbox')).toBeVisible(); await page.getByRole('textbox').press('Escape');
 });

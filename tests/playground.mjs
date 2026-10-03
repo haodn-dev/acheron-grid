@@ -50,10 +50,10 @@ test('column menus apply local sort and combined filters, map edits, and recover
   expect(layout).toEqual({ centered: true, contained: true, separated: true });
   await page.getByRole('combobox', { name: 'Filter condition' }).selectOption('equals'); await page.getByRole('searchbox', { name: 'Contains text' }).fill('Mapped edit');
   await page.getByRole('button', { name: 'Apply view', exact: true }).click(); await expect(viewport).toHaveAttribute('aria-rowcount', '1');
-  await expect(page.locator('[data-grid-index] button')).toHaveCount(1); await expect(page.locator('[data-grid-index] button')).toHaveText('1');
+  await expect(page.locator('[data-grid-index] button[aria-label^="Select row "]')).toHaveCount(1); await expect(page.locator('[data-grid-index] button[aria-label^="Select row "]')).toHaveText('1');
   await header(400); await page.getByRole('menuitem', { name: 'Filter column…', exact: true }).click();
   await page.getByRole('searchbox', { name: 'Contains text' }).fill('no-match'); await page.getByRole('button', { name: 'Apply view', exact: true }).click();
-  await expect(viewport).toHaveAttribute('aria-rowcount', '0'); await expect(page.locator('[data-grid-index] button')).toHaveCount(0); await expect(viewport).toBeFocused();
+  await expect(viewport).toHaveAttribute('aria-rowcount', '0'); await expect(page.locator('[data-grid-index] button[aria-label^="Select row "]')).toHaveCount(0); await expect(viewport).toBeFocused();
   await header(); await page.getByRole('menuitem', { name: 'Clear sort and filters…', exact: true }).click();
   await page.getByRole('button', { name: 'Apply view', exact: true }).click(); await expect(viewport).toHaveAttribute('aria-rowcount', '10000');
   await viewport.press('Control+End'); await expect(cell).toHaveText('Metric 3: 30000'); await viewport.press('Home'); await viewport.press('ArrowRight'); await expect(cell).toHaveText('Name: Mapped edit');
