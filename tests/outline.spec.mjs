@@ -76,3 +76,19 @@ test('table lock notice follows locks, can be customized or disabled, and preser
     else await expect(page.locator('[data-grid-lock-notice]')).toHaveText('Read onlyCustom message');
   }
 });
+
+
+test('layout motion updates state immediately and cancels on scroll or reduced motion', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await setup(page);
+  const count = await page.evaluate(() => { window.grid.moveColumns([0], 3); return { keys: window.grid.columns.map(column => column.key), layers: document.querySelectorAll('[data-grid-motion]').length }; });
+  expect(count.keys).toEqual(['b', 'c', 'a']); expect(count.layers).toBeGreaterThan(0);
+  await expect(page.locator('[data-grid-motion]')).toHaveCount(0);
+  await page.evaluate(() => { window.grid.moveRows([0], 4); document.querySelector('[role=grid]').dispatchEvent(new Event('scroll')); });
+  await expect(page.locator('[data-grid-motion]')).toHaveCount(0);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  expect(await page.evaluate(() => { window.grid.moveColumns([0], 3); return document.querySelectorAll('[data-grid-motion]').length; })).toBe(0);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.evaluate(() => { window.grid.moveColumns([0], 3); window.grid.destroy(); });
+  await expect(page.locator('[data-grid-motion]')).toHaveCount(0);
+});

@@ -78,7 +78,7 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
   renderCell?: CellRenderer;
   createEditor?: CellEditorFactory;
   choiceEditor?: ChoiceEditorOptions | false;
-  motion?: boolean;
+  motion?: boolean | { readonly duration?: number };
   tableLockNotice?: false | { readonly title?: string; readonly description?: string };
   selectionStyle?: { readonly activeBorderWidth?: number; readonly headerTintOpacity?: number; readonly rangeBorderWidth?: number; readonly rangeTintOpacity?: number };
   allowColumnChanges?:boolean;
@@ -160,6 +160,9 @@ const stateIconSvg = {lock:icons.lock,'arrow-up':icons['arrow-up'],'arrow-down':
 /** Mount a grid. The caller owns the container and its dimensions. */
 export function createGrid(options: GridOptions): Grid {
   const { container, dataSource } = options;
+  const motionDuration = typeof options.motion === 'object' ? options.motion.duration ?? 220 : 220;
+  if (!Number.isFinite(motionDuration) || motionDuration < 0 || motionDuration > 1000) throw new RangeError('Motion duration must be between 0 and 1000ms.');
+
   const managesView=options.viewMode === 'core' || (options.viewMode !== 'host' && !options.onViewChange);
   let currentView=options.view;
   const activeBorderWidth = options.selectionStyle?.activeBorderWidth ?? 1;
@@ -726,7 +729,7 @@ export function createGrid(options: GridOptions): Grid {
       win.clearTimeout(lockNoticeTimer); lockNotice.hidden = true;
       if (locked && !wasLocked && options.tableLockNotice !== false) {
         lockNotice.hidden = false;
-        if (options.motion !== false && !win.matchMedia('(prefers-reduced-motion: reduce)').matches) lockNotice.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'translateY(0)', offset: .045 }, { opacity: 1, offset: .95 }, { opacity: 0 }], { duration: 4000, easing: 'ease-out' });
+        if (motionEnabled()) lockNotice.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'translateY(0)', offset: .045 }, { opacity: 1, offset: .95 }, { opacity: 0 }], { duration: 4000, easing: 'ease-out' });
         lockNoticeTimer = win.setTimeout(() => { lockNotice.hidden = true; }, 4000);
       }
     }
@@ -735,7 +738,9 @@ export function createGrid(options: GridOptions): Grid {
   function setFrozen(rows: number, columns: number): void {
     if (destroyed) throw new Error('Grid is destroyed.');
     if (editor) throw new Error('Finish editing before changing frozen panes.');
-    engine.setFrozen(rows, columns);
+    const axis = rows !== engine.frozenRows ? 'row' : 'column';
+    animateLayout(() => engine.setFrozen(rows, columns), axis);
+    if (motionEnabled()) for (const [line, scale] of [[freezeVertical, 'scaleY'], [freezeHorizontal, 'scaleX']] as const) if (!line.hidden) { line.style.transformOrigin = 'top left'; line.animate([{ opacity: 0, transform: `${scale}(0)` }, { opacity: 1, transform: `${scale}(1)` }], { duration: motionDuration, easing: 'cubic-bezier(.22,1,.36,1)' }); }
   }
 
   function resizeAxis(axis: typeof rowAxis, index: number, size: number): void {
@@ -825,8 +830,19 @@ export function createGrid(options: GridOptions): Grid {
     catch (error) { actionError.textContent = error instanceof Error ? error.message : 'Unable to fit size.'; actionError.style.display = 'block'; }
   }
 
+  function enterSurface(node: HTMLElement): void {
+    if (!motionEnabled()) return;
+    node.style.transformOrigin = 'top left';
+    node.animate([{ opacity: 0, transform: 'translateY(-4px) scale(.98)' }, { opacity: 1, transform: 'translateY(0) scale(1)' }], { duration: Math.min(160, motionDuration), easing: 'cubic-bezier(.22,1,.36,1)' });
+  }
+  function exitSurface(node: HTMLElement): void {
+    node.style.pointerEvents = 'none'; node.inert = true; node.setAttribute('aria-hidden', 'true');
+    node.removeAttribute('data-grid-choices');
+    if (!motionEnabled() || destroyed) { node.remove(); return; }
+    node.animate([{ opacity: 1 }, { opacity: 0, transform: 'translateY(-2px)' }], { duration: Math.min(100, motionDuration), easing: 'ease-out' }).finished.then(() => node.remove(), () => node.remove());
+  }
   function closeMenu(focus = false): void {
-    menu?.remove();
+    if (menu) exitSurface(menu);
     menu = null;
     if (focus && !destroyed) scroller.focus({ preventScroll: true });
   }
@@ -956,7 +972,7 @@ export function createGrid(options: GridOptions): Grid {
       item('Group selected rows',wholeRows&&!engine.getRowGroups().some(group=>group.collapsed)&&!engine.view.sort&&!engine.view.filters?.length&&!!span&&engine.canChangeLayout({kind:'group',group:{id:'',startRow:span.startRow,endRow:span.endRow,collapsed:false}}),()=>{if(span)structureAction(()=>engine.groupRows(span.startRow,span.endRow));});
       const sourceRow=engine.getRowSourceIndex(row),rowGroups=engine.getRowGroups().filter(group=>sourceRow>=group.startRow&&sourceRow<=group.endRow).sort((a,b)=>(a.endRow-a.startRow)-(b.endRow-b.startRow));
       const group=rowGroups[0];
-      if(group){item(group.collapsed?'Expand row group':'Collapse row group',engine.canChangeLayout({kind:group.collapsed?'expand':'collapse',group}),()=>structureAction(()=>engine.setGroupCollapsed(group.id,!group.collapsed)));item('Ungroup rows',engine.canChangeLayout({kind:'ungroup',group}),()=>structureAction(()=>engine.ungroupRows(group.id)));}
+      if(group){item(group.collapsed?'Expand row group':'Collapse row group',engine.canChangeLayout({kind:group.collapsed?'expand':'collapse',group}),()=>structureAction(()=>engine.setGroupCollapsed(group.id,!group.collapsed), 'row'));item('Ungroup rows',engine.canChangeLayout({kind:'ungroup',group}),()=>structureAction(()=>engine.ungroupRows(group.id)));}
     }
     if (!header && options.onRowChange) {
       const above = Object.freeze({ kind: 'insert' as const, beforeIndex: indices[0]!, count: 1 });
@@ -1035,6 +1051,7 @@ export function createGrid(options: GridOptions): Grid {
     popup.showPopover();
     popup.style.left = `${Math.max(8, Math.min(x, win.innerWidth - popup.offsetWidth - 8))}px`;
     popup.style.top = `${Math.max(8, Math.min(y, win.innerHeight - popup.offsetHeight - 8))}px`;
+    enterSurface(popup);
     popup.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
   }
 
@@ -1340,7 +1357,7 @@ export function createGrid(options: GridOptions): Grid {
     const input = editor;
     editor = null;
     richEditor?.remove(); richEditor = null;
-    choices?.remove(); choices = null;
+    if (choices) exitSurface(choices); choices = null;
     input.remove(); editorAnchor = null; editorLabel.hidden = true; win.removeEventListener('beforeunload', guardEditNavigation);
     editorError.style.position = 'absolute';
     editorError.style.display = 'none';
@@ -1481,6 +1498,7 @@ export function createGrid(options: GridOptions): Grid {
     else if (editor.tagName !== 'SELECT' && 'select' in editor) editor.select();
     if (editor instanceof win.HTMLSelectElement && editor.dataset.gridChoiceEditor !== undefined && options.choiceEditor) {
       choices = choicePanel(editor, root, options.choiceEditor, commit => { const done = finishEdit(commit); if (done) scroller.focus({ preventScroll: true }); return done; }, column.key);
+      enterSurface(choices);
       editor.style.opacity = '0'; editor.style.pointerEvents = 'none'; editor.tabIndex = -1; editor.setAttribute('aria-hidden', 'true');
     }
   }
@@ -2392,7 +2410,7 @@ export function createGrid(options: GridOptions): Grid {
           toggle.title=toggle.getAttribute('aria-label')!+' · '+(group.endRow-group.startRow+1)+' rows';const glyph=svgIcon('chevron-down');if(group.collapsed)glyph.setAttribute('style','transform:rotate(-90deg)');toggle.append(glyph);
           toggle.style.cssText=`position:absolute;left:${depth*18+2}px;top:${rowAxis.position(row)+band.offset-band.y+Math.max(0,(rowAxis.size(row)-20)/2)}px;width:18px;height:20px;display:flex;align-items:center;justify-content:center;padding:2px;border:1px solid var(--acheron-grid-line-color);border-radius:4px;background:var(--acheron-background);color:var(--acheron-icon-color);cursor:pointer`;
           toggle.addEventListener('pointerdown',event=>{event.stopPropagation();});
-          toggle.addEventListener('click',event=>{event.stopPropagation();try{structureAction(()=>engine.setGroupCollapsed(group.id,!group.collapsed));}catch(error){actionError.textContent=error instanceof Error?error.message:'Unable to toggle row group.';actionError.style.display='block';}});
+          toggle.addEventListener('click',event=>{event.stopPropagation();try{structureAction(()=>engine.setGroupCollapsed(group.id,!group.collapsed), 'row');}catch(error){actionError.textContent=error instanceof Error?error.message:'Unable to toggle row group.';actionError.style.display='block';}});
           pane.append(toggle);
         }
       }
@@ -2647,6 +2665,7 @@ export function createGrid(options: GridOptions): Grid {
     observedWidth = width; observedHeight = height; render();
   });
   observer.observe(root);
+  scroller.addEventListener('scroll', clearLayoutMotion, { passive: true });
   scroller.addEventListener('scroll', render, { passive: true });
   scroller.addEventListener('scroll',clearChoiceHover,{passive:true});
   root.addEventListener('pointerleave',clearChoiceHover);
@@ -2685,9 +2704,51 @@ export function createGrid(options: GridOptions): Grid {
     if (cell && columnEditors.get(columns[cell.col]!.key)?.type === 'checkbox') return;
     if (event.target !== editor && cell && selection?.rowIndex === cell.row && selection.columnIndex === cell.col && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) beginEdit();
   }
-  function structureAction<T>(run:()=>T):T {
+  const layoutMotion = new Set<HTMLElement>();
+  const motionPreference = win.matchMedia('(prefers-reduced-motion: reduce)');
+  const motionEnabled = () => options.motion !== false && motionDuration > 0 && !motionPreference.matches;
+  const cancelMotion = () => { if (motionPreference.matches) { clearLayoutMotion(); root.getAnimations({ subtree: true }).forEach(animation => animation.cancel()); } };
+  motionPreference.addEventListener('change', cancelMotion);
+  function clearLayoutMotion(): void { for (const node of layoutMotion) { node.getAnimations().forEach(animation => animation.cancel()); node.remove(); } layoutMotion.clear(); }
+  function animateLayout<T>(run: () => T, axis: 'row' | 'column'): T {
+    clearLayoutMotion();
+    if (!motionEnabled() || !canvas.clientWidth || !canvas.clientHeight) return run();
+    if (frame !== undefined) { win.cancelAnimationFrame(frame); frame = undefined; draw(); }
+    const oldView = viewport();
+    const indices = [...new Set(oldView.regions.flatMap(region => {
+      const range = axis === 'row' ? region.rows : region.columns;
+      return Array.from({ length: range.end - range.start }, (_, i) => range.start + i);
+    }))].slice(0, 64);
+    const old = indices.map(index => { const rect = oldView.cellRect(axis === 'row' ? index : 0, axis === 'column' ? index : 0); return { key: axis === 'row' ? dataSource.getRowId(engine.getRowSourceIndex(index)) : columns[index]!.key, position: axis === 'row' ? headerHeight + rect.y : rect.x, size: axis === 'row' ? rect.height : rect.width }; });
+    const snapshot = doc.createElement('canvas'); snapshot.width = canvas.width; snapshot.height = canvas.height; snapshot.getContext('2d')!.drawImage(canvas, 0, 0);
+    const result = run();
+    if (frame !== undefined) { win.cancelAnimationFrame(frame); frame = undefined; } draw();
+    const nextView = viewport(); const positions = new Map<string | number, number>();
+    for (const region of nextView.regions) {
+      const range = axis === 'row' ? region.rows : region.columns;
+      for (let i = range.start; i < range.end; i++) { const rect = nextView.cellRect(axis === 'row' ? i : 0, axis === 'column' ? i : 0); positions.set(axis === 'row' ? dataSource.getRowId(engine.getRowSourceIndex(i)) : columns[i]!.key, axis === 'row' ? headerHeight + rect.y : rect.x); }
+    }
+    const ratio = snapshot.width / canvas.clientWidth;
+    for (const strip of old) {
+      const next = positions.get(strip.key); if (next === strip.position) continue;
+      const start = Math.max(axis === 'row' ? headerHeight : 0, strip.position), end = Math.min(axis === 'row' ? canvas.clientHeight : canvas.clientWidth, strip.position + strip.size);
+      if (end <= start) continue;
+      const tile = doc.createElement('canvas'); tile.dataset.gridMotion = axis; tile.setAttribute('aria-hidden', 'true');
+      const width = axis === 'row' ? canvas.clientWidth : end - start, height = axis === 'row' ? end - start : canvas.clientHeight;
+      tile.width = Math.ceil(width * ratio); tile.height = Math.ceil(height * ratio);
+      tile.getContext('2d')!.drawImage(snapshot, (axis === 'row' ? 0 : start) * ratio, (axis === 'row' ? start : 0) * ratio, width * ratio, height * ratio, 0, 0, tile.width, tile.height);
+      const destination = next ?? start;
+      tile.style.cssText = `position:absolute;pointer-events:none;z-index:8;left:${indexWidth + (axis === 'column' ? destination : 0)}px;top:${axis === 'row' ? destination : 0}px;width:${width}px;height:${height}px`;
+      root.append(tile); layoutMotion.add(tile);
+      const delta = start - destination;
+      const animation = tile.animate([{ transform: axis === 'row' ? `translateY(${delta}px)` : `translateX(${delta}px)`, opacity: 1 }, { transform: 'translate(0,0)', opacity: 1, offset: .8 }, { transform: 'translate(0,0)', opacity: 0 }], { duration: motionDuration, easing: 'cubic-bezier(.22,1,.36,1)' });
+      const remove = () => { tile.remove(); layoutMotion.delete(tile); }; animation.finished.then(remove, remove);
+    }
+    return result;
+  }
+  function structureAction<T>(run:()=>T, axis?: 'row' | 'column'):T {
     if(editor||destroyed)throw new Error('Save or cancel the editor before changing structure.');
-    return run();
+    return axis ? animateLayout(run, axis) : run();
   }
   return {
     getMerge:engine.getMerge,getMergedCells:engine.getMergedCells,canMerge:engine.canMerge,
@@ -2696,7 +2757,7 @@ export function createGrid(options: GridOptions): Grid {
     getRowGroups:engine.getRowGroups,
     groupRows:(start:number,end:number)=>structureAction(()=>engine.groupRows(start,end)),
     ungroupRows:(id:string)=>structureAction(()=>engine.ungroupRows(id)),
-    setGroupCollapsed:(id:string,collapsed:boolean)=>structureAction(()=>engine.setGroupCollapsed(id,collapsed)),
+    setGroupCollapsed:(id:string,collapsed:boolean)=>structureAction(()=>engine.setGroupCollapsed(id,collapsed), 'row'),
     setView:(view:LocalViewOptions)=>structureAction(()=>{engine.setView(view);currentView=engine.view;}),
     get view(){return managesView ? engine.view : currentView ?? {};},
     copySelectionBlocks,
@@ -2706,11 +2767,11 @@ export function createGrid(options: GridOptions): Grid {
     deleteColumns:(indices:readonly number[])=>structureAction(()=>engine.deleteColumns(indices)),
     insertRows: (index:number,rows:readonly DataRow[])=>structureAction(()=>engine.insertRows(index,rows)),
     deleteRows: (indices:readonly number[])=>structureAction(()=>engine.deleteRows(indices)),
-    moveRows: (indices:readonly number[],beforeIndex:number)=>structureAction(()=>engine.moveRows(indices,beforeIndex)),
-    moveColumns: (indices:readonly number[],beforeIndex:number)=>structureAction(()=>engine.moveColumns(indices,beforeIndex)),
+    moveRows: (indices:readonly number[],beforeIndex:number)=>structureAction(()=>engine.moveRows(indices,beforeIndex), 'row'),
+    moveColumns: (indices:readonly number[],beforeIndex:number)=>structureAction(()=>engine.moveColumns(indices,beforeIndex), 'column'),
     setTheme(patch) {
       if (destroyed) throw new Error('Grid is destroyed.');
-      const next = Object.freeze({ ...theme, ...patch }); validateTheme(next); theme = next; measuredRows.clear();
+      const next = Object.freeze({ ...theme, ...patch }); validateTheme(next); clearLayoutMotion(); theme = next; measuredRows.clear();
       for (const [key, value] of Object.entries(theme)) root.style.setProperty('--acheron-' + key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase()), value);
       for (const [name, image] of Object.entries(stateIcons)) {
         const color = theme.iconColor.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
@@ -2743,7 +2804,7 @@ export function createGrid(options: GridOptions): Grid {
     setRowHeight: (index, height) => resizeAxis(rowAxis, index, height),
     destroy() {
       if (destroyed) return;
-      win.clearTimeout(lockNoticeTimer);
+      win.clearTimeout(lockNoticeTimer); clearLayoutMotion(); motionPreference.removeEventListener('change', cancelMotion);
       choices?.remove(); choices = null; win.removeEventListener('beforeunload', guardEditNavigation);
       clearReorder();
       engine.destroy();
@@ -2787,6 +2848,7 @@ export function createGrid(options: GridOptions): Grid {
       scroller.removeEventListener('keydown', onKeyDown);
       if (frame !== undefined) win.cancelAnimationFrame(frame);
       observer.disconnect();
+      scroller.removeEventListener('scroll', clearLayoutMotion);
       scroller.removeEventListener('scroll', render);
       scroller.removeEventListener('scroll',clearChoiceHover);
       root.removeEventListener('pointerleave',clearChoiceHover);
