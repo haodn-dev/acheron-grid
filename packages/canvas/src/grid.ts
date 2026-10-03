@@ -39,7 +39,7 @@ export interface GridTheme {
   headerFont: string;
   linkColor: string;
 }
-export type ColumnEditor = { readonly type: 'select'; readonly values: readonly string[] } | { readonly type: 'checkbox' };
+export type ColumnEditor = { readonly type: 'select' | 'multiselect'; readonly values: readonly string[] } | { readonly type: 'checkbox' };
 export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 'resolveCellPermission' | 'onEvent' | 'allowLockChanges' | 'frozenRows' | 'frozenColumns'> {
   view?: LocalViewOptions;
   onViewChange?: (view: LocalViewOptions) => void;
@@ -162,10 +162,11 @@ export function createGrid(options: GridOptions): Grid {
   const columnEditors = new Map<string, ColumnEditor>();
   for (const [key, config] of Object.entries(options.columnEditors ?? {})) {
     const column = columns.find(column => column.key === key);
-    if (!column || !config || !['select', 'checkbox'].includes(config.type)) throw new TypeError('Invalid column editor configuration.');
-    if (config.type === 'select') {
+    if (!column || !config || !['select', 'multiselect', 'checkbox'].includes(config.type)) throw new TypeError('Invalid column editor configuration.');
+    if (config.type === 'select' || config.type === 'multiselect') {
       if (!Array.isArray(config.values) || !config.values.length || config.values.some(value => typeof value !== 'string') || new Set(config.values).size !== config.values.length) throw new TypeError('Select values must be a nonempty list of unique strings.');
-      columnEditors.set(key, Object.freeze({ type: 'select', values: Object.freeze([...config.values]) }));
+      if (config.type === 'multiselect' && config.values.some(value => !value || value.includes(','))) throw new TypeError('Multiselect values must be nonempty and contain no commas.');
+      columnEditors.set(key, Object.freeze({ type: config.type, values: Object.freeze([...config.values]) }));
     } else {
       if (column.editable && typeof column.parse !== 'function') throw new TypeError('Checkbox columns require a boolean parser.');
       columnEditors.set(key, Object.freeze({ type: 'checkbox' }));
@@ -938,7 +939,7 @@ export function createGrid(options: GridOptions): Grid {
     if (commit) {
       try {
         if (!editor.checkValidity()) throw new Error(editor.validationMessage);
-        engine.editCell(selection.rowIndex, selection.columnIndex, editor instanceof win.HTMLInputElement && editor.type === 'checkbox' ? String(editor.checked) : editor.value);
+        engine.editCell(selection.rowIndex, selection.columnIndex, editor instanceof win.HTMLInputElement && editor.type === 'checkbox' ? String(editor.checked) : editor instanceof win.HTMLSelectElement && editor.multiple ? Array.from(editor.selectedOptions).map(option => option.value).join(', ') : editor.value);
       } catch (error) {
         editor.setCustomValidity(error instanceof Error ? error.message : 'Unable to save cell.');
         editor.setAttribute('aria-invalid', 'true');
@@ -970,15 +971,19 @@ export function createGrid(options: GridOptions): Grid {
         throw new Error('Cell editor must be a detached input, select or textarea from the grid document.');
       }
       const configured = columnEditors.get(column.key);
-      if (!custom && configured?.type === 'select') {
+      if (!custom && (configured?.type === 'select' || configured?.type === 'multiselect')) {
         const select = doc.createElement('select');
         for (const value of configured.values) { const option = doc.createElement('option'); option.value = option.textContent = value; select.append(option); }
-        select.required = !configured.values.includes(''); editor = select;
+        select.multiple = configured.type === 'multiselect'; select.size = select.multiple ? Math.min(8, configured.values.length) : 0;
+        select.required = !select.multiple && !configured.values.includes(''); editor = select;
       } else if (!custom && configured?.type === 'checkbox') {
         if (typeof value !== 'boolean') throw new TypeError('Checkbox cells require boolean values.');
         const checkbox = doc.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = value; editor = checkbox;
       } else editor = custom ?? doc.createElement(options.multilineEditor ? 'textarea' : 'input');
-      if (!custom) editor.value = value == null ? '' : String(value);
+      if (!custom) {
+        if (editor instanceof win.HTMLSelectElement && editor.multiple) { const selected = new Set(String(value ?? '').split(',').map(item => item.trim())); for (const option of Array.from(editor.options)) option.selected = selected.has(option.value); }
+        else editor.value = value == null ? '' : String(value);
+      }
     } catch (error) {
       actionError.textContent = error instanceof Error ? error.message : 'Unable to create cell editor.';
       actionError.style.display = 'block';
@@ -1381,7 +1386,7 @@ export function createGrid(options: GridOptions): Grid {
       ctx.save(); ctx.globalAlpha = .08; ctx.fillStyle = theme.headerTextColor; ctx.fillRect(x, y, width, height); ctx.restore();
     }
     if (header && (wholeColumn || engine.getSelection()?.columnIndex === columnIndex)) {
-      ctx.save(); ctx.globalAlpha = .12; ctx.fillStyle = theme.selectionColor; ctx.fillRect(x, y, width, height); ctx.restore();
+      ctx.save(); ctx.globalAlpha = .12; ctx.fillStyle = theme.selectionColor; ctx.fillRect(x, y, width, height); ctx.globalAlpha = 1; ctx.fillRect(x + 1, y + height - 3, Math.max(0, width - 2), 3); ctx.restore();
     }
     ctx.strokeStyle = theme.gridLineColor;
     ctx.lineWidth = 1;
@@ -1514,7 +1519,7 @@ export function createGrid(options: GridOptions): Grid {
     editor.style.left = `${rect.x - clip.x}px`;
     editor.style.top = `${rect.y - clip.y}px`;
     editor.style.width = `${rect.width}px`;
-    editor.style.height = `${rect.height}px`;
+    editor.style.height = `${editor instanceof win.HTMLSelectElement && editor.multiple ? Math.min(220, Math.max(rect.height, editor.size * 24 + 8), Math.max(1, clip.height - Math.max(0, rect.y - clip.y))) : rect.height}px`;
     const hidden = rect.x + rect.width <= clip.x || rect.x >= clip.x + clip.width || rect.y + rect.height <= clip.y || rect.y >= clip.y + clip.height;
     editorPane.style.clipPath = hidden ? 'inset(100%)' : '';
     if (editor instanceof win.HTMLTextAreaElement) {
@@ -1765,13 +1770,15 @@ export function createGrid(options: GridOptions): Grid {
         headerHeight + rowAxis.position(range.startRow) + region.offsetY + 1,
         Math.max(0, columnAxis.position(range.endColumn + 1) - columnAxis.position(range.startColumn) - 2),
         Math.max(0, rowAxis.position(range.endRow + 1) - rowAxis.position(range.startRow) - 2));
-      if (ranges.length > 1 || ranges[0]!.startRow !== ranges[0]!.endRow || ranges[0]!.startColumn !== ranges[0]!.endColumn) {
-        // The active cell belongs to only one pane; never project it into another.
-        if (selection.rowIndex >= region.rows.start && selection.rowIndex < region.rows.end && selection.columnIndex >= region.columns.start && selection.columnIndex < region.columns.end) {
-          context!.strokeRect(columnAxis.position(selection.columnIndex) + region.offsetX + 1,
-            headerHeight + rowAxis.position(selection.rowIndex) + region.offsetY + 1,
-            Math.max(0, columnAxis.size(selection.columnIndex) - 2), Math.max(0, rowAxis.size(selection.rowIndex) - 2));
-        }
+      // Draw the active cell once in its own pane, above semantic cell colors.
+      if (selection.rowIndex >= region.rows.start && selection.rowIndex < region.rows.end && selection.columnIndex >= region.columns.start && selection.columnIndex < region.columns.end) {
+        const x = columnAxis.position(selection.columnIndex) + region.offsetX;
+        const y = headerHeight + rowAxis.position(selection.rowIndex) + region.offsetY;
+        const width = columnAxis.size(selection.columnIndex); const height = rowAxis.size(selection.rowIndex);
+        context!.strokeStyle = '#ffffff'; context!.lineWidth = 1;
+        context!.strokeRect(x + 3.5, y + 3.5, Math.max(0, width - 7), Math.max(0, height - 7));
+        context!.strokeStyle = theme.selectionColor; context!.lineWidth = 3;
+        context!.strokeRect(x + 1.5, y + 1.5, Math.max(0, width - 3), Math.max(0, height - 3));
       }
       context!.restore();
     }

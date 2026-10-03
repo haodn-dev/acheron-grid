@@ -375,3 +375,6 @@ Select editor lists may include `''` as an optional empty value; all values rema
 
 
 Scrollbars use native thin styling, with `scrollbarColor` for the thumb and `headerBackground` for the track. Frozen boundaries use the independent `freezeColor`, keeping them distinct from selection. Both colors support `setTheme`; scrollbar thickness follows browser/platform support with an 8px WebKit fallback.
+
+
+`columnEditors: { tags: { type: 'multiselect', values: ['Idea', 'Design', 'Content'] } }` uses a native multiple-select list. Ctrl/Cmd-click toggles options; Enter saves and Escape cancels. Selected labels serialize as a comma-separated string through the column parser; option labels must be unique, nonempty and contain no commas. An empty selection saves an empty string. Active cells use a contrasting inner border and a stronger selection outline; the corresponding leaf header has an accent underline.
