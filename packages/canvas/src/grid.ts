@@ -63,7 +63,7 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
   imageColumns?: readonly string[];
   columnEditors?: Readonly<Record<string, ColumnEditor>>;
   multilineEditor?: boolean;
-  editorOptions?: { readonly pinned?: boolean; readonly showLabel?: boolean; readonly guardNavigation?: boolean };
+  editorOptions?: { readonly pinned?: boolean; readonly showLabel?: boolean | 'scroll' | 'always'; readonly guardNavigation?: boolean };
   wrapText?: boolean;
   detectLinks?: boolean;
   allowOpenLinks?: boolean;
@@ -1785,7 +1785,8 @@ export function createGrid(options: GridOptions): Grid {
       if (editor instanceof win.HTMLTextAreaElement) {
         editor.style.height = '0px'; editor.style.height = `${Math.min(Math.max(editorAnchor.height, editor.scrollHeight + 4), win.innerHeight - top - 16)}px`;
       }
-      editorLabel.hidden = options.editorOptions.showLabel === false;
+      const displaced=Math.abs(bounds.left+indexWidth+rect.x-editorAnchor.left)>.5 || Math.abs(bounds.top+headerHeight+rect.y-editorAnchor.top)>.5;
+      editorLabel.hidden = options.editorOptions.showLabel === false || options.editorOptions.showLabel === 'scroll' && !displaced;
       if (choices && editor instanceof win.HTMLSelectElement) { choices.hidden = false; positionChoicePanel(choices, editor); }
       if (editorError.style.display !== 'none') { editorError.style.position = 'fixed'; editorError.style.left = `${left}px`; editorError.style.top = `${Math.min(top + editor.offsetHeight + 4, win.innerHeight - editorError.offsetHeight - 8)}px`; editorError.style.maxWidth = `${win.innerWidth - left - 8}px`; editorError.style.visibility = 'visible'; }
       return;
@@ -1945,7 +1946,8 @@ export function createGrid(options: GridOptions): Grid {
         if (activeColumn !== undefined && activeColumn >= group.start && activeColumn < group.end || getSelectionRanges().some(range => range.startRow === 0 && range.endRow === rowCount - 1 && range.startColumn < group.end && range.endColumn >= group.start)) {
           context!.save(); context!.globalAlpha = headerTintOpacity; context!.fillStyle = theme.selectionColor; context!.fillRect(x, y, width, headerRowHeight); context!.restore();
         }
-        context!.strokeStyle = theme.gridLineColor; context!.lineWidth = 1; context!.strokeRect(x + .5, y + .5, width, headerRowHeight);
+        context!.strokeStyle = theme.gridLineColor; context!.lineWidth = 1; context!.beginPath();
+        context!.moveTo(x+width-.5,y);context!.lineTo(x+width-.5,y+headerRowHeight-.5);context!.lineTo(x,y+headerRowHeight-.5);context!.stroke();
         context!.save(); context!.beginPath(); context!.rect(x + 6, y, Math.max(0, width - 12), headerRowHeight); context!.clip();
         context!.font = theme.headerFont; context!.fillStyle = theme.headerTextColor; context!.textAlign = 'center'; context!.textBaseline = 'middle';
         context!.fillText(group.title, (Math.max(band.x, x) + Math.min(band.x + band.width, x + width)) / 2, y + headerRowHeight / 2); context!.restore();
@@ -1960,6 +1962,8 @@ export function createGrid(options: GridOptions): Grid {
       context!.restore();
     }
     const focusedHeader = headerSurface.contains(doc.activeElement) ? (doc.activeElement as HTMLElement).dataset.gridHeaderCell : undefined;
+    const focusedGroup = headerSurface.contains(doc.activeElement) ? (doc.activeElement as HTMLElement).dataset.gridHeaderGroup : undefined;
+    const focusedGroupStart = headerSurface.contains(doc.activeElement) ? (doc.activeElement as HTMLElement).dataset.groupStart : undefined;
     if (viewportAccessibility && headers.levels > 1) {
       const rows = Array.from({ length: headers.levels }, (_, level) => {
         const row = doc.createElement('div'); row.setAttribute('role', 'row'); row.setAttribute('aria-rowindex', String(level + 1));
@@ -1968,6 +1972,7 @@ export function createGrid(options: GridOptions): Grid {
       headerSurface.replaceChildren(...rows);
     } else headerSurface.replaceChildren(...headerNodes);
     if (focusedHeader !== undefined) headerNodes.find(node => node.dataset.gridHeaderCell === focusedHeader)?.focus({ preventScroll: true });
+    else if(focusedGroup!==undefined)headerNodes.find(node=>node.dataset.gridHeaderGroup===focusedGroup&&node.dataset.groupStart===focusedGroupStart)?.focus({preventScroll:true});
     if (viewportAccessibility) {
       for (const key of accessibleCells.keys()) if (!seenCells.has(key)) accessibleCells.delete(key);
       accessibleBody.replaceChildren(...[...accessibleRows.entries()].sort(([a], [b]) => a - b).map(([, row]) => row));
@@ -2313,6 +2318,7 @@ export function createGrid(options: GridOptions): Grid {
   scroller.addEventListener('dblclick', onDoubleClick);
   win.addEventListener('blur', onPointerEnd);
   win.addEventListener('resize', render);
+  win.addEventListener('scroll',positionEditor,{capture:true,passive:true});
   render();
   function onDoubleClick(event: MouseEvent): void {
     const cell = pointerCell(event);
@@ -2423,6 +2429,7 @@ export function createGrid(options: GridOptions): Grid {
       root.removeEventListener('pointerleave',clearChoiceHover);
       win.removeEventListener('blur', onPointerEnd);
       win.removeEventListener('resize', render);
+      win.removeEventListener('scroll',positionEditor,true);
       root.remove();
     },
   };

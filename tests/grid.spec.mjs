@@ -2060,3 +2060,17 @@ test('touch moves selected rows and columns through shared preview, history and 
   await page.evaluate(()=>window.grid.selectRow(1));const viewport=await page.locator('[data-grid-viewport]').boundingBox();await send('touchStart',from);await send('touchMove',{x:from.x,y:viewport.y+viewport.height-5});await expect.poll(()=>page.locator('[data-grid-viewport]').evaluate(el=>el.scrollTop)).toBeGreaterThan(0);await send('touchCancel');await expect(page.locator('[data-grid-reorder-guide]')).not.toBeVisible();expect(await page.evaluate(()=>window.requests.length)).toBe(3);
 
 });
+
+
+test('pinned editor scroll label appears on displacement and resets for each draft',async({page})=>{
+  await page.goto('/');
+  await page.evaluate(async()=>{
+    const {createGrid}=await import('/canvas/index.js');const {LocalDataSource}=await import('/core/index.js');
+    window.grid=createGrid({container:document.querySelector('#grid'),columns:[{key:'name',title:'Name',editable:true}],dataSource:new LocalDataSource(Array.from({length:100},(_,id)=>({id,name:'Draft'})),row=>row.id),editorOptions:{pinned:true,showLabel:'scroll'}});
+  });
+  const viewport=page.getByRole('grid');await viewport.press('Control+Home');await viewport.press('F2');
+  const badge=page.locator('[data-grid-editor-label]');await expect(badge).toBeHidden();
+  await viewport.evaluate(el=>{el.scrollTop=120;});await expect(badge).toBeVisible();
+  await viewport.evaluate(el=>{el.scrollTop=0;});await expect(badge).toBeHidden();
+  await page.getByRole('textbox').press('Escape');await viewport.press('F2');await expect(badge).toBeHidden();
+});
