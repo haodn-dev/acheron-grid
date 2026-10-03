@@ -27,6 +27,7 @@ function mount(next = view) {
   view = next;
   document.querySelector('#range-count').textContent = '0 ranges selected';
   grid = createGrid({ container: document.querySelector('#grid'), columns, dataSource: viewSource, view, onViewChange: next => { mount(next); document.querySelector('#grid [role="grid"]').focus({ preventScroll: true }); activity.textContent = `New view applied. Values remain; selection, locks, colors and undo history reset.`; }, multilineEditor: true, wrapText: true,
+    columnWidths: { approved: 100, avatar: 80 },
     frozenRows: frozen.checked ? Math.min(1, viewSource.getRowCount()) : 0, frozenColumns: frozen.checked ? 1 : 0,
     theme: themes[appearance.value], accessibility: 'viewport',
     resolveCellPermission: () => formattingLock.checked ? { formatting: false } : undefined,
@@ -51,7 +52,6 @@ function mount(next = view) {
       ctx.fillText(String(cell.value), cell.x + 18, cell.y + cell.height / 2); return true;
     },
   });
-  grid.setColumnWidth(3, 100); grid.setColumnWidth(4, 80);
 }
 appearance.addEventListener('change', () => { grid.setTheme(themes[appearance.value]); activity.textContent = 'Appearance updated. Selection, locks, sizes and undo history remain.'; });
 frozen.addEventListener('change', () => {

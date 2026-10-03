@@ -93,6 +93,8 @@ Install the test browser with `npx playwright install chromium` before running b
 
 See [Contributing](CONTRIBUTING.md) for changes and bug reports.
 
+[CI](.github/workflows/ci.yml) checks Node 22 and 24 on Ubuntu for pushes and pull requests: type checking, Node/SSR tests, package dry runs, Chromium integration and the standalone playground. Failed browser runs retain traces, screenshots and reports for seven days. The workflow does not publish packages.
+
 ## Limits and planned work
 
 Data sources and validation are synchronous. Rows and columns can change through structural commands with state remapping and undo/redo; external source structure changes require a new view/mount. Local values, user state and history are in memory. Persistence and backend authorization belong to the application.
