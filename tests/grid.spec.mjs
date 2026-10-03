@@ -2019,7 +2019,7 @@ test('menu icons and groups, quiet search focus, match tint and dropdown hover s
   await page.addStyleTag({content:'input:focus-visible{outline:2px solid green;outline-offset:3px}'});
   await page.evaluate(async()=>{const {createGrid}=await import('/canvas/index.js');const {LocalDataSource}=await import('/core/index.js');window.source=new LocalDataSource([{id:1,name:'Match',status:'Active'},{id:2,name:'Match',status:'Pending'}],row=>row.id);window.grid=createGrid({container:document.querySelector('#grid'),dataSource:window.source,theme:{iconColor:'#172554'},columns:[{key:'name',title:'Name',editable:true},{key:'status',title:'Status',editable:true}],columnEditors:{status:{type:'select',values:['Active','Pending']}}});});
   const viewport=page.locator('[data-grid-viewport]');await viewport.click({position:{x:20,y:16},button:'right'});
-  const menu=page.getByRole('menu');await expect(menu.getByRole('separator')).toHaveCount(5);
+  const menu=page.getByRole('menu');await expect(menu.getByRole('separator')).toHaveCount(6);
   expect(await menu.getByRole('menuitem').evaluateAll(items=>items.every(item=>item.querySelector('svg[aria-hidden=true]')))).toBe(true);
   await expect(menu.getByRole('menuitem',{name:'Copy',exact:true}).locator('svg')).toHaveCSS('color','rgb(23, 37, 84)');await menu.press('Escape');
   await viewport.press('Control+f');const search=page.getByRole('searchbox',{name:'Find in grid',exact:true});await expect(search).toHaveCSS('outline-style','none');await expect(search).toHaveCSS('box-shadow','none');await search.fill('Match');await expect(page.getByRole('status').filter({hasText:'1 of 2'})).toBeVisible();

@@ -5,7 +5,7 @@ import type { ClipboardBlock } from './clipboard.js';
 import { reorderedIndices } from './structure.js';
 import type { StructureRequest } from './structure.js';
 import type { CellUpdate, DataSource, RowId, DataRow, RowSplice } from './data-source.js';
-import type { Column, CellSelection, SelectionRange, CellLockTarget, CellFormatTarget, CellFormat, CellFormatPatch } from './types.js';
+import type { Column, CellSelection, SelectionRange, CellLockTarget, CellFormatTarget, CellFormat, CellFormatPatch, RowGroup, LayoutRequest } from './types.js';
 import { resolvePermissions } from './permissions.js';
 import type { CellPermission, CellPermissionPolicy, CellPermissionResolver } from './permissions.js';
 import type { GridEvent, GridChangeSource } from './events.js';
@@ -21,6 +21,9 @@ export type GridInvalidation =
   | { readonly type: 'structure'; readonly rowMap: readonly number[]; readonly columnMap: readonly number[] };
 
 export interface GridEngineOptions {
+  allowMerging?: boolean;
+  allowRowGrouping?: boolean;
+  canChangeLayout?: (request: Readonly<LayoutRequest>) => boolean;
   columns: readonly Column[];
   view?: LocalViewOptions;
   canChangeStructure?: (request: Readonly<StructureRequest>) => boolean;
@@ -69,6 +72,9 @@ export function createGridEngine(options: GridEngineOptions) {
   const allowLockChanges = options.allowLockChanges ?? true;
   if (typeof allowLockChanges !== 'boolean') throw new TypeError('allowLockChanges must be boolean.');
   let tableLocked = false;
+  let merges: Readonly<SelectionRange>[] = [];
+  let groups: Readonly<RowGroup>[] = [];
+  let groupId = 0;
   const addedColumnKeys=new Set<string>();
   const manualRows=new Set<number>();
   const lockedRows = new Set<number>();
@@ -84,12 +90,14 @@ export function createGridEngine(options: GridEngineOptions) {
   type FormatEntry = { target: Readonly<CellFormatTarget>; bounds: Readonly<SelectionRange>; patch: Readonly<CellFormatPatch>; orders: Readonly<{ background?: number; textColor?: number }>; order: number };
   type FormatChange = { key: string; previous: FormatEntry | undefined; value: FormatEntry | undefined };
   type StructureState = {
+    merges: readonly Readonly<SelectionRange>[]; groups: readonly Readonly<RowGroup>[];
     columns: typeof columns; rowCount: number; rowIds: readonly RowId[]; rows: ReturnType<GridAxis['snapshot']>; widths: ReturnType<GridAxis['snapshot']>;
     selection: CellSelection | null; anchor: CellSelection | null; ranges: SelectionRange[];
     manualRows:number[]; lockedRows: number[]; lockedColumns: number[]; lockedCells: string[]; formats: Map<string, FormatEntry>;
     frozenRows: number; frozenColumns: number;
   };
   type HistoryCommand = { kind: 'values'; changes: Change[] } | { kind: 'format'; changes: FormatChange[] }
+    | { kind: 'outline'; requests: readonly LayoutRequest[]; beforeMerges: readonly Readonly<SelectionRange>[]; afterMerges: readonly Readonly<SelectionRange>[]; beforeGroups: readonly Readonly<RowGroup>[]; afterGroups: readonly Readonly<RowGroup>[] }
     | { kind: 'resize'; axis: 'row' | 'column'; index: number; previous: number; size: number; previousManual:boolean }
     | { kind: 'freeze'; previousRows: number; previousColumns: number; rows: number; columns: number }
     | { kind: 'structure'; request: Readonly<StructureRequest>; reverseRequest: Readonly<StructureRequest>; before: StructureState; after: StructureState; forward: readonly RowSplice[]; backward: readonly RowSplice[]; rowMap: readonly number[]; columnMap: readonly number[] };
@@ -107,6 +115,10 @@ export function createGridEngine(options: GridEngineOptions) {
   let displayAnchor: { row: number; col: number } | null = null;
 
   function viewAxis(): GridAxis { return projectedAxis ?? rowAxis; }
+  function visibleFrozenRows():number {
+    if(!projection||!groups.some(group=>group.collapsed))return Math.min(frozenRows,visibleRowCount());
+    let low=0,high=projection.length;while(low<high){const mid=(low+high)>>>1;if(projection[mid]!<frozenRows)low=mid+1;else high=mid;}return low;
+  }
   function rebuildViewAxis(): void {
     if (!projection) { projectedAxis = null; return; }
     const axis = new GridAxis(projection.length, rowHeight);
@@ -116,6 +128,11 @@ export function createGridEngine(options: GridEngineOptions) {
     projectedAxis = axis;
   }
   function buildProjection(next: LocalViewOptions): number[] | null {
+    if (!next.sort && !next.filters?.length) {
+      const hidden = groups.filter(group => group.collapsed);
+      return hidden.length ? Array.from({length:rowCount}, (_,i)=>i).filter(row => !hidden.some(group => row>group.startRow && row<=group.endRow)) : null;
+    }
+    if (merges.length || groups.length) throw new Error('Unmerge cells and remove row groups before sorting or filtering.');
     for (const key of [next.sort?.columnKey, ...(next.filters ?? []).map(filter => filter.columnKey)]) {
       if (key !== undefined && !columnIndices.has(key)) throw new Error('Unknown view column: ' + key);
     }
@@ -147,6 +164,7 @@ export function createGridEngine(options: GridEngineOptions) {
   }
   function sourceRanges(range: SelectionRange): SelectionRange[] {
     if (![range.startRow,range.endRow,range.startColumn,range.endColumn].every(Number.isSafeInteger) || range.startRow<0 || range.endRow<range.startRow || range.endRow>=visibleRowCount() || range.startColumn<0 || range.endColumn<range.startColumn || range.endColumn>=columns.length) throw new RangeError('Invalid selection range.');
+    if(!projection)return [{...range}];
     const rows = Array.from({length:range.endRow-range.startRow+1}, (_,i)=>sourceRow(range.startRow+i)).sort((a,b)=>a-b);
     const result:SelectionRange[]=[];
     for (const row of rows) { const last=result.at(-1); if(last && last.endRow+1===row)last.endRow=row; else result.push({...range,startRow:row,endRow:row}); }
@@ -157,6 +175,7 @@ export function createGridEngine(options: GridEngineOptions) {
   }
   function selectDisplayRange(range:SelectionRange, mode:'replace'|'add'|'extend'='replace'):boolean {
     assertAlive();
+    if(merges.length)range=expandMergedRange(range,merges.map(span=>({...span,startRow:displayRow(span.startRow),endRow:displayRow(span.endRow)})));
     const parts=sourceRanges(range);
     if (!getCellPermission(sourceRow(range.startRow),range.startColumn).selectable || !getCellPermission(sourceRow(range.endRow),range.endColumn).selectable) return false;
     if (!['replace','add','extend'].includes(mode)) throw new TypeError('Invalid selection mode.');
@@ -177,9 +196,106 @@ export function createGridEngine(options: GridEngineOptions) {
   }
   function selectDisplay(row:number,col:number,extend=false,add=false):boolean {
     if (!projection && activeParts===1) { displayAnchor={row,col}; return select(row,col,extend,add); }
+    const span=mergeAt(sourceRow(row),col);if(span){row=displayRow(span.startRow);col=span.startColumn;}
     const from=extend ? displayAnchor ?? {row:displaySelection()?.rowIndex ?? row,col:displaySelection()?.columnIndex ?? col} : {row,col};
     const result=selectDisplayRange({startRow:Math.min(from.row,row),endRow:Math.max(from.row,row),startColumn:Math.min(from.col,col),endColumn:Math.max(from.col,col)},add?'add':extend?'extend':'replace');
     displayAnchor=from; return result;
+  }
+
+  function intersects(a: Readonly<SelectionRange>, b: Readonly<SelectionRange>): boolean {
+    return a.startRow<=b.endRow && b.startRow<=a.endRow && a.startColumn<=b.endColumn && b.startColumn<=a.endColumn;
+  }
+  function mergeAt(row: number, col: number): Readonly<SelectionRange> | undefined {
+    return merges.find(range => row>=range.startRow && row<=range.endRow && col>=range.startColumn && col<=range.endColumn);
+  }
+  function expandMergedRange(range: SelectionRange, spans: readonly Readonly<SelectionRange>[]=merges): SelectionRange {
+    const result={...range}; let changed=true;
+    while(changed) { changed=false; for(const span of spans) if(intersects(result,span)) {
+      const next={startRow:Math.min(result.startRow,span.startRow),endRow:Math.max(result.endRow,span.endRow),startColumn:Math.min(result.startColumn,span.startColumn),endColumn:Math.max(result.endColumn,span.endColumn)};
+      if(JSON.stringify(next)!==JSON.stringify(result)){Object.assign(result,next);changed=true;}
+    } }
+    return result;
+  }
+  function validateMergeFreeze(spans: readonly Readonly<SelectionRange>[], rows=frozenRows, cols=frozenColumns): void {
+    if(spans.some(span => span.startRow<rows && span.endRow>=rows || span.startColumn<cols && span.endColumn>=cols)) throw new Error('A merged cell cannot cross a frozen boundary.');
+  }
+  function layoutAllowed(request: LayoutRequest): boolean {
+    assertAlive();
+    if(!request||!['merge','unmerge','group','ungroup','collapse','expand'].includes(request.kind))return false;
+    if('range' in request){const range=request.range;if(!range||![range.startRow,range.endRow,range.startColumn,range.endColumn].every(Number.isSafeInteger)||range.startRow<0||range.endRow<range.startRow||range.endRow>=rowCount||range.startColumn<0||range.endColumn<range.startColumn||range.endColumn>=columns.length)return false;}
+    else {const group=request.group;if(!group||typeof group.id!=='string'||!Number.isSafeInteger(group.startRow)||!Number.isSafeInteger(group.endRow)||group.startRow<0||group.endRow<=group.startRow||group.endRow>=rowCount||typeof group.collapsed!=='boolean')return false;}
+    const snapshot=Object.freeze('range' in request?{...request,range:Object.freeze({...request.range})}:{...request,group:Object.freeze({...request.group})});
+    if(tableLocked || options.canChangeLayout?.(snapshot)===false) return false;
+    if('range' in request) {
+      if(options.allowMerging===false) return false;
+      const range=request.range;
+      if((range.endRow-range.startRow+1)*(range.endColumn-range.startColumn+1)>clipboardCellLimit) return false;
+      for(let row=range.startRow;row<=range.endRow;row++) for(let col=range.startColumn;col<=range.endColumn;col++) if(!getCellPermission(row,col).writable) return false;
+    } else {
+      if(options.allowRowGrouping===false) return false;
+      for(let row=request.group.startRow;row<=request.group.endRow;row++) if(lockedRows.has(row)) return false;
+    }
+    return true;
+  }
+  function notifyOutline(kind:'merge'|'group', old:readonly number[], source:'api'|'undo'|'redo'):void {
+    if(selection){const span=mergeAt(selection.rowIndex,selection.columnIndex);if(span)selection={rowIndex:span.startRow,columnIndex:span.startColumn,rowId:dataSource.getRowId(span.startRow),columnKey:columns[span.startColumn]!.key};}
+    installProjection(buildProjection(view));
+    notify({type:'structure',rowMap:old.map(displayRow),columnMap:columns.map((_,i)=>i)}, Object.freeze({type:kind==='merge'?'merge:change':'group:change',source}));
+  }
+  function changeOutline(requests: readonly LayoutRequest[], nextMerges: readonly Readonly<SelectionRange>[], nextGroups: readonly Readonly<RowGroup>[]):void {
+    if(nextMerges.length>1024||nextGroups.length>1024)throw new RangeError('At most 1024 merged regions and row groups are supported.');
+    if(requests.some(request=>!layoutAllowed(request))) throw new Error('Changing merged cells or row groups is disabled.');
+    const old=projection ?? Array.from({length:rowCount},(_,i)=>i);
+    const entry:Extract<HistoryCommand,{kind:'outline'}>={kind:'outline',requests,beforeMerges:merges,afterMerges:nextMerges,beforeGroups:groups,afterGroups:nextGroups};
+    merges=[...nextMerges];groups=[...nextGroups];past.push(entry);if(past.length>100)past.shift();future.length=0;
+    notifyOutline(requests[0] && 'range' in requests[0] ? 'merge':'group',old,'api');
+  }
+  function mergeRange(range: SelectionRange): Readonly<SelectionRange> {
+    const parts=sourceRanges(range);
+    if(parts.length!==1 || parts[0]!.endRow-parts[0]!.startRow!==range.endRow-range.startRow) throw new Error('Merged rows must be contiguous and visible.');
+    return Object.freeze(parts[0]!);
+  }
+  function canMerge(range:SelectionRange):boolean {
+    try {
+      if((range.endRow-range.startRow+1)*(range.endColumn-range.startColumn+1)>clipboardCellLimit)return false;
+      const span=mergeRange(range);validateMergeFreeze([span]);
+      return !view.sort && !view.filters?.length && (span.startRow!==span.endRow || span.startColumn!==span.endColumn) && !merges.some(other=>intersects(span,other)) && layoutAllowed({kind:'merge',range:span});
+    } catch {return false;}
+  }
+  function mergeCells(range:SelectionRange):void {
+    if(!canMerge(range))throw new Error('This range cannot be merged. Check locks, existing merges and frozen boundaries.');
+    const span=mergeRange(range);changeOutline([{kind:'merge',range:span}],[...merges,span],groups);
+  }
+  function unmergeCells(range:SelectionRange):void {
+    const parts=sourceRanges(range), removed=merges.filter(span=>parts.some(part=>intersects(part,span)));
+    if(!removed.length)return;
+    changeOutline(removed.map(span=>({kind:'unmerge',range:span})),merges.filter(span=>!removed.includes(span)),groups);
+  }
+  function groupRows(startRow:number,endRow:number):string {
+    sourceRow(startRow);sourceRow(endRow);
+    if(projection || view.sort || view.filters?.length || endRow<=startRow) throw new Error('Group at least two contiguous rows in an expanded, unsorted view.');
+    if(groups.some(group=>group.startRow===startRow&&group.endRow===endRow || group.startRow<=endRow&&startRow<=group.endRow && !(startRow<=group.startRow&&endRow>=group.endRow || group.startRow<=startRow&&group.endRow>=endRow)))throw new Error('Row groups must be nested or disjoint.');
+    const group=Object.freeze({id:'group-'+(++groupId),startRow,endRow,collapsed:false});
+    changeOutline([{kind:'group',group}],merges,[...groups,group]);return group.id;
+  }
+  function findGroup(id:string):Readonly<RowGroup> {const group=groups.find(group=>group.id===id);if(!group)throw new Error('Unknown row group.');return group;}
+  function ungroupRows(id:string):void {const group=findGroup(id);changeOutline([{kind:'ungroup',group}],merges,groups.filter(other=>other!==group));}
+  function setGroupCollapsed(id:string,collapsed:boolean):void {
+    if(typeof collapsed!=='boolean')throw new TypeError('Collapsed must be boolean.');
+    const group=findGroup(id);if(group.collapsed===collapsed)return;
+    if(collapsed && merges.some(span=>span.endRow>group.startRow && span.startRow<=group.endRow))throw new Error('Unmerge cells in these rows before collapsing the group.');
+    if(collapsed && group.startRow<frozenRows && group.endRow>=frozenRows)throw new Error('A collapsed group cannot cross a frozen boundary.');
+    changeOutline([{kind:collapsed?'collapse':'expand',group}],merges,groups.map(other=>other===group?Object.freeze({...group,collapsed}):other));
+  }
+  function mergedViewport(options:ViewportOptions) {
+    const axis=viewAxis(), viewport=createViewport(axis,columnAxis,visibleFrozenRows(),frozenColumns,options);
+    return Object.freeze({...viewport,
+      hitTest(x:number,y:number) {const hit=viewport.hitTest(x,y);if(!hit)return null;const span=mergeAt(sourceRow(hit.row),hit.col);return span?{row:displayRow(span.startRow),col:span.startColumn}:hit;},
+      cellRect(row:number,col:number) {const base=viewport.cellRect(row,col),span=mergeAt(sourceRow(row),col);if(!span)return base;
+        const first=displayRow(span.startRow),last=displayRow(span.endRow),rect=viewport.cellRect(first,span.startColumn);
+        return Object.freeze({...rect,width:columnAxis.position(span.endColumn+1)-columnAxis.position(span.startColumn),height:axis.position(last+1)-axis.position(first)});
+      }
+    });
   }
 
   const emptyFormat: Readonly<CellFormat> = Object.freeze({});
@@ -229,6 +345,10 @@ export function createGridEngine(options: GridEngineOptions) {
 
   function requirePermission(rowIndex: number, columnIndex: number, key: keyof CellPermission): void {
     if (!getCellPermission(rowIndex, columnIndex)[key]) throw new Error(`Cell is read-only or permission denied: ${key}.`);
+    const span=mergeAt(rowIndex,columnIndex);
+    if(span&&rowIndex===span.startRow&&columnIndex===span.startColumn&&(key==='writable'||key==='pasteable')) {
+      for(let row=span.startRow;row<=span.endRow;row++)for(let col=span.startColumn;col<=span.endColumn;col++)if(!getCellPermission(row,col).writable)throw new Error('Merged cell contains a locked or read-only cell.');
+    }
   }
 
   function notifyCells(changes: readonly Change[], source: GridChangeSource): void {
@@ -271,6 +391,17 @@ export function createGridEngine(options: GridEngineOptions) {
     const to = redo ? past : future;
     const entry = from.at(-1);
     if (!entry) return false;
+    if(entry.kind==='outline') {
+      const requests=entry.requests.map(request=>redo?request:'range' in request?{...request,kind:request.kind==='merge'?'unmerge' as const:'merge' as const}:{...request,kind:({group:'ungroup',ungroup:'group',collapse:'expand',expand:'collapse'} as const)[request.kind]});
+      if(requests.some(request=>!layoutAllowed(request)))throw new Error('Changing merged cells or row groups is disabled.');
+      const nextMerges=redo?entry.afterMerges:entry.beforeMerges,nextGroups=redo?entry.afterGroups:entry.beforeGroups;
+      if((nextMerges.length||nextGroups.length)&&(view.sort||view.filters?.length))throw new Error('Clear sort and filters before restoring merged cells or row groups.');
+      validateMergeFreeze(nextMerges);
+      if(nextGroups.some(group=>group.collapsed&&group.startRow<frozenRows&&group.endRow>=frozenRows))throw new Error('A collapsed group cannot cross a frozen boundary.');
+      const old=projection ?? Array.from({length:rowCount},(_,i)=>i);
+      merges=[...nextMerges];groups=[...nextGroups];from.pop();to.push(entry);
+      notifyOutline('range' in entry.requests[0]!?'merge':'group',old,redo?'redo':'undo');return true;
+    }
     if (entry.kind === 'structure') {
       replayStructure(entry, redo);
       from.pop(); to.push(entry);
@@ -289,6 +420,8 @@ export function createGridEngine(options: GridEngineOptions) {
     if (entry.kind === 'freeze') {
       if (frozenRows !== (redo ? entry.previousRows : entry.rows) || frozenColumns !== (redo ? entry.previousColumns : entry.columns)) throw new Error('Frozen history conflicts with external changes.');
       const previousRows=frozenRows, previousColumns=frozenColumns;
+      validateMergeFreeze(merges,redo?entry.rows:entry.previousRows,redo?entry.columns:entry.previousColumns);
+      if(groups.some(group=>group.collapsed&&group.startRow<(redo?entry.rows:entry.previousRows)&&group.endRow>=(redo?entry.rows:entry.previousRows)))throw new Error('A collapsed group cannot cross a frozen boundary.');
       frozenRows=redo ? entry.rows : entry.previousRows; frozenColumns=redo ? entry.columns : entry.previousColumns;
       from.pop(); to.push(entry);
       notify({type:'layout'}, Object.freeze({type:'freeze:change', previousRows, previousColumns, rows:frozenRows, columns:frozenColumns}));
@@ -323,8 +456,8 @@ export function createGridEngine(options: GridEngineOptions) {
 
   function getSelectionRange(): SelectionRange | null {
     if (!selection || !anchor) return null;
-    return { startRow: Math.min(anchor.rowIndex, selection.rowIndex), endRow: Math.max(anchor.rowIndex, selection.rowIndex),
-      startColumn: Math.min(anchor.columnIndex, selection.columnIndex), endColumn: Math.max(anchor.columnIndex, selection.columnIndex) };
+    return expandMergedRange({ startRow: Math.min(anchor.rowIndex, selection.rowIndex), endRow: Math.max(anchor.rowIndex, selection.rowIndex),
+      startColumn: Math.min(anchor.columnIndex, selection.columnIndex), endColumn: Math.max(anchor.columnIndex, selection.columnIndex) });
   }
 
   function getSelectionRanges(): SelectionRange[] {
@@ -372,7 +505,7 @@ export function createGridEngine(options: GridEngineOptions) {
         const line:string[]=[];
         for(let col=range.startColumn;col<=range.endColumn;col++) {
           const index=sourceRow(row);requirePermission(index,col,'copyable');
-          const value=dataSource.getValue(index,columns[col]!.key),text=value==null?'':String(value);
+          const span=mergeAt(index,col),value=span&&(index!==span.startRow||col!==span.startColumn)?null:dataSource.getValue(index,columns[col]!.key),text=value==null?'':String(value);
           length+=text.length;if(length>clipboardTextLimit)throw new RangeError('Selection text is too large.');line.push(text);
         }
         values.push(line);
@@ -398,6 +531,11 @@ export function createGridEngine(options: GridEngineOptions) {
       if(place.row+height>visibleRowCount()||place.col+width>columns.length)throw new RangeError('Paste extends beyond grid bounds.');
       for(let row=0;row<height;row++)for(let col=0;col<width;col++){
         const rowIndex=sourceRow(place.row+row),columnIndex=place.col+col,columnKey=columns[columnIndex]!.key,text=place.values[row]![col]!,key=JSON.stringify([rowIndex,columnKey]),previous=texts.get(key);
+        const span=mergeAt(rowIndex,columnIndex);
+        if(span&&(rowIndex!==span.startRow||columnIndex!==span.startColumn)) {
+          if(text!=='')throw new Error('Paste would overwrite a hidden merged value. Unmerge first.');
+          continue;
+        }
         if(previous&&previous.text!==text)throw new Error('Overlapping paste targets contain conflicting values.');
         texts.set(key,{rowIndex,columnKey,columnIndex,text});
       }
@@ -416,6 +554,8 @@ export function createGridEngine(options: GridEngineOptions) {
     assertAlive();
     if (!Number.isSafeInteger(rowIndex) || rowIndex < 0 || rowIndex >= rowCount || !Number.isSafeInteger(columnIndex) || columnIndex < 0 || columnIndex >= columns.length) throw new RangeError('Invalid cell position.');
     if (!getCellPermission(rowIndex, columnIndex).selectable) return false;
+    const span=mergeAt(rowIndex,columnIndex);
+    if(span){rowIndex=span.startRow;columnIndex=span.startColumn;if(!getCellPermission(rowIndex,columnIndex).selectable)return false;}
     if (add && extend) throw new Error('Adding and extending a selection are separate operations.');
     if (add && selection && retainedRanges.length >= 127) throw new RangeError('Selection supports at most 128 ranges.');
     const nextSelection = { rowIndex, rowId: dataSource.getRowId(rowIndex), columnIndex, columnKey: columns[columnIndex]!.key };
@@ -435,6 +575,7 @@ export function createGridEngine(options: GridEngineOptions) {
 
   function selectRange(range: SelectionRange, mode: 'replace' | 'add' | 'extend' = 'replace'): boolean {
     assertAlive();
+    range=expandMergedRange(range);
     const { startRow, endRow, startColumn, endColumn } = range;
     for (const [value, limit] of [[startRow, rowCount], [endRow, rowCount], [startColumn, columns.length], [endColumn, columns.length]]) {
       if (!Number.isSafeInteger(value) || value! < 0 || value! >= limit!) throw new RangeError('Invalid selection range.');
@@ -474,6 +615,8 @@ export function createGridEngine(options: GridEngineOptions) {
   }
 
   function canEdit(rowIndex: number, columnIndex: number): boolean {
+    const span=mergeAt(rowIndex,columnIndex);
+    if(span){rowIndex=span.startRow;columnIndex=span.startColumn;for(let row=span.startRow;row<=span.endRow;row++)for(let col=span.startColumn;col<=span.endColumn;col++)if(!getCellPermission(row,col).writable)return false;}
     const column = columns[columnIndex];
     if (destroyed || !Number.isSafeInteger(rowIndex) || !Number.isSafeInteger(columnIndex) || !dataSource.setValue || !column || rowIndex < 0 || rowIndex >= rowCount) return false;
     if (!getCellPermission(rowIndex, columnIndex).editable) return false;
@@ -488,6 +631,7 @@ export function createGridEngine(options: GridEngineOptions) {
 
   function editCell(rowIndex: number, columnIndex: number, text: string): void {
     assertAlive();
+    const span=mergeAt(rowIndex,columnIndex);if(span){rowIndex=span.startRow;columnIndex=span.startColumn;}
     if (!canEdit(rowIndex, columnIndex)) throw new Error('Cell cannot be edited.');
     const column = columns[columnIndex]!;
     const previous = dataSource.getValue(rowIndex, column.key);
@@ -619,6 +763,8 @@ export function createGridEngine(options: GridEngineOptions) {
     assertAlive();
     if (!Number.isSafeInteger(rows) || rows < 0 || rows > rowCount || !Number.isSafeInteger(columnCount) || columnCount < 0 || columnCount > columns.length) throw new RangeError('Invalid frozen row or column count.');
     if (rows === frozenRows && columnCount === frozenColumns) return;
+    validateMergeFreeze(merges,rows,columnCount);
+    if(groups.some(group=>group.collapsed&&group.startRow<rows&&group.endRow>=rows))throw new Error('A collapsed group cannot cross a frozen boundary.');
     const previousRows = frozenRows; const previousColumns = frozenColumns;
     frozenRows = rows; frozenColumns = columnCount;
     past.push({kind:'freeze', previousRows, previousColumns, rows, columns:columnCount}); if (past.length > 100) past.shift(); future.length=0;
@@ -627,11 +773,12 @@ export function createGridEngine(options: GridEngineOptions) {
 
 
   function snapshotStructure(): StructureState {
-    return {columns, rowCount, rowIds:Array.from({length:rowCount},(_,i)=>dataSource.getRowId(i)), rows:rowAxis.snapshot(), widths:columnAxis.snapshot(), selection:getSelection(), anchor:anchor ? {...anchor} : null,
+    return {merges,groups,columns, rowCount, rowIds:Array.from({length:rowCount},(_,i)=>dataSource.getRowId(i)), rows:rowAxis.snapshot(), widths:columnAxis.snapshot(), selection:getSelection(), anchor:anchor ? {...anchor} : null,
       ranges:retainedRanges.map(range=>({...range})), manualRows:[...manualRows], lockedRows:[...lockedRows], lockedColumns:[...lockedColumns], lockedCells:[...lockedCells],
       formats:new Map(formats), frozenRows, frozenColumns};
   }
   function restoreStructure(state: StructureState): void {
+    merges=[...state.merges];groups=[...state.groups];
     activeParts=1;displayAnchor=null;cachedRanges=null;
     columns=state.columns; rowCount=state.rowCount; columnIndices.clear(); columns.forEach((column,i)=>columnIndices.set(column.key,i));
     rowAxis.replace(rowCount,state.rows); columnAxis.replace(columns.length,state.widths);
@@ -697,7 +844,16 @@ export function createGridEngine(options: GridEngineOptions) {
       }
     }
     const mapSizes=(sizes:StructureState['rows'],map:readonly number[])=>sizes.filter(([i])=>map[i]!>=0).map(([i,size])=>[map[i]!,size] as const);
+    function contiguous(start:number,end:number,map:readonly number[]):[number,number]|null {
+      const values=map.slice(start,end+1);if(values.some(i=>i<0))return null;
+      if(values.some((value,i)=>value!==values[0]!+i))throw new Error('This change would split a merged cell or row group. Remove it first.');
+      return [values[0]!,values.at(-1)!];
+    }
+    const nextMerges=before.merges.flatMap(span=>{const rows=contiguous(span.startRow,span.endRow,rowMap),cols=contiguous(span.startColumn,span.endColumn,columnMap);return rows&&cols?[Object.freeze({startRow:rows[0],endRow:rows[1],startColumn:cols[0],endColumn:cols[1]})]:[];});
+    const nextGroups=before.groups.flatMap(group=>{const rows=contiguous(group.startRow,group.endRow,rowMap);return rows?[Object.freeze({...group,startRow:rows[0],endRow:rows[1]})]:[];});
+    validateMergeFreeze(nextMerges,Math.min(frozenRows,nextCount),Math.min(frozenColumns,nextColumns.length));
     return {...before,columns:nextColumns,rowCount:nextCount,rowIds:axis==='row' ? order.map(i=>i<0 ? '' : before.rowIds[i]!) : before.rowIds,rows:mapSizes(before.rows,rowMap),widths:mapSizes(before.widths,columnMap),selection:mappedSelection,anchor:mappedAnchor,ranges,
+      merges:nextMerges,groups:nextGroups,
       manualRows:before.manualRows.map(i=>rowMap[i]!).filter(i=>i>=0),lockedRows:before.lockedRows.map(i=>rowMap[i]!).filter(i=>i>=0),lockedColumns:before.lockedColumns.map(i=>columnMap[i]!).filter(i=>i>=0),
       lockedCells:before.lockedCells.flatMap(key=>{const [r,c]=key.split(':').map(Number);const row=rowMap[r!]!,col=columnMap[c!]!;return row>=0&&col>=0 ? [`${row}:${col}`] : [];}),
       formats:nextFormats,frozenRows:Math.min(frozenRows,nextCount),frozenColumns:Math.min(frozenColumns,nextColumns.length)};
@@ -864,8 +1020,19 @@ export function createGridEngine(options: GridEngineOptions) {
     get view(){return view;},
     get sourceRowCount(){return rowCount;},
     getRowId:(row:number)=>dataSource.getRowId(sourceRow(row)),
-    get columns() { return columns; }, get rowCount() { return visibleRowCount(); }, get frozenRows() { return Math.min(frozenRows,visibleRowCount()); }, get frozenColumns() { return frozenColumns; },
-    getViewport: (viewport: ViewportOptions) => { assertAlive(); return createViewport(viewAxis(), columnAxis, Math.min(frozenRows,visibleRowCount()), frozenColumns, viewport); },
+    get columns() { return columns; }, get rowCount() { return visibleRowCount(); }, get frozenRows() { return visibleFrozenRows(); }, get frozenColumns() { return frozenColumns; },
+    getViewport: (viewport: ViewportOptions) => { assertAlive(); return mergedViewport(viewport); },
+    getMergedCells:()=>Object.freeze(merges.map(span=>Object.freeze({...span}))),
+    getMerge:(row:number,col:number)=> {const span=mergeAt(sourceRow(row),col);return span?Object.freeze({...span,startRow:displayRow(span.startRow),endRow:displayRow(span.endRow)}):null;},
+    canMerge:(range:SelectionRange)=>query(()=>canMerge(range)),
+    mergeCells:(range:SelectionRange)=>command(()=>mergeCells(range)),
+    unmergeCells:(range:SelectionRange)=>command(()=>unmergeCells(range)),
+    getRowGroups:()=>Object.freeze(groups.map(group=>Object.freeze({...group}))),
+    canChangeLayout:(request:LayoutRequest)=>query(()=>layoutAllowed(request)),
+    getRowSourceIndex:(row:number)=>sourceRow(row),
+    groupRows:(start:number,end:number)=>command(()=>groupRows(start,end)),
+    ungroupRows:(id:string)=>command(()=>ungroupRows(id)),
+    setGroupCollapsed:(id:string,collapsed:boolean)=>command(()=>setGroupCollapsed(id,collapsed)),
     rows: Object.freeze({size:(i:number)=>viewAxis().size(i),position:(i:number)=>viewAxis().position(i),indexAt:(offset:number)=>viewAxis().indexAt(offset),range:(offset:number,extent:number)=>viewAxis().range(offset,extent)}), columnsLayout: axisView(columnAxis),
     getValue: (row: number, key: string): unknown => dataSource.getValue(sourceRow(row), key),
     insertColumns:(index:number,added:readonly Column[])=>command(()=>insertColumns(index,added)),
@@ -896,7 +1063,7 @@ export function createGridEngine(options: GridEngineOptions) {
     format: (targets: readonly CellFormatTarget[], patch: CellFormatPatch | null) => command(() => format(sourceFormats(targets), patch)),
     isLocked:(target:CellLockTarget)=>isLocked(sourceTarget(target)), canManageLocks: () => !destroyed && allowLockChanges,
     setLocked: (target: CellLockTarget, locked: boolean) => command(() => setLocked(sourceTarget(target), locked)),
-    setFrozen: (rows: number, columns: number) => command(() => setFrozen(rows, columns)),
+    setFrozen: (rows: number, columns: number) => command(() => {if(!Number.isSafeInteger(rows)||rows<0||rows>visibleRowCount())throw new RangeError('Invalid frozen row count.');setFrozen(projection&&groups.some(group=>group.collapsed)&&rows>0?sourceRow(rows-1)+1:rows, columns);}),
     setColumnWidth: (index: number, size: number) => command(() => resize(columnAxis, index, size)),
     setRowHeight: (index: number, size: number) => command(() => resize(rowAxis, sourceRow(index), size)),
     destroy: () => command(() => {
@@ -909,6 +1076,7 @@ export function createGridEngine(options: GridEngineOptions) {
       selection = anchor = null;
       retainedRanges.length = 0;
       formats.clear(); orderedFormats.length = 0;
+      merges=[];groups=[];
       projection=null;projectedAxis=null;cachedRanges=null;reverseProjection.clear();displayAnchor=null;
       manualRows.clear();lockedRows.clear(); lockedColumns.clear(); lockedCells.clear(); tableLocked = false;
     }),

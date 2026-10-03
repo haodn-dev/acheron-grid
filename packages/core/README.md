@@ -150,3 +150,19 @@ Structural history retains row identity arrays, coordinate maps, sparse metadata
 
 
 Live local views use O(rows) index memory/filter work and O(matches log matches) sorting per value command. Sparse geometry is rebuilt from resized rows. Large source selections can split into many visible fragments when sorted/filtered. External source writes require setView(engine.view) to refresh membership/order; remote paging and async filtering are not implemented.
+## Merged cells and manual row groups
+
+```ts
+engine.mergeCells({ startRow: 1, endRow: 2, startColumn: 0, endColumn: 1 });
+engine.unmergeCells({ startRow: 1, endRow: 2, startColumn: 0, endColumn: 1 });
+const groupId = engine.groupRows(3, 8);
+engine.setGroupCollapsed(groupId, true);
+engine.setGroupCollapsed(groupId, false);
+engine.ungroupRows(groupId);
+```
+
+Merged cells use the top-left value; other source values remain intact. `getMerge(row, col)` returns a span in visible coordinates. Numeric viewport geometry and hit testing resolve the anchor, including when it is scrolled outside the viewport. Selection expands to include complete intersecting spans. Copy exports the anchor and blank covered cells. Paste rejects nonempty writes to covered cells; blank clipboard placeholders preserve hidden values. Explicit `updateCells` still addresses source values through visible coordinates.
+
+Manual row groups can be nested or disjoint. Their first row remains visible when collapsed. `getRowGroups()` and `getMergedCells()` return immutable **source-coordinate** metadata; `getRowSourceIndex(visibleRow)` maps visible rows. Editing, selection, locks and row sizes retain record identity across collapse/expand. Grouping, ungrouping, collapse/expand and merge/unmerge share undo/redo. Use `allowMerging`, `allowRowGrouping` or `canChangeLayout(request)` to control capabilities. Merge/unmerge require writable cells; row grouping respects table/row locks and the host veto.
+
+Current limits: 1,024 spans/groups each; merge permission checks cover at most 100,000 cells. Sorting/filtering requires removing merges and groups. Collapsing rows that contain merged cells, or crossing a frozen boundary, is rejected. Expand all groups before structural changes. Moving an intact span/group preserves it; operations splitting it are rejected, and deletion of a member dissolves its metadata (undo restores it). Collapse rebuilds an O(row-count) local projection; metadata stays sparse and rendering remains viewport based.
