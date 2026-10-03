@@ -31,6 +31,10 @@ Core does not import Canvas or framework code. `@acheron-grid/core/headless` rem
 
 Core-managed local sorting/filtering preserves selection, history, locks, colors and sizes and refreshes after edits. Legacy host-managed projections remain supported. Rendering virtualization does not make filtering or in-memory storage independent of dataset size.
 
+## Documentation
+
+Start with the [practical guide](examples/vanilla/practical-guide.md) for editor configuration, keyboard interactions, clipboard/history, local views, grouped headers, structural operations, rich text, permissions and troubleshooting. Package README files below provide detailed contracts and limits.
+
 ## Quick start
 
 Use Node.js 22 or later to build the repository:

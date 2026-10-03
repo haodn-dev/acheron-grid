@@ -53,7 +53,7 @@ DataSource exposes synchronous getRowCount/getRowId/getValue and optional setVal
 
 updateCells accepts already-validated values and intentionally does not apply column parsers or the editor's editable flag. editCell and paste apply resolved editable/pasteable permissions and text parsers. All writes, including API updates and undo/redo, require writable permission. Batches with more than one changed cell require `setValues`; a source with only `setValue` can accept single-cell writes. Batch setters must be synchronous and atomic, leaving data unchanged on failure. Validation completes before writes. Duplicate updates use the last value, Object.is no-ops preserve history, and undo/redo retain at most 100 delta commands with shallow value references. External writes are outside history; replay rejects row identity/current value conflicts. Explicit resize and freeze changes share this history.
 
-Clipboard processing is limited to 100,000 cells and 10 million UTF-16 code units. Async sources and framework adapters are not implemented. Multiple selection ranges support packed TSV and an internal structured clipboard payload.
+Clipboard processing is limited to 100,000 cells and 10 million UTF-16 code units. Async sources are not implemented. React and Vue adapters live in separate packages. Multiple selection ranges support packed TSV and an internal structured clipboard payload.
 
 ## Browser import migration
 

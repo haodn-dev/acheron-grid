@@ -181,11 +181,11 @@ The grid retains the latest 100 commands, with shallow old/new value references.
 
 When the viewport has focus, Ctrl/Cmd+Z undoes and Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y redoes. The DOM editor keeps native text undo. `updateCells` throws while editing or after destruction; undo/redo return `false` while editing, after destruction or when the stack is empty. Destroy releases both history stacks.
 
-Value commands coalesce dirty cells into one animation frame. Offscreen changes are read when scrolled into view. Scroll, resize, selection changes and explicit `render()` request a full viewport redraw. Undoable layout commands, async history and persistent history are not implemented.
+Value commands coalesce dirty cells into one animation frame. Offscreen changes are read when scrolled into view. Scroll, resize, selection changes and explicit `render()` request a full viewport redraw. Explicit resize/freeze and structural commands share history; async and persistent history are not implemented.
 
 ## Range selection and clipboard
 
-Drag with a mouse/pen, Shift-click, or use Shift+Arrow/Home/End to extend a rectangular range from its anchor. Ctrl/Cmd+Shift+Home/End extends to the first/last grid cell. Ordinary clicks or navigation collapse the range; Escape clears it. Dragging captures the pointer and clamps to viewport/data bounds. Mouse/pen dragging auto-scrolls while the pointer stays within 24px of a scrolling edge or outside the viewport, at 16 CSS pixels per animation frame. Release, cancellation, capture loss, Escape, window blur or destruction stops the loop. Touch range dragging is not implemented. Multiple ranges are supported; clipboard operations require one rectangle.
+Drag with a mouse/pen, Shift-click, or use Shift+Arrow/Home/End to extend a rectangular range from its anchor. Ctrl/Cmd+Shift+Home/End extends to the first/last grid cell. Ordinary clicks or navigation collapse the range; Escape clears it. Dragging captures the pointer and clamps to viewport/data bounds. Mouse/pen dragging auto-scrolls while the pointer stays within 24px of a scrolling edge or outside the viewport, at 16 CSS pixels per animation frame. Release, cancellation, capture loss, Escape, window blur or destruction stops the loop. Touch range dragging is not implemented. Multiple ranges support packed TSV and structured clipboard operations; see the core clipboard contract.
 
 `getSelection()` still returns the active endpoint. `getSelectionRange()` returns a fresh normalized `{ startRow, endRow, startColumn, endColumn }` object or `null`; bounds are zero-based and inclusive. `onSelectionRangeChange(range)` receives a copy when bounds change, or `null` on clear. The grid draws both the outer range and active-cell borders. Editing changes the active cell while keeping the range.
 
@@ -198,7 +198,7 @@ Native copy/paste events support Ctrl/Cmd+C/V on the focused viewport without Cl
 
 Paste starts at the selected range's top-left cell and uses the clipboard rectangle's dimensions. It does not tile/fill the selection, add rows or skip read-only columns. Every destination must be within bounds and permit `pasteable`/`writable`; values pass through column parsers. Non-string existing values require a parser. All values are validated before the atomic write, so parser/bounds/read-only failures leave data/history unchanged. Multi-cell paste requires an atomic source `setValues` implementation.
 
-Clipboard work is limited to 100,000 cells and 10,000,000 UTF-16 code units per payload. Over-limit transfers throw `RangeError`. Copy/paste APIs throw while editing or after destruction; no selection yields empty copy/no-op paste. Event errors use native alerts. HTML-only clipboard, cut and formula processing are not supported. Actual OS clipboard and spreadsheet interoperability have not been verified; browser tests exercise native event handlers with controlled `DataTransfer` payloads.
+Clipboard work is limited to 100,000 cells and 10,000,000 UTF-16 code units per payload. Over-limit transfers throw `RangeError`. Copy/paste APIs throw while editing or after destruction; no selection yields empty copy/no-op paste. Event errors use native alerts. Rich native clipboard and structured payloads preserve supported styles; cut and formula processing are not supported. Actual OS clipboard and spreadsheet interoperability have not been verified; browser tests exercise native event handlers with controlled `DataTransfer` payloads.
 
 ## Row/column resize and context menu
 
@@ -207,7 +207,7 @@ grid.setColumnWidth(1, 240);
 grid.setRowHeight(0, 48);
 ```
 
-Sizes are finite positive CSS pixel values; indices are zero-based integers. Invalid indices/sizes are rejected before layout changes. Calls throw while editing or after destruction. Sizes default to `columnWidth`/`rowHeight`, with sparse per-index overrides; rows do not require a size array. Resizing updates scroll dimensions and fully redraws, keeping hit testing, editor placement and selection aligned. Layout changes are in memory and are outside data undo/redo.
+Sizes are finite positive CSS pixel values; indices are zero-based integers. Invalid indices/sizes are rejected before layout changes. Calls throw while editing or after destruction. Sizes default to `columnWidth`/`rowHeight`, with sparse per-index overrides; rows do not require a size array. Resizing updates scroll dimensions and fully redraws, keeping hit testing, editor placement and selection aligned. Explicit resize commands share undo/redo; automatic row measurement stays outside history.
 
 Drag within 8 CSS pixels of a header edge to preview a column resize (24–1000px); release to apply. Row boundaries in the default index gutter also support resize preview. Right-click a cell and choose **Resize column…** or **Resize row…** for a native DOM dialog with a labeled number input, Apply and Cancel. The dialog accepts sizes of at least 1px. Double-click a column/header or index-row boundary, or choose Auto-fit column/row from the menu, to fit visible content. Persisted layout is not implemented.
 
@@ -291,7 +291,7 @@ Right-click → **Format cells…** opens the native color dialog. Choose select
 
 Canvas exposes core `format(targets, patch)`, `canFormat(targets)`, and `getFormat(row, col)`; see the [core formatting contract](../core/README.md#sparse-cell-formatting). Set `permissions: { formatting: false }`, column permissions, or a resolver veto to disable formatting in the menu, API and history, independently of editing. Existing colors remain visible. The demo admin checkbox illustrates this host policy; it is not server authorization.
 
-Default text, checkbox strokes, cell backgrounds and native editor colors use effective styles. Custom renderers receive frozen `cell.format` and decide how to apply content colors; their paint may override the cell background. Color changes repaint the viewport, while value updates retain dirty-cell drawing. Headers retain the theme. Only colors are supported; fonts, borders, formatting clipboard and persistence remain outside this preview.
+Default text, checkbox strokes, cell backgrounds and native editor colors use effective styles. Custom renderers receive frozen `cell.format` and decide how to apply content colors; their paint may override the cell background. Color changes repaint the viewport, while value updates retain dirty-cell drawing. Headers retain the theme. Bold/italic and rich formatting clipboard are supported; arbitrary font families, per-cell borders and persistence remain outside this preview.
 
 ## Active-cell accessibility
 
@@ -426,16 +426,6 @@ Menu Copy/Paste uses HTML when the browser Clipboard API supports it; text-only 
 Formatting supports text marks rather than full document layout: headings use the normal cell font, lists retain markers, code uses a monospace font, and images display alt text. Editing normalizes supported marks and line breaks; document block structure and unsupported markup are not round-tripped after changes. Cache holds at most 256 source strings of at most 4,096 characters each. Sources exceeding 100,000 characters or rejected by parsing show an unavailable message; editing/copying that content is blocked to avoid exposing source or losing data. HTML traversal stops beyond 128 nested elements. No document formatting toolbar is provided.
 
 Context-menu rows use inset focus styling with separate hit areas. Type while the menu is open to filter actions; Up/Down navigates enabled matches and Enter activates one. Escape clears the query first, then closes the menu. Disabled items remain visible when their labels match. Dismissed popovers are removed.
-
-## Rich text columns
-
-Set `richTextColumns: { description: 'html', notes: 'markdown' }` to render portions of cell text in bold or italic, with inline code, links and line breaks. HTML also supports `<u>`. Core and Canvas have no Markdown parser dependency: Markdown columns require a synchronous `markdownToHtml(source): string` callback, supplied by your application or the optional [@acheron-grid/markdown adapter](../markdown/README.md). Without a callback, grid creation rejects Markdown configuration.
-
-Canvas reads markup in an inert template and paints text. It never mounts parsed elements, applies embedded CSS/event handlers, or loads rich-text images; image alt text remains visible. Script/style/iframe/object/SVG content is excluded. HTTP(S) links reject credentials and control characters. This restricted display projection is not an HTML sanitizer for export or arbitrary DOM insertion. Custom adapters must disable raw HTML if that is their Markdown policy; the supplied adapter does so.
-
-Editing, TSV clipboard, paste and undo/redo retain the original string. Use `multilineEditor: true` for source editing. Search and accessibility use displayed text; auto-fit and wrapping measure formatted runs. Core sort/filter still operates on source values. Existing `renderCell` callbacks take priority over rich-text painting, and `measureCellHeight` overrides automatic measurement.
-
-Formatting is a text projection, not a document layout engine: headings use the normal cell font, lists retain markers, code uses a monospace font, and images display alt text. Cache holds at most 256 source strings of at most 4,096 characters each. Sources exceeding 100,000 characters fall back to plain text; HTML traversal stops beyond 128 nested elements. Trusted Types policies that prohibit parsing fall back to source text. No WYSIWYG editor or toolbar is provided.
 
 ## Runtime structure
 
