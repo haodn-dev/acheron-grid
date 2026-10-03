@@ -2118,3 +2118,25 @@ test('adjacent Ctrl columns share one outline and horizontal scroll keeps automa
   await page.getByRole('grid').evaluate(el => { el.scrollLeft = 400; });
   await pixels(); expect(await row.evaluate(el => el.offsetHeight)).toBe(height);
 });
+
+
+test('scroll repaint finishes canvas cells before updating the accessibility DOM', async ({ page }) => {
+  await page.goto('/'); await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.order = [];
+    const original = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function (key, value) {
+      if (key === 'aria-readonly' && this.getAttribute('role') === 'gridcell') window.order.push('accessible');
+      return original.call(this, key, value);
+    };
+    window.grid = createGrid({ container: document.querySelector('#grid'), accessibility: 'viewport', rowHeight: 10,
+      columns: ['a','b','c'].map(key => ({ key, title: key })),
+      dataSource: new LocalDataSource(Array.from({ length: 100 }, (_, id) => ({ id, a: 'A', b: 'B', c: 'C' })), row => row.id),
+      renderCell: () => { window.order.push('paint'); return false; } });
+  });
+  await expect(page.getByRole('gridcell')).toHaveCount(99);
+  await page.evaluate(() => { window.order.length = 0; document.querySelector('[role=grid]').scrollTop = 80; });
+  await expect.poll(() => page.evaluate(() => window.order.includes('accessible'))).toBe(true);
+  expect(await page.evaluate(() => window.order.indexOf('accessible') > window.order.lastIndexOf('paint'))).toBe(true);
+  await expect(page.getByRole('gridcell')).toHaveCount(99);
+});

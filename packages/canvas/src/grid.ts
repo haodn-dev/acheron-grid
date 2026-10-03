@@ -764,13 +764,13 @@ export function createGrid(options: GridOptions): Grid {
     rowAxis.size(index);
     resizeAxis(rowAxis, index, measureRowHeight(index));
   }
-  function measureRowHeight(index: number): number {
+  function measureRowHeight(index: number, allColumns = false): number {
     const ctx = context!; ctx.save(); let height = options.rowHeight ?? 24;
     try {
       ctx.font = theme.font;
       const metrics = ctx.measureText('M');
       const lineHeight = Math.ceil(metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent) || 18;
-      for (let col = 0; col < columns.length; col++) {
+      for (const col of allColumns ? columns.keys() : visibleIndices('column')) {
         const key = columns[col]!.key;
         const value = engine.getValue(index, key);
         const custom = options.measureCellHeight?.(value, key, columnAxis.size(col));
@@ -1997,6 +1997,10 @@ export function createGrid(options: GridOptions): Grid {
       ctx.textBaseline = 'top';
       const metrics = ctx.measureText('M');
       const lineHeight = Math.ceil(metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent) || 18;
+      if (!text.includes('\n') && ctx.measureText(text).width <= Math.max(0, width - 20)) {
+        if (y + 4 + lineHeight <= y + height) paintText(text, 0, y + 4, lineHeight);
+        ctx.restore(); highlightSearch(x, y, width, height, rowIndex, columnIndex); return;
+      }
       let line = ''; let top = y + 4; let offset = 0;
       for (const character of text) {
         if (top + lineHeight > y + height) break;
@@ -2152,7 +2156,7 @@ export function createGrid(options: GridOptions): Grid {
     if (destroyed) return;
     if (options.autoRowHeight && !editor && !resizing) for (const row of visibleIndices('row')) {
       if (engine.isRowHeightManual(row) || measuredRows.has(row)) continue;
-      const height = measureRowHeight(row); measuredRows.add(row);
+      const height = measureRowHeight(row, true); measuredRows.add(row);
       if (height !== rowAxis.size(row)) engine.measureRowHeight(row, height);
     }
     const view = viewport();
@@ -2180,13 +2184,16 @@ export function createGrid(options: GridOptions): Grid {
       return;
     }
     fullDraw = false;
+    const pendingAccessible: { row: number; col: number; value: unknown }[] = [];
     const accessibleRows = new Map<number, HTMLElement>(); const seenCells = new Set<string>(); const headerNodes: HTMLElement[] = [];
     visibleImages.clear();
     dirty.clear();
     const ratio = win.devicePixelRatio || 1;
     const height = Math.min(root.clientHeight, view.height + headerHeight);
-    canvas.width = Math.max(0, Math.round(view.width * ratio));
-    canvas.height = Math.max(0, Math.round(height * ratio));
+    const pixelWidth = Math.max(0, Math.round(view.width * ratio));
+    const pixelHeight = Math.max(0, Math.round(height * ratio));
+    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
     canvas.style.width = `${view.width}px`;
     canvas.style.height = `${height}px`;
     context!.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -2201,11 +2208,7 @@ export function createGrid(options: GridOptions): Grid {
           const key=`${paintRow}:${paintCol}`;if(painted.has(key))continue;painted.add(key);
           const rect=view.cellRect(paintRow,paintCol);
           const value = engine.getValue(paintRow, columns[paintCol]!.key);
-          if (viewportAccessibility) {
-            let rowNode = accessibleRows.get(paintRow);
-            if (!rowNode) { rowNode = doc.createElement('div'); rowNode.setAttribute('role', 'row'); rowNode.setAttribute('aria-rowindex', String(paintRow + headers.levels + 1)); accessibleRows.set(paintRow, rowNode); }
-            seenCells.add(key); rowNode.append(accessibleCell(paintRow, paintCol, value));
-          }
+          if (viewportAccessibility) pendingAccessible.push({ row: paintRow, col: paintCol, value });
           cell(value, rect.x, headerHeight+rect.y,rect.width,rect.height,false,paintRow,paintCol);
         }
       }
@@ -2275,6 +2278,11 @@ export function createGrid(options: GridOptions): Grid {
     } else headerSurface.replaceChildren(...headerNodes);
     if (focusedHeader !== undefined) headerNodes.find(node => node.dataset.gridHeaderCell === focusedHeader)?.focus({ preventScroll: true });
     else if(focusedGroup!==undefined)headerNodes.find(node=>node.dataset.gridHeaderGroup===focusedGroup&&node.dataset.groupStart===focusedGroupStart)?.focus({preventScroll:true});
+    for (const { row, col, value } of pendingAccessible) {
+      let rowNode = accessibleRows.get(row);
+      if (!rowNode) { rowNode = doc.createElement('div'); rowNode.setAttribute('role', 'row'); rowNode.setAttribute('aria-rowindex', String(row + headers.levels + 1)); accessibleRows.set(row, rowNode); }
+      seenCells.add(`${row}:${col}`); rowNode.append(accessibleCell(row, col, value));
+    }
     if (viewportAccessibility) {
       for (const key of accessibleCells.keys()) if (!seenCells.has(key)) accessibleCells.delete(key);
       accessibleBody.replaceChildren(...[...accessibleRows.entries()].sort(([a], [b]) => a - b).map(([, row]) => row));
