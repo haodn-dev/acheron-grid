@@ -335,7 +335,7 @@ export function createGrid(options: GridOptions): Grid {
   root.append(dialogStyles);
   const scroller = doc.createElement('div');
   const viewportLabel = dataSource.setValue && columns.some(column => column.editable) ? 'Data grid viewport' : 'Read-only data grid viewport';
-  scroller.style.cssText = `position:absolute;inset:${headerHeight}px 0 0 ${indexWidth}px;overflow:auto;overscroll-behavior:contain`;
+  scroller.style.cssText = `position:absolute;inset:${headerHeight}px 0 0 ${indexWidth}px;overflow:auto;overscroll-behavior:contain;outline:none`;
   scroller.dataset.gridViewport = '';
   scroller.tabIndex = 0;
   scroller.setAttribute('aria-label', viewportLabel);
@@ -794,6 +794,7 @@ export function createGrid(options: GridOptions): Grid {
     const range = getSelectionRange();
     if (rowCount && !getSelectionRanges().some(range => row >= range.startRow && row <= range.endRow && col >= range.startColumn && col <= range.endColumn)) select(row, col, false, false);
     if (destroyed || (rowCount > 0 && !engine.getCellPermission(row, col).selectable)) return;
+    header ||= getSelectionRanges().some(range => range.startRow === 0 && range.endRow === rowCount - 1 && col >= range.startColumn && col <= range.endColumn && (rowCount > 1 || axisAnchor?.axis === 'column'));
     const selection = engine.getSelection() ?? (header || !rowCount && options.onRowChange ? { rowIndex: 0, columnIndex: col, columnKey: columns[col]!.key, rowId: 0 } : null);
     if (!selection) return;
     const popup = doc.createElement('div');
@@ -1328,11 +1329,14 @@ export function createGrid(options: GridOptions): Grid {
     actionError.style.display = 'none';
     editor.setAttribute('aria-label', `Edit row ${engine.getRowSourceIndex(selection.rowIndex) + 1}, ${column.title}`);
     editor.setAttribute('aria-errormessage', editorError.id);
-    editor.style.cssText = 'position:absolute;box-sizing:border-box;pointer-events:auto;outline:none;border:2px solid var(--acheron-selection-color);background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);padding:0 8px';
+    editor.style.cssText = 'position:absolute;box-sizing:border-box;pointer-events:auto;outline:none;border:1px solid var(--acheron-selection-color);background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);padding:0 8px';
     const cellFormat = engine.getFormat(selection.rowIndex, selection.columnIndex);
     if (cellFormat.background) editor.style.background = cellFormat.background;
     if (cellFormat.textColor) editor.style.color = cellFormat.textColor;
     if (editor instanceof win.HTMLTextAreaElement) editor.style.resize = 'none';
+    if (editor instanceof win.HTMLInputElement && editor.type === 'checkbox') {
+      editor.style.maxWidth = editor.style.maxHeight = '16px'; editor.style.margin = '8px'; editor.style.padding = '0'; editor.style.accentColor = 'var(--acheron-selection-color)';
+    }
     const clearValidation = () => {
       editor?.setCustomValidity('');
       editor?.removeAttribute('aria-invalid');
@@ -1418,7 +1422,7 @@ export function createGrid(options: GridOptions): Grid {
     if (richEditor) { const range = doc.createRange(); range.selectNodeContents(richEditor); const selection = win.getSelection(); selection?.removeAllRanges(); selection?.addRange(range); }
     else if (editor.tagName !== 'SELECT' && 'select' in editor) editor.select();
     if (editor instanceof win.HTMLSelectElement && editor.dataset.gridChoiceEditor !== undefined && options.choiceEditor) {
-      choices = choicePanel(editor, root, options.choiceEditor, commit => { const done = finishEdit(commit); if (done) scroller.focus({ preventScroll: true }); return done; });
+      choices = choicePanel(editor, root, options.choiceEditor, commit => { const done = finishEdit(commit); if (done) scroller.focus({ preventScroll: true }); return done; }, column.key);
       editor.style.opacity = '0'; editor.style.pointerEvents = 'none'; editor.tabIndex = -1; editor.setAttribute('aria-hidden', 'true');
     }
   }
@@ -1723,8 +1727,12 @@ export function createGrid(options: GridOptions): Grid {
     if (event.shiftKey && !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     if (control && event.key !== 'Home' && event.key !== 'End') return;
     if (event.key === 'Enter' || event.key === 'F2') {
+      event.preventDefault();
       beginEdit();
-      if (editor) event.preventDefault();
+      if (event.key === 'Enter' && editor instanceof win.HTMLInputElement && editor.type === 'checkbox') {
+        editor.checked = !editor.checked;
+        if (finishEdit(true)) scroller.focus({ preventScroll: true });
+      }
       return;
     }
     if (event.key === 'Escape') {

@@ -1,4 +1,4 @@
-export interface ChoiceInfo { readonly value: string; readonly selected: boolean; readonly multiple: boolean; }
+export interface ChoiceInfo { readonly value: string; readonly selected: boolean; readonly multiple: boolean; readonly columnKey?: string; }
 export interface ChoiceEditorOptions {
   readonly placeholder?: string;
   readonly applyLabel?: string;
@@ -8,7 +8,7 @@ export interface ChoiceEditorOptions {
   readonly renderOption?: (option: Readonly<ChoiceInfo>, document: Document) => HTMLElement;
 }
 let choiceId=0;
-export function choicePanel(select: HTMLSelectElement, root: HTMLElement, options: ChoiceEditorOptions, finish: (commit: boolean) => boolean): HTMLElement {
+export function choicePanel(select: HTMLSelectElement, root: HTMLElement, options: ChoiceEditorOptions, finish: (commit: boolean) => boolean, columnKey?: string): HTMLElement {
   if (options.maxHeight !== undefined && (!Number.isFinite(options.maxHeight) || options.maxHeight <= 0)) throw new RangeError('Choice maxHeight must be positive.');
   const doc = root.ownerDocument; const panel = doc.createElement('div'); panel.dataset.gridChoices = '';
   panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', select.getAttribute('aria-label') ?? 'Choose values');
@@ -24,7 +24,7 @@ export function choicePanel(select: HTMLSelectElement, root: HTMLElement, option
       if (!option.text.toLowerCase().includes(query.value.toLowerCase())) continue;
       const label = doc.createElement('label'); label.style.cssText = 'display:flex;align-items:center;gap:8px;padding:7px;border-radius:4px;cursor:pointer';
       const input = doc.createElement('input'); input.type = select.multiple ? 'checkbox' : 'radio'; input.disabled = option.disabled || option.parentElement instanceof doc.defaultView!.HTMLOptGroupElement && option.parentElement.disabled; input.dataset.optionIndex=String(option.index); input.checked = option.selected; input.setAttribute('aria-label', option.text || options.emptyLabel || 'Empty'); input.style.accentColor = 'var(--acheron-selection-color)';
-      const custom = options.renderOption?.(Object.freeze({ value: option.value, selected: option.selected, multiple: select.multiple }), doc);
+      const custom = options.renderOption?.(Object.freeze({ value: option.value, selected: option.selected, multiple: select.multiple, ...(columnKey === undefined ? {} : { columnKey }) }), doc);
       if (custom && (custom.ownerDocument !== doc || custom.parentNode)) throw new TypeError('Choice option renderer must return a detached element from the grid document.');
       const text = custom ?? doc.createElement('span'); if (!custom) text.textContent = option.text || options.emptyLabel || 'Empty';
       input.addEventListener('change', () => { if (!select.multiple) select.value = option.value; else option.selected = input.checked; select.dispatchEvent(new doc.defaultView!.Event('change', { bubbles: true })); draw(); Array.from(list.querySelectorAll<HTMLInputElement>('input')).find(input => input.dataset.optionIndex === String(option.index))?.focus(); });

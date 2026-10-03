@@ -35,6 +35,41 @@ test('keyboard context menus suppress the browser menu on focused popup controls
   expect(await editor.evaluate(el => !el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })))).toBe(false);
 });
 
+test('Enter opens choices without committing, toggles checkboxes and keeps focus borders inside cells', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.source = new LocalDataSource([{ id: 1, tags: 'Idea', approved: false, text: 'draft' }], row => row.id);
+    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source, columns: ['tags', 'approved', 'text'].map(key => ({ key, title: key, editable: true, ...(key === 'approved' ? { parse: text => text === 'true' } : {}) })), columnEditors: { tags: { type: 'multiselect', values: ['Idea', 'Design'] }, approved: { type: 'checkbox' } }, choiceEditor: { renderOption: (option, doc) => { const span = doc.createElement('span'); span.textContent = option.value; span.dataset.columnKey = option.columnKey; return span; } } });
+  });
+  const viewport = page.getByRole('grid'); await viewport.press('Control+Home'); await viewport.press('Enter');
+  const panel = page.locator('[data-grid-choices]'); await expect(panel).toBeVisible();
+  await expect(panel.locator('span[data-column-key="tags"]').first()).toBeVisible();
+  await expect(panel.getByRole('checkbox', { name: 'Idea' })).toBeChecked();
+  await panel.getByRole('checkbox', { name: 'Design' }).check(); await page.keyboard.press('Enter');
+  expect(await page.evaluate(() => window.source.getValue(0, 'tags'))).toBe('Idea, Design');
+  await viewport.press('ArrowRight'); await viewport.press('Enter');
+  expect(await page.evaluate(() => window.source.getValue(0, 'approved'))).toBe(true);
+  await expect(page.getByLabel('Edit row 1, approved', { exact: true })).toHaveCount(0);
+  await viewport.press('Enter'); expect(await page.evaluate(() => window.source.getValue(0, 'approved'))).toBe(false);
+  await expect(viewport).toHaveCSS('outline-style', 'none');
+  await viewport.press('ArrowRight'); await viewport.press('Enter');
+  await expect(page.getByLabel('Edit row 1, text', { exact: true })).toHaveCSS('border-top-width', '1px');
+});
+
+test('whole-column selection opens column actions from a data cell', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
+    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: new LocalDataSource([{ id: 1, a: 'a', b: 'b' }, { id: 2, a: 'c', b: 'd' }], row => row.id), columns: ['a', 'b'].map(key => ({ key, title: key })), allowColumnChanges: true, accessibility: 'viewport' });
+  });
+  const viewport = page.getByRole('grid'); await viewport.press('Control+Home'); await viewport.press('Control+Space'); await viewport.press('Shift+F10');
+  const menu = page.getByRole('menu', { name: 'Column actions' }); await expect(menu).toBeVisible();
+  await menu.getByRole('menuitem', { name: 'Delete column', exact: true }).click();
+  await expect(page.getByRole('columnheader', { name: 'a', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('columnheader', { name: 'b', exact: true })).toBeVisible();
+});
+
 test('context actions filter by typing, preserve keyboard navigation and keep focus inside separated rows', async ({ page }) => {
   await setup(page);
   expect(await page.evaluate(() => window.grid.copySelection())).toBe('');
