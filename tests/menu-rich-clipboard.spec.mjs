@@ -9,6 +9,32 @@ async function setup(page) {
   });
 }
 
+test('keyboard context menus suppress the browser menu on focused popup controls', async ({ page }) => {
+  await setup(page);
+  const viewport = page.getByLabel(/^Data grid viewport/);
+  await viewport.press('Control+Home');
+  for (const key of ['Shift+F10', 'ContextMenu']) {
+    await viewport.press(key);
+    const menu = page.getByRole('menu', { name: 'Cell actions' });
+    await expect(menu).toBeVisible();
+    expect(await page.evaluate(() => {
+      const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+      document.activeElement.dispatchEvent(event);
+      return event.defaultPrevented;
+    })).toBe(true);
+    await expect(menu).toHaveCount(1);
+    await page.keyboard.press('Escape');
+  }
+  await page.getByRole('columnheader', { name: 'md', exact: true }).press('Shift+F10');
+  await expect(page.getByRole('menu', { name: 'Column actions' })).toBeVisible();
+  expect(await page.evaluate(() => document.activeElement.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: 200, clientY: 100 })))).toBe(false);
+  await expect(page.getByRole('menu', { name: 'Column actions' })).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await viewport.press('F2');
+  const editor = page.getByRole('textbox', { name: 'Edit row 1, md', exact: true });
+  expect(await editor.evaluate(el => !el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })))).toBe(false);
+});
+
 test('context actions filter by typing, preserve keyboard navigation and keep focus inside separated rows', async ({ page }) => {
   await setup(page);
   expect(await page.evaluate(() => window.grid.copySelection())).toBe('');

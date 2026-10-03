@@ -991,6 +991,10 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function onHeaderContextMenu(event: MouseEvent): void {
+    if (event.target instanceof win.Node && menu?.contains(event.target)) {
+      event.preventDefault(); event.stopPropagation();
+      return;
+    }
     const bounds = root.getBoundingClientRect();
     if (indexWidth && event.clientX >= bounds.left && event.clientX < bounds.left + indexWidth && event.clientY >= bounds.top + headerHeight) {
       event.preventDefault(); event.stopPropagation();
