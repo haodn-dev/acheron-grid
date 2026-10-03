@@ -2074,3 +2074,16 @@ test('pinned editor scroll label appears on displacement and resets for each dra
   await viewport.evaluate(el=>{el.scrollTop=0;});await expect(badge).toBeHidden();
   await page.getByRole('textbox').press('Escape');await viewport.press('F2');await expect(badge).toBeHidden();
 });
+
+
+test('selection at a frozen seam stays visible and clears its separator tint',async({page})=>{
+ await page.goto('/');await page.evaluate(async()=>{
+ const {createGrid}=await import('/canvas/index.js');const {LocalDataSource}=await import('/core/index.js');
+ window.grid=createGrid({container:document.querySelector('#grid'),columns:[{key:'a',title:'A'},{key:'b',title:'B'}],dataSource:new LocalDataSource(Array.from({length:30},(_,id)=>({id,a:'a',b:'b'})),row=>row.id),frozenColumns:1,frozenRows:1});window.grid.selectColumn(0);
+ });
+ const seam=page.locator('[data-grid-freeze-line=column]');await expect(seam).toHaveCSS('background-image',/linear-gradient/);
+ await expect(page.getByRole('button',{name:'Adjust selection end',includeHidden:true})).toHaveCSS('z-index','3');
+ await page.evaluate(()=>window.grid.selectColumn(1));
+ await expect(seam).toHaveCSS('background-image',/linear-gradient/);
+ await page.getByRole('grid').press('Escape');await expect(seam).toHaveCSS('background-image','none');
+});

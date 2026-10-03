@@ -386,7 +386,7 @@ export function createGrid(options: GridOptions): Grid {
   let touchSelection = false;
   const selectionHandles = (['start', 'end'] as const).map(endpoint => {
     const button = doc.createElement('button'); button.type = 'button'; button.hidden = true; button.tabIndex = -1; button.setAttribute('aria-label', `Adjust selection ${endpoint}`);
-    button.style.cssText = 'position:absolute;width:20px;height:20px;padding:0;margin:0;border:3px solid var(--acheron-background);border-radius:50%;background:var(--acheron-selection-color);z-index:2;touch-action:none;cursor:crosshair';
+    button.style.cssText = 'position:absolute;width:20px;height:20px;padding:0;margin:0;border:3px solid var(--acheron-background);border-radius:50%;background:var(--acheron-selection-color);z-index:3;touch-action:none;cursor:crosshair';
     button.addEventListener('pointerdown', event => {
       const range = getSelectionRange(); if (event.button !== 0 || !range || !finishEdit(true)) return;
       event.preventDefault(); event.stopPropagation();
@@ -2266,6 +2266,24 @@ export function createGrid(options: GridOptions): Grid {
     freezeVertical.style.left = `${indexWidth + Math.max(0, view.frozenWidth - 1)}px`; freezeVertical.style.top = '0px'; freezeVertical.style.width = '2px'; freezeVertical.style.height = `${headerHeight + view.height}px`;
     freezeHorizontal.hidden = !engine.frozenRows || view.frozenHeight >= view.height;
     freezeHorizontal.style.top = `${headerHeight + Math.max(0, view.frozenHeight - 1)}px`; freezeHorizontal.style.left = '0px'; freezeHorizontal.style.height = '2px'; freezeHorizontal.style.width = `${indexWidth + view.width}px`;
+    // Show selected boundaries above the frozen seam without breaking the rest of the separator.
+    for(const [line,axis,seam,offset] of [[freezeVertical,'column',engine.frozenColumns,headerHeight],[freezeHorizontal,'row',engine.frozenRows,indexWidth]] as const){
+      const segments:string[]=[];
+      for(const range of getSelectionRanges()){
+        const first=axis==='column'?range.startColumn:range.startRow,last=axis==='column'?range.endColumn:range.endRow;
+        if(first!==seam&&last+1!==seam)continue;
+        for(const region of view.regions){
+          const start=axis==='column'?Math.max(range.startRow,region.rows.start):Math.max(range.startColumn,region.columns.start);
+          const end=axis==='column'?Math.min(range.endRow+1,region.rows.end):Math.min(range.endColumn+1,region.columns.end);
+          if(start>=end)continue;
+          const layout=axis==='column'?rowAxis:columnAxis,shift=axis==='column'?region.offsetY:region.offsetX;
+          const clipStart=axis==='column'?region.clip.y:region.clip.x,clipEnd=clipStart+(axis==='column'?region.clip.height:region.clip.width);
+          const from=offset+Math.max(clipStart,layout.position(start)+shift),to=offset+Math.min(clipEnd,layout.position(end)+shift);
+          if(to>from)segments.push(`linear-gradient(${axis==='column'?'to bottom':'to right'},transparent ${from}px,var(--acheron-selection-color) ${from}px,var(--acheron-selection-color) ${to}px,transparent ${to}px)`);
+        }
+      }
+      line.style.background=segments.length?segments.join(',')+',var(--acheron-freeze-color)':'var(--acheron-freeze-color)';
+    }
     endResize();
     positionEditor();
     const range = getSelectionRange();
