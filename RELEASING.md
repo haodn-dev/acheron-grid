@@ -2,9 +2,9 @@
 
 Version `0.1.0` has been selected for the first release. Package manifests are prepared for public publication; the root workspace remains private. No package has been published by this preparation. This guide prepares a reviewable release; it does not authorize publishing, pushing tags or changing the license.
 
-## Before choosing a version
+## Before release
 
-1. Agree the release scope, prerelease version, supported environments and public documentation/demo URL. Do not use the local `.test` address as a public website.
+1. Confirm the agreed 0.1.0 development-preview scope, supported environments and public documentation/demo URL. Do not use the local `.test` address as a public website.
 2. Review API changes, migration instructions and known limitations. Update the Unreleased section in [CHANGELOG.md](CHANGELOG.md), root/package README files, and bundled MCP documentation.
 3. Verify all package versions and local dependency ranges agree. Review package contents, licenses and Lucide attribution. The root workspace remains private; change individual publication flags only as part of an explicit package-release decision.
 4. Resolve failing checks and record actual results for the release commit. A rerun that passes does not explain an intermittent failure.
@@ -57,4 +57,4 @@ TypeScript data grid with a headless core, Canvas rendering, and React/Vue adapt
 MIT; embedded third-party assets retain their documented notices.
 ```
 
-Once release approval exists, update versioned notes, create the agreed tag/draft and publish only the approved artifacts. A GitHub source release and npm publication are separate actions. Keep an unreleased section for subsequent work.
+Once release approval exists, verify npm scope ownership and authentication, publish only the approved artifacts in dependency order (core, canvas, markdown, react, vue, mcp), and verify that each published package can be installed from the registry. Update the README and versioned notes from prepared to published only after successful publication. Create the agreed tag/draft from the verified release commit. A GitHub source release and npm publication are separate actions. Keep an unreleased section for subsequent work.
