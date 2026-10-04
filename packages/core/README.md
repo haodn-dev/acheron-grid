@@ -2,7 +2,7 @@
 
 An experimental headless TypeScript data-grid engine. Core owns data, selection, layout, editing, TSV clipboard operations and delta history. It has no runtime dependencies or browser/framework types.
 
-Use core for a custom renderer or headless data workflow. For a ready-made interactive grid, start with the [Canvas guide](../canvas/README.md); React and Vue adapters are separate packages.
+Use core for a custom renderer or headless data workflow. For a ready-made interactive grid, start with the [Canvas guide](https://acheron-grid.haoduong.dev/reference/canvas); React and Vue adapters are separate packages.
 
 ## Contents
 
@@ -17,7 +17,15 @@ Use core for a custom renderer or headless data workflow. For a ready-made inter
 
 ## Getting started
 
-### Build and local installation
+### Installation
+
+```sh
+npm install @acheron-grid/core
+```
+
+Version 0.1.0 is available on npm as a development preview. APIs may change before 1.0. This package exports ESM JavaScript and TypeScript declarations.
+
+### Building from source
 
 From the engine repository root, use Node.js 22 or later:
 
@@ -28,7 +36,7 @@ npm run typecheck
 npm test
 ```
 
-Build runs core before Canvas. This package exports ESM JavaScript and TypeScript declarations from `dist/`. Version 0.1.0 is prepared for publication; it has not yet been published. To use the built package in another project:
+Build runs core before Canvas and writes ESM JavaScript and TypeScript declarations to `dist/`. For local development, install the built package in another project:
 
 ```sh
 npm install /path/to/acheron-grid-engine/packages/core
@@ -36,7 +44,7 @@ npm install /path/to/acheron-grid-engine/packages/core
 
 ### Quick start
 
-The root entry exports `createGridEngine`, `LocalDataSource`, `LocalDataView` and their public types. It runs in Node without DOM, Canvas or framework globals. The earlier @acheron-grid/core/headless subpath remains an alias. Browser rendering is provided by [@acheron-grid/canvas](../canvas/README.md).
+The root entry exports `createGridEngine`, `LocalDataSource`, `LocalDataView` and their public types. It runs in Node without DOM, Canvas or framework globals. The earlier @acheron-grid/core/headless subpath remains an alias. Browser rendering is provided by [@acheron-grid/canvas](https://acheron-grid.haoduong.dev/reference/canvas).
 
 ```js
 import { createGridEngine, LocalDataSource } from '@acheron-grid/core';
@@ -308,7 +316,7 @@ Restoring a different column order checks structural permissions before committi
 
 ## Browser import migration
 
-This unpublished preview moved createGrid, Grid and GridOptions from core to @acheron-grid/canvas. Install both local packages and change imports:
+The development preview moved createGrid, Grid and GridOptions from core to @acheron-grid/canvas. Install both local packages and change imports:
 
 ```ts
 import { createGrid } from '@acheron-grid/canvas';
@@ -317,8 +325,8 @@ import { LocalDataSource } from '@acheron-grid/core';
 import type { Column, CellSelection, SelectionRange } from '@acheron-grid/core';
 ```
 
-The createGrid methods and behavior remain the same; see the [Canvas guide](../canvas/README.md). Core does not re-export Canvas because that would invert the dependency direction. Existing core/headless consumers continue to work.
+The createGrid methods and behavior remain the same; see the [Canvas guide](https://acheron-grid.haoduong.dev/reference/canvas). Core does not re-export Canvas because that would invert the dependency direction. Existing core/headless consumers continue to work.
 
 ## License
 
-Licensed under [MIT](LICENSE). Copyright (c) 2026 Hao Duong. No npm release is available. Lucide assets belong to the separate Canvas package and are not dependencies of this headless core.
+Licensed under [MIT](LICENSE). Copyright (c) 2026 Hao Duong. Lucide assets belong to the separate Canvas package and are not dependencies of this headless core.
