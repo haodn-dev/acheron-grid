@@ -8,7 +8,7 @@ Acheron Grid displays and edits tabular data without a framework dependency. The
 
 ## Status
 
-This is an experimental development preview. APIs may change, packages are not published, and npm manifests are marked `private` to prevent accidental publication. Build and install from a local checkout. The project is licensed under [MIT](LICENSE).
+Version 0.1.0 is prepared as the first release. APIs may change before 1.0. Packages have not yet been published; build from source or install the packed artifacts until publication. The project is licensed under [MIT](LICENSE).
 
 | Package | Purpose | Runtime dependencies |
 | --- | --- | --- |
@@ -133,3 +133,5 @@ See [@acheron-grid/mcp](packages/mcp/README.md) for a stdio documentation server
 ## Author
 
 Created by [Hao Duong](https://haoduong.dev/). See [Contributing](CONTRIBUTING.md) for bug reports and contributions. The author website is separate from the grid demo; a public demo domain has not been finalized.
+
+First release preparation: [0.1.0 release notes](RELEASE-0.1.0.md).

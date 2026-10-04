@@ -12,7 +12,7 @@ test('package entries keep core headless and canvas depends only on public core'
   assert.equal(core.LocalDataSource, headless.LocalDataSource);
   assert.equal(typeof createGrid, 'function');
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url)));
-  assert.deepEqual(pkg.dependencies, { '@acheron-grid/core': '0.0.0' });
+  assert.deepEqual(pkg.dependencies, { '@acheron-grid/core': pkg.version });
   const source = await readFile(new URL('../src/grid.ts', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /from ['"][^'"]*core\//);
   for (const file of ['grid.js', 'grid.js.map', 'grid.d.ts']) {

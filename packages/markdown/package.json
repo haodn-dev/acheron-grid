@@ -1,7 +1,6 @@
 {
   "name": "@acheron-grid/markdown",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "type": "module",
   "description": "Optional Marked adapter for Acheron Grid rich text",
   "files": [
@@ -23,5 +22,9 @@
   "author": "Hao Duong",
   "dependencies": {
     "marked": "^18.0.5"
-  }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://acheron-grid.haoduong.dev/"
 }

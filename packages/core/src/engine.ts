@@ -602,6 +602,9 @@ export function createGridEngine(options: GridEngineOptions) {
     }
     applyUpdates(updates,'paste',formatChanges);
     if (move) pendingCut=undefined;
+    // Preserve selection when a live filter removes a pasted row from the visible view.
+    const targets=placements.map(place=>({startRow:place.row,endRow:place.row+(place.height ?? place.values.length)-1,startColumn:place.col,endColumn:place.col+(place.width ?? place.values[0]!.length)-1}));
+    if(targets.length<=128 && targets.every(range=>range.endRow<visibleRowCount())) targets.forEach((range,index)=>!projection && activeParts===1 ? selectRange(range,index===0?'replace':'add') : selectDisplayRange(range,index===0?'replace':'add'));
   }
   function paste(text:string):void { pasteBlocks([{row:0,column:0,values:decodeTsv(text)}],false); }
 

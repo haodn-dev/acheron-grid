@@ -1,7 +1,6 @@
 {
   "name": "@acheron-grid/canvas",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "type": "module",
   "description": "Canvas browser renderer for Acheron Grid",
   "files": [
@@ -22,7 +21,7 @@
     "dev": "tsc -p tsconfig.json --watch"
   },
   "dependencies": {
-    "@acheron-grid/core": "0.0.0"
+    "@acheron-grid/core": "0.1.0"
   },
   "license": "MIT",
   "repository": {
@@ -33,6 +32,9 @@
   "bugs": {
     "url": "https://github.com/haodn-dev/acheron-grid/issues"
   },
-  "homepage": "https://github.com/haodn-dev/acheron-grid#readme",
-  "author": "Hao Duong"
+  "homepage": "https://acheron-grid.haoduong.dev/",
+  "author": "Hao Duong",
+  "publishConfig": {
+    "access": "public"
+  }
 }

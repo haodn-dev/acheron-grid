@@ -1,6 +1,6 @@
 # Release preparation
 
-No public package release has been approved or published. Current manifests use version `0.0.0` and `private: true`. This guide prepares a reviewable release; it does not authorize publishing, pushing tags or changing the license.
+Version `0.1.0` has been selected for the first release. Package manifests are prepared for public publication; the root workspace remains private. No package has been published by this preparation. This guide prepares a reviewable release; it does not authorize publishing, pushing tags or changing the license.
 
 ## Before choosing a version
 

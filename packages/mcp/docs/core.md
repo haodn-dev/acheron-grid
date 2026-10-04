@@ -13,7 +13,7 @@ npm run typecheck
 npm test
 ```
 
-Build runs core before Canvas. This package exports ESM JavaScript and TypeScript declarations from `dist/`. It is not published; `private: true` prevents accidental npm publication. To use the built package in another project:
+Build runs core before Canvas. This package exports ESM JavaScript and TypeScript declarations from `dist/`. Version 0.1.0 is prepared for publication; it has not yet been published. To use the built package in another project:
 
 ```sh
 npm install /path/to/acheron-grid-engine/packages/core
@@ -200,3 +200,5 @@ engine.pasteCutSelectionBlocks(cut);    // Destination write and source clear: o
 ```
 
 Cut is a staged move within the same engine. Source cells must be copyable and writable; paste validates destination permissions/parsers and unchanged source row IDs, column order and values before writing. A failed validation leaves both sides unchanged. Source content is cleared to `null`; source cell formatting remains, while copied formatting is applied at the destination. Overlapping source/destination cells preserve the pasted result. Undo/redo replays the combined change once. Cut from merged cells is rejected; unmerge first. Use the payload from the staged cut with `pasteCutSelectionBlocks`; ordinary `paste`/`pasteSelectionBlocks` remain copy operations. The host owns clipboard transfer and must not treat arbitrary external clipboard data as a staged move. Cross-engine/browser/application moves and matrix tiling are not supported.
+
+Successful paste selects the full destination rectangle, including all pasted rows and columns. Failed paste leaves selection unchanged.

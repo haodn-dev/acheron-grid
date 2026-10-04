@@ -105,7 +105,7 @@ test('edit and paste parse in domain, rollback on error and undo as one command'
   assert.throws(() => engine.paste('a\t1\tx'), /beyond/);
   engine.paste('Changed\t3\r\nOther\t4');
   assert.equal(source.getValue(1, 'score'), 4);
-  engine.select(1, 1, true);
+  assert.deepEqual(engine.getSelectionRange(), {startRow:0,endRow:1,startColumn:0,endColumn:1});
   assert.equal(engine.copySelection(), 'Changed\t3\r\nOther\t4');
   engine.undo();
   assert.equal(source.getValue(1, 'name'), 'Grace');

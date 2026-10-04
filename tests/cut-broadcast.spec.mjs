@@ -38,3 +38,11 @@ test('Ctrl+X and Ctrl+V move through the browser clipboard',async({page,context}
  await viewport.click({position:{x:170,y:45}});await viewport.press('Control+v');
  await expect.poll(()=>page.evaluate(()=>[window.source.getValue(0,'a'),window.source.getValue(1,'b')])).toEqual([null,'First']);
 });
+
+test('pasting a multiline block selects the entire destination and rejected paste preserves selection',async({page})=>{
+ await setup(page);const viewport=page.getByRole('grid');await viewport.press('Shift+ArrowDown');await viewport.press('Shift+ArrowDown');
+ await page.evaluate(()=>{window.payload=window.grid.copySelectionBlocks();});await viewport.click({position:{x:170,y:10}});await page.evaluate(()=>window.grid.pasteSelectionBlocks(window.payload));
+ expect(await page.evaluate(()=>window.grid.getSelectionRange())).toEqual({startRow:0,endRow:2,startColumn:1,endColumn:1});
+ await viewport.click({position:{x:170,y:75}});await page.evaluate(()=>{try{window.grid.pasteSelectionBlocks(window.payload);}catch{}});
+ expect(await page.evaluate(()=>window.grid.getSelectionRange())).toEqual({startRow:2,endRow:2,startColumn:1,endColumn:1});
+});
