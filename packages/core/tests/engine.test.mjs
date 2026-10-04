@@ -673,3 +673,11 @@ test('inserted column defaults and hidden values survive structural replay and n
   engine.updateCells([{rowIndex:0,columnKey:'extra',value:'edited'}]); engine.deleteColumns([1]); engine.undo(); assert.equal(source.getValue(0,'extra'),'edited');
   engine.insertRows(2,[{id:3,values:{id:3,name:'New',score:3}}]); assert.equal(source.getValue(2,'extra'),'initial'); engine.undo(); engine.redo(); assert.equal(source.getValue(2,'extra'),'initial');
 });
+
+test('column validation rejects a batch atomically and can allow invalid values',()=>{
+ const source=new LocalDataSource([{id:1,a:'ok',b:'ok'}],r=>r.id);
+ const engine=createGridEngine({dataSource:source,columns:[{key:'a',title:'Reject',editable:true,validate:v=>v==='bad'?'Invalid':undefined},{key:'b',title:'Allow',editable:true,invalidInput:'allow',validate:v=>v==='bad'?'Invalid':undefined}]});
+ assert.throws(()=>engine.updateCells([{rowIndex:0,columnKey:'b',value:'changed'},{rowIndex:0,columnKey:'a',value:'bad'}]),/Invalid/);
+ assert.equal(source.getValue(0,'b'),'ok');
+ engine.updateCells([{rowIndex:0,columnKey:'b',value:'bad'}]);assert.equal(source.getValue(0,'b'),'bad');engine.undo();assert.equal(source.getValue(0,'b'),'ok');
+});

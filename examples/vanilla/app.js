@@ -3,11 +3,11 @@ import { LocalDataSource, LocalDataView } from '@acheron-grid/core';
 
 const avatars = ['#0f766e', '#2563eb', '#7c3aed'].map(color => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect width="48" height="48" rx="10" fill="${color}"/><circle cx="24" cy="17" r="8" fill="white"/><path d="M10 42c0-16 28-16 28 0" fill="white"/></svg>`));
 
-const columns = [{ key: 'id', title: 'Record ID' }, { key: 'name', title: 'Name', editable: true, parse: text => { if (!text.trim()) throw new Error('Name is required.'); return text; } },
+const columns = [{ key: 'id', title: 'Record ID' }, { key: 'name', title: 'Name', editable: true, validate: value => !String(value).trim() ? 'Name is required.' : undefined },
   { key: 'status', title: 'Status', editable: true, parse: text => { if (!['Review', 'Active'].includes(text)) throw new Error('Invalid status.'); return text; } },
   { key: 'approved', title: 'Approved', editable: true, parse: text => { if (!['true', 'false'].includes(text)) throw new Error('Invalid boolean.'); return text === 'true'; } },
   { key: 'avatar', title: 'Avatar' },
-  { key: 'website', title: 'Website', editable: true },
+  { key: 'website', title: 'Website (warning)', editable: true, invalidInput: 'allow', validate: value => /^https?:\/\//.test(String(value)) ? undefined : 'Use an http:// or https:// URL.' },
   ...Array.from({ length: 2 }, (_, index) => ({ key: `metric${index}`, title: `Metric ${index + 1}` }))];
 const source = new LocalDataSource(Array.from({ length: 10_000 }, (_, index) => ({
   id: `AG-${String(index + 1).padStart(5, '0')}`, name: `Record ${index + 1}`, status: index % 4 === 0 ? 'Review' : 'Active', approved: index % 3 === 0, avatar: avatars[index % avatars.length], website: `https://example.com/records/${index + 1}`,

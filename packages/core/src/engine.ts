@@ -379,6 +379,11 @@ export function createGridEngine(options: GridEngineOptions) {
     })).filter(change => !Object.is(change.previous, change.value));
     if (!changes.length && !formatChanges.length) return;
     for (const change of changes) requirePermission(change.rowIndex, columnIndices.get(change.columnKey)!, 'writable');
+    for (const change of changes) {
+      const column = columns[columnIndices.get(change.columnKey)!]!;
+      const message = column.validate?.(change.value);
+      if (message && column.invalidInput !== 'allow') throw new Error(message);
+    }
     if (changes.length) write(changes);
     writeFormats(formatChanges);
     past.push({ kind: 'values', changes, formats: formatChanges });

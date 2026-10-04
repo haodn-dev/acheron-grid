@@ -338,6 +338,8 @@ export function createGrid(options: GridOptions): Grid {
     dialog[data-grid-dialog] :focus-visible { outline:2px solid var(--acheron-selection-color);outline-offset:2px }
     [data-grid-row-group]:hover:not(:disabled) { background:color-mix(in srgb,var(--acheron-icon-color) 12%,var(--acheron-header-background))!important;color:var(--acheron-text-color)!important }
     [data-grid-row-group]:focus-visible { outline:1px solid var(--acheron-selection-color);outline-offset:1px }
+    [data-severity=warning] { border-color:color-mix(in srgb,#d97706 50%,var(--acheron-grid-line-color))!important;background:color-mix(in srgb,#d97706 12%,var(--acheron-background))!important }
+    [aria-invalid=true]:is(input,textarea,select) { outline:1px solid #ef4444;outline-offset:-1px }
     [data-grid-row-group]:disabled { opacity:.4;cursor:default!important }
     [data-grid-row-resize]:hover { background:var(--acheron-selection-color);opacity:.5 }
     [data-grid-header-cell]:focus-visible { outline:2px solid var(--acheron-selection-color);outline-offset:-3px }
@@ -1043,7 +1045,7 @@ export function createGrid(options: GridOptions): Grid {
       const affected=span?engine.getMergedCells().filter(merge=>merge.startRow<=engine.getRowSourceIndex(span.endRow)&&merge.endRow>=engine.getRowSourceIndex(span.startRow)&&merge.startColumn<=span.endColumn&&merge.endColumn>=span.startColumn):[];
       item('Unmerge cells',affected.length>0&&affected.every(range=>engine.canChangeLayout({kind:'unmerge',range})),()=>{if(span)structureAction(()=>engine.unmergeCells(span));});
       const wholeRows=!!span&&span.startColumn===0&&span.endColumn===columns.length-1&&span.endRow>span.startRow;
-      item('Group selected rows',wholeRows&&!engine.getRowGroups().some(group=>group.collapsed)&&!engine.view.sort&&!engine.view.filters?.length&&!!span&&engine.canChangeLayout({kind:'group',group:{id:'',startRow:span.startRow,endRow:span.endRow,collapsed:false}}),()=>{if(span)structureAction(()=>engine.groupRows(span.startRow,span.endRow));});
+      item('Group selected rows',wholeRows&&!engine.getRowGroups().some(group=>group.collapsed)&&!engine.view.sort&&!engine.view.filters?.length&&!!span&&engine.canChangeLayout({kind:'group',group:{id:'',startRow:span.startRow,endRow:span.endRow,collapsed:false}}),()=>{if(span)groupRows(span.startRow,span.endRow);});
       const sourceRow=engine.getRowSourceIndex(row),rowGroups=engine.getRowGroups().filter(group=>sourceRow>=group.startRow&&sourceRow<=group.endRow).sort((a,b)=>(a.endRow-a.startRow)-(b.endRow-b.startRow));
       const group=rowGroups[0];
       if(group){item(group.collapsed?'Expand row group':'Collapse row group',engine.canChangeLayout({kind:group.collapsed?'expand':'collapse',group}),()=>structureAction(()=>engine.setGroupCollapsed(group.id,!group.collapsed), 'row'));item('Ungroup rows',engine.canChangeLayout({kind:'ungroup',group}),()=>structureAction(()=>engine.ungroupRows(group.id)));}
@@ -1081,15 +1083,26 @@ export function createGrid(options: GridOptions): Grid {
     item('Undo', engine.canUndo(), () => { replay(false); });
     item('Redo', engine.canRedo(), () => { replay(true); });
     item('Format cellsâ€¦', rowCount > 0 && engine.canFormat(getSelectionRanges().map(range => ({ scope: 'range', range }))), () => openFormatDialog(row, col));
-    for (const [label, target] of [
-      ['cell', { scope: 'cell', rowIndex: row, columnIndex: col }],
-      ['row', { scope: 'row', rowIndex: row }],
-      ['column', { scope: 'column', columnIndex: col }],
-      ['table', { scope: 'table' }],
-    ] as const) {
-      if (!rowCount && (target.scope === 'row' || target.scope === 'cell')) continue;
-      const locked = engine.isLocked(target);
-      item(`${locked ? 'Unlock' : 'Lock'} ${label}`, engine.canManageLocks(), () => setLocked(target, !locked));
+    const lockRanges = getSelectionRanges();
+    const selectedCellsLocked = lockRanges.every(range => {
+      for(let r=range.startRow;r<=range.endRow;r++)for(let c=range.startColumn;c<=range.endColumn;c++)if(!engine.isLocked({scope:'cell',rowIndex:r,columnIndex:c}))return false;
+      return true;
+    });
+    const lockTargets: [string, CellLockTarget[]][] = [
+      [lockRanges.length > 1 || lockRanges.some(range => range.startRow !== range.endRow || range.startColumn !== range.endColumn) ? 'selected cells' : 'cell', [{scope:'cell',rowIndex:row,columnIndex:col}]],
+      ['row', selectedAxisIndices('row',row).map(rowIndex => ({scope:'row',rowIndex}))],
+      ['column', selectedAxisIndices('column',col).map(columnIndex => ({scope:'column',columnIndex}))],
+      ['table', [{scope:'table'}]],
+    ];
+    for (const [label, targets] of lockTargets) {
+      if (!targets.length || (!rowCount && (label === 'row' || label.includes('cell')))) continue;
+      const locked = label.includes('cell') ? selectedCellsLocked : targets.every(target => engine.isLocked(target));
+      const name = targets.length > 1 && (label === 'row' || label === 'column') ? `${targets.length} selected ${label}s` : label;
+      item(`${locked ? 'Unlock' : 'Lock'} ${name}`, engine.canManageLocks(), () => {
+        if (label.includes('cell')) {
+          for (const range of lockRanges) for (let r=range.startRow;r<=range.endRow;r++) for (let c=range.startColumn;c<=range.endColumn;c++) setLocked({scope:'cell',rowIndex:r,columnIndex:c},!locked);
+        } else for (const target of targets) setLocked(target, !locked);
+      });
     }
     if (rowCount > 0 && !engine.getCellPermission(row, col).writable) item('Cell is read-only', false, () => {});
     const rowsFit = rowCount > 0 && rowAxis.position(row + 1) < scroller.clientHeight;
@@ -1358,6 +1371,7 @@ export function createGrid(options: GridOptions): Grid {
       : column !== null ? 'Drag the column boundary to resize width'
       : event.clientY - bounds.top < headerHeight && event.clientX >= bounds.left + indexWidth && headerColumn >= 0 && headerColumn < columns.length ? stateLabels(null, headerColumn).join('; ')
       : indexRow(event) !== null ? [`Select row ${indexRow(event)! + 1}`, ...rowLabels(indexRow(event)!)].join('; ') : cell ? stateLabels(cell.row, cell.col).join('; ') : '';
+    if (cell && !resizing) { const message=validationMessage(engine.getValue(cell.row,columns[cell.col]!.key),cell.col);if(message)root.title=message; }
     if (!resizing && cell && event.altKey && options.allowOpenLinks !== false && cellLinks(cell.row, cell.col).length) { root.style.cursor = 'pointer'; root.title = 'Alt+click to open links'; }
     if(hoveredChoice && cell){const rect=viewport().cellRect(cell.row,cell.col);if(event.clientX-scroller.getBoundingClientRect().left>=rect.x+rect.width-24)root.style.cursor='pointer';}
     if (resizing?.pointerId === event.pointerId) {
@@ -1419,6 +1433,7 @@ export function createGrid(options: GridOptions): Grid {
         if (!editor.checkValidity()) throw new Error(editor.validationMessage);
         engine.editCell(selection.rowIndex, selection.columnIndex, editor instanceof win.HTMLInputElement && editor.type === 'checkbox' ? String(editor.checked) : editor instanceof win.HTMLSelectElement && editor.multiple ? Array.from(editor.selectedOptions).map(option => option.value).join(', ') : editor.value);
       } catch (error) {
+        editorError.dataset.severity = 'error';
         editor.setCustomValidity(error instanceof Error ? error.message : 'Unable to save cell.');
         editor.setAttribute('aria-invalid', 'true');
         editorError.textContent = error instanceof Error ? error.message : 'Unable to save cell.';
@@ -1490,10 +1505,25 @@ export function createGrid(options: GridOptions): Grid {
       editor?.setCustomValidity('');
       editor?.removeAttribute('aria-invalid');
       editorError.style.display = 'none';
+      editorError.dataset.severity = column.invalidInput === 'allow' ? 'warning' : 'error';
+      if (editor) {
+        try {
+          const text = editor instanceof win.HTMLInputElement && editor.type === 'checkbox' ? String(editor.checked) : editor instanceof win.HTMLSelectElement && editor.multiple ? Array.from(editor.selectedOptions).map(option=>option.value).join(', ') : editor.value;
+          const message = column.validate?.(column.parse ? column.parse(text) : text);
+          if (message) {
+            editor.setAttribute('aria-invalid','true');
+            editorError.textContent = message + (column.invalidInput === 'allow' ? ' — You can save this value.' : ' — Correct this before saving.');
+            editorError.style.display = 'block';
+          }
+        } catch (error) {
+          editorError.dataset.severity='error';editor.setAttribute('aria-invalid','true');editorError.textContent = error instanceof Error ? error.message : 'Invalid value.';editorError.style.display = 'block';
+        }
+      }
       positionEditor();
     };
     editor.addEventListener('input', clearValidation);
     editor.addEventListener('change', clearValidation);
+    clearValidation();
     editor.addEventListener('keydown', event => {
       if (!(event instanceof win.KeyboardEvent)) return;
       event.stopPropagation();
@@ -2023,6 +2053,9 @@ export function createGrid(options: GridOptions): Grid {
     const bounds = popup.getBoundingClientRect(); popup.style.left = `${Math.max(8, Math.min(x, win.innerWidth - bounds.width - 8))}px`; popup.style.top = `${Math.max(8, Math.min(y, win.innerHeight - bounds.height - 8))}px`; popup.querySelector('a')?.focus();
   }
 
+  function validationMessage(value: unknown, columnIndex: number): string | undefined {
+    return columns[columnIndex]?.validate?.(value);
+  }
   function cell(value: unknown, x: number, y: number, width: number, height: number, header: boolean, rowIndex = 0, columnIndex = 0): void {
     paintCell(value, x, y, width, height, header, rowIndex, columnIndex);
     const labels = stateLabels(header ? null : rowIndex, columnIndex);
@@ -2050,6 +2083,9 @@ export function createGrid(options: GridOptions): Grid {
     if (locked && width >= 24 && height >= 20) {
       const left = x + width - 18; const top = y + 4;
       stateIcon('lock', left, top);
+    }
+    if (!header && validationMessage(value,columnIndex)) {
+      ctx.fillStyle = columns[columnIndex]?.invalidInput === 'allow' ? '#d97706' : '#ef4444';ctx.beginPath();ctx.moveTo(x+width-8,y+1);ctx.lineTo(x+width-1,y+1);ctx.lineTo(x+width-1,y+8);ctx.closePath();ctx.fill();
     }
     if(!header&&hoveredChoice?.row===rowIndex&&hoveredChoice.col===columnIndex&&width>=28&&height>=20&&engine.canEdit(rowIndex,columnIndex))stateIcon('chevron-down',x+width-22,y+(height-16)/2);
     ctx.restore();
@@ -2296,9 +2332,10 @@ export function createGrid(options: GridOptions): Grid {
     const span=engine.getMerge(row,col);
     node.setAttribute('aria-rowspan',String(span?span.endRow-span.startRow+1:1));
     node.setAttribute('aria-colspan',String(span?span.endColumn-span.startColumn+1:1));
+    const invalid = validationMessage(value,col);node.setAttribute('aria-invalid',String(!!invalid));
     node.setAttribute('aria-readonly', String(!engine.canEdit(row, col)));
     node.setAttribute('aria-selected', String(getSelectionRanges().some(range => row >= range.startRow && row <= range.endRow && col >= range.startColumn && col <= range.endColumn)));
-    node.setAttribute('aria-description', [...stateLabels(row, col), ...(linksForValue(value, columns[col]!.key, engine.getFormat(row, col).contentFormat).length ? ['Contains links. Alt+Enter opens links.'] : [])].join('; '));
+    node.setAttribute('aria-description', [...stateLabels(row, col), ...(invalid ? [invalid] : []), ...(linksForValue(value, columns[col]!.key, engine.getFormat(row, col).contentFormat).length ? ['Contains links. Alt+Enter opens links.'] : [])].join('; '));
     node.textContent = accessibleText(row, col, value);
     return node;
   }
@@ -2514,7 +2551,8 @@ export function createGrid(options: GridOptions): Grid {
         if(outline.length)button.style.paddingLeft=`${levels*24}px`;
         for(const group of outline.filter(group=>!group.collapsed&&group.startRow<=sourceIndex&&group.endRow>=sourceIndex)){
           const depth=depths.get(group.id)!;
-          const line=doc.createElement('span');line.setAttribute('aria-hidden','true');line.style.cssText=`position:absolute;left:${depth*24+12}px;top:${rowAxis.position(row)+band.offset-band.y+(group.startRow===sourceIndex?rowAxis.size(row)/2+10:0)}px;width:6px;height:${group.startRow===sourceIndex?Math.max(0,rowAxis.size(row)/2-10):group.endRow===sourceIndex?rowAxis.size(row)/2:rowAxis.size(row)}px;box-sizing:border-box;border-left:1px solid var(--acheron-grid-line-color);${group.endRow===sourceIndex?'border-bottom:1px solid var(--acheron-grid-line-color);border-bottom-left-radius:4px;':''}pointer-events:none`;pane.append(line);
+          const line=doc.createElement('span');line.setAttribute('aria-hidden','true');line.style.cssText=`position:absolute;left:${depth*24+12}px;top:${rowAxis.position(row)+band.offset-band.y+(group.startRow===sourceIndex?rowAxis.size(row)/2+10:0)}px;width:6px;height:${group.startRow===sourceIndex?Math.max(0,rowAxis.size(row)/2-10):group.endRow===sourceIndex?rowAxis.size(row)/2:rowAxis.size(row)}px;box-sizing:border-box;border-left:1px solid color-mix(in srgb,var(--acheron-icon-color) 35%,var(--acheron-grid-line-color));${group.endRow===sourceIndex?'border-bottom:1px solid var(--acheron-grid-line-color);border-bottom-left-radius:4px;':''}pointer-events:none;transform-origin:top`;pane.append(line);
+          if(enteringGroups.has(group.id)&&motionEnabled())line.animate([{opacity:0,transform:'scaleY(.6)'},{opacity:1,transform:'scaleY(1)'}],{duration:180,easing:'cubic-bezier(.22,1,.36,1)'});
         }
         for(const group of outline.filter(group=>group.startRow===sourceIndex).sort((a,b)=>b.endRow-a.endRow)) {
           const depth=depths.get(group.id)!;
@@ -2522,7 +2560,8 @@ export function createGrid(options: GridOptions): Grid {
           toggle.setAttribute('aria-label',`${group.collapsed?'Expand':'Collapse'} rows ${group.startRow+1}â€“${group.endRow+1}`);toggle.setAttribute('aria-expanded',String(!group.collapsed));
           toggle.disabled=!engine.canChangeLayout({kind:group.collapsed?'expand':'collapse',group});
           toggle.title=toggle.getAttribute('aria-label')!+' Â· '+(group.endRow-group.startRow+1)+' rows';const glyph=svgIcon('chevron-down');if(group.collapsed)glyph.setAttribute('style','transform:rotate(-90deg)');glyph.setAttribute('width','12');glyph.setAttribute('height','12');toggle.append(glyph);
-          toggle.style.cssText=`position:absolute;left:${depth*24+3}px;top:${rowAxis.position(row)+band.offset-band.y+Math.max(0,(rowAxis.size(row)-20)/2)}px;width:18px;height:20px;display:flex;align-items:center;justify-content:center;padding:2px;border:0;border-radius:5px;background:var(--acheron-header-background);color:var(--acheron-icon-color);cursor:pointer`;
+          toggle.style.cssText=`position:absolute;left:${depth*24+3}px;top:${rowAxis.position(row)+band.offset-band.y+Math.max(0,(rowAxis.size(row)-20)/2)}px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;padding:2px;border:0;border-radius:6px;background:color-mix(in srgb,var(--acheron-icon-color) 7%,var(--acheron-header-background));color:var(--acheron-header-text-color);cursor:pointer`;
+          if (enteringGroups.has(group.id) && motionEnabled()) toggle.animate([{opacity:0,transform:'scale(.8)'},{opacity:1,transform:'scale(1)'}],{duration:180,easing:'cubic-bezier(.22,1,.36,1)'});
           toggle.addEventListener('pointerdown',event=>{event.stopPropagation();});
           toggle.addEventListener('click',event=>{event.stopPropagation();try{structureAction(()=>engine.setGroupCollapsed(group.id,!group.collapsed), 'row');}catch(error){actionError.textContent=error instanceof Error?error.message:'Unable to toggle row group.';actionError.style.display='block';}});
           pane.append(toggle);
@@ -2531,6 +2570,7 @@ export function createGrid(options: GridOptions): Grid {
       children.push(pane);
     }
     indexGutter.replaceChildren(...children);
+    enteringGroups.clear();
   }
 
   let reorderDrag: { axis: 'row' | 'column'; indices: number[] } | null = null;
@@ -2863,6 +2903,10 @@ export function createGrid(options: GridOptions): Grid {
     }
     return result;
   }
+  const enteringGroups = new Set<string>();
+  function groupRows(start:number,end:number):string {
+    return structureAction(()=>{const id=engine.groupRows(start,end);enteringGroups.add(id);return id;});
+  }
   function structureAction<T>(run:()=>T, axis?: 'row' | 'column'):T {
     if(editor||destroyed)throw new Error('Save or cancel the editor before changing structure.');
     return axis ? animateLayout(run, axis) : run();
@@ -2876,7 +2920,7 @@ export function createGrid(options: GridOptions): Grid {
     mergeCells:(range:SelectionRange)=>structureAction(()=>engine.mergeCells(range)),
     unmergeCells:(range:SelectionRange)=>structureAction(()=>engine.unmergeCells(range)),
     getRowGroups:engine.getRowGroups,
-    groupRows:(start:number,end:number)=>structureAction(()=>engine.groupRows(start,end)),
+    groupRows,
     ungroupRows:(id:string)=>structureAction(()=>engine.ungroupRows(id)),
     setGroupCollapsed:(id:string,collapsed:boolean)=>structureAction(()=>engine.setGroupCollapsed(id,collapsed), 'row'),
     setView:(view:LocalViewOptions)=>structureAction(()=>{engine.setView(view);currentView=engine.view;}),

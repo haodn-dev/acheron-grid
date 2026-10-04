@@ -135,3 +135,16 @@ See [@acheron-grid/mcp](packages/mcp/README.md) for a stdio documentation server
 Created by [Hao Duong](https://haoduong.dev/). See [Contributing](CONTRIBUTING.md) for bug reports and contributions. The author website is separate from the grid demo; a public demo domain has not been finalized.
 
 First release preparation: [0.1.0 release notes](RELEASE-0.1.0.md).
+
+### Input validation
+
+Columns can validate typed values with `validate(value)`, returning an error message or `undefined`. Invalid values are rejected by default before any batch writes. Set `invalidInput: 'allow'` to save invalid values with a warning in Canvas. Parsing remains separate: a parser exception always prevents saving.
+
+```ts
+{ key: 'name', title: 'Name', editable: true,
+  validate: value => String(value).trim() ? undefined : 'Name is required.' },
+{ key: 'website', title: 'Website', editable: true, invalidInput: 'allow',
+  validate: value => /^https?:\/\//.test(String(value)) ? undefined : 'Use an HTTP or HTTPS URL.' }
+```
+
+Canvas displays live editor feedback and a corner marker for saved invalid values; hover or the viewport accessibility mirror exposes the message. See the vanilla example for both policies.

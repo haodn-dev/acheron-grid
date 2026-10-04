@@ -37,6 +37,7 @@ test('merged cells render one span, hit the anchor, edit, resize, scroll and unm
 test('row group controls collapse nested groups and keep visible edits tied to source records',async({page})=>{
   await setup(page);
   await page.evaluate(()=>{window.parent=window.grid.groupRows(1,6);window.child=window.grid.groupRows(2,4);});
+  await page.screenshot({path:'test-results/group-ui.png'});
   const child=page.getByRole('button',{name:'Collapse rows 3–5',exact:true});
   await child.click();
   await expect(page.getByRole('button',{name:'Expand rows 3–5',exact:true})).toHaveAttribute('aria-expanded','false');
@@ -105,3 +106,35 @@ test('copy and cut have distinct persistent outlines',async({page})=>{
 });
 
 
+
+test('context locks the selected rows and columns together',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{window.grid.selectRow(1);});
+ const viewport=page.getByLabel(/^Data grid viewport/);
+ await viewport.press('Shift+ArrowDown');
+ await viewport.click({button:'right',position:{x:80,y:80}});
+ await page.getByRole('menuitem',{name:'Lock 2 selected rows',exact:true}).click();
+ expect(await page.evaluate(()=>[1,2].map(rowIndex=>window.grid.isLocked({scope:'row',rowIndex})))).toEqual([true,true]);
+ await viewport.click({button:'right',position:{x:80,y:80}});
+ await page.getByRole('menuitem',{name:'Unlock 2 selected rows',exact:true}).click();
+ expect(await page.evaluate(()=>[1,2].map(rowIndex=>window.grid.isLocked({scope:'row',rowIndex})))).toEqual([false,false]);
+ await page.evaluate(()=>window.grid.selectColumn(0));await viewport.press('Shift+ArrowRight');
+ await viewport.click({button:'right',position:{x:80,y:80}});await page.getByRole('menuitem',{name:'Lock 2 selected columns',exact:true}).click();
+ expect(await page.evaluate(()=>[0,1].map(columnIndex=>window.grid.isLocked({scope:'column',columnIndex})))).toEqual([true,true]);
+});
+test('validation distinguishes reject from allowed warnings',async({page})=>{
+ await setup(page);
+ await page.evaluate(async()=>{
+  window.grid.destroy();const {createGrid}=await import('/canvas/index.js');
+  window.grid=createGrid({container:document.querySelector('#grid'),dataSource:window.source,accessibility:'viewport',columns:[{key:'a',title:'Reject',editable:true,validate:v=>v==='bad'?'Use another value.':undefined},{key:'b',title:'Allow',editable:true,invalidInput:'allow',validate:v=>v==='bad'?'Use another value.':undefined}],rowHeight:32,columnWidth:160});
+ });
+ const viewport=page.getByLabel(/^Data grid viewport/);
+ await viewport.click({position:{x:80,y:45}});await viewport.press('F2');
+ const editor=page.getByRole('textbox');await editor.fill('bad');await expect(editor).toHaveAttribute('aria-invalid','true');
+ await editor.press('Enter');await expect(editor).toBeVisible();expect(await page.evaluate(()=>window.source.getValue(0,'a'))).toBe('Alpha 0');
+ await editor.press('Escape');await viewport.click({position:{x:220,y:45}});await viewport.press('F2');await editor.fill('bad');
+ await expect(page.getByText('Use another value. � You can save this value.',{exact:true})).toBeVisible();await editor.press('Enter');
+ expect(await page.evaluate(()=>window.source.getValue(1,'b'))).toBe('bad');
+ await expect(page.getByRole('gridcell',{name:'Allow: bad',exact:true})).toHaveAttribute('aria-invalid','true');
+ await page.screenshot({path:'test-results/validation-ui.png'});
+});
