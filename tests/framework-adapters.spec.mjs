@@ -7,6 +7,7 @@ test('framework adapters preserve live state, forward current events and clean u
     const host = page.locator('#' + framework);
     await expect(host.getByRole('grid')).toHaveCount(1);
     expect(await page.evaluate(name => !!window.adapters[name], framework)).toBe(true);
+    expect(await page.evaluate(name => window.adapters[name].exportConfiguration().version, framework)).toBe(1);
     await page.evaluate(name => {
       const api = window.adapters; api[name].updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Edited' }]);
       api[name + 'Before'] = api[name];

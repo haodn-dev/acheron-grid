@@ -10,7 +10,7 @@ import { detectLinks } from './links.js';
 import { readHtml, layoutRichText, richTextHtml, richTextSource } from './rich-text.js';
 import type { RichText, RichTextFormat } from './rich-text.js';
 import { createGridEngine, gridClipboardType, decodeBlocks, encodeBlocks, blocksToTsv } from '@acheron-grid/core';
-import type { ClipboardBlock } from '@acheron-grid/core';
+import type { GridConfiguration, ClipboardBlock } from '@acheron-grid/core';
 import type { CellUpdate, DataRow, DataSource, Column, CellSelection, SelectionRange, CellPermission, CellLockTarget, CellFormatTarget, CellFormat, CellFormatPatch, LocalViewOptions, GridEngineOptions, ViewportRegion, RowGroup } from '@acheron-grid/core';
 
 let editorId = 0;
@@ -102,6 +102,7 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
   indexColumn?: boolean;
 }
 export interface Grid {
+  exportConfiguration(): GridConfiguration;
   getMerge(row:number,col:number):Readonly<SelectionRange>|null;
   getMergedCells():readonly Readonly<SelectionRange>[];
   canMerge(range:SelectionRange):boolean;
@@ -2759,6 +2760,10 @@ export function createGrid(options: GridOptions): Grid {
     return axis ? animateLayout(run, axis) : run();
   }
   return {
+    exportConfiguration: () => {
+      if (!managesView) throw new Error('Export configuration requires core-managed view; persist host view separately.');
+      return engine.exportConfiguration();
+    },
     getMerge:engine.getMerge,getMergedCells:engine.getMergedCells,canMerge:engine.canMerge,
     mergeCells:(range:SelectionRange)=>structureAction(()=>engine.mergeCells(range)),
     unmergeCells:(range:SelectionRange)=>structureAction(()=>engine.unmergeCells(range)),
