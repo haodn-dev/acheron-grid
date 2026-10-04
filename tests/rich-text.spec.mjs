@@ -20,7 +20,9 @@ test('rich text paints partial styles, wraps, searches visible text and visually
   await expect(page.getByRole('gridcell', { name: /Description: Strong slanted underlined/ })).toHaveText('Description: Strong slanted underlined\nNext & last');
   expect(await page.evaluate(() => window.drawn.some(run => run.text === 'Bold' && /bold|700/.test(run.font)))).toBe(true);
   expect(await page.evaluate(() => window.drawn.some(run => run.text === 'italic' && run.font.includes('italic')))).toBe(true);
-  expect(await page.getByRole('button', { name: 'Select row 1', exact: true }).evaluate(el => el.offsetHeight)).toBeGreaterThan(24);
+  const row = page.getByRole('button', { name: 'Select row 1', exact: true });
+  const originalHeight = await row.evaluate(el => el.offsetHeight);
+  expect(originalHeight).toBeGreaterThan(24);
   const viewport = page.getByLabel(/^Data grid viewport/);
   await viewport.press('Control+Home'); await viewport.press('F2');
   const editor = page.getByRole('textbox', { name: 'Edit row 1, Notes', exact: true });
@@ -33,6 +35,8 @@ test('rich text paints partial styles, wraps, searches visible text and visually
   expect(await page.evaluate(() => window.grid.copySelection())).toBe('Changed and part');
   await page.evaluate(() => window.grid.undo());
   expect(await page.evaluate(() => window.source.getValue(0, 'notes') === window.raw)).toBe(true);
+  await expect(page.getByRole('gridcell', { name: /Notes: Bold and italic with reference/ })).toBeAttached();
+  await expect.poll(()=>row.evaluate(el=>el.offsetHeight)).toBe(originalHeight);
   await viewport.press('Alt+Enter');
   await expect(page.getByRole('dialog', { name: 'Cell links' }).getByRole('link', { name: 'reference' })).toHaveAttribute('href', 'https://example.com/page');
   await page.getByRole('button', { name: 'Close', exact: true }).click();
