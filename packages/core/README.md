@@ -168,3 +168,21 @@ Merged cells use the top-left value; other source values remain intact. `getMerg
 Manual row groups can be nested or disjoint. Their first row remains visible when collapsed. `getRowGroups()` and `getMergedCells()` return immutable **source-coordinate** metadata; `getRowSourceIndex(visibleRow)` maps visible rows. Editing, selection, locks and row sizes retain record identity across collapse/expand. Grouping, ungrouping, collapse/expand and merge/unmerge share undo/redo. Use `allowMerging`, `allowRowGrouping` or `canChangeLayout(request)` to control capabilities. Merge/unmerge require writable cells; row grouping respects table/row locks and the host veto.
 
 Current limits: 1,024 spans/groups each; merge permission checks cover at most 100,000 cells. Sorting/filtering requires removing merges and groups. Collapsing rows that contain merged cells, or crossing a frozen boundary, is rejected. Expand all groups before structural changes. Moving an intact span/group preserves it; operations splitting it are rejected, and deletion of a member dissolves its metadata (undo restores it). Collapse rebuilds an O(row-count) local projection; metadata stays sparse and rendering remains viewport based.
+
+## Portable layout and view configuration
+
+```ts
+import { createGridEngine, restoreGridConfiguration } from '@acheron-grid/core';
+
+const saved = JSON.stringify(engine.exportConfiguration());
+const restoredOptions = restoreGridConfiguration(
+  JSON.parse(saved), applicationColumns, dataSource.getRowCount(),
+);
+const restoredEngine = createGridEngine({
+  ...restoredOptions, dataSource, permissions: applicationPermissions,
+});
+```
+
+`exportConfiguration()` returns a detached version-1 JSON-compatible snapshot of column keys/order/current widths, source frozen-row count, frozen-column count and local sort/filters. `restoreGridConfiguration(input, columns, rowCount)` validates unknown input and returns initialization options. It requires exactly the current column keys once each; unknown versions, missing/duplicate/unknown keys, invalid sizes, counts or view definitions throw before grid construction. Existing application column definitions (including parsers and permission policies) are reused; configuration cannot supply executable definitions.
+
+Storage is host-owned; the core does not access localStorage or a server. Filter queries may contain sensitive text, so choose storage and access controls accordingly. Apply returned options to a new engine; this API does not change a mounted grid or create undo history. Configuration excludes cell data, row order/heights, default row height, merges/groups, formatting, locks, selection and history. Frozen rows are a count, not stable row identities; restore against the intended source order. Keep rowHeight and other host options explicit. Structural column additions/deletions require the host's matching schema when restoring.

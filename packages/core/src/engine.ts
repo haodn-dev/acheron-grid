@@ -1,3 +1,4 @@
+import type { GridConfiguration } from './configuration.js';
 import { LocalDataView } from './data-source.js';
 import type { LocalViewOptions } from './data-source.js';
 import { blocksToTsv, encodeBlocks, decodeBlocks } from './clipboard.js';
@@ -1044,6 +1045,15 @@ export function createGridEngine(options: GridEngineOptions) {
   return Object.freeze({
     setView:(next:LocalViewOptions)=>command(()=>setView(next)),
     get view(){return view;},
+    exportConfiguration: (): GridConfiguration => query(() => {
+      assertAlive();
+      return {
+      version: 1,
+      columns: columns.map((column, index) => ({ key: column.key, width: columnAxis.size(index) })),
+      frozenRows, frozenColumns,
+      view: { ...(view.sort ? { sort: { ...view.sort } } : {}), ...(view.filters ? { filters: view.filters.map(filter => ({ ...filter })) } : {}) },
+      };
+    }),
     get sourceRowCount(){return rowCount;},
     getRowId:(row:number)=>dataSource.getRowId(sourceRow(row)),
     get columns() { return columns; }, get rowCount() { return visibleRowCount(); }, get frozenRows() { return visibleFrozenRows(); }, get frozenColumns() { return frozenColumns; },

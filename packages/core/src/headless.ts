@@ -14,3 +14,6 @@ export { gridClipboardType } from './clipboard.js';
 export { encodeBlocks, decodeBlocks, blocksToTsv } from './clipboard.js';
 export type { ClipboardBlock } from './clipboard.js';
 export type { RowGroup, LayoutRequest } from './types.js';
+
+export { restoreGridConfiguration } from './configuration.js';
+export type { GridConfiguration } from './configuration.js';
