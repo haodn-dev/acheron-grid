@@ -486,7 +486,7 @@ The same version-1 configuration contract as the headless engine applies: order/
 
 ## Copy feedback and motion details
 
-Successful cell copy through Ctrl/Cmd+C, the context menu, `copySelection()` or `copySelectionBlocks()` briefly shows a 1px dashed outline, including a single cell. The marker is pointer-transparent, clipped by frozen panes, and expires after 1.8 seconds. Selection/data/layout changes, scrolling, resizing, Escape, theme changes and destroy clear it. A pending menu clipboard write cannot show stale feedback after state changes. Native text selection inside an editor retains native copy behavior.
+Successful cell copy through Ctrl/Cmd+C, the context menu, `copySelection()` or `copySelectionBlocks()` shows a 1px dashed outline around the copied source, including a single cell. The marker persists when selecting another cell and follows scrolling, clipped by frozen panes. Dashes move slowly when motion is enabled; reduced motion or `motion: false` keeps them static. Another copy replaces the marker. Data/layout changes, resizing, Escape, theme changes and destroy clear it. A pending menu clipboard write cannot show stale feedback after data/layout changes. Native text selection inside an editor retains native copy behavior.
 
 With motion enabled the marker fades in for at most 120ms; reduced motion or `motion:false` keeps the static marker. There is no indefinite marching animation or Canvas repaint loop. Visual feedback is bounded to the first 64 selected ranges; clipboard content is unaffected. Programmatic copy methods return content and show feedback, but do not themselves write to the operating-system clipboard.
 

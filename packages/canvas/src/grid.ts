@@ -241,7 +241,7 @@ export function createGrid(options: GridOptions): Grid {
     ...(options.frozenRows === undefined ? {} : { frozenRows: options.frozenRows }),
     ...(options.frozenColumns === undefined ? {} : { frozenColumns: options.frozenColumns }),
     onInvalidate(change) {
-    clearCopyFeedback();
+    if (change.type !== 'selection') clearCopyFeedback();
     if (change.type === 'cells') { if (engine.getMergedCells().length) fullDraw=true; if (options.autoRowHeight) { change.cells.forEach(cell => measuredRows.delete(cell.rowIndex)); fullDraw = true; } invalidate(change.cells); if (!searchBar.hidden) refreshSearch(); }
     else if (change.type === 'layout' || change.type === 'structure') {
       if (change.type === 'structure') {
@@ -396,13 +396,13 @@ export function createGrid(options: GridOptions): Grid {
   copyFeedback.setAttribute('aria-hidden', 'true');
   copyFeedback.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:3';
   root.append(copyFeedback);
-  let copyFeedbackTimer: number | undefined;
+  let copiedRanges: readonly SelectionRange[] = [];
   let copyFeedbackRevision = 0;
   let pendingCutText: string | undefined;
   let cutRevision=0;
   function clearCopyFeedback(): void {
     copyFeedbackRevision++;
-    win.clearTimeout(copyFeedbackTimer); copyFeedbackTimer = undefined;
+    copiedRanges = [];
     if (!copyFeedback.hasChildNodes()) return;
     copyFeedback.getAnimations({ subtree: true }).forEach(animation => animation.cancel());
     copyFeedback.replaceChildren();
@@ -410,21 +410,31 @@ export function createGrid(options: GridOptions): Grid {
   function showCopyFeedback(ranges: readonly SelectionRange[]): void {
     clearCopyFeedback();
     if (destroyed || !ranges.length) return;
+    copiedRanges = ranges.slice(0, 64).map(range => ({ ...range }));
+    renderCopyFeedback();
+    if (motionEnabled()) copyFeedback.animate([{ opacity: .35 }, { opacity: 1 }], { duration: Math.min(120, motionDuration), easing: 'cubic-bezier(.22,1,.36,1)' });
+  }
+  function renderCopyFeedback(): void {
+    if (destroyed || !copiedRanges.length) return;
+    copyFeedback.getAnimations({ subtree: true }).forEach(animation => animation.cancel());
+    copyFeedback.replaceChildren();
     const view = viewport();
     // Bound visual feedback independently of clipboard data size.
-    for (const region of view.regions) for (const range of ranges.slice(0, 64)) {
+    for (const region of view.regions) for (const range of copiedRanges) {
       if (range.endRow < region.rows.start || range.startRow >= region.rows.end || range.endColumn < region.columns.start || range.startColumn >= region.columns.end) continue;
       const clip = region.clip;
       const pane = doc.createElement('div');
       pane.style.cssText = `position:absolute;overflow:hidden;left:${indexWidth + clip.x}px;top:${headerHeight + clip.y}px;width:${clip.width}px;height:${clip.height}px`;
       const border = doc.createElement('div');
       border.style.cssText = `position:absolute;box-sizing:border-box;left:${columnAxis.position(range.startColumn) + region.offsetX - clip.x}px;top:${rowAxis.position(range.startRow) + region.offsetY - clip.y}px;width:${columnAxis.position(range.endColumn + 1) - columnAxis.position(range.startColumn)}px;height:${rowAxis.position(range.endRow + 1) - rowAxis.position(range.startRow)}px;border:1px solid var(--acheron-background)`;
-      const dashes = doc.createElement('div');
-      dashes.style.cssText = 'position:absolute;inset:-1px;border:1px dashed var(--acheron-selection-color)';
-      border.append(dashes); pane.append(border); copyFeedback.append(pane);
+      const dashes = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      dashes.style.cssText = 'position:absolute;left:-1px;top:-1px;width:calc(100% + 2px);height:calc(100% + 2px);overflow:visible';
+      const outline = doc.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      outline.setAttribute('x', '.5'); outline.setAttribute('y', '.5');
+      outline.style.cssText = 'width:calc(100% - 1px);height:calc(100% - 1px);fill:none;stroke:var(--acheron-selection-color);stroke-width:1;stroke-dasharray:4 3';
+      dashes.append(outline); border.append(dashes); pane.append(border); copyFeedback.append(pane);
+      if (motionEnabled()) outline.animate([{ strokeDashoffset: '0' }, { strokeDashoffset: '-14' }], { duration: 1200, iterations: Infinity, easing: 'linear' });
     }
-    if (motionEnabled()) copyFeedback.animate([{ opacity: .35 }, { opacity: 1 }], { duration: Math.min(120, motionDuration), easing: 'cubic-bezier(.22,1,.36,1)' });
-    copyFeedbackTimer = win.setTimeout(clearCopyFeedback, 1800);
   }
   container.append(root);
   let frame: number | undefined;
@@ -2757,7 +2767,7 @@ export function createGrid(options: GridOptions): Grid {
     observedWidth = width; observedHeight = height; render();
   });
   observer.observe(root);
-  scroller.addEventListener('scroll', clearCopyFeedback, { passive: true });
+  scroller.addEventListener('scroll', renderCopyFeedback, { passive: true });
   scroller.addEventListener('scroll', clearLayoutMotion, { passive: true });
   scroller.addEventListener('scroll', render, { passive: true });
   scroller.addEventListener('scroll',clearChoiceHover,{passive:true});
@@ -2949,7 +2959,7 @@ export function createGrid(options: GridOptions): Grid {
       scroller.removeEventListener('keydown', onKeyDown);
       if (frame !== undefined) win.cancelAnimationFrame(frame);
       observer.disconnect();
-      scroller.removeEventListener('scroll', clearCopyFeedback);
+      scroller.removeEventListener('scroll', renderCopyFeedback);
       scroller.removeEventListener('scroll', clearLayoutMotion);
       scroller.removeEventListener('scroll', render);
       scroller.removeEventListener('scroll',clearChoiceHover);

@@ -8,6 +8,8 @@ This file summarizes the current unreleased development preview. It does not ann
 
 ## Unreleased
 
+- Copy source outlines persist across selection changes and scrolling, with slow moving dashes and reduced-motion support.
+
 
 
 ## 0.1.0 — First release candidate (not published)
