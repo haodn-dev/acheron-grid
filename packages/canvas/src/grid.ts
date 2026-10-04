@@ -1,5 +1,20 @@
-import { createGridEngine } from '@acheron-grid/core';
-import type { CellUpdate, DataSource, Column, CellSelection, SelectionRange, CellPermission, CellLockTarget, CellFormatTarget, CellFormat, CellFormatPatch, LocalViewOptions, GridEngineOptions, ViewportRegion } from '@acheron-grid/core';
+import { installTooltips } from './tooltips.js';
+import { icons } from './icons.js';
+import { choicePanel, choiceValue, positionChoicePanel, disposeChoicePanel } from './choices.js';
+import type { ChoiceEditorOptions, ChoiceOption } from './choices.js';
+import { mediaItems, parseMediaValue, validateMediaValue } from './media.js';
+import { createMediaEditor } from './media-editor.js';
+import type { MediaItem } from './media.js';
+import { reorderedIndices } from './reorder.js';
+import type { ReorderRequest, RowChangeRequest } from './reorder.js';
+import { headerLayout, reorderedHeaderGroups } from './headers.js';
+import type { HeaderGroup } from './headers.js';
+import { safeWebUrl, detectLinks } from './links.js';
+import { readHtml, layoutRichText, richTextHtml, richTextSource } from './rich-text.js';
+import type { RichText, RichTextFormat } from './rich-text.js';
+import { createGridEngine, restoreGridConfiguration, gridClipboardType, decodeBlocks, encodeBlocks, blocksToTsv } from '@acheron-grid/core';
+import type { GridConfiguration, GridState, GridEngine, ClipboardBlock, RowId } from '@acheron-grid/core';
+import type { CellUpdate, DataRow, DataSource, Column, CellSelection, SelectionRange, CellPermission, CellLockTarget, CellFormatTarget, CellFormat, CellFormatPatch, LocalViewOptions, GridEngineOptions, ViewportRegion, RowGroup } from '@acheron-grid/core';
 
 let editorId = 0;
 let gridId = 0;
@@ -28,22 +43,60 @@ export interface GridTheme {
   textColor: string;
   headerBackground: string;
   headerTextColor: string;
+  iconColor: string;
+  searchHighlightColor: string;
   gridLineColor: string;
   selectionColor: string;
+  freezeColor: string;
+  scrollbarColor: string;
   font: string;
   headerFont: string;
+  linkColor: string;
 }
-export type ColumnEditor = { readonly type: 'select'; readonly values: readonly string[] } | { readonly type: 'checkbox' };
-export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 'resolveCellPermission' | 'onEvent' | 'allowLockChanges' | 'frozenRows' | 'frozenColumns'> {
+export type { ChoiceOption } from './choices.js';
+export type ColumnEditor = { readonly type: 'select' | 'multiselect'; readonly values: readonly (string | ChoiceOption)[]; readonly choiceEditor?: ChoiceEditorOptions | false } | { readonly type: 'checkbox' };
+export interface ColumnType {
+  readonly key:string;
+  readonly label:string;
+  readonly create:(input:Readonly<{key:string;title:string;defaultText:string}>)=>{column:Column;editor?:ColumnEditor};
+}
+export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 'resolveCellPermission' | 'onEvent' | 'allowLockChanges' | 'frozenRows' | 'frozenColumns' | 'canChangeStructure' | 'columnWidths'> {
+  allowMerging?: boolean;
+  allowRowGrouping?: boolean;
+  canChangeLayout?: GridEngineOptions['canChangeLayout'];
   view?: LocalViewOptions;
+  viewMode?: 'core' | 'host';
   onViewChange?: (view: LocalViewOptions) => void;
   theme?: Partial<GridTheme>;
   imageColumns?: readonly string[];
+  avatarColumns?: readonly string[];
+  mediaOptions?: { readonly size?: number; readonly maxVisible?: number; readonly upload?: (file:File, context:Readonly<{columnKey:string;signal:AbortSignal}>)=>Promise<MediaItem> };
   columnEditors?: Readonly<Record<string, ColumnEditor>>;
+  richTextColumns?: Readonly<Record<string, RichTextFormat>>;
+  markdownToHtml?: (source: string) => string;
   multilineEditor?: boolean;
+  editorOptions?: { readonly pinned?: boolean; readonly showLabel?: boolean | 'scroll' | 'always'; readonly guardNavigation?: boolean };
   wrapText?: boolean;
+  detectLinks?: boolean;
+  allowOpenLinks?: boolean;
+  contextMenuSuggestions?: boolean;
+  linkPreview?: boolean | { readonly enabled?: boolean; readonly allowMetadata?: boolean; readonly load: (href: string, signal: AbortSignal) => Promise<{ readonly title?: string; readonly description?: string; readonly image?: string }> };
+  accessibility?: 'active' | 'viewport';
+  getCellLabel?: (rowIndex: number, columnKey: string, value: unknown) => string | undefined;
   renderCell?: CellRenderer;
   createEditor?: CellEditorFactory;
+  onEditorMount?: (cell:Readonly<CellEditorInfo>, editor:CellEditor)=>void|(()=>void);
+  onObserverError?: GridEngineOptions['onObserverError'];
+  choiceEditor?: ChoiceEditorOptions | false;
+  motion?: boolean | { readonly duration?: number };
+  tableLockNotice?: false | { readonly title?: string; readonly description?: string };
+  selectionStyle?: { readonly activeCellBorderInRange?: boolean; readonly activeBorderWidth?: number; readonly headerTintOpacity?: number; readonly rangeBorderWidth?: number; readonly rangeTintOpacity?: number };
+  allowColumnChanges?:boolean;
+  columnTypes?:readonly ColumnType[];
+  onRowChange?: (request: Readonly<RowChangeRequest>) => void;
+  canRowChange?: (request: Readonly<RowChangeRequest>) => boolean;
+  onReorder?: (request: Readonly<ReorderRequest>) => void;
+  canReorder?: (request: Readonly<ReorderRequest>) => boolean;
   onSelectionChange?: (selection: CellSelection | null) => void;
   onSelectionRangesChange?: (ranges: readonly SelectionRange[]) => void;
   onSelectionRangeChange?: (range: SelectionRange | null) => void;
@@ -53,13 +106,47 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
   rowHeight?: number;
   columnWidth?: number;
   headerHeight?: number;
+  headerGroups?: readonly HeaderGroup[];
+  autoRowHeight?: boolean;
+  measureCellHeight?: (value: unknown, columnKey: string, width: number) => number | undefined;
   indexColumn?: boolean;
 }
 export interface Grid {
+  subscribe: GridEngine['subscribe'];
+  takeObserverErrors: GridEngine['takeObserverErrors'];
+  captureRowIdentity(): readonly RowId[];
+  refreshData(previousRowIds?: readonly RowId[] | 'values'):void;
+  exportState():GridState;
+  restoreState(state:unknown):void;
+  setColumnEditor(key:string,editor:ColumnEditor | null):void;
+  exportConfiguration(): GridConfiguration;
+  getMerge(row:number,col:number):Readonly<SelectionRange>|null;
+  getMergedCells():readonly Readonly<SelectionRange>[];
+  canMerge(range:SelectionRange):boolean;
+  mergeCells(range:SelectionRange):void;
+  unmergeCells(range:SelectionRange):void;
+  getRowGroups():readonly Readonly<RowGroup>[];
+  groupRows(start:number,end:number):string;
+  ungroupRows(id:string):void;
+  setGroupCollapsed(id:string,collapsed:boolean):void;
+  setView(view: LocalViewOptions): void;
+  readonly view: Readonly<LocalViewOptions>;
+  readonly rowCount: number;
+  readonly columns: readonly Column[];
+  insertColumns(index:number,columns:readonly Column[]):void;
+  deleteColumns(indices:readonly number[]):void;
+  insertRows(index: number, rows: readonly DataRow[]): void;
+  deleteRows(indices: readonly number[]): void;
+  moveRows(indices: readonly number[], beforeIndex: number): void;
+  moveColumns(indices: readonly number[], beforeIndex: number): void;
   render(): void;
+  setTheme(theme: Partial<GridTheme>): void;
   openSearch(): void;
   selectColumn(index: number): void;
   selectRow(index: number): void;
+  selectAll(): void;
+  autoFitColumn(index: number): void;
+  autoFitRow(index: number): void;
   readonly frozenRows: number;
   readonly frozenColumns: number;
   setFrozen(rows: number, columns: number): void;
@@ -76,6 +163,10 @@ export interface Grid {
   getSelection(): CellSelection | null;
   getSelectionRange(): SelectionRange | null;
   getSelectionRanges(): SelectionRange[];
+  cutSelectionBlocks(): string;
+  cancelCut(): void;
+  copySelectionBlocks(): string;
+  pasteSelectionBlocks(text: string): void;
   copySelection(): string;
   paste(text: string): void;
   setColumnWidth(index: number, width: number): void;
@@ -84,67 +175,167 @@ export interface Grid {
 }
 
 
-// Lucide SVG assets; see ../LICENSE.lucide for attribution and license terms.
-const stateIconSvg = {
-  "lock": "<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <rect width=\"18\" height=\"11\" x=\"3\" y=\"11\" rx=\"2\" ry=\"2\" />\n  <path d=\"M7 11V7a5 5 0 0 1 10 0v4\" />\n</svg>\n",
-  "arrow-up": "<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"m5 12 7-7 7 7\" />\n  <path d=\"M12 19V5\" />\n</svg>\n",
-  "arrow-down": "<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M12 5v14\" />\n  <path d=\"m19 12-7 7-7-7\" />\n</svg>\n",
-  "funnel": "<svg\n  xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"24\"\n  height=\"24\"\n  viewBox=\"0 0 24 24\"\n  fill=\"none\"\n  stroke=\"currentColor\"\n  stroke-width=\"2\"\n  stroke-linecap=\"round\"\n  stroke-linejoin=\"round\"\n>\n  <path d=\"M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z\" />\n</svg>\n"
-} as const;
+const stateIconSvg = {lock:icons.lock,'arrow-up':icons['arrow-up'],'arrow-down':icons['arrow-down'],funnel:icons.funnel,'chevron-down':icons['chevron-down']} as const;
 
 /** Mount a grid. The caller owns the container and its dimensions. */
 export function createGrid(options: GridOptions): Grid {
   const { container, dataSource } = options;
+  const motionDuration = typeof options.motion === 'object' ? options.motion.duration ?? 220 : 220;
+  if (!Number.isFinite(motionDuration) || motionDuration < 0 || motionDuration > 1000) throw new RangeError('Motion duration must be between 0 and 1000ms.');
+
+  const managesView=options.viewMode === 'core' || (options.viewMode !== 'host' && !options.onViewChange);
+  let currentView=options.view;
+  const activeBorderWidth = options.selectionStyle?.activeBorderWidth ?? 1;
+  const rangeBorderWidth = options.selectionStyle?.rangeBorderWidth ?? 1;
+  const rangeTintOpacity = options.selectionStyle?.rangeTintOpacity ?? .06;
+  if (!Number.isFinite(rangeBorderWidth) || rangeBorderWidth < 1 || rangeBorderWidth > 4 || !Number.isFinite(rangeTintOpacity) || rangeTintOpacity < 0 || rangeTintOpacity > 1) throw new RangeError('Invalid range selection style.');
+  const headerTintOpacity = options.selectionStyle?.headerTintOpacity ?? .12;
+  if (!Number.isFinite(activeBorderWidth) || activeBorderWidth < 1 || activeBorderWidth > 4 || !Number.isFinite(headerTintOpacity) || headerTintOpacity < 0 || headerTintOpacity > 1) throw new RangeError('Invalid selection style.');
   const doc = container.ownerDocument;
+  const richTextColumns = new Map(Object.entries(options.richTextColumns ?? {}));
+  for (const format of richTextColumns.values()) {
+    if (format !== 'html' && format !== 'markdown') throw new TypeError('Unsupported rich text format.');
+    if (format === 'markdown' && !options.markdownToHtml) throw new TypeError('Markdown columns require a markdownToHtml adapter.');
+  }
+  const richCache = new Map<string, RichText>();
+  function richText(value: unknown, key: string, contentFormat?: CellFormat['contentFormat']): RichText | undefined {
+    const format = contentFormat ?? richTextColumns.get(key);
+    if (!format || format === 'plain' || typeof value !== 'string') return undefined;
+    if (value.length > 100_000) return { text: 'Rich text is too large to display', runs: [{ text: 'Rich text is too large to display' }], unavailable: true };
+    const cacheKey = format + ':' + value;
+    let rich = richCache.get(cacheKey);
+    if (!rich) {
+      try { rich = readHtml(format === 'markdown' ? options.markdownToHtml!(value) : value, doc); }
+      catch { rich = { text: 'Rich text unavailable', runs: [{ text: 'Rich text unavailable' }], unavailable: true }; }
+      if (value.length <= 4096) {
+        if (richCache.size >= 256) richCache.delete(richCache.keys().next().value!);
+        richCache.set(cacheKey, rich);
+      }
+    }
+    return rich;
+  }
+  function displayedText(value: unknown, key: string, contentFormat?: CellFormat['contentFormat']): string { return richText(value, key, contentFormat)?.text ?? String(value ?? ''); }
   const win = doc.defaultView!;
-  const theme = Object.freeze({ background: '#ffffff', textColor: '#0f172a', headerBackground: '#edf2f7',
-    headerTextColor: '#334155', gridLineColor: '#e2e8f0', selectionColor: '#2563eb',
-    font: '400 13px system-ui, sans-serif', headerFont: '600 13px system-ui, sans-serif', ...options.theme });
-  for (const [key, value] of Object.entries(theme)) {
-    const property = key === 'font' || key === 'headerFont' ? 'font' : 'color';
-    if (typeof value !== 'string' || /var\(|currentcolor|^(inherit|initial|unset|revert)/i.test(value.trim()) || !win.CSS.supports(property, value)) {
-      throw new TypeError(`Invalid grid theme ${key}. Use a concrete CSS ${property} value.`);
+  let theme = Object.freeze({ background: '#ffffff', textColor: '#0f172a', headerBackground: '#edf2f7',
+    headerTextColor: '#334155', iconColor: '#475569', searchHighlightColor: '#f59e0b', gridLineColor: '#e2e8f0', selectionColor: '#2563eb',
+    freezeColor: '#94a3b8', scrollbarColor: '#a8b6c8', linkColor: '#2563eb', font: '400 13px system-ui, sans-serif', headerFont: '600 13px system-ui, sans-serif', ...options.theme });
+  function validateTheme(candidate: GridTheme): void {
+    for (const [key, value] of Object.entries(candidate)) {
+      const property = key === 'font' || key === 'headerFont' ? 'font' : 'color';
+      if (typeof value !== 'string' || /var\(|currentcolor|^(inherit|initial|unset|revert)/i.test(value.trim()) || !win.CSS.supports(property, value)) {
+        throw new TypeError(`Invalid grid theme ${key}. Use a concrete CSS ${property} value.`);
+      }
     }
   }
+  validateTheme(theme);
+  const measuredRows = new Set<number>();
   const indicatorPolicy = Object.freeze({ ...options.permissions });
-  const headerHeight = options.headerHeight ?? 36;
+  let headers = headerLayout(options.columns, options.headerGroups);
+  const headerRowHeight = options.headerHeight ?? 36;
+  let headerHeight = headerRowHeight * headers.levels;
+  let leafHeaders = headers.cells.filter(cell => cell.leaf).sort((a, b) => a.start - b.start);
   if (!Number.isFinite(headerHeight) || headerHeight <= 0) throw new RangeError('Grid sizes must be positive finite numbers.');
-  const engine = createGridEngine({ columns: options.columns, dataSource,
+  const engine = createGridEngine({ columns: options.columns.map(column => (options.imageColumns?.includes(column.key) || options.avatarColumns?.includes(column.key)) && !column.parse ? {...column, parse:parseMediaValue} : column), dataSource,
+    ...(options.allowMerging===undefined?{}:{allowMerging:options.allowMerging}),
+    ...(options.allowRowGrouping===undefined?{}:{allowRowGrouping:options.allowRowGrouping}),
+    ...(options.canChangeLayout===undefined?{}:{canChangeLayout:options.canChangeLayout}),
+    ...(managesView && options.view ? {view:options.view} : {}),
     ...(options.rowHeight === undefined ? {} : { rowHeight: options.rowHeight }),
+    ...(options.columnWidths === undefined ? {} : { columnWidths:options.columnWidths }),
     ...(options.columnWidth === undefined ? {} : { columnWidth: options.columnWidth }),
+    canChangeStructure: request => {
+      if(options.canChangeStructure?.(request)===false)return false;
+      if(request.axis==='column') {
+        if(request.kind==='insert' && !request.columns)return true;
+        try { const next=request.columns ?? (request.kind==='delete' ? engine.columns.filter((_,i)=>!request.indices.includes(i)) : (request.order ?? reorderedIndices(engine.columns.length,request.indices,request.beforeIndex)).map(i=>engine.columns[i]!)); reorderedHeaderGroups(next,options.headerGroups); } catch { return false; }
+      }
+      return true;
+    },
     ...(options.permissions === undefined ? {} : { permissions: options.permissions }),
     ...(options.resolveCellPermission === undefined ? {} : { resolveCellPermission: options.resolveCellPermission }),
     ...(options.onEvent === undefined ? {} : { onEvent: options.onEvent }),
+    ...(options.onObserverError === undefined ? {} : { onObserverError:options.onObserverError }),
     ...(options.allowLockChanges === undefined ? {} : { allowLockChanges: options.allowLockChanges }),
     ...(options.frozenRows === undefined ? {} : { frozenRows: options.frozenRows }),
     ...(options.frozenColumns === undefined ? {} : { frozenColumns: options.frozenColumns }),
     onInvalidate(change) {
-    if (change.type === 'cells') { invalidate(change.cells); if (!searchBar.hidden) refreshSearch(); }
-    else if (change.type === 'layout') {
+    if (change.type !== 'selection') clearCopyFeedback();
+    if (change.type === 'cells') { if (engine.getMergedCells().length) fullDraw=true; if (options.autoRowHeight) { change.cells.forEach(cell => measuredRows.delete(cell.rowIndex)); fullDraw = true; } invalidate(change.cells); if (!searchBar.hidden) refreshSearch(); }
+    else if (change.type === 'layout' || change.type === 'structure') {
+      if (change.type === 'structure') {
+        hoveredChoice=null;
+        if(managesView)currentView=engine.view;
+        if(axisAnchor) {
+          const map=axisAnchor.axis==='row'?change.rowMap:change.columnMap,next=map[axisAnchor.index];
+          axisAnchor=next!==undefined&&next>=0 ? {...axisAnchor,index:next}:null;
+        }
+        onPointerEnd();
+        columns=engine.columns; rowCount=engine.rowCount;
+        const outline=engine.getRowGroups();
+        const levels=outline.reduce((max,group)=>Math.max(max,outline.filter(other=>other.startRow<=group.startRow&&other.endRow>=group.endRow).length),0);
+        indexWidth=options.indexColumn===false ? 0:Math.max(48,String(engine.sourceRowCount).length*8+16)+levels*24;
+        scroller.style.left=headerSurface.style.left=canvas.style.left=indexGutter.style.width=String(indexWidth)+'px';
+        headers=headerLayout(columns,reorderedHeaderGroups(columns,options.headerGroups));
+        headerHeight=headerRowHeight*headers.levels;
+        headerSurface.style.height=scroller.style.top=`${headerHeight}px`;
+        if(viewportAccessibility){headerSurface.setAttribute('role',headers.levels>1?'rowgroup':'row');if(headers.levels===1)headerSurface.setAttribute('aria-rowindex','1');else headerSurface.removeAttribute('aria-rowindex');}
+        leafHeaders=headers.cells.filter(cell=>cell.leaf).sort((a,b)=>a.start-b.start);
+        if(headerSurface.contains(doc.activeElement)||indexGutter.contains(doc.activeElement))scroller.focus({preventScroll:true});
+        headerSurface.replaceChildren();indexGutter.replaceChildren();clearReorder();
+        measuredRows.clear(); accessibleCells.clear(); accessibleBody.replaceChildren();
+        scroller.setAttribute('aria-rowcount',String(rowCount+(viewportAccessibility ? headers.levels:0)));
+        scroller.setAttribute('aria-colcount',String(columns.length));
+        if(!searchBar.hidden)refreshSearch();
+        syncAccessibleCell();
+        options.onSelectionChange?.(engine.getSelection());
+        options.onSelectionRangesChange?.(engine.getSelectionRanges());
+        options.onSelectionRangeChange?.(engine.getSelectionRange());
+      }
       spacer.style.width = String(columnAxis.position(columns.length)) + 'px';
       spacer.style.height = String(rowAxis.position(rowCount)) + 'px';
       render();
     } else render();
   } });
-  const { columns, rowCount, rows: rowAxis, columnsLayout: columnAxis } = engine;
-  const indexWidth = options.indexColumn === false ? 0 : Math.max(48, String(rowCount).length * 8 + 16);
+  let columns=engine.columns, rowCount=engine.rowCount;
+  const { rows:rowAxis, columnsLayout:columnAxis }=engine;
+  let indexWidth = options.indexColumn === false ? 0 : Math.max(48, String(rowCount).length * 8 + 16);
   if (options.imageColumns !== undefined && !Array.isArray(options.imageColumns)) throw new TypeError('Image columns must be column keys.');
   const imageColumns = new Set(options.imageColumns ?? []);
+  if(options.avatarColumns!==undefined&&!Array.isArray(options.avatarColumns))throw new TypeError('Avatar columns must be column keys.');
+  const avatarColumns=new Set(options.avatarColumns ?? []);
+  for(const key of avatarColumns)if(!columns.some(column=>column.key===key)||imageColumns.has(key))throw new TypeError('Unknown or conflicting avatar column.');
+  const mediaSize=options.mediaOptions?.size ?? 32,mediaLimit=options.mediaOptions?.maxVisible ?? 4;
+  if(!Number.isFinite(mediaSize)||mediaSize<20||mediaSize>96||!Number.isSafeInteger(mediaLimit)||mediaLimit<1||mediaLimit>20)throw new RangeError('Invalid media size or visible count.');
+  const mediaColumn=(key:string)=>imageColumns.has(key)||avatarColumns.has(key);
+  const ownedImageUrls=new Set<string>();let mediaUpload:AbortController|undefined;
   for (const key of imageColumns) if (!columns.some(column => column.key === key)) throw new TypeError('Unknown image column.');
   const imageCache = new Map<string, { image: HTMLImageElement; state: 'loading' | 'ready' | 'error' }>();
   const visibleImages = new Set<string>();
   const columnEditors = new Map<string, ColumnEditor>();
-  for (const [key, config] of Object.entries(options.columnEditors ?? {})) {
-    const column = columns.find(column => column.key === key);
-    if (!column || !config || !['select', 'checkbox'].includes(config.type)) throw new TypeError('Invalid column editor configuration.');
-    if (config.type === 'select') {
-      if (!Array.isArray(config.values) || !config.values.length || config.values.some(value => typeof value !== 'string' || !value) || new Set(config.values).size !== config.values.length) throw new TypeError('Select values must be nonempty unique strings.');
-      columnEditors.set(key, Object.freeze({ type: 'select', values: Object.freeze([...config.values]) }));
+  function validateColumnEditor(column:Column,config:ColumnEditor):ColumnEditor {
+    if (!column || !config || !['select', 'multiselect', 'checkbox'].includes(config.type)) throw new TypeError('Invalid column editor configuration.');
+    if (config.type === 'select' || config.type === 'multiselect') {
+      if(!Array.isArray(config.values)||!config.values.length)throw new TypeError('Select options must be nonempty.');
+      const values=config.values.map(value=>typeof value==='string'?{value}:value);
+      if(values.some(value=>!value||typeof value.value!=='string'||value.label!==undefined&&typeof value.label!=='string'||value.disabled!==undefined&&typeof value.disabled!=='boolean')||new Set(values.map(value=>value.value)).size!==values.length)throw new TypeError('Select values must be unique strings with optional labels.');
+      if (config.type === 'multiselect' && values.some(option => !option.value || option.value.includes(','))) throw new TypeError('Multiselect values must be nonempty and contain no commas.');
+      return Object.freeze({ type: config.type, values: Object.freeze(values.map(value=>Object.freeze({...value}))),...(config.choiceEditor===undefined?{}:{choiceEditor:config.choiceEditor===false?false:Object.freeze({...config.choiceEditor})}) });
     } else {
       if (column.editable && typeof column.parse !== 'function') throw new TypeError('Checkbox columns require a boolean parser.');
-      columnEditors.set(key, Object.freeze({ type: 'checkbox' }));
+      return Object.freeze({ type: 'checkbox' });
     }
   }
+  for (const [key, config] of Object.entries(options.columnEditors ?? {})) {
+    const column=columns.find(column=>column.key===key);
+    if(!column)throw new TypeError('Unknown editor column.');
+    columnEditors.set(key,validateColumnEditor(column,config));
+  }
+  function choiceOptionsFor(key:string):ChoiceEditorOptions|false|undefined {
+    const config=columnEditors.get(key), local=config&&config.type!=='checkbox'?config.choiceEditor:undefined;
+    return local===false?false:local?{...(options.choiceEditor||{}),...local}:options.choiceEditor;
+  }
+  const viewportAccessibility = options.accessibility === 'viewport';
+  if (options.accessibility !== undefined && !['active', 'viewport'].includes(options.accessibility)) throw new TypeError('Invalid accessibility mode.');
   const root = doc.createElement('div');
   root.style.cssText = 'position:relative;width:100%;height:100%;overflow:hidden;background:var(--acheron-background)';
   for (const [key, value] of Object.entries(theme)) root.style.setProperty('--acheron-' + key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase()), value);
@@ -152,6 +343,16 @@ export function createGrid(options: GridOptions): Grid {
   dialogStyles.textContent = `
     dialog[data-grid-dialog] { position:fixed;inset:0;margin:auto;width:min(420px,calc(100% - 32px));max-width:none;max-height:calc(100% - 32px);overflow:auto;box-sizing:border-box;padding:24px;border:1px solid var(--acheron-grid-line-color);border-radius:12px;box-shadow:0 16px 48px #0f172a33;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);line-height:1.5 }
     dialog[data-grid-dialog][open], dialog[data-grid-dialog] form { display:flex;flex-direction:column;gap:14px }
+    [data-grid-viewport], dialog[data-grid-dialog] { scrollbar-width:thin;scrollbar-color:var(--acheron-scrollbar-color) var(--acheron-header-background) }
+    [data-grid-viewport]::-webkit-scrollbar, dialog[data-grid-dialog]::-webkit-scrollbar { width:8px;height:8px }
+    [data-grid-viewport]::-webkit-scrollbar-thumb, dialog[data-grid-dialog]::-webkit-scrollbar-thumb { background:var(--acheron-scrollbar-color);border:2px solid var(--acheron-header-background);border-radius:8px }
+    [data-grid-viewport]::-webkit-scrollbar-track, [data-grid-viewport]::-webkit-scrollbar-corner { background:var(--acheron-header-background) }
+    [data-grid-viewport]::-webkit-scrollbar-button { display:none }
+    .acheron-context-menu { scrollbar-width:thin;scrollbar-color:var(--acheron-scrollbar-color) transparent }
+    .acheron-context-menu::-webkit-scrollbar { width:6px;height:6px }
+    .acheron-context-menu::-webkit-scrollbar-thumb { background:var(--acheron-scrollbar-color);border-radius:6px }
+    .acheron-context-menu::-webkit-scrollbar-track { background:transparent }
+    .acheron-context-menu::-webkit-scrollbar-button { display:none }
     dialog[data-grid-dialog]::backdrop { background:#0f172a55 }
     dialog[data-grid-dialog] p { margin:0 }
     dialog[data-grid-dialog] > p:first-child { font-size:16px;font-weight:600 }
@@ -166,17 +367,37 @@ export function createGrid(options: GridOptions): Grid {
     dialog[data-grid-dialog] button:first-child { border-color:var(--acheron-selection-color);font-weight:600 }
     dialog[data-grid-dialog] :disabled { opacity:.5;cursor:default }
     dialog[data-grid-dialog] :focus-visible { outline:2px solid var(--acheron-selection-color);outline-offset:2px }
+    [data-grid-row-group]:hover:not(:disabled) { background:color-mix(in srgb,var(--acheron-icon-color) 12%,var(--acheron-header-background))!important;color:var(--acheron-text-color)!important }
+    [data-grid-row-group]:focus-visible { outline:1px solid var(--acheron-selection-color);outline-offset:1px }
+    [data-severity=warning] { border-color:color-mix(in srgb,#d97706 50%,var(--acheron-grid-line-color))!important;background:color-mix(in srgb,#d97706 12%,var(--acheron-background))!important }
+    [aria-invalid=true]:is(input,textarea,select) { outline:1px solid #ef4444;outline-offset:-1px }
+    [data-grid-row-group]:disabled { opacity:.4;cursor:default!important }
+    [data-grid-row-resize]:hover { background:var(--acheron-selection-color);opacity:.5 }
+    [data-grid-header-cell]:focus-visible { outline:2px solid var(--acheron-selection-color);outline-offset:-3px }
+    [data-grid-search]:not([hidden]) { display:flex;align-items:center;flex-wrap:wrap;gap:4px }
     dialog[data-grid-dialog] [data-dialog-actions] { display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:4px }
+  `;
+  dialogStyles.textContent += `
+    dialog[data-grid-dialog], [data-grid-choices], .acheron-context-menu { -webkit-font-smoothing:antialiased; }
+    dialog[data-grid-dialog] button, [data-grid-choices] button { min-height:32px;cursor:pointer;touch-action:manipulation; }
+    dialog[data-grid-dialog] button:hover:not(:disabled), [data-grid-choices] button:hover:not(:disabled) { filter:brightness(.96); }
+    [data-grid-choices] button:focus-visible, [data-grid-choices] input:not([type=radio]):not([type=checkbox]):focus-visible { outline:2px solid var(--acheron-selection-color);outline-offset:2px; }
+    .acheron-context-menu button:focus-visible { box-shadow:inset 0 0 0 2px var(--acheron-selection-color); }
+    @media(pointer:coarse) {
+      .acheron-context-menu button, [data-grid-choices] label, [data-grid-choices] button, dialog[data-grid-dialog] button { min-height:44px; }
+      [data-grid-choices] input[type=search] { min-height:40px; }
+    }
   `;
   root.append(dialogStyles);
   const scroller = doc.createElement('div');
   const viewportLabel = dataSource.setValue && columns.some(column => column.editable) ? 'Data grid viewport' : 'Read-only data grid viewport';
-  scroller.style.cssText = `position:absolute;inset:${headerHeight}px 0 0 ${indexWidth}px;overflow:auto;overscroll-behavior:contain`;
+  scroller.style.cssText = `position:absolute;inset:${headerHeight}px 0 0 ${indexWidth}px;overflow:auto;overscroll-behavior:contain;outline:none`;
+  scroller.dataset.gridViewport = '';
   scroller.tabIndex = 0;
   scroller.setAttribute('aria-label', viewportLabel);
-  scroller.setAttribute('aria-keyshortcuts', 'Shift+F8 Control+f Meta+f');
+  scroller.setAttribute('aria-keyshortcuts', 'Shift+F8 Control+f Meta+f Control+a Meta+a Alt+Enter');
   scroller.setAttribute('role', 'grid');
-  scroller.setAttribute('aria-rowcount', String(rowCount));
+  scroller.setAttribute('aria-rowcount', String(rowCount + (viewportAccessibility ? headers.levels : 0)));
   scroller.setAttribute('aria-colcount', String(columns.length));
   scroller.setAttribute('aria-multiselectable', 'true');
   const activeRow = doc.createElement('div');
@@ -184,16 +405,23 @@ export function createGrid(options: GridOptions): Grid {
   activeRow.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);pointer-events:none';
   activeRow.hidden = true;
   const activeCell = doc.createElement('div');
-  activeCell.id = `acheron-active-cell-${++gridId}`;
+  const instanceId = ++gridId;
+  activeCell.id = `acheron-active-cell-${instanceId}`;
   activeCell.setAttribute('role', 'gridcell');
   activeCell.setAttribute('aria-selected', 'true');
   activeRow.append(activeCell);
+  const accessibleBody = doc.createElement('div');
+  accessibleBody.style.cssText = activeRow.style.cssText;
+  const accessibleCells = new Map<string, HTMLElement>();
+  const headerSurface = doc.createElement('div');
+  headerSurface.style.cssText = `position:absolute;top:0;left:${indexWidth}px;right:0;height:${headerHeight}px;overflow:hidden;touch-action:none`;
+  if (viewportAccessibility) { headerSurface.id = `acheron-header-${instanceId}`; headerSurface.setAttribute('role', headers.levels > 1 ? 'rowgroup' : 'row'); if (headers.levels === 1) headerSurface.setAttribute('aria-rowindex', '1'); accessibleBody.id = `acheron-body-${instanceId}`; accessibleBody.setAttribute('role', 'rowgroup'); activeRow.id = `acheron-active-row-${instanceId}`; scroller.setAttribute('aria-owns', `${headerSurface.id} ${accessibleBody.id} ${activeRow.id}`); }
   const spacer = doc.createElement('div');
   spacer.setAttribute('aria-hidden', 'true');
   spacer.style.width = `${columnAxis.position(columns.length)}px`;
   spacer.style.position = 'relative';
   spacer.style.height = `${rowAxis.position(rowCount)}px`;
-  scroller.append(spacer, activeRow);
+  scroller.append(spacer, accessibleBody, activeRow);
   const canvas = doc.createElement('canvas');
   canvas.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none';
   canvas.style.left = `${indexWidth}px`;
@@ -205,32 +433,118 @@ export function createGrid(options: GridOptions): Grid {
   indexGutter.hidden = indexWidth === 0;
   indexGutter.style.cssText = `position:absolute;left:0;top:0;width:${indexWidth}px;overflow:hidden;background:var(--acheron-header-background);color:var(--acheron-header-text-color);font:var(--acheron-font)`;
   indexGutter.setAttribute('aria-label', 'Row index');
-  root.append(scroller, canvas, indexGutter);
+  indexGutter.style.touchAction = 'none';
+  root.append(scroller, canvas, headerSurface, indexGutter);
+  const copyFeedback = doc.createElement('div');
+  copyFeedback.dataset.gridCopyFeedback = '';
+  copyFeedback.setAttribute('aria-hidden', 'true');
+  copyFeedback.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:3';
+  root.append(copyFeedback);
+  let copiedRanges: readonly SelectionRange[] = [];
+  let copyFeedbackRevision = 0;
+  let pendingCutText: string | undefined;
+  let cutRevision=0;
+  function clearCopyFeedback(): void {
+    copyFeedbackRevision++;
+    copiedRanges = [];
+    if (!copyFeedback.hasChildNodes()) return;
+    copyFeedback.getAnimations({ subtree: true }).forEach(animation => animation.cancel());
+    copyFeedback.replaceChildren();
+  }
+  function showCopyFeedback(ranges: readonly SelectionRange[], cut = false): void {
+    clearCopyFeedback();
+    if (destroyed || !ranges.length) return;
+    copyFeedback.dataset.operation = cut ? 'cut' : 'copy';
+    copiedRanges = ranges.slice(0, 64).map(range => ({ ...range }));
+    renderCopyFeedback();
+    if (motionEnabled()) copyFeedback.animate([{ opacity: .35 }, { opacity: 1 }], { duration: Math.min(120, motionDuration), easing: 'cubic-bezier(.22,1,.36,1)' });
+  }
+  function renderCopyFeedback(): void {
+    if (destroyed || !copiedRanges.length) return;
+    copyFeedback.getAnimations({ subtree: true }).forEach(animation => animation.cancel());
+    copyFeedback.replaceChildren();
+    const view = viewport();
+    // Bound visual feedback independently of clipboard data size.
+    for (const region of view.regions) for (const range of copiedRanges) {
+      if (range.endRow < region.rows.start || range.startRow >= region.rows.end || range.endColumn < region.columns.start || range.startColumn >= region.columns.end) continue;
+      const clip = region.clip;
+      const pane = doc.createElement('div');
+      pane.style.cssText = `position:absolute;overflow:hidden;left:${indexWidth + clip.x}px;top:${headerHeight + clip.y}px;width:${clip.width}px;height:${clip.height}px`;
+      const border = doc.createElement('div');
+      border.style.cssText = `position:absolute;box-sizing:border-box;left:${columnAxis.position(range.startColumn) + region.offsetX - clip.x}px;top:${rowAxis.position(range.startRow) + region.offsetY - clip.y}px;width:${columnAxis.position(range.endColumn + 1) - columnAxis.position(range.startColumn)}px;height:${rowAxis.position(range.endRow + 1) - rowAxis.position(range.startRow)}px;border:1px solid var(--acheron-background)`;
+      const dashes = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      dashes.style.cssText = 'position:absolute;left:-1px;top:-1px;width:calc(100% + 2px);height:calc(100% + 2px);overflow:visible';
+      const outline = doc.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      outline.setAttribute('x', '.5'); outline.setAttribute('y', '.5');
+      const cutting = copyFeedback.dataset.operation === 'cut';
+      outline.style.cssText = `width:calc(100% - 1px);height:calc(100% - 1px);fill:${cutting ? 'var(--acheron-selection-color)' : 'none'};fill-opacity:.08;stroke:var(--acheron-selection-color);stroke-width:1;stroke-dasharray:${cutting ? '8 6' : '4 3'}`;
+      dashes.append(outline); border.append(dashes); pane.append(border); copyFeedback.append(pane);
+      if (motionEnabled()) outline.animate([{ strokeDashoffset: '0' }, { strokeDashoffset: '-14' }], { duration: 1200, iterations: Infinity, easing: 'linear' });
+    }
+  }
   container.append(root);
   let frame: number | undefined;
   let destroyed = false;
   const stateIcons = Object.fromEntries(Object.entries(stateIconSvg).map(([name, svg]) => {
     const image = doc.createElement('img');
     image.onload = () => { if (!destroyed) { fullDraw = true; schedule(); } };
-    const color = theme.headerTextColor.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const color = theme.iconColor.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     image.src = `data:image/svg+xml,${encodeURIComponent(svg.replace('currentColor', color))}`;
     return [name, image];
   }));
+  function svgIcon(name:keyof typeof icons,size=16):Element {
+    const svg=new win.DOMParser().parseFromString(icons[name],'image/svg+xml').documentElement;
+    svg.setAttribute('width',String(size));svg.setAttribute('height',String(size));svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');
+    return doc.importNode(svg,true);
+  }
   const rowLockSvg = new win.DOMParser().parseFromString(stateIconSvg.lock, 'image/svg+xml').documentElement;
   function stateIcon(name: keyof typeof stateIconSvg, x: number, y: number): void {
     const image = stateIcons[name]!;
     if (image.complete && image.naturalWidth) context!.drawImage(image, x, y, 16, 16);
   }
 
+  let hoveredChoice:{row:number;col:number}|null=null;
+  function clearChoiceHover():void {
+    if(!hoveredChoice)return;const old=hoveredChoice;hoveredChoice=null;
+    if(old.row<rowCount&&old.col<columns.length)invalidate([{rowIndex:old.row,columnKey:columns[old.col]!.key}]);
+  }
   let dragPointer: number | null = null;
+  let axisAnchor: { axis: 'row' | 'column'; index: number } | null = null;
+  let axisDrag: { axis: 'row' | 'column'; index: number } | null = null;
+  let dragPosition: { clientX: number; clientY: number } | null = null;
+  let dragFrame: number | undefined;
+  let handleAnchor: { row: number; col: number } | null = null;
+  let touchSelection = false;
+  const selectionHandles = (['start', 'end'] as const).map(endpoint => {
+    const button = doc.createElement('button'); button.type = 'button'; button.hidden = true; button.tabIndex = -1; button.setAttribute('aria-label', `Adjust selection ${endpoint}`);
+    button.style.cssText = 'position:absolute;width:20px;height:20px;padding:0;margin:0;border:3px solid var(--acheron-background);border-radius:50%;background:var(--acheron-selection-color);z-index:3;touch-action:none;cursor:crosshair';
+    button.addEventListener('pointerdown', event => {
+      const range = getSelectionRange(); if (event.button !== 0 || !range || !finishEdit(true)) return;
+      event.preventDefault(); event.stopPropagation();
+      handleAnchor = endpoint === 'start' ? { row: range.endRow, col: range.endColumn } : { row: range.startRow, col: range.startColumn };
+      axisDrag = null; dragPointer = event.pointerId; dragPosition = event; root.setPointerCapture(event.pointerId);
+    }); root.append(button); return button;
+  });
   let addNextSelection = false;
   let editor: CellEditor | null = null;
+  let editorCleanup:(()=>void)|undefined;
+  function disposeEditorIntegration():void {const cleanup=editorCleanup;editorCleanup=undefined;try{cleanup?.();}catch(error){try{options.onObserverError?.(error);}catch{}}}
+  let richEditor: HTMLDivElement | null = null;
+  let choices: HTMLElement | null = null;
   const editorPane = doc.createElement('div');
   editorPane.style.cssText = 'position:absolute;overflow:hidden;pointer-events:none;z-index:1';
   root.append(editorPane);
+  const editorLabel = doc.createElement('div'); editorLabel.dataset.gridEditorLabel = ''; editorLabel.hidden = true;
+  editorLabel.style.cssText = 'position:absolute;left:0;top:-25px;box-sizing:border-box;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:4px 8px;border:1px solid var(--acheron-grid-line-color);background:var(--acheron-header-background);color:var(--acheron-header-text-color);font:11px system-ui';
+  editorPane.append(editorLabel);
+  let editorAnchor: { left: number; top: number; width: number; height: number } | null = null;
+  function guardEditNavigation(event: BeforeUnloadEvent): void { if (editor) { event.preventDefault(); event.returnValue = ''; } }
+
   let fullDraw = true;
   const dirty = new Map<string, { rowIndex: number; columnKey: string }>();
   let menu: HTMLDivElement | null = null;
+  let previewAbort: AbortController | undefined;
+  let suggestionsEnabled = options.contextMenuSuggestions ?? false;
   let activeDialog: HTMLDialogElement | null = null;
   let resizing: { pointerId: number; axis: 'column' | 'row'; index: number; start: number; size: number; proposed: number; edge: number } | null = null;
   const resizeGuide = doc.createElement('div');
@@ -241,17 +555,25 @@ export function createGrid(options: GridOptions): Grid {
   const freezeVertical = doc.createElement('div');
   const freezeHorizontal = doc.createElement('div');
   for (const line of [freezeVertical, freezeHorizontal]) {
-    line.setAttribute('aria-hidden', 'true'); line.style.cssText = 'position:absolute;pointer-events:none;z-index:2;background:var(--acheron-selection-color);opacity:.7'; root.append(line);
+    line.setAttribute('aria-hidden', 'true'); line.style.cssText = 'position:absolute;pointer-events:none;z-index:2;background:var(--acheron-freeze-color)'; root.append(line);
   }
   freezeVertical.dataset.gridFreezeLine = 'column'; freezeHorizontal.dataset.gridFreezeLine = 'row';
   const actionError = doc.createElement('div');
   actionError.setAttribute('role', 'alert');
-  actionError.style.cssText = 'display:none;position:absolute;bottom:20px;left:12px;right:24px;z-index:2;padding:10px;background:#fff1f2;color:#9f1239;border:1px solid #fda4af;border-radius:6px;font:13px system-ui';
+  actionError.style.cssText = 'display:none;position:absolute;bottom:20px;left:12px;right:24px;z-index:2;padding:10px;background:color-mix(in srgb,#ef4444 12%,var(--acheron-background));color:var(--acheron-text-color);border:1px solid color-mix(in srgb,#ef4444 50%,var(--acheron-grid-line-color));border-radius:6px;font:13px system-ui';
   root.append(actionError);
+  const lockNotice = doc.createElement('div');
+  lockNotice.dataset.gridLockNotice = ''; lockNotice.setAttribute('role', 'status'); lockNotice.hidden = true;
+  lockNotice.style.cssText = 'position:absolute;top:48px;left:16px;right:16px;z-index:12;padding:16px;background:var(--acheron-background);color:var(--acheron-text-color);border:1px solid var(--acheron-grid-line-color);box-shadow:0 8px 24px #0002;font:var(--acheron-font);pointer-events:none';
+  const lockTitle = doc.createElement('strong'); lockTitle.style.cssText = 'display:flex;align-items:center;gap:8px'; lockTitle.append(svgIcon('lock'), options.tableLockNotice && options.tableLockNotice.title || 'Table locked');
+  const lockDescription = doc.createElement('div'); lockDescription.style.cssText = 'margin-top:8px;opacity:.8'; lockDescription.textContent = options.tableLockNotice && options.tableLockNotice.description || 'Editing is disabled while the table is locked.';
+  lockNotice.append(lockTitle, lockDescription); root.append(lockNotice);
+  let lockNoticeTimer: number | undefined;
+
   const editorError = doc.createElement('div');
   editorError.id = `acheron-editor-error-${++editorId}`;
   editorError.setAttribute('role', 'alert');
-  editorError.style.cssText = 'display:none;position:absolute;pointer-events:none;z-index:3;padding:8px;border:1px solid #fda4af;border-radius:4px;background:#fff1f2;color:#9f1239;font:13px system-ui';
+  editorError.style.cssText = 'display:none;position:absolute;pointer-events:none;z-index:3;padding:8px;border:1px solid color-mix(in srgb,#ef4444 50%,var(--acheron-grid-line-color));border-radius:6px;background:color-mix(in srgb,#ef4444 12%,var(--acheron-background));color:var(--acheron-text-color);font:13px system-ui';
   root.append(editorError);
   const selectionStatus = doc.createElement('div');
   selectionStatus.setAttribute('role', 'status');
@@ -260,13 +582,14 @@ export function createGrid(options: GridOptions): Grid {
 
   const searchBar = doc.createElement('div');
   searchBar.hidden = true;
+  searchBar.dataset.gridSearch = '';
   searchBar.setAttribute('role', 'search');
   searchBar.setAttribute('aria-label', 'Find in grid');
   searchBar.style.cssText = 'position:absolute;top:4px;right:20px;max-width:calc(100% - 24px);z-index:4;padding:6px;border:1px solid var(--acheron-grid-line-color);border-radius:6px;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);box-shadow:0 4px 12px #0f172a26';
   const searchInput = doc.createElement('input');
   searchInput.type = 'search';
   searchInput.setAttribute('aria-label', 'Find in grid');
-  searchInput.style.cssText = 'width:140px;max-width:35vw;padding:4px;font:inherit';
+  searchInput.style.cssText = 'width:140px;min-width:80px;max-width:100%;padding:6px;font:inherit;color:inherit;background:var(--acheron-background);border:1px solid var(--acheron-grid-line-color);border-radius:4px;outline:none;box-shadow:none';
   const searchStatus = doc.createElement('span');
   searchStatus.setAttribute('role', 'status');
   searchStatus.style.cssText = 'display:inline-block;padding:0 8px';
@@ -274,7 +597,8 @@ export function createGrid(options: GridOptions): Grid {
   const searchNext = doc.createElement('button');
   const searchClose = doc.createElement('button');
   for (const [button, label, text] of [[searchPrevious, 'Previous match', '↑'], [searchNext, 'Next match', '↓'], [searchClose, 'Close search', '×']] as const) {
-    button.type = 'button'; button.textContent = text; button.setAttribute('aria-label', label);
+    button.type = 'button'; button.setAttribute('aria-label', label);
+    button.append(svgIcon(text==='↑'?'arrow-up':text==='↓'?'arrow-down':'x',14));
     button.style.cssText = 'padding:4px 8px;margin-left:2px;font:inherit;color:inherit;background:var(--acheron-background);border:1px solid var(--acheron-grid-line-color);border-radius:3px';
   }
   searchBar.append(searchInput, searchStatus, searchPrevious, searchNext, searchClose);
@@ -298,8 +622,9 @@ export function createGrid(options: GridOptions): Grid {
     const query = searchInput.value.toLocaleLowerCase();
     try {
       if (query) for (let row = 0; row < rowCount; row++) for (let col = 0; col < columns.length; col++) {
+        const span=engine.getMerge(row,col);if(span&&(span.startRow!==row||span.startColumn!==col))continue;
         const value = engine.getValue(row, columns[col]!.key);
-        if (value != null && String(value).toLocaleLowerCase().includes(query) && engine.getCellPermission(row, col).selectable) searchMatches.add(row * columns.length + col);
+        if (value != null && displayedText(value, columns[col]!.key, engine.getFormat(row, col).contentFormat).toLocaleLowerCase().includes(query) && engine.getCellPermission(row, col).selectable) searchMatches.add(row * columns.length + col);
       }
       if (!searchMatches.has(searchCurrent)) searchCurrent = searchMatches.values().next().value ?? -1;
       updateSearchStatus();
@@ -364,7 +689,7 @@ export function createGrid(options: GridOptions): Grid {
     selectionStatus.textContent = `${selection ? `Row ${selection.rowIndex + 1}, ${columns[selection.columnIndex]!.title}. ${getSelectionRanges().length} selected range(s).` : 'Selection cleared.'}${addNextSelection ? ' Next click or navigation adds a range.' : ''}`;
   }
 
-  function openSizeDialog(label: string, current: number, apply: (size: number) => void): void {
+  function openSizeDialog(label: string, current: number, apply: (size: number) => void, units: string | null = 'px'): void {
     const dialog = doc.createElement('dialog');
     activeDialog?.remove();
     activeDialog = dialog;
@@ -372,9 +697,9 @@ export function createGrid(options: GridOptions): Grid {
     dialog.dataset.gridDialog = '';
     const form = doc.createElement('form');
     const fieldLabel = doc.createElement('label');
-    fieldLabel.textContent = `${label} (px) `;
+    fieldLabel.textContent = `${label}${units ? ` (${units})` : ''} `;
     const input = doc.createElement('input');
-    input.type = 'number'; input.min = '1'; input.step = 'any'; input.required = true;
+    input.type = 'number'; input.min = '1'; input.step = units ? 'any' : '1'; input.required = true;
     input.value = String(current);
 
     fieldLabel.append(input);
@@ -465,34 +790,154 @@ export function createGrid(options: GridOptions): Grid {
   function setLocked(target: CellLockTarget, locked: boolean): void {
     if (destroyed) throw new Error('Grid is destroyed.');
     if (editor) throw new Error('Finish editing before changing locks.');
+    const wasLocked = engine.isLocked(target);
     engine.setLocked(target, locked);
+    rowLockCache.clear();
+    if (target.scope === 'table') {
+      win.clearTimeout(lockNoticeTimer); lockNotice.getAnimations().forEach(animation => animation.cancel()); lockNotice.hidden = true;
+      if (locked && !wasLocked && options.tableLockNotice !== false) {
+        lockNotice.hidden = false;
+        if (motionEnabled()) lockNotice.animate([{ opacity: 0, transform: 'translateY(2px)' }, { opacity: 1, transform: 'translateY(0)', offset: .045 }, { opacity: 1, offset: .95 }, { opacity: 0 }], { duration: 4000, easing: 'ease-out' });
+        lockNoticeTimer = win.setTimeout(() => { lockNotice.hidden = true; }, 4000);
+      }
+    }
   }
 
   function setFrozen(rows: number, columns: number): void {
     if (destroyed) throw new Error('Grid is destroyed.');
     if (editor) throw new Error('Finish editing before changing frozen panes.');
-    engine.setFrozen(rows, columns);
+    const axis = rows !== engine.frozenRows ? 'row' : 'column';
+    animateLayout(() => engine.setFrozen(rows, columns), axis);
+    if (motionEnabled()) for (const [line, scale] of [[freezeVertical, 'scaleY'], [freezeHorizontal, 'scaleX']] as const) if (!line.hidden) { line.style.transformOrigin = 'top left'; line.animate([{ opacity: 0, transform: `${scale}(0)` }, { opacity: 1, transform: `${scale}(1)` }], { duration: motionDuration, easing: 'cubic-bezier(.22,1,.36,1)' }); }
   }
 
   function resizeAxis(axis: typeof rowAxis, index: number, size: number): void {
     if (destroyed) throw new Error('Grid is destroyed.');
     if (editor) throw new Error('Finish editing before resizing cells.');
-    if (axis === rowAxis) engine.setRowHeight(index, size);
-    else engine.setColumnWidth(index, size);
+    if (axis === rowAxis) { engine.setRowHeight(index, size); }
+    else { engine.setColumnWidth(index, size); measuredRows.clear(); }
   }
 
+  function visibleIndices(axis: 'row' | 'column'): Set<number> {
+    const indices = new Set<number>();
+    for (const region of viewport().regions) {
+      const range = axis === 'row' ? region.rows : region.columns;
+      for (let index = range.start; index < range.end; index++) indices.add(index);
+    }
+    return indices;
+  }
+  function autoFitColumn(index: number): void {
+    if (destroyed) throw new Error('Grid is destroyed.');
+    if (editor) throw new Error('Finish editing before resizing cells.');
+    columnAxis.size(index);
+    const column = columns[index]!; const ctx = context!;
+    ctx.save();
+    let width: number;
+    try {
+      ctx.font = theme.headerFont; width = ctx.measureText(column.title).width + 56;
+      ctx.font = theme.font;
+      for (const row of visibleIndices('row')) {
+        const value = engine.getValue(row, column.key);
+        if (mediaColumn(column.key)) { width=Math.max(width,mediaSize*2+16);continue; }
+        else if (columnEditors.get(column.key)?.type === 'checkbox') width = Math.max(width, 36);
+        else {
+          const rich = richText(value, column.key, engine.getFormat(row, index).contentFormat);
+          if (rich) width = Math.max(width, layoutRichText(ctx, rich, theme.font, Infinity, false).width + 20);
+          else for (const line of String(value ?? '').split('\n')) width = Math.max(width, ctx.measureText(line).width + 20);
+          ctx.font = theme.font;
+        }
+      }
+    } finally { ctx.restore(); }
+    resizeAxis(columnAxis, index, Math.max(24, Math.min(1000, Math.ceil(width))));
+  }
+  function autoFitRow(index: number): void {
+    if (destroyed) throw new Error('Grid is destroyed.');
+    if (editor) throw new Error('Finish editing before resizing cells.');
+    rowAxis.size(index);
+    resizeAxis(rowAxis, index, measureRowHeight(index));
+  }
+  function measureRowHeight(index: number, allColumns = false): number {
+    const ctx = context!; ctx.save(); let height = options.rowHeight ?? 24;
+    try {
+      ctx.font = theme.font;
+      const metrics = ctx.measureText('M');
+      const lineHeight = Math.ceil(metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent) || 18;
+      for (const col of allColumns ? columns.keys() : visibleIndices('column')) {
+        const key = columns[col]!.key;
+        const value = engine.getValue(index, key);
+        const custom = options.measureCellHeight?.(value, key, columnAxis.size(col));
+        if (custom !== undefined) {
+          if (!Number.isFinite(custom) || custom <= 0) throw new RangeError('Measured cell height must be positive and finite.');
+          height = Math.max(height, custom); continue;
+        }
+        if (mediaColumn(key)) { height = Math.max(height, mediaSize+8); continue; }
+        const rich = richText(value, key, engine.getFormat(index, col).contentFormat);
+        if (rich) {
+          const layout = layoutRichText(ctx, rich, theme.font, Math.max(0, columnAxis.size(col) - 20), !!options.wrapText, Math.ceil(1000 / lineHeight));
+          height = Math.max(height, Math.min(1000, layout.lines * layout.lineHeight + 12)); ctx.font = theme.font; continue;
+        }
+        let lines = 1; let line = '';
+        if (options.wrapText) for (const character of String(value ?? '')) {
+          if (character === '\n' || (line && ctx.measureText(line + character).width > Math.max(0, columnAxis.size(col) - 20))) {
+            lines++; line = ''; if (lines * lineHeight >= 1000) break;
+          }
+          if (character !== '\n') line += character;
+        }
+        height = Math.max(height, lines * lineHeight + 12);
+      }
+    } finally { ctx.restore(); }
+    return Math.min(1000, height);
+  }
+  function onAxisDoubleClick(event: MouseEvent): void {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || !(event.target instanceof win.Node) || (event.target !== root && !scroller.contains(event.target) && !indexGutter.contains(event.target))) return;
+    const column = columnEdge(event); const row = column === null ? rowEdge(event) : null;
+    if (column === null && row === null) return;
+    event.preventDefault(); event.stopPropagation(); endResize(); onPointerEnd();
+    if (!finishEdit(true)) return;
+    try { if (column !== null) autoFitColumn(column); else autoFitRow(row!); }
+    catch (error) { actionError.textContent = error instanceof Error ? error.message : 'Unable to fit size.'; actionError.style.display = 'block'; }
+  }
+
+  function enterSurface(node: HTMLElement): void {
+    if (!motionEnabled()) return;
+    node.style.transformOrigin = 'top left';
+    node.animate([{ opacity: 0, transform: 'translateY(-2px)' }, { opacity: 1, transform: 'translateY(0)' }], { duration: Math.min(160, motionDuration), easing: 'cubic-bezier(.22,1,.36,1)' });
+  }
+  function exitSurface(node: HTMLElement): void {
+    node.style.pointerEvents = 'none'; node.inert = true; node.setAttribute('aria-hidden', 'true');
+    node.removeAttribute('data-grid-choices');
+    if (!motionEnabled() || destroyed) { node.remove(); return; }
+    const opacity = win.getComputedStyle(node).opacity;
+    const transform = win.getComputedStyle(node).transform;
+    node.getAnimations().forEach(animation => animation.cancel());
+    node.animate([{ opacity, transform }, { opacity: 0, transform: 'translateY(-1px)' }], { duration: Math.min(100, motionDuration), easing: 'ease-out' }).finished.then(() => node.remove(), () => node.remove());
+  }
   function closeMenu(focus = false): void {
-    menu?.remove();
+    previewAbort?.abort();previewAbort=undefined;
+    if (menu) exitSurface(menu);
     menu = null;
     if (focus && !destroyed) scroller.focus({ preventScroll: true });
   }
 
+  function selectedAxisIndices(axis: 'row' | 'column', index: number): number[] {
+    const ranges = getSelectionRanges().filter(range => axis === 'row' ? range.startColumn === 0 && range.endColumn === columns.length - 1 : range.startRow === 0 && range.endRow === rowCount - 1);
+    if (!ranges.some(range => axis === 'row' ? index >= range.startRow && index <= range.endRow : index >= range.startColumn && index <= range.endColumn)) return [index];
+    const indices = new Set<number>();
+    for (const range of ranges) for (let i = axis === 'row' ? range.startRow : range.startColumn; i <= (axis === 'row' ? range.endRow : range.endColumn); i++) indices.add(i);
+    return [...indices].sort((a, b) => a - b);
+  }
+  function changeRows(request: Readonly<RowChangeRequest>): void {
+    if (!finishEdit(true)) return;
+    if (options.canRowChange?.(request) === false) throw new Error('Changing rows is disabled.');
+    options.onRowChange?.(request);
+  }
   function openMenu(row: number, col: number, x: number, y: number, header = false): void {
     closeMenu();
     const range = getSelectionRange();
-    if (rowCount && (!range || row < range.startRow || row > range.endRow || col < range.startColumn || col > range.endColumn)) select(row, col, false, false);
+    if (rowCount && !getSelectionRanges().some(range => row >= range.startRow && row <= range.endRow && col >= range.startColumn && col <= range.endColumn)) select(row, col, false, false);
     if (destroyed || (rowCount > 0 && !engine.getCellPermission(row, col).selectable)) return;
-    const selection = engine.getSelection() ?? (header ? { rowIndex: 0, columnIndex: col, columnKey: columns[col]!.key, rowId: 0 } : null);
+    header ||= axisAnchor?.axis === 'column' && getSelectionRanges().some(range => range.startRow === 0 && range.endRow === rowCount - 1 && col >= range.startColumn && col <= range.endColumn);
+    const selection = engine.getSelection() ?? (header || !rowCount && options.onRowChange ? { rowIndex: 0, columnIndex: col, columnKey: columns[col]!.key, rowId: 0 } : null);
     if (!selection) return;
     const popup = doc.createElement('div');
     menu = popup;
@@ -500,15 +945,62 @@ export function createGrid(options: GridOptions): Grid {
     popup.setAttribute('role', 'menu');
     popup.setAttribute('aria-label', header ? 'Column actions' : 'Cell actions');
     popup.className = 'acheron-context-menu';
-    popup.style.cssText = 'position:fixed;margin:0;padding:6px;min-width:200px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;border:1px solid var(--acheron-grid-line-color);border-radius:8px;box-shadow:0 8px 24px #0f172a26;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font)';
+    popup.style.cssText = 'position:fixed;margin:0;padding:6px;min-width:200px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;border:1px solid var(--acheron-grid-line-color);border-radius:10px;box-shadow:0 12px 32px #0003;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font)';
     const style = doc.createElement('style');
-    style.textContent = '.acheron-context-menu button{display:block;width:100%;padding:8px 10px;border:0;border-radius:4px;background:transparent;text-align:left;color:inherit;font:inherit;cursor:pointer}.acheron-context-menu button:hover:not(:disabled),.acheron-context-menu button:focus-visible{background:var(--acheron-header-background);outline:2px solid var(--acheron-selection-color)}.acheron-context-menu button:disabled{opacity:.45;cursor:default}';
+    style.textContent = '.acheron-context-menu [hidden]{display:none!important}.acheron-context-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:0;border-radius:4px;background:transparent;text-align:left;color:inherit;font:inherit;cursor:pointer;outline:none}.acheron-context-menu button:hover:not(:disabled),.acheron-context-menu button:focus-visible{background:var(--acheron-header-background)}.acheron-context-menu button:focus-visible{box-shadow:inset 0 0 0 2px var(--acheron-selection-color)}.acheron-context-menu button:disabled{opacity:.45;cursor:default}.acheron-context-menu svg{flex:none;color:var(--acheron-icon-color)}.acheron-context-menu [role=separator]{height:1px;background:var(--acheron-grid-line-color);margin:5px 4px}';
     popup.append(style);
+    style.textContent += '.acheron-context-menu:popover-open{display:grid;gap:2px}.acheron-context-menu:not(:popover-open){display:none}';
+    popup.addEventListener('toggle', () => { if (!popup.matches(':popover-open') && menu === popup) closeMenu(); });
+    const filter = doc.createElement('input'); filter.type = 'search'; filter.hidden = true; filter.placeholder = 'Filter actions…'; filter.setAttribute('aria-label', 'Filter actions');
+    filter.style.cssText = 'position:sticky;top:0;width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--acheron-grid-line-color);border-radius:4px;background:var(--acheron-background);color:inherit;font:inherit;outline:none';
+    popup.append(filter);
+    const empty = doc.createElement('div'); empty.textContent = 'No matching actions'; empty.hidden = true; empty.setAttribute('role', 'status'); empty.style.padding = '10px';
+    let showAll = !suggestionsEnabled;
+    const recommended = (label:string):boolean => /^(Copy|Cut|Paste|Undo|Redo|Open links|Edit cell)/.test(label) || (header ? /^(Sort|Filter|Resize column|Auto-fit column|Move columns|Freeze columns|Lock.*column|Unlock.*column)/.test(label) : axisAnchor?.axis === 'row' ? /^(Group|Ungroup|Collapse|Expand|Move rows|Insert row|Delete.*row|Lock.*row|Unlock.*row)/.test(label) : /^(Merge|Unmerge|Format cells|Lock.*cell|Unlock.*cell)/.test(label));
+    function filterActions(): void {
+      const query = filter.value.trim().toLocaleLowerCase();
+      let count = 0;
+      for (const button of Array.from(popup.querySelectorAll<HTMLButtonElement>('button[data-action]'))) { button.hidden = query ? !button.textContent!.toLocaleLowerCase().includes(query) : !showAll && (button.disabled || !recommended(button.dataset.action!) || count >= 8); if (!button.hidden) count++; }
+      let previousGroup = '';
+      for (const child of Array.from(popup.children)) {
+        if (child.getAttribute('role') === 'separator') (child as HTMLElement).hidden = true;
+        if (child instanceof win.HTMLButtonElement && !child.hidden) {
+          if (previousGroup && child.dataset.group !== previousGroup) {
+            let preceding = child.previousElementSibling;
+            while (preceding && preceding.getAttribute('role') !== 'separator') preceding = preceding.previousElementSibling;
+            if (preceding) (preceding as HTMLElement).hidden = false;
+          }
+          previousGroup = child.dataset.group!;
+        }
+      }
+      empty.hidden = count > 0;
+      mode.hidden=!!query;all.hidden=!!query || showAll;
+      if(popup.isConnected && popup.matches(':popover-open')){popup.style.left=`${Math.max(8,Math.min(x,win.innerWidth-popup.offsetWidth-8))}px`;popup.style.top=`${Math.max(8,Math.min(y,win.innerHeight-popup.offsetHeight-8))}px`;}
+    }
+    filter.addEventListener('input', filterActions);
     const fingerprint = JSON.stringify(getSelectionRanges());
+    const menuIcons:readonly (readonly [string,keyof typeof icons,string])[]=[
+      ['Copy','copy','clipboard'],['Cut','scissors','clipboard'],['Paste','clipboard-paste','clipboard'],
+      ['Select row','rows-3','selection'],['Select column','columns-3','selection'],
+      ['Sort ascending','arrow-up','view'],['Sort descending','arrow-down','view'],['Filter','funnel','view'],['Clear sort','list-filter','view'],
+      ['Insert row above','between-horizontal-start','structure'],['Insert row','between-horizontal-end','structure'],['Insert rows','rows-3','structure'],
+      ['Insert column left','between-vertical-start','structure'],['Insert column','between-vertical-end','structure'],['Delete','x','structure'],['Move','move','structure'],
+      ['Merge','columns-3','outline'],['Unmerge','columns-3','outline'],['Group','rows-3','outline'],['Ungroup','rows-3','outline'],['Collapse','chevron-down','outline'],['Expand','chevron-down','outline'],
+      ['Open links','external-link','links'],['Edit','square-pen','editing'],['Undo','undo-2','editing'],['Redo','redo-2','editing'],['Format','palette','editing'],
+      ['Unlock','lock-open','permissions'],['Lock','lock','permissions'],['Cell is','lock','permissions'],
+      ['Freeze','snowflake','freeze'],['Unfreeze','panel-top-close','freeze'],
+      ['Auto-fit','maximize-2','layout'],['Resize column','arrow-left-right','layout'],['Resize row','arrow-up-down','layout'],
+    ];
+    let previousGroup='';
     function item(label: string, enabled: boolean, action: () => void | Promise<void>): void {
       const button = doc.createElement('button');
       button.type = 'button';
-      button.textContent = label;
+      const [,name,group]=menuIcons.find(([prefix])=>label.startsWith(prefix)) ?? ['', 'square-pen', 'editing'];
+      if(previousGroup&&group!==previousGroup){const separator=doc.createElement('div');separator.setAttribute('role','separator');popup.append(separator);}
+      previousGroup=group;
+      button.dataset.group = group;
+      button.append(svgIcon(name),doc.createTextNode(label));
+      button.dataset.action = label;
       button.setAttribute('role', 'menuitem');
       button.disabled = !enabled;
       button.addEventListener('click', async () => {
@@ -517,42 +1009,102 @@ export function createGrid(options: GridOptions): Grid {
         try { await action(); }
         catch (error) {
           if (!destroyed) {
-            actionError.textContent = `${error instanceof Error ? error.message : 'Action failed.'}${label === 'Copy' || label === 'Paste' ? ' Use Ctrl/Cmd+C or Ctrl/Cmd+V if the browser blocks menu clipboard access.' : ''}`;
+            actionError.textContent = `${error instanceof Error ? error.message : 'Action failed.'}${label === 'Copy' || label === 'Cut' || label === 'Paste' ? ' Use Ctrl/Cmd+C or Ctrl/Cmd+V if the browser blocks menu clipboard access.' : ''}`;
             actionError.style.display = 'block';
           }
         }
       });
       popup.append(button);
     }
-    item('Copy', rowCount > 0 && getSelectionRanges().length === 1 && engine.getCellPermission(selection.rowIndex, selection.columnIndex).copyable && !!win.navigator.clipboard?.writeText, () => win.navigator.clipboard.writeText(copySelection()));
+    item('Copy', rowCount > 0 && getSelectionRanges().length > 0 && engine.getCellPermission(selection.rowIndex, selection.columnIndex).copyable && !!win.navigator.clipboard?.writeText, writeClipboard);
+    item('Cut', rowCount > 0 && getSelectionRanges().length > 0 && engine.canEdit(selection.rowIndex,selection.columnIndex) && !!win.navigator.clipboard?.writeText, () => writeClipboard(true));
     item('Paste', !!win.navigator.clipboard?.readText && engine.canPaste(), async () => {
-      const text = await win.navigator.clipboard.readText();
+      let text = '', html = '';
+      if (win.navigator.clipboard.read) {
+        const items = await win.navigator.clipboard.read();
+        for (const item of items) {
+          if (item.types.includes('text/html')) html = await (await item.getType('text/html')).text();
+          if (item.types.includes('text/plain')) text = await (await item.getType('text/plain')).text();
+        }
+      } else text = await win.navigator.clipboard.readText();
       if (destroyed || fingerprint !== JSON.stringify(getSelectionRanges())) throw new Error('Selection changed before paste. Try again.');
-      paste(text);
+      if (html) pasteSelectionBlocks(encodeBlocks(htmlClipboardBlocks(html))); else paste(text);
     });
     if (header) {
       item('Select column', true, () => selectColumn(col));
-      item('Sort ascending…', !!options.onViewChange, () => openViewDialog(col, 'asc'));
-      item('Sort descending…', !!options.onViewChange, () => openViewDialog(col, 'desc'));
-      item('Filter column…', !!options.onViewChange, () => openViewDialog(col));
-      item('Clear sort and filters…', !!options.onViewChange, () => openViewDialog(col, 'clear'));
+      item('Sort ascending…', managesView || !!options.onViewChange, () => openViewDialog(col, 'asc'));
+      item('Sort descending…', managesView || !!options.onViewChange, () => openViewDialog(col, 'desc'));
+      item('Filter column…', managesView || !!options.onViewChange, () => openViewDialog(col));
+      item('Clear sort and filters…', managesView || !!options.onViewChange, () => openViewDialog(col, 'clear'));
     } else {
-      item('Select row', true, () => selectRow(row));
+      item('Select row', rowCount > 0, () => selectRow(row));
       item('Select column', true, () => selectColumn(col));
     }
+    const indices = selectedAxisIndices(header ? 'column' : 'row', header ? col : row);
+    if(!header && rowCount) {
+      const selected=getSelectionRanges(),span=selected.length===1?selected[0]:undefined;
+      item('Merge cells',!!span&&engine.canMerge(span),()=>{if(span)structureAction(()=>engine.mergeCells(span));});
+      const affected=span?engine.getMergedCells().filter(merge=>merge.startRow<=engine.getRowSourceIndex(span.endRow)&&merge.endRow>=engine.getRowSourceIndex(span.startRow)&&merge.startColumn<=span.endColumn&&merge.endColumn>=span.startColumn):[];
+      item('Unmerge cells',affected.length>0&&affected.every(range=>engine.canChangeLayout({kind:'unmerge',range})),()=>{if(span)structureAction(()=>engine.unmergeCells(span));});
+      const wholeRows=!!span&&span.startColumn===0&&span.endColumn===columns.length-1&&span.endRow>span.startRow;
+      item('Group selected rows',wholeRows&&!engine.getRowGroups().some(group=>group.collapsed)&&!engine.view.sort&&!engine.view.filters?.length&&!!span&&engine.canChangeLayout({kind:'group',group:{id:'',startRow:span.startRow,endRow:span.endRow,collapsed:false}}),()=>{if(span)groupRows(span.startRow,span.endRow);});
+      const sourceRow=engine.getRowSourceIndex(row),rowGroups=engine.getRowGroups().filter(group=>sourceRow>=group.startRow&&sourceRow<=group.endRow).sort((a,b)=>(a.endRow-a.startRow)-(b.endRow-b.startRow));
+      const group=rowGroups[0];
+      if(group){item(group.collapsed?'Expand row group':'Collapse row group',engine.canChangeLayout({kind:group.collapsed?'expand':'collapse',group}),()=>structureAction(()=>engine.setGroupCollapsed(group.id,!group.collapsed), 'row'));item('Ungroup rows',engine.canChangeLayout({kind:'ungroup',group}),()=>structureAction(()=>engine.ungroupRows(group.id)));}
+    }
+    if (!header && options.onRowChange) {
+      const above = Object.freeze({ kind: 'insert' as const, beforeIndex: indices[0]!, count: 1 });
+      const below = Object.freeze({ kind: 'insert' as const, beforeIndex: rowCount ? indices[indices.length - 1]! + 1 : 0, count: 1 });
+      const deletion = Object.freeze({ kind: 'delete' as const, indices: Object.freeze(indices) });
+      item('Insert row above', options.canRowChange?.(above) !== false, () => changeRows(above));
+      item('Insert row below', options.canRowChange?.(below) !== false, () => changeRows(below));
+      item('Insert rows…', options.canRowChange?.(above) !== false, () => openSizeDialog('Number of rows', 1, count => {
+        if (!Number.isSafeInteger(count) || count < 1 || count > 1000) throw new RangeError('Choose 1–1000 rows.');
+        changeRows(Object.freeze({ ...above, count }));
+      }, null));
+      item(indices.length > 1 ? `Delete ${indices.length} selected rows` : 'Delete row', rowCount > 0 && options.canRowChange?.(deletion) !== false, () => changeRows(deletion));
+    }
+    if(header&&options.allowColumnChanges) {
+      const request={axis:'column' as const,kind:'insert' as const,indices:[],beforeIndex:indices[0]!,count:1};
+      item('Insert column left…',engine.canChangeStructure(request),()=>openColumnDialog(indices[0]!));
+      item('Insert column right…',engine.canChangeStructure({...request,beforeIndex:indices.at(-1)!+1}),()=>openColumnDialog(indices.at(-1)!+1));
+      item(indices.length>1 ? 'Delete '+indices.length+' selected columns':'Delete column',indices.length<columns.length&&engine.canChangeStructure({axis:'column',kind:'delete',indices,beforeIndex:indices[0]!,count:indices.length}),()=>engine.deleteColumns(indices));
+    }
+    if (options.onReorder) item(header ? 'Move columns to…' : 'Move rows to…', (header || rowCount > 0) && options.canReorder?.({ axis: header ? 'column' : 'row', indices, beforeIndex: indices[0]! }) !== false, () => {
+      const axis = header ? 'column' : 'row'; const count = header ? columns.length : rowCount;
+      openSizeDialog(header ? 'Destination column' : 'Destination row', indices[0]! + 1, destination => {
+        if (!Number.isSafeInteger(destination) || destination < 1 || destination > count - indices.length + 1) throw new RangeError(`Choose a position from 1 to ${count - indices.length + 1}.`);
+        const moved = new Set(indices); const remaining = Array.from({ length: count }, (_, i) => i).filter(i => !moved.has(i));
+        const request = Object.freeze({ axis, indices: Object.freeze(indices), beforeIndex: remaining[destination - 1] ?? count });
+        if (options.canReorder?.(request) === false) throw new Error('Moving items is disabled.');
+        options.onReorder?.(request);
+      }, null);
+    });
+    if (!header && rowCount && cellLinks(row, col).length) item('Open links…', options.allowOpenLinks !== false, () => openLinks(row, col, x, y));
     item('Edit cell', rowCount > 0 && engine.canEdit(selection.rowIndex, selection.columnIndex), beginEdit);
     item('Undo', engine.canUndo(), () => { replay(false); });
     item('Redo', engine.canRedo(), () => { replay(true); });
     item('Format cells…', rowCount > 0 && engine.canFormat(getSelectionRanges().map(range => ({ scope: 'range', range }))), () => openFormatDialog(row, col));
-    for (const [label, target] of [
-      ['cell', { scope: 'cell', rowIndex: row, columnIndex: col }],
-      ['row', { scope: 'row', rowIndex: row }],
-      ['column', { scope: 'column', columnIndex: col }],
-      ['table', { scope: 'table' }],
-    ] as const) {
-      if (!rowCount && (target.scope === 'row' || target.scope === 'cell')) continue;
-      const locked = engine.isLocked(target);
-      item(`${locked ? 'Unlock' : 'Lock'} ${label}`, engine.canManageLocks(), () => setLocked(target, !locked));
+    const lockRanges = getSelectionRanges();
+    const selectedCellsLocked = lockRanges.every(range => {
+      for(let r=range.startRow;r<=range.endRow;r++)for(let c=range.startColumn;c<=range.endColumn;c++)if(!engine.isLocked({scope:'cell',rowIndex:r,columnIndex:c}))return false;
+      return true;
+    });
+    const lockTargets: [string, CellLockTarget[]][] = [
+      [lockRanges.length > 1 || lockRanges.some(range => range.startRow !== range.endRow || range.startColumn !== range.endColumn) ? 'selected cells' : 'cell', [{scope:'cell',rowIndex:row,columnIndex:col}]],
+      ['row', selectedAxisIndices('row',row).map(rowIndex => ({scope:'row',rowIndex}))],
+      ['column', selectedAxisIndices('column',col).map(columnIndex => ({scope:'column',columnIndex}))],
+      ['table', [{scope:'table'}]],
+    ];
+    for (const [label, targets] of lockTargets) {
+      if (!targets.length || (!rowCount && (label === 'row' || label.includes('cell')))) continue;
+      const locked = label.includes('cell') ? selectedCellsLocked : targets.every(target => engine.isLocked(target));
+      const name = targets.length > 1 && (label === 'row' || label === 'column') ? `${targets.length} selected ${label}s` : label;
+      item(`${locked ? 'Unlock' : 'Lock'} ${name}`, engine.canManageLocks(), () => {
+        if (label.includes('cell')) {
+          for (const range of lockRanges) for (let r=range.startRow;r<=range.endRow;r++) for (let c=range.startColumn;c<=range.endColumn;c++) setLocked({scope:'cell',rowIndex:r,columnIndex:c},!locked);
+        } else for (const target of targets) setLocked(target, !locked);
+      });
     }
     if (rowCount > 0 && !engine.getCellPermission(row, col).writable) item('Cell is read-only', false, () => {});
     const rowsFit = rowCount > 0 && rowAxis.position(row + 1) < scroller.clientHeight;
@@ -563,12 +1115,25 @@ export function createGrid(options: GridOptions): Grid {
     item('Unfreeze rows', engine.frozenRows > 0, () => setFrozen(0, engine.frozenColumns));
     item('Unfreeze columns', engine.frozenColumns > 0, () => setFrozen(engine.frozenRows, 0));
     item('Unfreeze table', engine.frozenRows > 0 || engine.frozenColumns > 0, () => setFrozen(0, 0));
+    item('Auto-fit column', true, () => autoFitColumn(col));
+    item('Auto-fit row', rowCount > 0, () => autoFitRow(row));
     item('Resize column…', true, () => openSizeDialog('Column width', columnAxis.size(col), size => resizeAxis(columnAxis, col, size)));
     item('Resize row…', rowCount > 0, () => openSizeDialog('Row height', rowAxis.size(row), size => resizeAxis(rowAxis, row, size)));
+    const mode = doc.createElement('button');mode.type='button';mode.setAttribute('role','menuitemcheckbox');mode.textContent='Suggested actions';mode.setAttribute('aria-checked',String(suggestionsEnabled));mode.setAttribute('aria-label','Suggested actions');mode.textContent='Suggested actions: '+(suggestionsEnabled?'On':'Off');
+    mode.addEventListener('click',()=>{suggestionsEnabled=!suggestionsEnabled;showAll=!suggestionsEnabled;mode.setAttribute('aria-checked',String(suggestionsEnabled));mode.textContent='Suggested actions: '+(suggestionsEnabled?'On':'Off');all.hidden=showAll;filterActions();});
+    const all = doc.createElement('button');all.type='button';all.textContent='Show all actions';all.setAttribute('role','menuitem');
+    all.addEventListener('click',()=>{showAll=true;filterActions();all.hidden=true;});
+    filter.before(mode);popup.append(all,empty);filterActions();all.hidden=showAll;
+
     popup.addEventListener('keydown', event => {
-      const buttons = Array.from(popup.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));
+      const buttons = Array.from(popup.querySelectorAll<HTMLButtonElement>('button:not(:disabled):not([hidden])'));
       const index = buttons.indexOf(doc.activeElement as HTMLButtonElement);
-      if (event.key === 'Escape' || event.key === 'Tab') { event.preventDefault(); closeMenu(true); }
+      if (event.key === 'Escape' && filter.value) { event.preventDefault(); filter.value = ''; filterActions(); filter.hidden = true; buttons[0]?.focus(); }
+      else if (event.key === 'Escape' || event.key === 'Tab') { event.preventDefault(); closeMenu(true); }
+      else if (event.target !== filter && !event.ctrlKey && !event.metaKey && !event.altKey && (event.key.length === 1 || event.key === 'Backspace')) {
+        event.preventDefault(); filter.hidden = false; filter.value = event.key === 'Backspace' ? filter.value.slice(0, -1) : filter.value + event.key; filterActions(); filter.focus();
+      }
+      else if (event.target === filter && event.key === 'Enter') { event.preventDefault(); popup.querySelector<HTMLButtonElement>('button[data-action]:not(:disabled):not([hidden])')?.click(); }
       else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
         event.preventDefault();
         const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
@@ -580,47 +1145,96 @@ export function createGrid(options: GridOptions): Grid {
     popup.showPopover();
     popup.style.left = `${Math.max(8, Math.min(x, win.innerWidth - popup.offsetWidth - 8))}px`;
     popup.style.top = `${Math.max(8, Math.min(y, win.innerHeight - popup.offsetHeight - 8))}px`;
-    popup.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+    enterSurface(popup);
+    popup.querySelector<HTMLButtonElement>('button[data-action]:not(:disabled):not([hidden])')?.focus();
   }
 
   function headerColumn(event: MouseEvent): number | null {
     const bounds = root.getBoundingClientRect(); const x = event.clientX - bounds.left - indexWidth; const y = event.clientY - bounds.top;
     if (x < 0 || x >= scroller.clientWidth || y < 0 || y >= headerHeight || !columns.length) return null;
     const col = columnAxis.indexAt(x + (x < viewport().frozenWidth ? 0 : scroller.scrollLeft));
-    return col < columns.length ? col : null;
+    return col < columns.length && y >= leafHeaders[col]!.level * headerRowHeight ? col : null;
   }
 
   function onHeaderContextMenu(event: MouseEvent): void {
+    if (event.target instanceof win.Node && menu?.contains(event.target)) {
+      event.preventDefault(); event.stopPropagation();
+      return;
+    }
     const bounds = root.getBoundingClientRect();
     if (indexWidth && event.clientX >= bounds.left && event.clientX < bounds.left + indexWidth && event.clientY >= bounds.top + headerHeight) {
       event.preventDefault(); event.stopPropagation();
       const row = indexRow(event);
-      if (row !== null && finishEdit(true)) { selectRow(row); openMenu(row, 0, event.clientX, event.clientY); }
+      if (row !== null && finishEdit(true)) { if (!getSelectionRanges().some(range => range.startColumn === 0 && range.endColumn === columns.length - 1 && row >= range.startRow && row <= range.endRow)) selectRow(row); openMenu(row, 0, event.clientX, event.clientY); }
       return;
     }
     if (event.clientY < bounds.top || event.clientY >= bounds.top + headerHeight) return;
     event.preventDefault(); event.stopPropagation();
     const col = headerColumn(event);
     if (col === null || !finishEdit(true)) return;
-    selectColumn(col);
+    if(!getSelectionRanges().some(range=>range.startRow===0&&range.endRow===rowCount-1&&col>=range.startColumn&&col<=range.endColumn))selectColumn(col);
     const selection = engine.getSelection();
-    if (!rowCount || selection?.columnIndex === col) openMenu(selection?.rowIndex ?? 0, col, event.clientX, event.clientY, true);
+    if (!rowCount || selection) openMenu(selection?.rowIndex ?? 0, col, event.clientX, event.clientY, true);
+  }
+
+  const builtinColumnTypes:readonly ColumnType[]=[
+    {key:'text',label:'Text',create:input=>({column:{key:input.key,title:input.title,editable:true,defaultValue:input.defaultText}})},
+    {key:'number',label:'Number',create:input=>{
+      const parse=(text:string)=>{if(!text.trim())return null;const value=Number(text);if(!Number.isFinite(value))throw new Error('Enter a finite number.');return value;};
+      return {column:{key:input.key,title:input.title,editable:true,parse,defaultValue:parse(input.defaultText)}};
+    }},
+    {key:'checkbox',label:'Checkbox',create:input=>{
+      const parse=(text:string)=>{if(text===''||text==='false')return false;if(text==='true')return true;throw new Error('Use true or false.');};
+      return {column:{key:input.key,title:input.title,editable:true,parse,defaultValue:parse(input.defaultText)},editor:{type:'checkbox'}};
+    }}
+  ];
+  const creationTypes=options.columnTypes ?? builtinColumnTypes;
+  if(!creationTypes.length||new Set(creationTypes.map(type=>type.key)).size!==creationTypes.length||creationTypes.some(type=>!type.key||!type.label||typeof type.create!=='function'))throw new TypeError('Invalid column types.');
+  let createdColumn=0;
+  function openColumnDialog(beforeIndex:number):void {
+    if(!options.allowColumnChanges||activeDialog?.open)return;
+    const dialog=doc.createElement('dialog');dialog.dataset.gridDialog='';dialog.setAttribute('aria-label','Insert column');activeDialog=dialog;
+    const heading=doc.createElement('p');heading.textContent='Insert column';
+    const key=doc.createElement('input'),title=doc.createElement('input'),type=doc.createElement('select'),initial=doc.createElement('input');
+    do{key.value='column_'+(++createdColumn);}while(columns.some(column=>column.key===key.value));
+    key.required=title.required=true;
+    for(const item of creationTypes){const option=doc.createElement('option');option.value=item.key;option.textContent=item.label;type.append(option);}
+    const field=(name:string,input:HTMLElement)=>{const label=doc.createElement('label');label.textContent=name;input.setAttribute('aria-label',name);label.append(input);return label;};
+    const status=doc.createElement('p');status.setAttribute('role','alert');
+    const apply=doc.createElement('button');apply.type='button';apply.textContent='Insert column';
+    const cancel=doc.createElement('button');cancel.type='button';cancel.textContent='Cancel';cancel.onclick=()=>dialog.close();
+    apply.onclick=()=>{
+      if(!key.reportValidity()||!title.reportValidity())return;
+      try {
+        if(!key.value.trim()||!title.value.trim())throw new Error('Key and title are required.');
+        const definition=creationTypes.find(item=>item.key===type.value)!.create(Object.freeze({key:key.value.trim(),title:title.value.trim(),defaultText:initial.value}));
+        if(definition.column.key!==key.value.trim())throw new Error('Column factory must retain the supplied key.');
+        const editorConfig=definition.editor ? validateColumnEditor(definition.column,definition.editor) : undefined;
+        engine.insertColumns(beforeIndex,[definition.column]);
+        if(editorConfig)columnEditors.set(definition.column.key,editorConfig);
+        dialog.close();render();
+      } catch(error){status.textContent=error instanceof Error?error.message:'Unable to insert column.';}
+    };
+    const actions=doc.createElement('div');actions.dataset.dialogActions='';actions.append(apply,cancel);
+    dialog.append(heading,field('Column key',key),field('Column title',title),field('Column type',type),field('Default value',initial),status,actions);
+    root.append(dialog);dialog.addEventListener('close',()=>{dialog.remove();if(activeDialog===dialog)activeDialog=null;if(!destroyed)scroller.focus({preventScroll:true});});
+    dialog.showModal();title.focus();
   }
 
   function openViewDialog(col: number, sort?: 'asc' | 'desc' | 'clear'): void {
-    if (!options.onViewChange || activeDialog?.open) return;
+    if ((!managesView && !options.onViewChange) || activeDialog?.open) return;
     const dialog = doc.createElement('dialog'); activeDialog = dialog;
     dialog.setAttribute('aria-label', sort ? 'Change row view' : 'Filter column');
     dialog.dataset.gridDialog = '';
     const title = doc.createElement('p'); title.textContent = sort === 'clear' ? 'Show all rows in source order' : `${sort ? `Sort ${sort === 'asc' ? 'ascending' : 'descending'}` : 'Filter'}: ${columns[col]!.title}`;
-    const note = doc.createElement('p'); note.textContent = 'Values stay. Changing the view resets selection, undo history, custom colors, user locks and custom sizing. Admin permissions still apply.';
+    const note = doc.createElement('p'); note.textContent = managesView ? 'Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Clear the view before changing rows or columns.' : 'The host applies this row view. State retention depends on its handler.';
     const input = doc.createElement('input'); input.type = 'search'; input.setAttribute('aria-label', 'Contains text');
-    input.placeholder = 'Contains text (empty removes this filter)'; input.style.width = '100%'; input.value = options.view?.filters?.find(filter => filter.columnKey === columns[col]!.key)?.query ?? '';
+    input.placeholder = 'Contains text (empty removes this filter)'; input.style.width = '100%'; input.value = currentView?.filters?.find(filter => filter.columnKey === columns[col]!.key)?.query ?? '';
     const condition = doc.createElement('select'); condition.setAttribute('aria-label', 'Filter condition');
     for (const [value, label] of [['contains', 'Contains text'], ['equals', 'Equals text'], ['not-empty', 'Has a value'], ['empty', 'Is empty']]) {
       const option = doc.createElement('option'); option.value = value!; option.textContent = label!; condition.append(option);
     }
-    condition.value = options.view?.filters?.find(filter => filter.columnKey === columns[col]!.key)?.operator ?? 'contains';
+    condition.value = currentView?.filters?.find(filter => filter.columnKey === columns[col]!.key)?.operator ?? 'contains';
     const updateInput = () => { input.disabled = condition.value === 'empty' || condition.value === 'not-empty'; };
     condition.addEventListener('change', updateInput); updateInput();
     const status = doc.createElement('p'); status.setAttribute('role', 'alert');
@@ -628,14 +1242,14 @@ export function createGrid(options: GridOptions): Grid {
     const cancel = doc.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel'; cancel.addEventListener('click', () => dialog.close());
     const commit = () => {
       const key = columns[col]!.key;
-      const filters = (options.view?.filters ?? []).filter(filter => filter.columnKey !== key);
+      const filters = (currentView?.filters ?? []).filter(filter => filter.columnKey !== key);
       if (!sort && (input.value || condition.value === 'empty' || condition.value === 'not-empty')) {
         const operator = condition.value as 'contains' | 'equals' | 'not-empty' | 'empty';
         filters.push({ columnKey: key, query: input.value, operator });
       }
-      const view: LocalViewOptions = sort === 'clear' ? {} : sort ? { ...options.view, sort: { columnKey: key, direction: sort } }
-        : { ...options.view, filters };
-      try { options.onViewChange!(view); if (dialog.isConnected) dialog.close(); }
+      const view: LocalViewOptions = sort === 'clear' ? {} : sort ? { ...currentView, sort: { columnKey: key, direction: sort } }
+        : { ...currentView, filters };
+      try { if(managesView)engine.setView(view); currentView=view; options.onViewChange?.(view); if (dialog.isConnected) dialog.close(); }
       catch (error) { status.textContent = error instanceof Error ? error.message : 'Unable to change view.'; }
     };
     apply.addEventListener('click', commit); input.addEventListener('keydown', event => { if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); commit(); } });
@@ -647,13 +1261,13 @@ export function createGrid(options: GridOptions): Grid {
   function onContextMenu(event: MouseEvent): void {
     if (event.target === editor) return;
     const cell = pointerCell(event);
-    if (!cell) return;
+    if (!cell) { if (!rowCount && columns.length && options.onRowChange) { event.preventDefault(); if (finishEdit(true)) openMenu(0, 0, event.clientX, event.clientY); } return; }
     event.preventDefault();
     if (!finishEdit(true)) return;
     openMenu(cell.row, cell.col, event.clientX, event.clientY);
   }
 
-  function columnEdge(event: PointerEvent): number | null {
+  function columnEdge(event: MouseEvent): number | null {
     const bounds = root.getBoundingClientRect();
     const x = event.clientX - bounds.left - indexWidth;
     const y = event.clientY - bounds.top;
@@ -662,6 +1276,7 @@ export function createGrid(options: GridOptions): Grid {
     if (engine.frozenColumns > 0 && Math.abs(columnAxis.position(engine.frozenColumns) - x) <= 8 && x <= view.width) return engine.frozenColumns - 1;
     const offset = x + (x < view.frozenWidth ? 0 : view.scrollLeft);
     const col = columnAxis.indexAt(offset);
+    if (col < columns.length && y < leafHeaders[col]!.level * headerRowHeight) return null;
     const first = x < view.frozenWidth ? 0 : engine.frozenColumns;
     const limit = x < view.frozenWidth ? engine.frozenColumns : columns.length;
     if (col < limit && col >= first && Math.abs(columnAxis.position(col + 1) - offset) <= 8) return col;
@@ -669,7 +1284,7 @@ export function createGrid(options: GridOptions): Grid {
     return null;
   }
 
-  function rowEdge(event: PointerEvent): number | null {
+  function rowEdge(event: MouseEvent): number | null {
     const bounds = scroller.getBoundingClientRect();
     const x = event.clientX - bounds.left;
     const y = event.clientY - bounds.top;
@@ -698,16 +1313,34 @@ export function createGrid(options: GridOptions): Grid {
     resizeGuide.style.height = resizing.axis === 'row' ? '2px' : `${headerHeight + view.height}px`;
   }
 
+  function selectHeaderGroup(first: number, last: number, event: PointerEvent | KeyboardEvent): void {
+    if (!rowCount || !finishEdit(true)) return;
+    const anchor = event.shiftKey ? (axisAnchor?.axis === 'column' ? axisAnchor.index : engine.getSelection()?.columnIndex ?? first) : first;
+    selectScope(axisRange('column', anchor, anchor > last ? first : last), event.shiftKey ? 'extend' : event.ctrlKey || event.metaKey ? 'add' : 'replace');
+    axisAnchor = { axis: 'column', index: anchor }; scroller.focus({ preventScroll: true });
+  }
   function onHeaderPointerDown(event: PointerEvent): void {
+    if(event.target instanceof win.Element&&event.target.closest('[data-grid-row-group]'))return;
+    const moveTarget = event.target instanceof win.Element ? event.target.closest<HTMLElement>('[data-grid-reorder]') : null;
+    if (moveTarget?.draggable && !event.shiftKey && !event.ctrlKey && !event.metaKey && columnEdge(event) === null && rowEdge(event) === null) {
+      if(event.pointerType==='touch')startTouchReorder(event,moveTarget);
+      return;
+    }
     if (resizing) { event.preventDefault(); return; }
-    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || (event.target !== root && !(event.target instanceof win.Node && (scroller.contains(event.target) || indexGutter.contains(event.target))))) return;
+    if (event.button !== 0 || event.altKey || (event.target !== root && !(event.target instanceof win.Node && (scroller.contains(event.target) || indexGutter.contains(event.target) || headerSurface.contains(event.target))))) return;
+    const bounds = root.getBoundingClientRect();
+    if (indexWidth && event.clientX < bounds.left + indexWidth && event.clientY < bounds.top + headerHeight) {
+      event.preventDefault(); selectAll(); scroller.focus({ preventScroll: true }); return;
+    }
     const column = columnEdge(event);
     const row = column === null ? rowEdge(event) : null;
     if (column === null && row === null) {
+      const group = event.target instanceof win.Element ? event.target.closest<HTMLElement>('[data-grid-header-group]') : null;
+      if (group) { event.preventDefault(); selectHeaderGroup(Number(group.dataset.groupStart), Number(group.dataset.groupEnd), event); return; }
       const row = indexRow(event);
-      if (row !== null && finishEdit(true)) { event.preventDefault(); selectRow(row); scroller.focus({ preventScroll: true }); return; }
+      if (row !== null && finishEdit(true)) { event.preventDefault(); startAxisSelection('row', row, event); return; }
       const col = headerColumn(event);
-      if (col !== null && rowCount && finishEdit(true)) { event.preventDefault(); selectColumn(col); scroller.focus({ preventScroll: true }); }
+      if (col !== null && rowCount && finishEdit(true)) { event.preventDefault(); startAxisSelection('column', col, event); }
       return;
     }
     event.preventDefault();
@@ -728,17 +1361,34 @@ export function createGrid(options: GridOptions): Grid {
     showResizeGuide();
   }
 
+  let linkHoverTimer = 0;
+  let linkHoverKey = '';
+  function cancelLinkPreviewHover(): void { win.clearTimeout(linkHoverTimer); linkHoverKey = ''; }
   function onHeaderPointerMove(event: PointerEvent): void {
+    if(touchReorder)return;
     root.style.cursor = resizing ? (resizing.axis === 'column' ? 'col-resize' : 'row-resize')
       : columnEdge(event) !== null ? 'col-resize' : rowEdge(event) !== null ? 'row-resize' : '';
     const column = columnEdge(event);
     const cell = pointerCell(event);
+    const key = cell && !event.buttons && !resizing && !editor && !menu && options.allowOpenLinks !== false && cellLinks(cell.row, cell.col).length ? `${cell.row}:${cell.col}` : '';
+    if (key !== linkHoverKey) {
+      cancelLinkPreviewHover(); linkHoverKey = key;
+      if (key && cell) { const row = cell.row, col = cell.col, x = event.clientX, y = event.clientY + 12;
+        linkHoverTimer = win.setTimeout(() => { if (!destroyed && !editor && !menu) openLinks(row, col, x, y, false); }, 450);
+      }
+    }
+    const config=cell ? columnEditors.get(columns[cell.col]!.key) : undefined;
+    const next=cell && config && config.type!=='checkbox' && !resizing && !editor && engine.canEdit(cell.row,cell.col) ? cell : null;
+    if(next?.row!==hoveredChoice?.row||next?.col!==hoveredChoice?.col){clearChoiceHover();hoveredChoice=next;if(next)invalidate([{rowIndex:next.row,columnKey:columns[next.col]!.key}]);}
     const bounds = root.getBoundingClientRect();
     const headerColumn = columnAxis.indexAt(event.clientX - bounds.left - indexWidth + (event.clientX - bounds.left - indexWidth < viewport().frozenWidth ? 0 : scroller.scrollLeft));
     root.title = root.style.cursor === 'row-resize' ? 'Drag the row boundary to resize height'
       : column !== null ? 'Drag the column boundary to resize width'
       : event.clientY - bounds.top < headerHeight && event.clientX >= bounds.left + indexWidth && headerColumn >= 0 && headerColumn < columns.length ? stateLabels(null, headerColumn).join('; ')
       : indexRow(event) !== null ? [`Select row ${indexRow(event)! + 1}`, ...rowLabels(indexRow(event)!)].join('; ') : cell ? stateLabels(cell.row, cell.col).join('; ') : '';
+    if (cell && !resizing) { const message=validationMessage(engine.getValue(cell.row,columns[cell.col]!.key),cell.col);if(message)root.title=message; }
+    if (!resizing && cell && event.altKey && options.allowOpenLinks !== false && cellLinks(cell.row, cell.col).length) { root.style.cursor = 'pointer'; root.title = 'Alt+click to open links'; }
+    if(hoveredChoice && cell){const rect=viewport().cellRect(cell.row,cell.col);if(event.clientX-scroller.getBoundingClientRect().left>=rect.x+rect.width-24)root.style.cursor='pointer';}
     if (resizing?.pointerId === event.pointerId) {
       resizing.proposed = Math.max(24, Math.min(1000, resizing.size + (resizing.axis === 'column' ? event.clientX : event.clientY) - resizing.start));
       showResizeGuide();
@@ -766,6 +1416,7 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function cancelResizeKey(event: KeyboardEvent): void {
+    if(touchReorder&&event.key==='Escape'){event.preventDefault();event.stopPropagation();clearReorder();return;}
     if (resizing && event.key === 'Escape') {
       event.preventDefault(); event.stopPropagation(); endResize();
     }
@@ -773,7 +1424,7 @@ export function createGrid(options: GridOptions): Grid {
 
   function invalidate(changes: readonly { rowIndex: number; columnKey: string }[]): void {
     const selection = engine.getSelection();
-    for (const change of changes) { dirty.set(JSON.stringify([change.rowIndex, change.columnKey]), change); if (imageColumns.has(change.columnKey)) fullDraw = true; }
+    for (const change of changes) { dirty.set(JSON.stringify([change.rowIndex, change.columnKey]), change); if (mediaColumn(change.columnKey)) fullDraw = true; }
     if (selection && changes.some(change => change.rowIndex === selection.rowIndex && change.columnKey === selection.columnKey)) syncAccessibleCell();
     schedule();
   }
@@ -795,20 +1446,25 @@ export function createGrid(options: GridOptions): Grid {
     if (commit) {
       try {
         if (!editor.checkValidity()) throw new Error(editor.validationMessage);
-        engine.editCell(selection.rowIndex, selection.columnIndex, editor instanceof win.HTMLInputElement && editor.type === 'checkbox' ? String(editor.checked) : editor.value);
+        engine.editCell(selection.rowIndex, selection.columnIndex, editor instanceof win.HTMLInputElement && editor.type === 'checkbox' ? String(editor.checked) : editor instanceof win.HTMLSelectElement && editor.multiple ? choiceValue(editor) : editor.value);
       } catch (error) {
+        editorError.dataset.severity = 'error';
         editor.setCustomValidity(error instanceof Error ? error.message : 'Unable to save cell.');
         editor.setAttribute('aria-invalid', 'true');
         editorError.textContent = error instanceof Error ? error.message : 'Unable to save cell.';
         editorError.style.display = 'block';
         positionEditor();
-        editor.focus({ preventScroll: true });
+        (choices?.querySelector<HTMLInputElement>('input') ?? richEditor ?? editor).focus({ preventScroll: true });
         return false;
       }
     }
     const input = editor;
     editor = null;
-    input.remove();
+    richEditor?.remove(); richEditor = null;
+    if (choices) {disposeChoicePanel(choices);exitSurface(choices);} choices = null;
+    disposeEditorIntegration();
+    input.remove(); editorAnchor = null; editorLabel.hidden = true; win.removeEventListener('beforeunload', guardEditNavigation);
+    editorError.style.position = 'absolute';
     editorError.style.display = 'none';
     editorError.textContent = '';
     editorPane.style.width = editorPane.style.height = '0px';
@@ -821,42 +1477,79 @@ export function createGrid(options: GridOptions): Grid {
     if (destroyed || editor || !selection || !engine.canEdit(selection.rowIndex, selection.columnIndex)) return;
     const column = columns[selection.columnIndex]!;
     const value = engine.getValue(selection.rowIndex, column.key);
+    const preview = richText(value, column.key, engine.getFormat(selection.rowIndex, selection.columnIndex).contentFormat);
+    if (preview?.unavailable) { actionError.textContent = 'Rich text cannot be edited until it can be displayed.'; actionError.style.display = 'block'; return; }
     try {
       const custom = options.createEditor?.(Object.freeze({ ...selection, value }), doc) ?? null;
       if (custom && (custom.ownerDocument !== doc || custom.parentNode || !['INPUT', 'SELECT', 'TEXTAREA'].includes(custom.tagName))) {
         throw new Error('Cell editor must be a detached input, select or textarea from the grid document.');
       }
+      if(!custom&&mediaColumn(column.key)) {
+        if(activeDialog?.open)return;
+        const dialog=createMediaEditor(doc,value,avatarColumns.has(column.key),next=>{
+          if(destroyed||engine.getRowId(selection.rowIndex)!==selection.rowId||columns[selection.columnIndex]?.key!==column.key||!Object.is(engine.getValue(selection.rowIndex,column.key),value))throw new Error('This cell changed. Cancel and reopen the editor.');
+          engine.editCell(selection.rowIndex,selection.columnIndex,JSON.stringify(next));
+        });
+        activeDialog=dialog;root.append(dialog);
+        dialog.addEventListener('close',()=>{dialog.remove();if(activeDialog===dialog)activeDialog=null;if(!destroyed)scroller.focus({preventScroll:true});});
+        dialog.showModal();return;
+      }
       const configured = columnEditors.get(column.key);
-      if (!custom && configured?.type === 'select') {
+      if (!custom && (configured?.type === 'select' || configured?.type === 'multiselect')) {
         const select = doc.createElement('select');
-        for (const value of configured.values) { const option = doc.createElement('option'); option.value = option.textContent = value; select.append(option); }
-        select.required = true; editor = select;
+        for (const value of configured.values) { const definition=typeof value==='string'?{value}:value; const option = doc.createElement('option'); option.value=definition.value; option.textContent=definition.label ?? definition.value;option.disabled=definition.disabled ?? false; select.append(option); }
+        select.dataset.gridChoiceEditor = '';
+        select.multiple = configured.type === 'multiselect'; select.size = select.multiple ? Math.min(8, configured.values.length) : 0;
+        select.required = !select.multiple && !configured.values.some(value=>(typeof value==='string'?value:value.value)===''); editor = select;
       } else if (!custom && configured?.type === 'checkbox') {
         if (typeof value !== 'boolean') throw new TypeError('Checkbox cells require boolean values.');
         const checkbox = doc.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = value; editor = checkbox;
       } else editor = custom ?? doc.createElement(options.multilineEditor ? 'textarea' : 'input');
-      if (!custom) editor.value = value == null ? '' : String(value);
+      if (!custom) {
+        if (editor instanceof win.HTMLSelectElement && editor.multiple) { const original = String(value ?? '').split(',').map(item => item.trim()).filter(Boolean);editor.dataset.choiceOriginalValues = JSON.stringify([...new Set(original)]);const selected = new Set(original); for (const option of Array.from(editor.options)) option.selected = selected.has(option.value); }
+        else editor.value = value == null ? '' : mediaColumn(column.key)&&Array.isArray(value)?JSON.stringify(value):String(value);
+      }
     } catch (error) {
       actionError.textContent = error instanceof Error ? error.message : 'Unable to create cell editor.';
       actionError.style.display = 'block';
       return;
     }
     actionError.style.display = 'none';
-    editor.setAttribute('aria-label', `Edit row ${selection.rowIndex + 1}, ${column.title}`);
+    editor.setAttribute('aria-label', `Edit row ${engine.getRowSourceIndex(selection.rowIndex) + 1}, ${column.title}`);
     editor.setAttribute('aria-errormessage', editorError.id);
-    editor.style.cssText = 'position:absolute;box-sizing:border-box;pointer-events:auto;border:2px solid var(--acheron-selection-color);background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);padding:0 8px';
+    editor.style.cssText = 'position:absolute;box-sizing:border-box;pointer-events:auto;outline:none;border:1px solid var(--acheron-selection-color);background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);padding:0 8px';
     const cellFormat = engine.getFormat(selection.rowIndex, selection.columnIndex);
     if (cellFormat.background) editor.style.background = cellFormat.background;
     if (cellFormat.textColor) editor.style.color = cellFormat.textColor;
+    if (cellFormat.fontWeight) editor.style.fontWeight = cellFormat.fontWeight;
+    if (cellFormat.fontStyle) editor.style.fontStyle = cellFormat.fontStyle;
     if (editor instanceof win.HTMLTextAreaElement) editor.style.resize = 'none';
+    if (editor instanceof win.HTMLInputElement && editor.type === 'checkbox') {
+      editor.style.maxWidth = editor.style.maxHeight = '16px'; editor.style.margin = '8px'; editor.style.padding = '0'; editor.style.accentColor = 'var(--acheron-selection-color)';
+    }
     const clearValidation = () => {
       editor?.setCustomValidity('');
       editor?.removeAttribute('aria-invalid');
       editorError.style.display = 'none';
+      editorError.dataset.severity = column.invalidInput === 'allow' ? 'warning' : 'error';
+      if (editor) {
+        try {
+          const text = editor instanceof win.HTMLInputElement && editor.type === 'checkbox' ? String(editor.checked) : editor instanceof win.HTMLSelectElement && editor.multiple ? choiceValue(editor) : editor.value;
+          const message = column.validate?.(column.parse ? column.parse(text) : text);
+          if (message) {
+            editor.setAttribute('aria-invalid','true');
+            editorError.textContent = message + (column.invalidInput === 'allow' ? ' You can save this value.' : ' Correct this before saving.');
+            editorError.style.display = 'block';
+          }
+        } catch (error) {
+          editorError.dataset.severity='error';editor.setAttribute('aria-invalid','true');editorError.textContent = error instanceof Error ? error.message : 'Invalid value.';editorError.style.display = 'block';
+        }
+      }
       positionEditor();
     };
     editor.addEventListener('input', clearValidation);
     editor.addEventListener('change', clearValidation);
+    clearValidation();
     editor.addEventListener('keydown', event => {
       if (!(event instanceof win.KeyboardEvent)) return;
       event.stopPropagation();
@@ -882,21 +1575,176 @@ export function createGrid(options: GridOptions): Grid {
         if (finishEdit(event.key === 'Enter')) scroller.focus({ preventScroll: true });
       } else if (event.key === 'Tab' && !finishEdit(true)) event.preventDefault();
     });
-    editor.addEventListener('blur', () => finishEdit(true));
+    editor.addEventListener('blur', () => { if (!options.editorOptions?.pinned && !choices && !(editor instanceof win.HTMLSelectElement && editor.dataset.gridChoiceEditor !== undefined && choiceOptionsFor(column.key))) finishEdit(true); });
     editorPane.append(editor);
+    const contentFormat = cellFormat.contentFormat ?? richTextColumns.get(column.key);
+    if (contentFormat && contentFormat !== 'plain' && !options.createEditor && !columnEditors.has(column.key)) {
+      const backing = editor;
+      const surface = doc.createElement('div'); richEditor = surface;
+      surface.contentEditable = 'true'; surface.setAttribute('role', 'textbox'); surface.setAttribute('aria-multiline', 'true');
+      surface.setAttribute('aria-label', backing.getAttribute('aria-label')!); surface.setAttribute('aria-errormessage', editorError.id);
+      surface.style.cssText = backing.style.cssText + ';white-space:pre-wrap;overflow:auto;overflow-wrap:anywhere;padding:4px 8px;line-height:normal';
+      surface.innerHTML = richTextHtml(richText(value, column.key, contentFormat) ?? { text: String(value ?? ''), runs: [{ text: String(value ?? '') }] }, doc);
+      backing.setAttribute('aria-hidden', 'true'); backing.tabIndex = -1; backing.style.visibility = 'hidden'; backing.style.pointerEvents = 'none';
+      const sync = () => { backing.value = richTextSource(readHtml(surface.innerHTML, doc, true), contentFormat, doc); backing.dispatchEvent(new win.Event('input', { bubbles: true })); };
+      const insert = (rich: RichText) => {
+        const selection = win.getSelection();
+        if (!selection?.rangeCount || !surface.contains(selection.anchorNode)) return;
+        const range = selection.getRangeAt(0); range.deleteContents();
+        const template = doc.createElement('template'); template.innerHTML = richTextHtml(rich, doc);
+        const last = template.content.lastChild; range.insertNode(template.content);
+        if (last) { range.setStartAfter(last); range.collapse(true); selection.removeAllRanges(); selection.addRange(range); }
+        sync();
+      };
+      surface.addEventListener('input', sync);
+      surface.addEventListener('paste', event => {
+        event.preventDefault(); event.stopPropagation();
+        const html = event.clipboardData?.getData('text/html'); const text = event.clipboardData?.getData('text/plain') ?? '';
+        const rich = html ? readHtml(html, doc) : { text, runs: [{ text }] };
+        insert(engine.getCellPermission(selection.rowIndex, selection.columnIndex).formatting ? rich : { text: rich.text, runs: [{ text: rich.text }] });
+      });
+      surface.addEventListener('drop', event => { event.preventDefault(); });
+      surface.addEventListener('click', event => { if ((event.target as Element).closest('a')) event.preventDefault(); });
+      surface.addEventListener('keydown', event => {
+        event.stopPropagation();
+        if (event.isComposing || event.keyCode === 229) return;
+        if ((event.ctrlKey || event.metaKey) && ['b','i','u'].includes(event.key.toLowerCase())) {
+          if (!engine.getCellPermission(selection.rowIndex, selection.columnIndex).formatting || contentFormat === 'markdown' && event.key.toLowerCase() === 'u') event.preventDefault();
+          return;
+        }
+        if (event.key === 'Enter' && (event.altKey || event.ctrlKey || event.metaKey)) { event.preventDefault(); insert({ text: '\n', runs: [{ text: '\n' }] }); return; }
+        if (['Enter', 'Escape', 'Tab'].includes(event.key)) {
+          event.preventDefault(); backing.dispatchEvent(new win.KeyboardEvent('keydown', { key: event.key, shiftKey: event.shiftKey }));
+        }
+      });
+      surface.addEventListener('blur', () => { if (!options.editorOptions?.pinned) finishEdit(true); });
+      editorPane.append(surface);
+    }
+    if (options.editorOptions?.guardNavigation !== false) win.addEventListener('beforeunload', guardEditNavigation);
+    editorLabel.textContent = `${column.title} · Row ${engine.getRowSourceIndex(selection.rowIndex) + 1} · ${String(engine.getRowId(selection.rowIndex))}`;
     positionEditor();
-    editor.focus({ preventScroll: true });
-    if (editor.tagName !== 'SELECT' && 'select' in editor) editor.select();
+    (richEditor ?? editor).focus({ preventScroll: true });
+    if (richEditor) { const range = doc.createRange(); range.selectNodeContents(richEditor); const selection = win.getSelection(); selection?.removeAllRanges(); selection?.addRange(range); }
+    else if (editor.tagName !== 'SELECT' && 'select' in editor) editor.select();
+    const choiceOptions=choiceOptionsFor(column.key);
+    if (editor instanceof win.HTMLSelectElement && editor.dataset.gridChoiceEditor !== undefined && choiceOptions) {
+      choices = choicePanel(editor, root, choiceOptions, commit => { const done = finishEdit(commit); if (done) scroller.focus({ preventScroll: true }); return done; }, column.key);
+      enterSurface(choices);
+      editor.style.opacity = '0'; editor.style.pointerEvents = 'none'; editor.tabIndex = -1; editor.setAttribute('aria-hidden', 'true');
+    }
+    try {const cleanup=options.onEditorMount?.(Object.freeze({...selection,value}),editor);editorCleanup=typeof cleanup==='function'?cleanup:undefined;}catch(error){finishEdit(false);actionError.textContent=error instanceof Error?error.message:'Unable to mount custom editor.';actionError.style.display='block';}
   }
 
   const getSelection = engine.getSelection;
   const getSelectionRange = engine.getSelectionRange;
   const getSelectionRanges = engine.getSelectionRanges;
 
+  function clipboardBlocks(): ClipboardBlock[] {
+    const ranges = getSelectionRanges();
+    if (!ranges.length) return [];
+    const blocks = decodeBlocks(engine.copySelectionBlocks());
+    const firstRow = Math.min(...ranges.map(range => range.startRow)), firstColumn = Math.min(...ranges.map(range => range.startColumn));
+    return blocks.map(block => {
+      const formats: CellFormat[][] = [];
+      const values = block.values.map((line, row) => line.map((text, col) => {
+        const rowIndex = firstRow + block.row + row, columnIndex = firstColumn + block.column + col;
+        const format = block.formats?.[row]?.[col] ?? engine.getFormat(rowIndex, columnIndex), rich = richText(text, columns[columnIndex]!.key, format.contentFormat);
+        if (rich?.unavailable) throw new Error('Rich text cannot be copied until it can be displayed.');
+        (formats[row] ??= []).push({ ...format, ...(rich ? { contentFormat: 'html' as const } : {}) });
+        if(mediaColumn(columns[columnIndex]!.key)){const value=engine.getValue(rowIndex,columns[columnIndex]!.key);return Array.isArray(value)?JSON.stringify(validateMediaValue(value)):text;}
+        return rich ? richTextHtml(rich, doc) : text;
+      }));
+      return { ...block, values, formats };
+    });
+  }
+  function cancelCut(): void { cutRevision++; pendingCutText=undefined; engine.cancelCut(); clearCopyFeedback(); }
+  function cutSelectionBlocks(): string {
+    cancelCut();
+    const blocks=clipboardBlocks();
+    engine.cutSelectionBlocks();
+    pendingCutText=encodeBlocks(blocks); showCopyFeedback(getSelectionRanges(), true); return pendingCutText;
+  }
+  function copySelectionBlocks(): string { cancelCut(); const text = encodeBlocks(clipboardBlocks()); showCopyFeedback(getSelectionRanges()); return text; }
+  function pasteSelectionBlocks(text: string): void {
+    if (destroyed || editor) throw new Error('Finish editing before pasting cells.');
+    const ranges = getSelectionRanges().sort((a,b) => a.startRow - b.startRow || a.startColumn - b.startColumn);
+    const moving=pendingCutText!==undefined && text===pendingCutText;
+    const original=decodeBlocks(text);
+    const scalar=!moving && original.length===1 && original[0]!.values.length===1 && original[0]!.values[0]!.length===1;
+    if (scalar && ranges.reduce((total,range)=>total+(range.endRow-range.startRow+1)*(range.endColumn-range.startColumn+1),0)>100_000) throw new RangeError('Paste has too many cells.');
+    const expanded=scalar && ranges.length ? ranges.map(range=>{
+      const first=original[0]!,height=range.endRow-range.startRow+1,width=range.endColumn-range.startColumn+1;
+      return {...first,row:0,column:0,values:Array.from({length:height},()=>Array<string>(width).fill(first.values[0]![0]!)),...(first.formats ? {formats:Array.from({length:height},()=>Array.from({length:width},()=>({...first.formats![0]![0]!})))} : {})};
+    }) : original;
+    const blocks = expanded.map((block, index) => {
+      const range = ranges.length > 1 ? ranges[index] : ranges[0];
+      if (!range) return block;
+      const formats = block.formats?.map(line => line.map(format => ({ ...format })));
+      const values = block.values.map((line, row) => line.map((value, col) => {
+        const rowIndex = range.startRow + row + (ranges.length === 1 ? block.row : 0), columnIndex = range.startColumn + col + (ranges.length === 1 ? block.column : 0);
+        if (formats?.[row]?.[col]?.contentFormat === 'html' && rowIndex < rowCount && columnIndex < columns.length) {
+          const current = engine.getValue(rowIndex, columns[columnIndex]!.key);
+          if (typeof current === 'number' || typeof current === 'boolean' || columnEditors.has(columns[columnIndex]!.key)) {
+            delete formats[row]![col]!.contentFormat;
+            return readHtml(value, doc).text;
+          }
+        }
+        return value;
+      }));
+      return { ...block, values, ...(formats ? { formats } : {}) };
+    });
+    if (moving) { engine.pasteCutSelectionBlocks(encodeBlocks(blocks)); pendingCutText=undefined; }
+    else { engine.pasteSelectionBlocks(encodeBlocks(blocks)); if (pendingCutText) cancelCut(); }
+  }
+  function clipboardPlain(blocks: readonly ClipboardBlock[]): string {
+    return blocksToTsv(blocks.map(block => ({ ...block, values: block.values.map((line, row) => line.map((value, col) => block.formats?.[row]?.[col]?.contentFormat === 'html' ? readHtml(value, doc).text : value)) })));
+  }
+  function clipboardHtml(blocks: readonly ClipboardBlock[]): string {
+    const table = doc.createElement('table'); table.setAttribute('data-acheron-blocks', encodeBlocks(blocks));
+    for (const block of blocks) for (const [row, line] of block.values.entries()) {
+      const tr = doc.createElement('tr'); table.append(tr);
+      for (const [col, value] of line.entries()) {
+        const td = doc.createElement('td'), format = block.formats?.[row]?.[col];
+        if (format?.contentFormat === 'html') td.innerHTML = richTextHtml(readHtml(value, doc), doc); else td.textContent = value;
+        if (format?.background) td.style.backgroundColor = format.background;
+        if (format?.textColor) td.style.color = format.textColor;
+        tr.append(td);
+      }
+    }
+    return table.outerHTML;
+  }
+  function htmlClipboardBlocks(html: string): ClipboardBlock[] {
+    if (html.length > 10_000_000) throw new RangeError('Clipboard text is too large.');
+    const template = doc.createElement('template'); template.innerHTML = html;
+    const encoded = template.content.querySelector('table')?.getAttribute('data-acheron-blocks');
+    if (encoded) return decodeBlocks(encoded);
+    const rows = Array.from(template.content.querySelectorAll('table tr'));
+    const cells = rows.length ? rows.map(row => Array.from(row.children).filter(cell => ['TD','TH'].includes(cell.tagName))) : [];
+    const values = cells.length ? cells.map(line => line.map(cell => richTextHtml(readHtml(cell.innerHTML, doc), doc))) : [[richTextHtml(readHtml(html, doc), doc)]];
+    const formats = values.map(line => line.map(() => ({ contentFormat: 'html' as const })));
+    return decodeBlocks(encodeBlocks([{ row: 0, column: 0, values, formats }]));
+  }
+  async function writeClipboard(cut=false): Promise<void> {
+    cancelCut();
+    const cutRequest=cutRevision;
+    const blocks = clipboardBlocks(); const text = clipboardPlain(blocks);
+    const copiedRanges = getSelectionRanges().map(range => ({ ...range }));
+    const revision = copyFeedbackRevision;
+    if (cut) engine.cutSelectionBlocks();
+    if (win.navigator.clipboard.write && win.ClipboardItem) await win.navigator.clipboard.write([new win.ClipboardItem({ 'text/plain': new win.Blob([text], { type: 'text/plain' }), 'text/html': new win.Blob([clipboardHtml(blocks)], { type: 'text/html' }) })]);
+    else await win.navigator.clipboard.writeText(text);
+    if (cut && cutRequest!==cutRevision) return;
+    if (cut && !destroyed && revision===copyFeedbackRevision) pendingCutText=encodeBlocks(blocks);
+    else if(cut) engine.cancelCut();
+    if (!destroyed && revision === copyFeedbackRevision) showCopyFeedback(copiedRanges, cut);
+  }
   function copySelection(): string {
     if (destroyed) throw new Error('Grid is destroyed.');
     if (editor) throw new Error('Finish editing before copying cells.');
-    return engine.copySelection();
+    cancelCut();
+    const text = clipboardPlain(clipboardBlocks());
+    showCopyFeedback(getSelectionRanges());
+    return text;
   }
 
   function paste(text: string): void {
@@ -905,24 +1753,58 @@ export function createGrid(options: GridOptions): Grid {
     engine.paste(text);
   }
 
+  function onCut(event: ClipboardEvent): void {
+    if (event.target===editor || !engine.getSelection() || !event.clipboardData) return;
+    event.preventDefault();
+    cancelCut();
+    try {
+      const blocks=clipboardBlocks();engine.cutSelectionBlocks();
+      event.clipboardData.setData('text/plain',clipboardPlain(blocks));event.clipboardData.setData('text/html',clipboardHtml(blocks));
+      pendingCutText=encodeBlocks(blocks);event.clipboardData.setData(gridClipboardType,pendingCutText);showCopyFeedback(getSelectionRanges(), true);
+    } catch(error) { pendingCutText=undefined;engine.cancelCut();win.alert(error instanceof Error ? error.message : 'Unable to cut cells.'); }
+  }
   function onCopy(event: ClipboardEvent): void {
     const selection = engine.getSelection();
     if (event.target === editor || !selection || !event.clipboardData) return;
     event.preventDefault();
-    try { event.clipboardData.setData('text/plain', copySelection()); }
+    cancelCut();
+    try { const blocks=clipboardBlocks(); event.clipboardData.setData('text/plain',clipboardPlain(blocks)); event.clipboardData.setData('text/html',clipboardHtml(blocks));event.clipboardData.setData(gridClipboardType,encodeBlocks(blocks)); showCopyFeedback(getSelectionRanges()); }
     catch (error) { win.alert(error instanceof Error ? error.message : 'Unable to copy cells.'); }
   }
 
   function onPaste(event: ClipboardEvent): void {
     const selection = engine.getSelection();
-    if (event.target === editor || !selection || !event.clipboardData?.types.includes('text/plain')) return;
+    const files=Array.from(event.clipboardData?.files ?? []).filter(file=>file.type.startsWith('image/'));
+    if(event.target!==editor&&selection&&files.length){event.preventDefault();void pasteImages(files);return;}
+    if (event.target === editor || !selection || !event.clipboardData || !event.clipboardData.types.some(type => ['text/plain','text/html',gridClipboardType].includes(type))) return;
     event.preventDefault();
-    try { paste(event.clipboardData.getData('text/plain')); }
+    try { if(event.clipboardData.types.includes(gridClipboardType))pasteSelectionBlocks(event.clipboardData.getData(gridClipboardType));else if(event.clipboardData.types.includes('text/html'))pasteSelectionBlocks(encodeBlocks(htmlClipboardBlocks(event.clipboardData.getData('text/html'))));else paste(event.clipboardData.getData('text/plain')); }
     catch (error) { win.alert(error instanceof Error ? error.message : 'Unable to paste cells.'); }
+  }
+
+  async function pasteImages(files:readonly File[]):Promise<void> {
+    const selection=engine.getSelection();if(!selection)return;
+    const key=selection.columnKey,target=JSON.stringify(getSelectionRanges()),originalValue=engine.getValue(selection.rowIndex,selection.columnKey),created:string[]=[];let controller:AbortController|undefined;
+    try {
+      if(!mediaColumn(key))throw new Error('Select an image or people column before pasting images.');
+      if(files.length>100||files.some(file=>file.size>20*1024*1024))throw new Error('Paste at most 100 images, each no larger than 20 MiB.');
+      if(!engine.canPaste())throw new Error('This cell does not allow pasting.');
+      mediaUpload?.abort();controller=new win.AbortController();mediaUpload=controller;
+      const values=await Promise.all(files.map(async file=>{
+        if(options.mediaOptions?.upload)return await options.mediaOptions.upload(file,Object.freeze({columnKey:key,signal:controller!.signal}));
+        const src=win.URL.createObjectURL(file);created.push(src);return {src,alt:file.name};
+      }));
+      if(destroyed||controller.signal.aborted||JSON.stringify(getSelectionRanges())!==target||engine.getSelection()?.rowId!==selection.rowId||engine.getSelection()?.columnKey!==key||!Object.is(engine.getValue(selection.rowIndex,key),originalValue))throw new Error('Image paste canceled because its destination changed.');
+      const value=validateMediaValue(values);
+      pasteSelectionBlocks(encodeBlocks([{row:0,column:0,values:[[JSON.stringify(value)]]}]));
+      for(const src of created)ownedImageUrls.add(src);
+      if(mediaUpload===controller)mediaUpload=undefined;
+    } catch(error){controller?.abort();if(mediaUpload===controller)mediaUpload=undefined;for(const src of created)win.URL.revokeObjectURL(src);if(!destroyed)win.alert(error instanceof Error?error.message:'Unable to paste images.');}
   }
 
   function select(rowIndex: number, columnIndex: number, extend = false, reveal = true, add = false): void {
     if (destroyed || rowCount === 0 || columns.length === 0) return;
+    axisAnchor = null;
     const previous = engine.getSelection();
     const changed = previous?.rowIndex !== rowIndex || previous?.columnIndex !== columnIndex;
     const previousRange = JSON.stringify(getSelectionRange());
@@ -950,11 +1832,11 @@ export function createGrid(options: GridOptions): Grid {
     if (previousRanges !== JSON.stringify(getSelectionRanges())) options.onSelectionRangesChange?.(getSelectionRanges());
   }
 
-  function selectScope(range: SelectionRange): void {
+  function selectScope(range: SelectionRange, mode: 'replace' | 'add' | 'extend' = 'replace'): void {
     if (destroyed) throw new Error('Grid is destroyed.');
     if (!finishEdit(true)) return;
     const previous = engine.getSelection();
-    if (!engine.selectRange(range)) return;
+    if (!engine.selectRange(range, mode)) return;
     addNextSelection = false; announceSelection();
     const selection = engine.getSelection();
     if (previous?.rowIndex !== selection?.rowIndex || previous?.columnIndex !== selection?.columnIndex) options.onSelectionChange?.(selection);
@@ -962,14 +1844,37 @@ export function createGrid(options: GridOptions): Grid {
   }
   function selectColumn(index: number): void {
     if (!Number.isSafeInteger(index) || index < 0 || index >= columns.length) throw new RangeError('Invalid column index.');
+    axisAnchor = { axis: 'column', index };
     if (rowCount) selectScope({ startRow: 0, endRow: rowCount - 1, startColumn: index, endColumn: index });
   }
   function selectRow(index: number): void {
     if (!Number.isSafeInteger(index) || index < 0 || index >= rowCount) throw new RangeError('Invalid row index.');
+    axisAnchor = { axis: 'row', index };
     if (columns.length) selectScope({ startRow: index, endRow: index, startColumn: 0, endColumn: columns.length - 1 });
   }
 
-  function pointerCell(event: MouseEvent, clamp = false): { row: number; col: number } | null {
+  function selectAll(): void {
+    if (destroyed) throw new Error('Grid is destroyed.');
+    axisAnchor = null;
+    if (rowCount && columns.length) selectScope({ startRow: 0, endRow: rowCount - 1, startColumn: 0, endColumn: columns.length - 1 });
+  }
+  function axisRange(axis: 'row' | 'column', anchor: number, end: number): SelectionRange {
+    return axis === 'row' ? { startRow: Math.min(anchor, end), endRow: Math.max(anchor, end), startColumn: 0, endColumn: columns.length - 1 }
+      : { startRow: 0, endRow: rowCount - 1, startColumn: Math.min(anchor, end), endColumn: Math.max(anchor, end) };
+  }
+  function startAxisSelection(axis: 'row' | 'column', index: number, event: PointerEvent | KeyboardEvent): void {
+    if (!rowCount || !columns.length) return;
+    const active = engine.getSelection();
+    const anchor = event.shiftKey ? (axisAnchor?.axis === axis ? axisAnchor.index : axis === 'row' ? active?.rowIndex ?? index : active?.columnIndex ?? index) : index;
+    const range = axisRange(axis, anchor, index);
+    if (!engine.getCellPermission(range.startRow, range.startColumn).selectable || !engine.getCellPermission(range.endRow, range.endColumn).selectable) return;
+    try { selectScope(range, event.shiftKey ? 'extend' : event.ctrlKey || event.metaKey || addNextSelection ? 'add' : 'replace'); }
+    catch (error) { actionError.textContent = error instanceof Error ? error.message : 'Unable to add selection.'; actionError.style.display = 'block'; return; }
+    axisAnchor = { axis, index: anchor }; scroller.focus({ preventScroll: true });
+    if (event instanceof win.PointerEvent) { axisDrag = axisAnchor; dragPointer = event.pointerId; dragPosition = event; root.setPointerCapture(event.pointerId); }
+  }
+
+  function pointerCell(event: Pick<MouseEvent, 'clientX' | 'clientY'>, clamp = false): { row: number; col: number } | null {
     if (!rowCount || !columns.length) return null;
     const bounds = scroller.getBoundingClientRect();
     let x = event.clientX - bounds.left;
@@ -984,8 +1889,15 @@ export function createGrid(options: GridOptions): Grid {
     return { row, col };
   }
 
+  function onLinkClick(event: MouseEvent): void {
+    if (!event.altKey || event.target === editor) return;
+    const cell = pointerCell(event);
+    if (cell && cellLinks(cell.row, cell.col).length && finishEdit(true)) { event.preventDefault(); select(cell.row, cell.col, false, false); openLinks(cell.row, cell.col, event.clientX, event.clientY); }
+  }
   function onPointerDown(event: PointerEvent): void {
-    if (event.defaultPrevented || event.target === editor || event.button !== 0 || event.altKey) return;
+    if (event.defaultPrevented || event.target === editor || event.button !== 0) return;
+    if (event.altKey) return;
+    touchSelection = event.pointerType === 'touch';
     const cell = pointerCell(event);
     if (!cell) return;
     event.preventDefault();
@@ -999,6 +1911,8 @@ export function createGrid(options: GridOptions): Grid {
       actionError.style.display = 'block';
       return;
     }
+    const choice=columnEditors.get(columns[cell.col]!.key);
+    if(!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&choice&&choice.type!=='checkbox'&&engine.canEdit(cell.row,cell.col)){const rect=viewport().cellRect(cell.row,cell.col);if(event.clientX-scroller.getBoundingClientRect().left>=rect.x+rect.width-24){clearChoiceHover();beginEdit();return;}}
     if (!event.ctrlKey && !event.metaKey && !event.shiftKey && columnEditors.get(columns[cell.col]!.key)?.type === 'checkbox') {
       const rect = viewport().cellRect(cell.row, cell.col); const bounds = scroller.getBoundingClientRect();
       const x = event.clientX - bounds.left - rect.x; const y = event.clientY - bounds.top - rect.y;
@@ -1014,14 +1928,42 @@ export function createGrid(options: GridOptions): Grid {
     }
   }
 
-  function onPointerMove(event: PointerEvent): void {
-    // drag extends on pointer movement; a frame loop would enable stationary edge auto-scroll.
-    if (event.pointerId !== dragPointer) return;
-    const cell = pointerCell(event, true);
-    if (cell) select(cell.row, cell.col, true);
+  function extendDrag(): void {
+    if (!dragPosition) return;
+    if(touchReorder){updateTouchReorder(dragPosition);return;}
+    const cell = pointerCell(dragPosition, true);
+    if (!cell) return;
+    if (handleAnchor) selectScope({ startRow: Math.min(handleAnchor.row, cell.row), endRow: Math.max(handleAnchor.row, cell.row), startColumn: Math.min(handleAnchor.col, cell.col), endColumn: Math.max(handleAnchor.col, cell.col) }, 'extend');
+    else if (axisDrag) selectScope(axisRange(axisDrag.axis, axisDrag.index, axisDrag.axis === 'row' ? cell.row : cell.col), 'extend');
+    else select(cell.row, cell.col, true, false);
   }
-
-  function onPointerEnd(): void { dragPointer = null; }
+  function dragScroll(): void {
+    dragFrame = undefined;
+    if (dragPointer === null || !dragPosition || destroyed) return;
+    const bounds = scroller.getBoundingClientRect(); const view = viewport();
+    const step = (position: number, start: number, size: number) => position < start + 24 ? -16 : position > start + size - 24 ? 16 : 0;
+    const activeAxis=touchReorder ? reorderDrag?.axis : axisDrag?.axis;
+    const dx = activeAxis === 'row' || view.width <= view.frozenWidth ? 0 : step(dragPosition.clientX, bounds.left + view.frozenWidth, view.width - view.frozenWidth);
+    const dy = activeAxis === 'column' || view.height <= view.frozenHeight ? 0 : step(dragPosition.clientY, bounds.top + view.frozenHeight, view.height - view.frozenHeight);
+    const previousLeft = scroller.scrollLeft; const previousTop = scroller.scrollTop;
+    scroller.scrollLeft += dx; scroller.scrollTop += dy;
+    if (scroller.scrollLeft !== previousLeft || scroller.scrollTop !== previousTop) {
+      extendDrag(); dragFrame = win.requestAnimationFrame(dragScroll);
+    }
+  }
+  function onPointerMove(event: PointerEvent): void {
+    if (event.pointerId !== dragPointer) return;
+    dragPosition = event; extendDrag();
+    if (dragFrame === undefined) dragFrame = win.requestAnimationFrame(dragScroll);
+  }
+  function onPointerEnd(): void {
+    if(touchReorder)clearReorder();
+    const pointer = dragPointer;
+    dragPointer = null; axisDrag = null; handleAnchor = null; dragPosition = null;
+    if (dragFrame !== undefined) win.cancelAnimationFrame(dragFrame);
+    dragFrame = undefined;
+    if (pointer !== null) for (const target of [root, scroller]) if (target.hasPointerCapture(pointer)) target.releasePointerCapture(pointer);
+  }
 
   function onKeyDown(event: KeyboardEvent): void {
     const selection = engine.getSelection();
@@ -1033,8 +1975,19 @@ export function createGrid(options: GridOptions): Grid {
         bounds.top + Math.min(rect.clip.y + rect.clip.height, rect.y + rect.height));
       return;
     }
+    if (event.altKey && event.key === 'Enter' && selection) { event.preventDefault(); if(openMedia(selection.rowIndex,selection.columnIndex))return;const rect = viewport().cellRect(selection.rowIndex, selection.columnIndex); const bounds = scroller.getBoundingClientRect(); openLinks(selection.rowIndex, selection.columnIndex, bounds.left + rect.x, bounds.top + rect.y + rect.height); return; }
     if (event.isComposing || event.altKey) return;
     const control = event.ctrlKey || event.metaKey;
+    if (control && selection && ['b', 'i'].includes(event.key.toLowerCase())) {
+      event.preventDefault();
+      const key = event.key.toLowerCase() === 'b' ? 'fontWeight' : 'fontStyle';
+      const current = engine.getFormat(selection.rowIndex, selection.columnIndex);
+      const value = current[key] && current[key] !== 'normal' ? 'normal' : key === 'fontWeight' ? 'bold' : 'italic';
+      try { format(getSelectionRanges().map(range => ({ scope: 'range', range })), { [key]: value }); }
+      catch (error) { actionError.textContent = error instanceof Error ? error.message : 'Unable to format selection.'; actionError.style.display = 'block'; }
+      return;
+    }
+    if (control && event.key.toLowerCase() === 'a') { event.preventDefault(); onPointerEnd(); selectAll(); return; }
     if (event.key === ' ' && selection && (control || event.shiftKey)) {
       event.preventDefault(); control ? selectColumn(selection.columnIndex) : selectRow(selection.rowIndex); return;
     }
@@ -1053,11 +2006,17 @@ export function createGrid(options: GridOptions): Grid {
     if (event.shiftKey && !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     if (control && event.key !== 'Home' && event.key !== 'End') return;
     if (event.key === 'Enter' || event.key === 'F2') {
+      event.preventDefault();
       beginEdit();
-      if (editor) event.preventDefault();
+      if (event.key === 'Enter' && editor instanceof win.HTMLInputElement && editor.type === 'checkbox') {
+        editor.checked = !editor.checked;
+        if (finishEdit(true)) scroller.focus({ preventScroll: true });
+      }
       return;
     }
     if (event.key === 'Escape') {
+      cancelCut();
+      onPointerEnd(); axisAnchor = null;
       addNextSelection = false;
       if (selection) {
         event.preventDefault();
@@ -1076,9 +2035,9 @@ export function createGrid(options: GridOptions): Grid {
     let col = selection?.columnIndex ?? 0;
     if (selection) {
       if (event.key === 'ArrowUp') row--;
-      if (event.key === 'ArrowDown') row++;
+      if (event.key === 'ArrowDown') row=(engine.getMerge(row,col)?.endRow??row)+1;
       if (event.key === 'ArrowLeft') col--;
-      if (event.key === 'ArrowRight') col++;
+      if (event.key === 'ArrowRight') col=(engine.getMerge(row,col)?.endColumn??col)+1;
       if (event.key === 'Home') { col = 0; if (control) row = 0; }
       if (event.key === 'End') { col = columns.length - 1; if (control) row = rowCount - 1; }
     }
@@ -1096,14 +2055,14 @@ export function createGrid(options: GridOptions): Grid {
     if (engine.isLocked({ scope: 'column', columnIndex: col })) labels.push('Column locked');
     if (col < engine.frozenColumns) labels.push('Column frozen');
     if (row === null) {
-      const sort = options.view?.sort;
+      const sort = currentView?.sort;
       if (sort?.columnKey === columns[col]!.key) labels.push(`Sorted ${sort.direction === 'asc' ? 'ascending' : 'descending'}`);
-      const filter = options.view?.filters?.find(filter => filter.columnKey === columns[col]!.key);
+      const filter = currentView?.filters?.find(filter => filter.columnKey === columns[col]!.key);
       if (filter) labels.push(`Filtered: ${filter.operator ?? 'contains'} ${filter.query}`.trim());
       const policy = columns[col]!.permissions;
       if ([indicatorPolicy, policy].some(scope => scope?.writable === false || scope?.selectable === false || scope?.editable === false)) labels.push('Column disabled by permissions');
     } else {
-      if (engine.isLocked({ scope: 'row', rowIndex: row })) labels.push('Row locked');
+      if (rowValueLocked(row)) labels.push('Row locked');
       if (engine.isLocked({ scope: 'cell', rowIndex: row, columnIndex: col })) labels.push('Cell locked');
       if (row < engine.frozenRows) labels.push('Row frozen');
       const permission = engine.getCellPermission(row, col);
@@ -1112,21 +2071,90 @@ export function createGrid(options: GridOptions): Grid {
     return labels;
   }
 
+  function cellLinks(row: number, col: number) {
+    return linksForValue(engine.getValue(row, columns[col]!.key), columns[col]!.key, engine.getFormat(row, col).contentFormat);
+  }
+  function linksForValue(value: unknown, key: string, contentFormat?: CellFormat['contentFormat']) {
+    if (options.detectLinks === false || mediaColumn(key)) return [];
+    const rich = richText(value, key, contentFormat);
+    if (!rich) return detectLinks(value);
+    const links = detectLinks(rich.text);
+    let offset = 0;
+    for (const run of rich.runs) {
+      if (run.href) links.push({ text: run.text, href: run.href, start: offset, end: offset + run.text.length });
+      offset += run.text.length;
+    }
+    return links.filter((link, index) => links.findIndex(other => other.href === link.href && other.start === link.start) === index);
+  }
+  function openLinks(row: number, col: number, x: number, y: number, focus = true): void {
+    if (options.allowOpenLinks === false || !engine.getCellPermission(row, col).selectable) return;
+    const links = cellLinks(row, col);
+    if (!links.length) return;
+    closeMenu();
+    const popup = doc.createElement('div'); menu = popup; popup.popover = 'auto'; popup.setAttribute('role', 'dialog'); popup.setAttribute('aria-label', 'Cell links');
+    popup.style.cssText = 'position:fixed;margin:0;padding:12px;max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);overflow:auto;border:1px solid var(--acheron-grid-line-color);border-radius:8px;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);box-shadow:0 12px 32px #0003';
+    const metadataAllowed = typeof options.linkPreview === 'object' && options.linkPreview.allowMetadata !== false;
+    let previews = metadataAllowed && typeof options.linkPreview === 'object' && options.linkPreview.enabled !== false;
+    const toggle = doc.createElement('button');toggle.type='button';toggle.textContent=previews?'Hide website details':'Show website details';toggle.setAttribute('aria-pressed',String(previews));
+    toggle.style.cssText='padding:6px 10px;margin:0 0 8px;border:1px solid var(--acheron-grid-line-color);border-radius:6px;background:var(--acheron-header-background);color:inherit;font:inherit';if (metadataAllowed) popup.append(toggle);
+    const entries=doc.createElement('div');entries.style.cssText='display:grid;gap:8px;max-width:420px';popup.append(entries);
+    function positionLinks():void { if(!popup.isConnected)return;popup.style.left=`${Math.max(8,Math.min(x,win.innerWidth-popup.offsetWidth-8))}px`;popup.style.top=`${Math.max(8,Math.min(y,win.innerHeight-popup.offsetHeight-8))}px`; }
+    async function drawLinks():Promise<void> {
+      previewAbort?.abort();const controller=new win.AbortController();previewAbort=controller;entries.replaceChildren();
+      for (const link of links) {
+        const card=doc.createElement('div');card.style.cssText='padding:10px;border:1px solid var(--acheron-grid-line-color);border-radius:6px;overflow-wrap:anywhere';
+        const anchor = doc.createElement('a'); anchor.textContent = link.text === link.href ? new URL(link.href).hostname : link.text; anchor.href = link.href; anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; anchor.referrerPolicy = 'no-referrer';anchor.setAttribute('aria-label',link.text);
+        anchor.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--acheron-link-color);text-decoration:underline;text-underline-offset:3px'; const icon = svgIcon('external-link'); icon.setAttribute('width','16'); icon.setAttribute('height','16'); icon.setAttribute('aria-hidden','true'); icon.setAttribute('style','flex-shrink:0'); anchor.append(icon); card.append(anchor);
+        const address=doc.createElement('div');address.textContent=link.href;address.style.cssText='margin-top:5px;font-size:12px;color:var(--acheron-header-text-color)';card.append(address);
+        entries.append(card);
+        if(!metadataAllowed || !previews || typeof options.linkPreview !== 'object')continue;
+        const detail=doc.createElement('div');detail.style.cssText='margin-top:8px';detail.textContent=new URL(link.href).hostname;card.append(detail);
+        if(typeof options.linkPreview !== 'object')continue;
+        detail.textContent='Loading preview...';detail.setAttribute('role','status');
+        const load = options.linkPreview.load;
+        void Promise.resolve().then(()=>load(link.href,controller.signal)).then(info=>{
+          if(controller.signal.aborted || menu!==popup)return;
+          detail.replaceChildren();
+          const title=doc.createElement('strong');title.textContent=(info.title ?? new URL(link.href).hostname).slice(0,160);detail.append(title);
+          if(info.description){const description=doc.createElement('p');description.textContent=info.description.slice(0,320);description.style.margin='6px 0 0';detail.append(description);}
+          const image=info.image && safeWebUrl(info.image);
+          if(image){const img=doc.createElement('img');img.src=image;img.alt='';img.referrerPolicy='no-referrer';img.style.cssText='width:100%;max-height:140px;object-fit:cover;border-radius:4px;margin-top:8px';img.addEventListener('load',positionLinks,{once:true});detail.append(img);}
+          positionLinks();
+        }).catch(()=>{if(!controller.signal.aborted && menu===popup){detail.textContent='Preview unavailable. The link is still available.';positionLinks();}});
+      }
+    }
+    toggle.addEventListener('click',()=>{previews=!previews;toggle.textContent=previews?'Hide website details':'Show website details';toggle.setAttribute('aria-pressed',String(previews));void drawLinks();positionLinks();});void drawLinks();
+    const close = doc.createElement('button'); close.type = 'button'; close.textContent = 'Close'; close.style.cssText = 'margin:8px;padding:6px 12px;border:1px solid var(--acheron-grid-line-color);border-radius:4px;background:var(--acheron-header-background);color:inherit;font:inherit'; close.addEventListener('click', () => closeMenu(true)); popup.append(close);
+    popup.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeMenu(true); } });
+    popup.addEventListener('toggle', () => { if (!popup.matches(':popover-open') && menu === popup) closeMenu(); });
+    root.append(popup); popup.showPopover();
+    const bounds = popup.getBoundingClientRect(); popup.style.left = `${Math.max(8, Math.min(x, win.innerWidth - bounds.width - 8))}px`; popup.style.top = `${Math.max(8, Math.min(y, win.innerHeight - bounds.height - 8))}px`; if (focus) popup.querySelector('a')?.focus();
+  }
+
+  function validationMessage(value: unknown, columnIndex: number): string | undefined {
+    return columns[columnIndex]?.validate?.(value);
+  }
+  const rowLockCache = new Map<number,boolean>();
+  function rowValueLocked(row:number):boolean {
+    const cached=rowLockCache.get(row);if(cached!==undefined)return cached;
+    const locked = engine.isLocked({scope:'row',rowIndex:row}) || columns.length > 0 && columns.every((_,columnIndex)=>engine.isLocked({scope:'cell',rowIndex:row,columnIndex}) || engine.isLocked({scope:'column',columnIndex}));
+    rowLockCache.set(row,locked);return locked;
+  }
   function cell(value: unknown, x: number, y: number, width: number, height: number, header: boolean, rowIndex = 0, columnIndex = 0): void {
     paintCell(value, x, y, width, height, header, rowIndex, columnIndex);
     const labels = stateLabels(header ? null : rowIndex, columnIndex);
     const ctx = context!;
-    ctx.save(); ctx.beginPath(); ctx.rect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2)); ctx.clip();
-    const range = getSelectionRange();
-    if (!header && range && rowIndex >= range.startRow && rowIndex <= range.endRow && columnIndex >= range.startColumn && columnIndex <= range.endColumn &&
-      ((range.startRow === 0 && range.endRow === rowCount - 1) || (range.startColumn === 0 && range.endColumn === columns.length - 1))) {
-      ctx.globalAlpha = .1; ctx.fillStyle = theme.selectionColor; ctx.fillRect(x, y, width, height); ctx.globalAlpha = 1;
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y, width, height); ctx.clip();
+    if (!header && rowValueLocked(rowIndex)) { ctx.globalAlpha=.06;ctx.fillStyle=theme.textColor;ctx.fillRect(x,y,width,height);ctx.globalAlpha=1; }
+    const range = getSelectionRanges().find(range => rowIndex >= range.startRow && rowIndex <= range.endRow && columnIndex >= range.startColumn && columnIndex <= range.endColumn );
+    if (!header && range && rowIndex >= range.startRow && rowIndex <= range.endRow && columnIndex >= range.startColumn && columnIndex <= range.endColumn) {
+      ctx.globalAlpha = rangeTintOpacity; ctx.fillStyle = theme.selectionColor; ctx.fillRect(x, y, width, height); ctx.globalAlpha = 1;
     }
     if (header) {
-      if (options.view?.sort?.columnKey === columns[columnIndex]!.key) {
-        stateIcon(options.view.sort.direction === 'asc' ? 'arrow-up' : 'arrow-down', x + width - 36, y + (height - 16) / 2);
+      if (currentView?.sort?.columnKey === columns[columnIndex]!.key) {
+        stateIcon(currentView!.sort!.direction === 'asc' ? 'arrow-up' : 'arrow-down', x + width - 36, y + (height - 16) / 2);
       }
-      if (options.view?.filters?.some(filter => filter.columnKey === columns[columnIndex]!.key)) {
+      if (currentView?.filters?.some(filter => filter.columnKey === columns[columnIndex]!.key)) {
         stateIcon('funnel', x + width - 54, y + (height - 16) / 2);
       }
     }
@@ -1136,42 +2164,47 @@ export function createGrid(options: GridOptions): Grid {
     }
     const leading = columnIndex === 0 || (x <= 0 && x + width > 0);
     const locked = header ? labels.some(label => label.endsWith('locked'))
-      : engine.isLocked({ scope: 'cell', rowIndex, columnIndex }) || (!indexWidth && leading && labels.includes('Row locked'));
+      : (!rowValueLocked(rowIndex) && engine.isLocked({ scope: 'cell', rowIndex, columnIndex })) || (!indexWidth && rowValueLocked(rowIndex));
     if (locked && width >= 24 && height >= 20) {
       const left = x + width - 18; const top = y + 4;
-      ctx.fillStyle = header ? theme.headerBackground : theme.background; ctx.fillRect(left - 1, top - 1, 18, 18);
       stateIcon('lock', left, top);
     }
+    if (!header && validationMessage(value,columnIndex)) {
+      ctx.fillStyle = columns[columnIndex]?.invalidInput === 'allow' ? '#d97706' : '#ef4444';ctx.beginPath();ctx.moveTo(x+width-8,y+1);ctx.lineTo(x+width-1,y+1);ctx.lineTo(x+width-1,y+8);ctx.closePath();ctx.fill();
+    }
+    if(!header&&hoveredChoice?.row===rowIndex&&hoveredChoice.col===columnIndex&&width>=28&&height>=20&&engine.canEdit(rowIndex,columnIndex))stateIcon('chevron-down',x+width-22,y+(height-16)/2);
     ctx.restore();
+    ctx.save(); ctx.strokeStyle = theme.gridLineColor; ctx.lineWidth = 1; ctx.beginPath();
+    ctx.moveTo(x + width - .5, y); ctx.lineTo(x + width - .5, y + height - .5); ctx.lineTo(x, y + height - .5); ctx.stroke(); ctx.restore();
   }
 
   function paintCell(value: unknown, x: number, y: number, width: number, height: number, header: boolean, rowIndex = 0, columnIndex = 0): void {
+    const selection = engine.getSelection();
     const ctx = context!;
     ctx.clearRect(x, y, width, height);
     const format = header ? null : engine.getFormat(rowIndex, columnIndex);
+    const cellFont = format?.fontStyle || format?.fontWeight ? `${format?.fontStyle === 'italic' ? 'italic ' : ''}${format?.fontWeight === 'bold' ? '700 ' : ''}${theme.font.replace(/\b(?:italic|oblique|normal|[1-9]00|bold)\s+/g, '')}` : theme.font;
     const background = format?.background ?? theme.background;
     const textColor = format?.textColor ?? theme.textColor;
     ctx.fillStyle = header ? theme.headerBackground : background;
     ctx.fillRect(x, y, width, height);
     const range = getSelectionRange();
-    const wholeColumn = range && range.startRow === 0 && range.endRow === rowCount - 1 && columnIndex >= range.startColumn && columnIndex <= range.endColumn;
+    const wholeColumn = getSelectionRanges().some(range => range.startRow === 0 && range.endRow === rowCount - 1 && columnIndex >= range.startColumn && columnIndex <= range.endColumn);
     if (header && engine.isLocked({ scope: 'column', columnIndex })) {
       ctx.save(); ctx.globalAlpha = .08; ctx.fillStyle = theme.headerTextColor; ctx.fillRect(x, y, width, height); ctx.restore();
     }
-    if (header && wholeColumn) {
-      ctx.save(); ctx.globalAlpha = .12; ctx.fillStyle = theme.selectionColor; ctx.fillRect(x, y, width, height); ctx.restore();
+    if (header && (wholeColumn || engine.getSelection()?.columnIndex === columnIndex)) {
+      ctx.save(); ctx.globalAlpha = headerTintOpacity; ctx.fillStyle = theme.selectionColor; ctx.fillRect(x, y, width, height); ctx.restore();
     }
-    ctx.strokeStyle = theme.gridLineColor;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x + 0.5, y + 0.5, width, height);
     if (!header && options.renderCell) {
+      ctx.font = cellFont;
       let handled = false;
       ctx.save();
       try {
         ctx.beginPath();
-        ctx.rect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
+        ctx.rect(x, y, width, height);
         ctx.clip();
-        handled = options.renderCell(ctx, Object.freeze({ value, format: format!, rowIndex, rowId: dataSource.getRowId(rowIndex),
+        handled = options.renderCell(ctx, Object.freeze({ value, format: format!, rowIndex, rowId: engine.getRowId(rowIndex),
           columnIndex, columnKey: columns[columnIndex]!.key, x, y, width, height }));
       } catch (error) {
         win.console.error('Cell renderer failed.', error);
@@ -1180,11 +2213,11 @@ export function createGrid(options: GridOptions): Grid {
         ctx.beginPath();
       }
       if (handled) { highlightSearch(x, y, width, height, rowIndex, columnIndex); return; }
-      ctx.clearRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
+      ctx.clearRect(x, y, width, height);
       ctx.fillStyle = background;
-      ctx.fillRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
+      ctx.fillRect(x, y, width, height);
     }
-    if (!header && imageColumns.has(columns[columnIndex]!.key)) { imageCell(value, x, y, width, height, textColor); highlightSearch(x, y, width, height, rowIndex, columnIndex); return; }
+    if (!header && mediaColumn(columns[columnIndex]!.key)) { if(avatarColumns.has(columns[columnIndex]!.key)||Array.isArray(value))mediaCell(value,x,y,width,height,textColor,avatarColumns.has(columns[columnIndex]!.key));else imageCell(value, x, y, width, height, textColor); highlightSearch(x, y, width, height, rowIndex, columnIndex); return; }
     if (!header && columnEditors.get(columns[columnIndex]!.key)?.type === 'checkbox' && typeof value === 'boolean') {
       const size = Math.max(0, Math.min(16, width - 20, height - 8)); const left = x + 10; const top = y + (height - size) / 2;
       ctx.save(); ctx.strokeStyle = textColor; ctx.lineWidth = 1;
@@ -1194,39 +2227,72 @@ export function createGrid(options: GridOptions): Grid {
       }
       ctx.restore(); highlightSearch(x, y, width, height, rowIndex, columnIndex); return;
     }
+    const rich = !header ? richText(value, columns[columnIndex]!.key, format?.contentFormat) : undefined;
+    if (rich) {
+      ctx.save(); ctx.beginPath(); ctx.rect(x + 8, y, Math.max(0, width - 16), height); ctx.clip();
+      ctx.font = cellFont; const metrics = ctx.measureText('M');
+      const lineHeight = Math.ceil(metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent) || 18;
+      const layout = layoutRichText(ctx, rich, cellFont, Math.max(0, width - 20), !!options.wrapText, Math.max(1, Math.floor((height - 4) / lineHeight)));
+      ctx.textBaseline = 'top';
+      for (const piece of layout.pieces) {
+        const top = y + (options.wrapText || layout.lines > 1 ? 4 : (height - layout.lineHeight) / 2) + piece.line * layout.lineHeight;
+        if (top + layout.lineHeight > y + height) break;
+        ctx.font = piece.font; ctx.fillStyle = piece.run.href && options.detectLinks !== false ? format?.textColor ?? theme.linkColor : textColor;
+        ctx.fillText(piece.text, x + 10 + piece.x, top);
+        if (piece.run.underline || (piece.run.href && options.detectLinks !== false)) ctx.fillRect(x + 10 + piece.x, top + layout.lineHeight - 1, piece.width, 1);
+      }
+      ctx.restore(); highlightSearch(x, y, width, height, rowIndex, columnIndex); return;
+    }
     ctx.save();
     ctx.beginPath();
     ctx.rect(x + 8, y, Math.max(0, width - 16), height);
     ctx.clip();
     ctx.fillStyle = header ? theme.headerTextColor : textColor;
-    ctx.font = header ? theme.headerFont : theme.font;
+    ctx.font = header ? theme.headerFont : cellFont;
     ctx.textBaseline = 'middle';
     const text = value == null ? '' : String(value);
+    const links = !header && options.detectLinks !== false ? detectLinks(value) : [];
+    const paintText = (line: string, offset: number, top: number, lineHeight = 0) => {
+      let left = x + 10; let position = 0;
+      for (const link of links) {
+        const start = Math.max(0, link.start - offset); const end = Math.min(line.length, link.end - offset);
+        if (end <= start || start >= line.length) continue;
+        const plain = line.slice(position, start); ctx.fillStyle = textColor; ctx.fillText(plain, left, top); left += ctx.measureText(plain).width;
+        const part = line.slice(start, end); ctx.fillStyle = format?.textColor ?? theme.linkColor; ctx.fillText(part, left, top); const w = ctx.measureText(part).width;
+        ctx.fillRect(left, top + (lineHeight ? lineHeight - 1 : 8), w, 1); left += w; position = end;
+      }
+      ctx.fillStyle = header ? theme.headerTextColor : textColor; ctx.fillText(line.slice(position), left, top);
+    };
     if (!header && options.wrapText) {
       ctx.textBaseline = 'top';
       const metrics = ctx.measureText('M');
       const lineHeight = Math.ceil(metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent) || 18;
-      let line = ''; let top = y + 4;
+      if (!text.includes('\n') && ctx.measureText(text).width <= Math.max(0, width - 20)) {
+        if (y + 4 + lineHeight <= y + height) paintText(text, 0, y + 4, lineHeight);
+        ctx.restore(); highlightSearch(x, y, width, height, rowIndex, columnIndex); return;
+      }
+      let line = ''; let top = y + 4; let offset = 0;
       for (const character of text) {
         if (top + lineHeight > y + height) break;
         if (character === '\n' || (line && ctx.measureText(line + character).width > Math.max(0, width - 20))) {
-          ctx.fillText(line, x + 10, top); top += lineHeight; line = '';
+          paintText(line, offset, top, lineHeight); offset += line.length + (character === '\n' ? 1 : 0); top += lineHeight; line = '';
         }
         if (character !== '\n') line += character;
       }
-      if (top + lineHeight <= y + height) ctx.fillText(line, x + 10, top);
-    } else ctx.fillText(text, x + 10, y + height / 2);
+      if (top + lineHeight <= y + height) paintText(line, offset, top, lineHeight);
+    } else if (header && headers.levels > 1) { ctx.textAlign = 'center'; ctx.fillText(text, x + width / 2, y + height / 2); }
+    else paintText(text, 0, y + height / 2);
     ctx.restore();
     if (!header) highlightSearch(x, y, width, height, rowIndex, columnIndex);
   }
 
-  function imageCell(value: unknown, x: number, y: number, width: number, height: number, textColor: string): void {
-    if (value == null || value === '') return;
+  function imageCell(value: unknown, x: number, y: number, width: number, height: number, textColor: string, shape?:'avatar'|'thumbnail', label=''): void {
+    if (!shape && (value == null || value === '')) return;
     let item: { image: HTMLImageElement; state: 'loading' | 'ready' | 'error' } | undefined;
     try {
       if (typeof value !== 'string') throw new TypeError('Image URL must be a string.');
       const url = new win.URL(value, doc.baseURI);
-      if (!['http:', 'https:', 'blob:', 'data:'].includes(url.protocol) || (url.protocol === 'data:' && !/^data:image\//i.test(value))) throw new TypeError('Unsupported image URL.');
+      if (url.username || url.password || !['http:', 'https:', 'blob:', 'data:'].includes(url.protocol) || (url.protocol === 'data:' && !/^data:image\//i.test(value))) throw new TypeError('Unsupported image URL.');
       const src = url.href;
       visibleImages.add(src); item = imageCache.get(src);
       if (!item) {
@@ -1245,32 +2311,98 @@ export function createGrid(options: GridOptions): Grid {
     } catch { /* Invalid URLs use the same unavailable state as failed image loads. */ }
     const ctx = context!;
     ctx.save(); ctx.beginPath(); ctx.rect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2)); ctx.clip();
+    if(shape){ctx.beginPath();ctx.roundRect(x+1,y+1,width-2,height-2,shape==='avatar'?width/2:6);ctx.clip();ctx.fillStyle=theme.headerBackground;ctx.fillRect(x,y,width,height);}
     if (item?.state === 'ready') {
       const image = item.image;
-      const ratio = Math.max(0, Math.min((width - 16) / image.naturalWidth, (height - 8) / image.naturalHeight));
+      const ratio = shape ? Math.max(width/image.naturalWidth,height/image.naturalHeight) : Math.max(0, Math.min(1, (width - 16) / image.naturalWidth, (height - 8) / image.naturalHeight));
       const w = image.naturalWidth * ratio; const h = image.naturalHeight * ratio;
-      if (ratio > 0) ctx.drawImage(image, x + (width - w) / 2, y + (height - h) / 2, w, h);
+      if (ratio > 0) {
+        ctx.save();
+        if(!shape){ctx.beginPath();ctx.roundRect(x+(width-w)/2,y+(height-h)/2,w,h,6);ctx.clip();}
+        ctx.drawImage(image, x + (width - w) / 2, y + (height - h) / 2, w, h);ctx.restore();
+      }
     } else {
       ctx.font = theme.font; ctx.fillStyle = textColor; ctx.textBaseline = 'middle';
-      ctx.fillText(item?.state === 'loading' ? 'Loading…' : 'Image unavailable', x + 8, y + height / 2);
+      if(shape){ctx.textAlign='center';ctx.fillText(shape==='avatar'?label.trim().split(/\s+/).slice(0,2).map(part=>part[0]).join('').toLocaleUpperCase()||'?':item?.state==='loading'?'…':'—',x+width/2,y+height/2);}
+      else ctx.fillText(item?.state === 'loading' ? 'Loading…' : 'Image unavailable', x + 8, y + height / 2);
     }
     ctx.restore(); ctx.beginPath();
+    if(shape){ctx.save();ctx.strokeStyle=theme.background;ctx.lineWidth=2;ctx.roundRect(x+1,y+1,width-2,height-2,shape==='avatar'?width/2:6);ctx.stroke();ctx.restore();ctx.beginPath();}
+  }
+
+  function mediaCell(value:unknown,x:number,y:number,width:number,height:number,textColor:string,avatars:boolean):void {
+    const items=mediaItems(value);if(!items.length)return;
+    const size=Math.max(0,Math.min(mediaSize,height-8,width-16));if(size<12)return;
+    const step=avatars?size*.76:size+6,available=Math.max(0,width-16);
+    let count=Math.min(mediaLimit,items.length,Math.max(1,Math.floor((available-size)/step)+1));
+    if(count<items.length&&count*step+size>available)count=Math.max(0,count-1);
+    for(let i=0;i<count;i++){const item=items[i]!;imageCell(item.src,x+8+i*step,y+(height-size)/2,size,size,textColor,avatars?'avatar':'thumbnail',item.name ?? item.alt ?? '');}
+    if(count<items.length){const ctx=context!;ctx.save();ctx.fillStyle=theme.headerBackground;ctx.beginPath();ctx.roundRect(x+8+count*step,y+(height-size)/2,size,size,avatars?size/2:6);ctx.fill();ctx.fillStyle=textColor;ctx.font=theme.font;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('+'+(items.length-count),x+8+count*step+size/2,y+height/2);ctx.restore();ctx.beginPath();}
+  }
+
+  function openMedia(row:number,col:number):boolean {
+    const key=columns[col]!.key;if(!mediaColumn(key))return false;
+    if(activeDialog?.open||!finishEdit(true))return true;
+    const items=mediaItems(engine.getValue(row,key)),avatars=avatarColumns.has(key);
+    const dialog=doc.createElement('dialog');dialog.dataset.gridDialog='';dialog.setAttribute('aria-label',avatars?'Cell people':'Cell images');activeDialog=dialog;
+    dialog.style.cssText='width:min(560px,calc(100vw - 48px));max-height:75vh;box-sizing:border-box';
+    const title=doc.createElement('h2');title.textContent=columns[col]!.title+' · '+items.length;
+    const list=doc.createElement('div');list.style.cssText=avatars?'display:grid;gap:12px':'display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px';
+    for(const [i,item] of items.entries()){
+      const figure=doc.createElement('figure');figure.style.cssText='margin:0;display:flex;gap:12px;'+(avatars?'align-items:center':'flex-direction:column');
+      const label=item.name ?? item.alt ?? (avatars?'Person ':'Image ')+(i+1);
+      const fallback=doc.createElement('span');fallback.textContent=avatars?label.trim().split(/\s+/).slice(0,2).map(part=>part[0]).join('').toLocaleUpperCase():'Image unavailable';fallback.style.cssText='display:grid;place-items:center;background:var(--acheron-header-background);min-height:48px;padding:8px;border-radius:8px';
+      figure.append(fallback);
+      if(item.src){try{const url=new win.URL(item.src,doc.baseURI);if(url.username||url.password||!['http:','https:','blob:','data:'].includes(url.protocol)||url.protocol==='data:'&&!/^data:image\//i.test(item.src))throw new Error();const image=doc.createElement('img');image.alt=label;image.referrerPolicy='no-referrer';image.loading='lazy';image.style.cssText=avatars?'width:44px;height:44px;object-fit:cover;border-radius:50%':'width:100%;height:160px;object-fit:contain;border-radius:8px';image.onload=()=>fallback.remove();image.onerror=()=>image.remove();image.src=url.href;figure.prepend(image);}catch{/* Keep a readable fallback for invalid image URLs. */}}
+      const caption=doc.createElement('figcaption');caption.textContent=label;figure.append(caption);list.append(figure);
+    }
+    if(!items.length)list.textContent=avatars?'No people':'No images';
+    const close=doc.createElement('button');close.type='button';close.textContent='Close';close.onclick=()=>dialog.close();
+    dialog.append(title,list,close);root.append(dialog);dialog.addEventListener('close',()=>{dialog.remove();if(activeDialog===dialog)activeDialog=null;if(!destroyed)scroller.focus({preventScroll:true});});dialog.showModal();close.focus();return true;
   }
 
   function highlightSearch(x: number, y: number, width: number, height: number, row: number, col: number): void {
     if (!searchMatches.has(row * columns.length + col)) return;
-    context!.save(); context!.strokeStyle = '#d97706'; context!.lineWidth = 2;
-    context!.strokeRect(x + 3, y + 3, Math.max(0, width - 6), Math.max(0, height - 6)); context!.restore();
+    const current=row*columns.length+col===searchCurrent;
+    context!.save();context!.fillStyle=theme.searchHighlightColor;context!.globalAlpha=current ? .22 : .09;
+    context!.fillRect(x,y,Math.max(0,width-1),Math.max(0,height-1));context!.globalAlpha=1;
+    if(current)context!.fillRect(x,y,3,Math.max(0,height-1));context!.restore();
   }
 
   function viewport() {
     return engine.getViewport({ width: scroller.clientWidth, height: scroller.clientHeight, scrollLeft: scroller.scrollLeft, scrollTop: scroller.scrollTop });
   }
 
+  function positionRichEditor(maxHeight: number): void {
+    if (!richEditor || !editor) return;
+    for (const property of ['left', 'top', 'width'] as const) richEditor.style[property] = editor.style[property];
+    richEditor.style.height = '0px';
+    richEditor.style.height = `${Math.min(maxHeight, Math.max(parseFloat(editor.style.height), richEditor.scrollHeight + 4))}px`;
+    editor.style.height = richEditor.style.height;
+    if (editor.hasAttribute('aria-invalid')) richEditor.setAttribute('aria-invalid', 'true'); else richEditor.removeAttribute('aria-invalid');
+  }
   function positionEditor(): void {
     const selection = engine.getSelection();
     if (!editor || !selection) return;
     const rect = viewport().cellRect(selection.rowIndex, selection.columnIndex);
+    if (options.editorOptions?.pinned) {
+      const bounds = root.getBoundingClientRect();
+      editorAnchor ??= { left: bounds.left + indexWidth + rect.x, top: bounds.top + headerHeight + rect.y, width: rect.width, height: rect.height };
+      const left = Math.max(8, Math.min(editorAnchor.left, win.innerWidth - Math.min(editorAnchor.width, win.innerWidth - 16) - 8));
+      const top = Math.max(32, Math.min(editorAnchor.top, win.innerHeight - Math.min(editorAnchor.height, win.innerHeight - 48) - 16));
+      editorPane.style.position = 'fixed'; editorPane.style.overflow = 'visible'; editorPane.style.zIndex = '9'; editorPane.style.clipPath = '';
+      editorPane.style.left = `${left}px`; editorPane.style.top = `${top}px`; editorPane.style.width = `${Math.min(editorAnchor.width, win.innerWidth - left - 8)}px`; editorPane.style.height = `${Math.min(editorAnchor.height, win.innerHeight - top - 16)}px`;
+      editor.style.left = '0px'; editor.style.top = '0px'; editor.style.width = editorPane.style.width; editor.style.height = editorPane.style.height;
+      if (editor instanceof win.HTMLTextAreaElement && !richEditor) {
+        editor.style.height = '0px'; editor.style.height = `${Math.min(Math.max(editorAnchor.height, editor.scrollHeight + 4), win.innerHeight - top - 16)}px`;
+      }
+      positionRichEditor(win.innerHeight - top - 16);
+      const displaced=Math.abs(bounds.left+indexWidth+rect.x-editorAnchor.left)>.5 || Math.abs(bounds.top+headerHeight+rect.y-editorAnchor.top)>.5;
+      editorLabel.hidden = options.editorOptions.showLabel === false || options.editorOptions.showLabel === 'scroll' && !displaced;
+      if (choices && editor instanceof win.HTMLSelectElement) { choices.hidden = false; positionChoicePanel(choices, editor); }
+      if (editorError.style.display !== 'none') { editorError.style.position = 'fixed'; editorError.style.left = `${left}px`; editorError.style.top = `${Math.min(top + editor.offsetHeight + 4, win.innerHeight - editorError.offsetHeight - 8)}px`; editorError.style.maxWidth = `${win.innerWidth - left - 8}px`; editorError.style.visibility = 'visible'; }
+      return;
+    }
     const clip = rect.clip;
     editorPane.style.left = `${indexWidth + clip.x}px`;
     editorPane.style.top = `${headerHeight + clip.y}px`;
@@ -1279,10 +2411,11 @@ export function createGrid(options: GridOptions): Grid {
     editor.style.left = `${rect.x - clip.x}px`;
     editor.style.top = `${rect.y - clip.y}px`;
     editor.style.width = `${rect.width}px`;
-    editor.style.height = `${rect.height}px`;
+    editor.style.height = `${editor instanceof win.HTMLSelectElement && editor.multiple && !options.choiceEditor ? Math.min(220, Math.max(rect.height, editor.size * 24 + 8), Math.max(1, clip.height - Math.max(0, rect.y - clip.y))) : rect.height}px`;
     const hidden = rect.x + rect.width <= clip.x || rect.x >= clip.x + clip.width || rect.y + rect.height <= clip.y || rect.y >= clip.y + clip.height;
     editorPane.style.clipPath = hidden ? 'inset(100%)' : '';
-    if (editor instanceof win.HTMLTextAreaElement) {
+    if (choices && editor instanceof win.HTMLSelectElement) { choices.hidden = hidden; positionChoicePanel(choices, editor); }
+    if (editor instanceof win.HTMLTextAreaElement && !richEditor) {
       context!.save(); context!.font = theme.font;
       let width = rect.width;
       for (const line of editor.value.split('\n')) width = Math.max(width, context!.measureText(line).width + 24);
@@ -1291,6 +2424,7 @@ export function createGrid(options: GridOptions): Grid {
       editor.style.height = '0px';
       editor.style.height = `${Math.min(Math.max(rect.height, editor.scrollHeight + 4), Math.max(1, clip.height - Math.max(0, rect.y - clip.y)))}px`;
     }
+    positionRichEditor(Math.max(1, clip.height - Math.max(0, rect.y - clip.y)));
     if (editorError.style.display !== 'none') {
       editorError.style.maxWidth = `${clip.width}px`;
       editorError.style.visibility = hidden ? 'hidden' : 'visible';
@@ -1306,9 +2440,36 @@ export function createGrid(options: GridOptions): Grid {
     context!.clip();
   }
 
+  function accessibleText(row: number, col: number, value: unknown): string {
+    const column = columns[col]!; const label = options.getCellLabel?.(row, column.key, value);
+    if (label !== undefined) return label;
+    if(mediaColumn(column.key)){const items=mediaItems(value);return `${column.title}: ${items.length} ${avatarColumns.has(column.key)?'people':'images'}${items.length?'; '+items.map((item,i)=>item.name ?? item.alt ?? ((avatarColumns.has(column.key)?'Person ':'Image ')+(i+1))).join(', '):''}. Alt+Enter opens details.`;}
+    return `${column.title}: ${displayedText(value, column.key, engine.getFormat(row, col).contentFormat)}`;
+  }
+  function accessibleCell(row: number, col: number, value: unknown): HTMLElement {
+    const key = `${row}:${col}`;
+    let node = accessibleCells.get(key);
+    if (!node) { node = doc.createElement('div'); node.id = `acheron-visible-${instanceId}-${row}-${col}`; node.setAttribute('role', 'gridcell'); accessibleCells.set(key, node); }
+    node.setAttribute('aria-colindex', String(col + 1));
+    const span=engine.getMerge(row,col);
+    node.setAttribute('aria-rowspan',String(span?span.endRow-span.startRow+1:1));
+    node.setAttribute('aria-colspan',String(span?span.endColumn-span.startColumn+1:1));
+    const invalid = validationMessage(value,col);node.setAttribute('aria-invalid',String(!!invalid));
+    node.setAttribute('aria-readonly', String(!engine.canEdit(row, col)));
+    node.setAttribute('aria-selected', String(getSelectionRanges().some(range => row >= range.startRow && row <= range.endRow && col >= range.startColumn && col <= range.endColumn)));
+    node.setAttribute('aria-description', [...stateLabels(row, col), ...(invalid ? [invalid] : []), ...(linksForValue(value, columns[col]!.key, engine.getFormat(row, col).contentFormat).length ? ['Contains links. Alt+Enter opens links.'] : [])].join('; '));
+    node.textContent = accessibleText(row, col, value);
+    return node;
+  }
   function draw(): void {
+    rowLockCache.clear();
     frame = undefined;
     if (destroyed) return;
+    if (options.autoRowHeight && !editor && !resizing) for (const row of visibleIndices('row')) {
+      if (engine.isRowHeightManual(row) || measuredRows.has(row)) continue;
+      const height = measureRowHeight(row, true); measuredRows.add(row);
+      if (height !== rowAxis.size(row)) engine.measureRowHeight(row, height);
+    }
     const view = viewport();
     if (!fullDraw) {
       for (const change of dirty.values()) {
@@ -1324,6 +2485,7 @@ export function createGrid(options: GridOptions): Grid {
         context!.rect(rect.x, headerHeight + rect.y, rect.width, rect.height);
         context!.clip();
         const value = engine.getValue(change.rowIndex, change.columnKey);
+        if (viewportAccessibility) accessibleCell(change.rowIndex, col, value);
         cell(value, rect.x, headerHeight + rect.y, rect.width, rect.height, false, change.rowIndex, col);
         drawSelection(view.regions);
         context!.restore();
@@ -1332,12 +2494,16 @@ export function createGrid(options: GridOptions): Grid {
       return;
     }
     fullDraw = false;
+    const pendingAccessible: { row: number; col: number; value: unknown }[] = [];
+    const accessibleRows = new Map<number, HTMLElement>(); const seenCells = new Set<string>(); const headerNodes: HTMLElement[] = [];
     visibleImages.clear();
     dirty.clear();
     const ratio = win.devicePixelRatio || 1;
     const height = Math.min(root.clientHeight, view.height + headerHeight);
-    canvas.width = Math.max(0, Math.round(view.width * ratio));
-    canvas.height = Math.max(0, Math.round(height * ratio));
+    const pixelWidth = Math.max(0, Math.round(view.width * ratio));
+    const pixelHeight = Math.max(0, Math.round(height * ratio));
+    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
     canvas.style.width = `${view.width}px`;
     canvas.style.height = `${height}px`;
     context!.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -1345,11 +2511,15 @@ export function createGrid(options: GridOptions): Grid {
     for (const region of view.regions) {
       context!.save();
       clipRegion(region);
+      const painted=new Set<string>();
       for (let row = region.rows.start; row < region.rows.end; row++) {
         for (let col = region.columns.start; col < region.columns.end; col++) {
-          const value = engine.getValue(row, columns[col]!.key);
-          cell(value, columnAxis.position(col) + region.offsetX,
-            headerHeight + rowAxis.position(row) + region.offsetY, columnAxis.size(col), rowAxis.size(row), false, row, col);
+          const span=engine.getMerge(row,col),paintRow=span?.startRow??row,paintCol=span?.startColumn??col;
+          const key=`${paintRow}:${paintCol}`;if(painted.has(key))continue;painted.add(key);
+          const rect=view.cellRect(paintRow,paintCol);
+          const value = engine.getValue(paintRow, columns[paintCol]!.key);
+          if (viewportAccessibility) pendingAccessible.push({ row: paintRow, col: paintCol, value });
+          cell(value, rect.x, headerHeight+rect.y,rect.width,rect.height,false,paintRow,paintCol);
         }
       }
       context!.restore();
@@ -1366,8 +2536,69 @@ export function createGrid(options: GridOptions): Grid {
       context!.beginPath();
       context!.rect(band.x, 0, band.width, headerHeight);
       context!.clip();
-      for (let col = band.start; col < band.end; col++) cell(columns[col]!.title, columnAxis.position(col) + band.offset, 0, columnAxis.size(col), headerHeight, true, 0, col);
+      for (let col = band.start; col < band.end; col++) {
+        const layout = leafHeaders[col]!;
+        cell(columns[col]!.title, columnAxis.position(col) + band.offset, layout.level * headerRowHeight, columnAxis.size(col), layout.rowSpan * headerRowHeight, true, 0, col);
+        const header = doc.createElement('div'); header.dataset.gridHeaderCell = String(col); header.tabIndex = 0;
+        header.setAttribute('role', viewportAccessibility ? 'columnheader' : 'button'); header.setAttribute('aria-label', viewportAccessibility ? columns[col]!.title : `Select column ${columns[col]!.title}`);
+        header.addEventListener('keydown', event => {
+          if (event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey) { event.preventDefault(); const bounds = header.getBoundingClientRect(); openMenu(0, col, bounds.left, bounds.bottom, true); }
+          else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (rowCount && finishEdit(true)) { startAxisSelection('column', col, event); scroller.focus({ preventScroll: true }); } }
+        });
+        header.style.cssText = `position:absolute;left:${Math.max(band.x, columnAxis.position(col) + band.offset)}px;top:${layout.level * headerRowHeight}px;width:${Math.max(0, Math.min(band.x + band.width, columnAxis.position(col + 1) + band.offset) - Math.max(band.x, columnAxis.position(col) + band.offset))}px;height:${layout.rowSpan * headerRowHeight}px`;
+        header.dataset.headerLevel = String(layout.level);
+        header.setAttribute('aria-rowspan', String(layout.rowSpan));
+        if (viewportAccessibility) { header.setAttribute('role', 'columnheader'); header.setAttribute('aria-colindex', String(col + 1)); header.setAttribute('aria-label', columns[col]!.title); header.setAttribute('aria-description', stateLabels(null, col).join('; ')); const sort = currentView?.sort; header.setAttribute('aria-sort', sort?.columnKey === columns[col]!.key ? sort.direction === 'asc' ? 'ascending' : 'descending' : 'none'); }
+        reorderHandle(header, 'column', col);
+        headerNodes.push(header);
+      }
+      for (const group of headers.cells.filter(cell => !cell.leaf && cell.start < band.end && cell.end > band.start)) {
+        const x = columnAxis.position(group.start) + band.offset;
+        const width = columnAxis.position(group.end) - columnAxis.position(group.start);
+        const y = group.level * headerRowHeight;
+        context!.fillStyle = theme.headerBackground; context!.fillRect(x, y, width, headerRowHeight);
+        const activeColumn = engine.getSelection()?.columnIndex;
+        if (activeColumn !== undefined && activeColumn >= group.start && activeColumn < group.end || getSelectionRanges().some(range => range.startRow === 0 && range.endRow === rowCount - 1 && range.startColumn < group.end && range.endColumn >= group.start)) {
+          context!.save(); context!.globalAlpha = headerTintOpacity; context!.fillStyle = theme.selectionColor; context!.fillRect(x, y, width, headerRowHeight); context!.restore();
+        }
+        context!.strokeStyle = theme.gridLineColor; context!.lineWidth = 1; context!.beginPath();
+        context!.moveTo(x+width-.5,y);context!.lineTo(x+width-.5,y+headerRowHeight-.5);context!.lineTo(x,y+headerRowHeight-.5);context!.stroke();
+        context!.save(); context!.beginPath(); context!.rect(x + 6, y, Math.max(0, width - 12), headerRowHeight); context!.clip();
+        context!.font = theme.headerFont; context!.fillStyle = theme.headerTextColor; context!.textAlign = 'center'; context!.textBaseline = 'middle';
+        context!.fillText(group.title, (Math.max(band.x, x) + Math.min(band.x + band.width, x + width)) / 2, y + headerRowHeight / 2); context!.restore();
+        const node = doc.createElement('div'); node.dataset.gridHeaderGroup = group.title; node.dataset.headerLevel = String(group.level);
+        node.setAttribute('role', 'columnheader'); node.setAttribute('aria-label', group.title); node.setAttribute('aria-colindex', String(group.start + 1)); node.setAttribute('aria-colspan', String(group.end - group.start));
+        node.style.cssText = `position:absolute;left:${Math.max(band.x, x)}px;top:${y}px;width:${Math.max(0, Math.min(band.x + band.width, x + width) - Math.max(band.x, x))}px;height:${headerRowHeight}px`;
+        node.tabIndex = 0; node.dataset.groupStart = String(group.start); node.dataset.groupEnd = String(group.end - 1);
+        node.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectHeaderGroup(group.start, group.end - 1, event); } });
+        reorderHandle(node, 'column', group.start, group.end - 1);
+        headerNodes.push(node);
+      }
       context!.restore();
+    }
+    const focusedHeader = headerSurface.contains(doc.activeElement) ? (doc.activeElement as HTMLElement).dataset.gridHeaderCell : undefined;
+    const focusedGroup = headerSurface.contains(doc.activeElement) ? (doc.activeElement as HTMLElement).dataset.gridHeaderGroup : undefined;
+    const focusedGroupStart = headerSurface.contains(doc.activeElement) ? (doc.activeElement as HTMLElement).dataset.groupStart : undefined;
+    if (viewportAccessibility && headers.levels > 1) {
+      const rows = Array.from({ length: headers.levels }, (_, level) => {
+        const row = doc.createElement('div'); row.setAttribute('role', 'row'); row.setAttribute('aria-rowindex', String(level + 1));
+        row.append(...headerNodes.filter(node => Number(node.dataset.headerLevel) === level)); return row;
+      });
+      headerSurface.replaceChildren(...rows);
+    } else headerSurface.replaceChildren(...headerNodes);
+    if (focusedHeader !== undefined) headerNodes.find(node => node.dataset.gridHeaderCell === focusedHeader)?.focus({ preventScroll: true });
+    else if(focusedGroup!==undefined)headerNodes.find(node=>node.dataset.gridHeaderGroup===focusedGroup&&node.dataset.groupStart===focusedGroupStart)?.focus({preventScroll:true});
+    for (const { row, col, value } of pendingAccessible) {
+      let rowNode = accessibleRows.get(row);
+      if (!rowNode) { rowNode = doc.createElement('div'); rowNode.setAttribute('role', 'row'); rowNode.setAttribute('aria-rowindex', String(row + headers.levels + 1)); accessibleRows.set(row, rowNode); }
+      seenCells.add(`${row}:${col}`); rowNode.append(accessibleCell(row, col, value));
+    }
+    if (viewportAccessibility) {
+      for (const key of accessibleCells.keys()) if (!seenCells.has(key)) accessibleCells.delete(key);
+      accessibleBody.replaceChildren(...[...accessibleRows.entries()].sort(([a], [b]) => a - b).map(([, row]) => row));
+      const selection = engine.getSelection(); const node = selection && accessibleCells.get(`${selection.rowIndex}:${selection.columnIndex}`);
+      if (node) { activeRow.hidden = true; scroller.setAttribute('aria-activedescendant', node.id); }
+      else if (selection) { activeRow.hidden = false; scroller.setAttribute('aria-activedescendant', activeCell.id); }
     }
     drawIndex();
     releaseUnusedImages();
@@ -1386,17 +2617,22 @@ export function createGrid(options: GridOptions): Grid {
   function rowLabels(row: number): string[] {
     const labels: string[] = [];
     if (engine.isLocked({ scope: 'table' })) labels.push('Table locked');
-    if (engine.isLocked({ scope: 'row', rowIndex: row })) labels.push('Row locked');
+    if (rowValueLocked(row)) labels.push('Row locked');
     if (row < engine.frozenRows) labels.push('Row frozen');
     return labels;
   }
 
   function drawIndex(): void {
     if (!indexWidth) return;
+    const outline=engine.getRowGroups();
+    const depths=new Map(outline.map(group=>[group.id,outline.filter(other=>other.id!==group.id&&other.startRow<=group.startRow&&other.endRow>=group.endRow).length]));
+    const levels=outline.reduce((max,group)=>Math.max(max,depths.get(group.id)!+1),0);
     const view = viewport(); const range = getSelectionRange();
     indexGutter.style.height = `${headerHeight + view.height}px`;
-    const corner = doc.createElement('div'); corner.textContent = '#'; corner.title = 'Row index';
-    corner.style.cssText = `height:${headerHeight}px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--acheron-grid-line-color);box-sizing:border-box`;
+    const corner = doc.createElement('button'); corner.type = 'button'; corner.tabIndex = -1; corner.textContent = '#'; corner.title = 'Select all cells'; corner.setAttribute('aria-label', 'Select all cells'); corner.disabled = !rowCount || !columns.length;
+    corner.setAttribute('aria-pressed', String(!!range && range.startRow === 0 && range.endRow === rowCount - 1 && range.startColumn === 0 && range.endColumn === columns.length - 1));
+    corner.addEventListener('click', event => { if (event.detail === 0) { selectAll(); scroller.focus({ preventScroll: true }); } });
+    corner.style.cssText = `width:100%;padding:0;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;height:${headerHeight}px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--acheron-grid-line-color);border-right:1px solid var(--acheron-grid-line-color);box-sizing:border-box`;
     const children: HTMLElement[] = [corner];
     const fixed = rowAxis.range(0, view.frozenHeight);
     const moving = rowAxis.range(rowAxis.position(engine.frozenRows) + view.scrollTop, view.height - view.frozenHeight);
@@ -1409,26 +2645,169 @@ export function createGrid(options: GridOptions): Grid {
       pane.style.cssText = `position:absolute;left:0;top:${headerHeight + band.y}px;width:100%;height:${band.height}px;overflow:hidden`;
       for (let row = band.start; row < band.end; row++) {
         const button = doc.createElement('button'); button.type = 'button'; button.tabIndex = -1;
-        button.textContent = String(row + 1); button.setAttribute('aria-label', `Select row ${row + 1}`);
+        const sourceIndex=engine.getRowSourceIndex(row);
+        button.textContent = String(sourceIndex + 1); button.setAttribute('aria-label', `Select row ${sourceIndex + 1}`);
         const labels = rowLabels(row); const locked = labels.includes('Row locked');
-        button.title = [`Select row ${row + 1}`, ...labels].join('; ');
+        button.title = [`Select row ${sourceIndex + 1}`, ...labels].join('; ');
         button.setAttribute('aria-description', labels.join('; '));
         if (locked) {
           const icon = rowLockSvg.cloneNode(true) as Element;
           icon.setAttribute('width', '12'); icon.setAttribute('height', '12'); icon.setAttribute('aria-hidden', 'true');
-          icon.setAttribute('style', 'position:absolute;right:3px;top:4px;pointer-events:none');
+          icon.setAttribute('style', 'position:absolute;right:3px;top:4px;pointer-events:none;color:var(--acheron-icon-color)');
           button.append(doc.importNode(icon, true));
         }
-        const selected = !!range && range.startColumn === 0 && range.endColumn === columns.length - 1 && row >= range.startRow && row <= range.endRow;
+        const selected = getSelectionRanges().some(range => range.startColumn === 0 && range.endColumn === columns.length - 1 && row >= range.startRow && row <= range.endRow);
         button.setAttribute('aria-pressed', String(selected));
-        button.style.cssText = `position:absolute;left:0;top:${rowAxis.position(row) + band.offset - band.y}px;width:100%;height:${rowAxis.size(row)}px;box-sizing:border-box;border:0;border-right:1px solid var(--acheron-grid-line-color);border-bottom:1px solid var(--acheron-grid-line-color);background:var(--acheron-header-background);color:inherit;font:inherit;cursor:pointer;${selected ? 'box-shadow:inset 0 0 0 9999px color-mix(in srgb,var(--acheron-selection-color) 16%,transparent)' : ''}`;
-        if (locked) { button.style.background = 'color-mix(in srgb,var(--acheron-header-text-color) 8%,var(--acheron-header-background))'; button.style.padding = '0 16px 0 2px'; }
+        button.style.cssText = `position:absolute;left:0;top:${rowAxis.position(row) + band.offset - band.y}px;width:100%;height:${rowAxis.size(row)}px;box-sizing:border-box;border:0;border-right:1px solid var(--acheron-grid-line-color);border-bottom:1px solid var(--acheron-grid-line-color);background:var(--acheron-header-background);color:inherit;font:inherit;cursor:pointer;${selected || engine.getSelection()?.rowIndex === row ? 'box-shadow:inset 0 0 0 9999px color-mix(in srgb,var(--acheron-selection-color) 16%,transparent)' : ''}`;
+        if (locked) { button.style.background = 'color-mix(in srgb,var(--acheron-header-text-color) 12%,var(--acheron-header-background))'; button.style.padding = '0 16px 0 2px'; }
         button.addEventListener('click', event => { if (event.detail === 0 && finishEdit(true)) { selectRow(row); scroller.focus({ preventScroll: true }); } });
+        const resizeHandle = doc.createElement('span');
+        resizeHandle.dataset.gridRowResize = String(row);
+        resizeHandle.setAttribute('aria-hidden', 'true');
+        resizeHandle.title = 'Drag to resize row; double-click to fit';
+        resizeHandle.style.cssText = 'position:absolute;bottom:0;left:0;width:100%;height:5px;cursor:row-resize';
+        button.append(resizeHandle);
+        reorderHandle(button, 'row', row);
         pane.append(button);
+        if(outline.length)button.style.paddingLeft=`${levels*24}px`;
+        for(const group of outline.filter(group=>!group.collapsed&&group.startRow<=sourceIndex&&group.endRow>=sourceIndex)){
+          const depth=depths.get(group.id)!;
+          const line=doc.createElement('span');line.setAttribute('aria-hidden','true');line.style.cssText=`position:absolute;left:${depth*24+12}px;top:${rowAxis.position(row)+band.offset-band.y+(group.startRow===sourceIndex?rowAxis.size(row)/2+10:0)}px;width:6px;height:${group.startRow===sourceIndex?Math.max(0,rowAxis.size(row)/2-10):group.endRow===sourceIndex?rowAxis.size(row)/2:rowAxis.size(row)}px;box-sizing:border-box;border-left:1px solid color-mix(in srgb,var(--acheron-icon-color) 35%,var(--acheron-grid-line-color));${group.endRow===sourceIndex?'border-bottom:1px solid var(--acheron-grid-line-color);border-bottom-left-radius:4px;':''}pointer-events:none;transform-origin:top`;pane.append(line);
+          if(enteringGroups.has(group.id)&&motionEnabled())line.animate([{opacity:0,transform:'scaleY(.6)'},{opacity:1,transform:'scaleY(1)'}],{duration:180,easing:'cubic-bezier(.22,1,.36,1)'});
+        }
+        for(const group of outline.filter(group=>group.startRow===sourceIndex).sort((a,b)=>b.endRow-a.endRow)) {
+          const depth=depths.get(group.id)!;
+          const toggle=doc.createElement('button');toggle.type='button';toggle.dataset.gridRowGroup=group.id;
+          toggle.setAttribute('aria-label',`${group.collapsed?'Expand':'Collapse'} rows ${group.startRow+1}–${group.endRow+1}`);toggle.setAttribute('aria-expanded',String(!group.collapsed));
+          toggle.disabled=!engine.canChangeLayout({kind:group.collapsed?'expand':'collapse',group});
+          toggle.title=toggle.getAttribute('aria-label')!+' · '+(group.endRow-group.startRow+1)+' rows';const glyph=svgIcon('chevron-down');if(group.collapsed)glyph.setAttribute('style','transform:rotate(-90deg)');glyph.setAttribute('width','12');glyph.setAttribute('height','12');toggle.append(glyph);
+          toggle.style.cssText=`position:absolute;left:${depth*24+3}px;top:${rowAxis.position(row)+band.offset-band.y+Math.max(0,(rowAxis.size(row)-20)/2)}px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;padding:2px;border:0;border-radius:6px;background:color-mix(in srgb,var(--acheron-icon-color) 7%,var(--acheron-header-background));color:var(--acheron-header-text-color);cursor:pointer`;
+          if (enteringGroups.has(group.id) && motionEnabled()) toggle.animate([{opacity:0,transform:'scale(.8)'},{opacity:1,transform:'scale(1)'}],{duration:180,easing:'cubic-bezier(.22,1,.36,1)'});
+          toggle.addEventListener('pointerdown',event=>{event.stopPropagation();});
+          toggle.addEventListener('click',event=>{event.stopPropagation();try{structureAction(()=>engine.setGroupCollapsed(group.id,!group.collapsed), 'row');}catch(error){actionError.textContent=error instanceof Error?error.message:'Unable to toggle row group.';actionError.style.display='block';}});
+          pane.append(toggle);
+        }
       }
       children.push(pane);
     }
     indexGutter.replaceChildren(...children);
+    enteringGroups.clear();
+  }
+
+  let reorderDrag: { axis: 'row' | 'column'; indices: number[] } | null = null;
+  let touchReorder:{pointerId:number;startX:number;startY:number;moved:boolean;beforeIndex:number}|null=null;
+  const reorderGuide = doc.createElement('div');
+  reorderGuide.dataset.gridReorderGuide = '';
+  reorderGuide.setAttribute('aria-hidden', 'true');
+  reorderGuide.style.cssText = 'display:none;position:absolute;pointer-events:none;z-index:8;background:var(--acheron-selection-color);box-shadow:0 0 0 1px var(--acheron-background)';
+  const reorderBadge = doc.createElement('div');
+  reorderBadge.dataset.gridReorderBadge = '';
+  reorderBadge.setAttribute('aria-hidden', 'true');
+  reorderBadge.style.cssText = 'display:none;position:absolute;pointer-events:none;z-index:9;padding:6px 10px;border:1px solid var(--acheron-grid-line-color);border-radius:5px;background:var(--acheron-background);color:var(--acheron-text-color);box-shadow:0 3px 10px #0002;font:12px system-ui;white-space:nowrap';
+  root.append(reorderGuide, reorderBadge);
+  function clearReorder(): void {
+    const pointer=touchReorder?.pointerId;touchReorder=null;
+    if(pointer!==undefined){dragPointer=null;dragPosition=null;if(dragFrame!==undefined)win.cancelAnimationFrame(dragFrame);dragFrame=undefined;if(root.hasPointerCapture(pointer))root.releasePointerCapture(pointer);}
+    reorderDrag = null; reorderGuide.style.display = reorderBadge.style.display = 'none';
+    root.style.cursor = '';
+  }
+  function reorderTarget(event: DragEvent, node: HTMLElement, axis: 'row' | 'column', first: number, last: number): number {
+    const bounds = node.getBoundingClientRect();
+    return (axis === 'row' ? event.clientY > bounds.top + bounds.height / 2 : event.clientX > bounds.left + bounds.width / 2) ? last + 1 : first;
+  }
+
+  function previewReorder(event:Pick<MouseEvent,'clientX'|'clientY'>,axis:'row'|'column',first:number,last:number,bounds:DOMRect):{beforeIndex:number;allowed:boolean} {
+    const beforeIndex=(axis==='row'?event.clientY>bounds.top+bounds.height/2:event.clientX>bounds.left+bounds.width/2)?last+1:first;
+    reorderBadge.style.display='block';
+    const request=Object.freeze({axis,indices:Object.freeze([...reorderDrag!.indices]),beforeIndex});
+    let allowed=false;try{allowed=options.canReorder?.(request)!==false;}catch{allowed=false;}
+      const origin = root.getBoundingClientRect();
+      const after = beforeIndex === last + 1;
+      const edge = axis === 'row' ? (after ? bounds.bottom : bounds.top) - origin.top : (after ? bounds.right : bounds.left) - origin.left;
+      reorderGuide.style.display = allowed ? 'block' : 'none';
+      reorderGuide.style.left = axis === 'row' ? '0px' : `${Math.max(0, Math.min(root.clientWidth - 2, edge - 1))}px`;
+      reorderGuide.style.top = axis === 'column' ? '0px' : `${Math.max(0, Math.min(root.clientHeight - 2, edge - 1))}px`;
+      reorderGuide.style.width = axis === 'row' ? `${root.clientWidth}px` : '2px';
+      reorderGuide.style.height = axis === 'column' ? `${root.clientHeight}px` : '2px';
+      reorderBadge.textContent = allowed ? `Move ${reorderDrag!.indices.length} ${axis}${reorderDrag!.indices.length > 1 ? 's' : ''} · ${after ? 'after' : 'before'} ${last === first ? first + 1 : `${first + 1}–${last + 1}`}` : 'Moving here is disabled';
+      reorderBadge.style.left = `${Math.max(4, Math.min(root.clientWidth - reorderBadge.offsetWidth - 4, event.clientX - origin.left + 14))}px`;
+      reorderBadge.style.top = `${Math.max(4, Math.min(root.clientHeight - reorderBadge.offsetHeight - 4, event.clientY - origin.top + 14))}px`;
+    reorderBadge.style.display='block';return {beforeIndex,allowed};
+  }
+  function startTouchReorder(event:PointerEvent,node:HTMLElement):void {
+    if(!finishEdit(true))return;
+    event.preventDefault();event.stopPropagation();onPointerEnd();closeMenu();clearChoiceHover();
+    const axis=node.dataset.gridReorder as 'row'|'column',first=Number(node.dataset.reorderFirst),last=Number(node.dataset.reorderLast);
+    const indices=first===last?selectedAxisIndices(axis,first):Array.from({length:last-first+1},(_,i)=>first+i);
+    reorderDrag={axis,indices};touchReorder={pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,moved:false,beforeIndex:first};
+    dragPointer=event.pointerId;dragPosition=event;root.setPointerCapture(event.pointerId);scroller.focus({preventScroll:true});root.style.cursor='grabbing';
+  }
+  function updateTouchReorder(position:Pick<MouseEvent,'clientX'|'clientY'>):void {
+    if(!touchReorder||!reorderDrag)return;
+    if(!touchReorder.moved && Math.hypot(position.clientX-touchReorder.startX,position.clientY-touchReorder.startY)<6)return;
+    touchReorder.moved=true;
+    const bounds=scroller.getBoundingClientRect(),view=viewport();
+    const hit=view.hitTest(Math.max(0,Math.min(view.width-.1,position.clientX-bounds.left)),Math.max(0,Math.min(view.height-.1,position.clientY-bounds.top)));
+    if(!hit)return;
+    const rect=view.cellRect(hit.row,hit.col),index=reorderDrag.axis==='row'?hit.row:hit.col;
+    touchReorder.beforeIndex=previewReorder(position,reorderDrag.axis,index,index,new win.DOMRect(bounds.left+rect.x,bounds.top+rect.y,rect.width,rect.height)).beforeIndex;
+  }
+  function commitTouchReorder(event:PointerEvent):void {
+    if(event.pointerId!==touchReorder?.pointerId||!reorderDrag)return;
+    event.preventDefault();event.stopPropagation();updateTouchReorder(event);
+    const request=Object.freeze({axis:reorderDrag.axis,indices:Object.freeze([...reorderDrag.indices]),beforeIndex:touchReorder.beforeIndex}),moved=touchReorder.moved;
+    clearReorder();
+    if(!moved)return;
+    try{if(options.canReorder?.(request)!==false)options.onReorder?.(request);}catch(error){actionError.textContent=error instanceof Error?error.message:'Unable to move items.';actionError.style.display='block';}
+  }
+
+  function reorderHandle(node: HTMLElement, axis: 'row' | 'column', first: number, last = first): void {
+    if (!options.onReorder) return;
+    const handle = node;
+    handle.dataset.gridReorder = axis;
+    handle.dataset.reorderFirst=String(first);handle.dataset.reorderLast=String(last);
+    const selectedAxis = getSelectionRanges().some(range => axis === 'row'
+      ? range.startColumn === 0 && range.endColumn === columns.length - 1 && first >= range.startRow && last <= range.endRow
+      : range.startRow === 0 && range.endRow === rowCount - 1 && first >= range.startColumn && last <= range.endColumn);
+    handle.draggable = selectedAxis;
+    if (selectedAxis) { handle.style.cursor = 'grab'; handle.title = 'Drag selected items to move; Alt+arrow moves one position'; }
+    handle.addEventListener('dragstart', event => {
+      if (!selectedAxis || !finishEdit(true)) { event.preventDefault(); return; }
+      const indices = first === last ? selectedAxisIndices(axis, first) : Array.from({ length: last - first + 1 }, (_, i) => first + i);
+      reorderDrag = { axis, indices };
+      reorderBadge.textContent = `Move ${indices.length} ${axis}${indices.length > 1 ? 's' : ''}`;
+      reorderBadge.style.display = 'block'; reorderBadge.style.left = '8px'; reorderBadge.style.top = '8px';
+      root.style.cursor = 'grabbing';
+      if (event.dataTransfer) {
+        event.dataTransfer.setData('text/plain', `Move ${axis}`); event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setDragImage(reorderBadge, 16, 14);
+      }
+    });
+    handle.addEventListener('keydown', event => {
+      const backward = axis === 'row' ? 'ArrowUp' : 'ArrowLeft'; const forward = axis === 'row' ? 'ArrowDown' : 'ArrowRight';
+      if (!selectedAxis || !event.altKey || (event.key !== backward && event.key !== forward)) return;
+      event.preventDefault(); event.stopPropagation(); if (!finishEdit(true)) return;
+      const beforeIndex = event.key === backward ? Math.max(0, first - 1) : Math.min(axis === 'row' ? rowCount : columns.length, last + 2);
+      const request = Object.freeze({ axis, indices: Object.freeze(Array.from({ length: last - first + 1 }, (_, i) => first + i)), beforeIndex });
+      try { if (options.canReorder?.(request) !== false) options.onReorder?.(request); } catch (error) { actionError.textContent = error instanceof Error ? error.message : 'Unable to move items.'; actionError.style.display = 'block'; }
+    });
+    handle.addEventListener('dragend', clearReorder);
+    node.addEventListener('dragover',event=>{
+      if(reorderDrag?.axis!==axis)return;event.preventDefault();
+      const preview=previewReorder(event,axis,first,last,node.getBoundingClientRect());
+      if(event.dataTransfer)event.dataTransfer.dropEffect=preview.allowed?'move':'none';
+    });
+    node.addEventListener('dragleave', event => {
+      if (!(event.relatedTarget instanceof win.Node) || !node.contains(event.relatedTarget)) reorderGuide.style.display = 'none';
+    });
+    node.addEventListener('drop', event => {
+      if (reorderDrag?.axis !== axis) return;
+      event.preventDefault(); event.stopPropagation();
+      const request = Object.freeze({ axis, indices: Object.freeze([...reorderDrag.indices]), beforeIndex: reorderTarget(event, node, axis, first, last) });
+      clearReorder();
+      try { if (options.canReorder?.(request) === false) return; options.onReorder?.(request); }
+      catch (error) { actionError.textContent = error instanceof Error ? error.message : 'Unable to move items.'; actionError.style.display = 'block'; }
+    });
   }
 
   function releaseUnusedImages(): void {
@@ -1439,24 +2818,44 @@ export function createGrid(options: GridOptions): Grid {
 
   function drawSelection(regions: readonly ViewportRegion[]): void {
     const selection = engine.getSelection();
-    const ranges = getSelectionRanges();
+    const original = getSelectionRanges();
+    const ranges: SelectionRange[] = [];
+    for (const axis of ['row', 'column'] as const) {
+      const full = (range: SelectionRange) => axis === 'row'
+        ? range.startColumn === 0 && range.endColumn === columns.length - 1
+        : range.startRow === 0 && range.endRow === rowCount - 1 && !(range.startColumn === 0 && range.endColumn === columns.length - 1);
+      const start = axis === 'row' ? 'startRow' : 'startColumn';
+      const end = axis === 'row' ? 'endRow' : 'endColumn';
+      const merged: SelectionRange[] = [];
+      for (const range of original.filter(full).map(range => ({ ...range })).sort((a, b) => a[start] - b[start])) {
+        const previous = merged.at(-1);
+        if (previous && range[start] <= previous[end] + 1) previous[end] = Math.max(previous[end], range[end]);
+        else merged.push(range);
+      }
+      ranges.push(...merged);
+    }
+    ranges.push(...original.filter(range => !(range.startColumn === 0 && range.endColumn === columns.length - 1) && !(range.startRow === 0 && range.endRow === rowCount - 1)));
     if (!selection || !ranges.length) return;
+    const activeScope = original.some(range => selection.rowIndex >= range.startRow && selection.rowIndex <= range.endRow && selection.columnIndex >= range.startColumn && selection.columnIndex <= range.endColumn && (range.startColumn === 0 && range.endColumn === columns.length - 1 || range.startRow === 0 && range.endRow === rowCount - 1));
     for (const region of regions) {
       context!.save();
       clipRegion(region);
       context!.strokeStyle = theme.selectionColor;
-      context!.lineWidth = 2;
-      for (const range of ranges) context!.strokeRect(columnAxis.position(range.startColumn) + region.offsetX + 1,
-        headerHeight + rowAxis.position(range.startRow) + region.offsetY + 1,
-        Math.max(0, columnAxis.position(range.endColumn + 1) - columnAxis.position(range.startColumn) - 2),
-        Math.max(0, rowAxis.position(range.endRow + 1) - rowAxis.position(range.startRow) - 2));
-      if (ranges.length > 1 || ranges[0]!.startRow !== ranges[0]!.endRow || ranges[0]!.startColumn !== ranges[0]!.endColumn) {
-        // The active cell belongs to only one pane; never project it into another.
-        if (selection.rowIndex >= region.rows.start && selection.rowIndex < region.rows.end && selection.columnIndex >= region.columns.start && selection.columnIndex < region.columns.end) {
-          context!.strokeRect(columnAxis.position(selection.columnIndex) + region.offsetX + 1,
-            headerHeight + rowAxis.position(selection.rowIndex) + region.offsetY + 1,
-            Math.max(0, columnAxis.size(selection.columnIndex) - 2), Math.max(0, rowAxis.size(selection.rowIndex) - 2));
-        }
+      context!.lineWidth = rangeBorderWidth;
+      for (const range of ranges) {
+        if (!activeScope && range.startRow === range.endRow && range.startColumn === range.endColumn && range.startRow === selection.rowIndex && range.startColumn === selection.columnIndex) continue;
+        context!.strokeRect(columnAxis.position(range.startColumn) + region.offsetX + rangeBorderWidth / 2,
+        headerHeight + rowAxis.position(range.startRow) + region.offsetY + rangeBorderWidth / 2,
+        Math.max(0, columnAxis.position(range.endColumn + 1) - columnAxis.position(range.startColumn) - rangeBorderWidth),
+        Math.max(0, rowAxis.position(range.endRow + 1) - rowAxis.position(range.startRow) - rangeBorderWidth));
+      }
+      // Draw the active cell once in its own pane, above semantic cell colors.
+      if (!activeScope && (options.selectionStyle?.activeCellBorderInRange || !getSelectionRanges().some(range => (range.startRow !== range.endRow || range.startColumn !== range.endColumn) && selection.rowIndex >= range.startRow && selection.rowIndex <= range.endRow && selection.columnIndex >= range.startColumn && selection.columnIndex <= range.endColumn)) && !engine.getMerge(selection.rowIndex,selection.columnIndex) && selection.rowIndex >= region.rows.start && selection.rowIndex < region.rows.end && selection.columnIndex >= region.columns.start && selection.columnIndex < region.columns.end) {
+        const x = columnAxis.position(selection.columnIndex) + region.offsetX;
+        const y = headerHeight + rowAxis.position(selection.rowIndex) + region.offsetY;
+        const width = columnAxis.size(selection.columnIndex); const height = rowAxis.size(selection.rowIndex);
+        context!.strokeStyle = theme.selectionColor; context!.lineWidth = activeBorderWidth;
+        context!.strokeRect(x + activeBorderWidth / 2, y + activeBorderWidth / 2, Math.max(0, width - activeBorderWidth), Math.max(0, height - activeBorderWidth));
       }
       context!.restore();
     }
@@ -1475,16 +2874,18 @@ export function createGrid(options: GridOptions): Grid {
       return;
     }
     const value = engine.getValue(selection.rowIndex, selection.columnKey);
-    const text = value == null ? '' : String(value);
-    const title = columns[selection.columnIndex]!.title;
-    activeRow.setAttribute('aria-rowindex', String(selection.rowIndex + 1));
+    activeRow.setAttribute('aria-rowindex', String(selection.rowIndex + (viewportAccessibility ? headers.levels + 1 : 1)));
     activeCell.setAttribute('aria-colindex', String(selection.columnIndex + 1));
+    const span=engine.getMerge(selection.rowIndex,selection.columnIndex);
+    activeCell.setAttribute('aria-rowspan',String(span?span.endRow-span.startRow+1:1));
+    activeCell.setAttribute('aria-colspan',String(span?span.endColumn-span.startColumn+1:1));
     activeCell.setAttribute('aria-readonly', String(!engine.canEdit(selection.rowIndex, selection.columnIndex)));
-    const content = `${title}: ${text}`;
-    activeCell.setAttribute('aria-description', stateLabels(selection.rowIndex, selection.columnIndex).join('; '));
+    const content = accessibleText(selection.rowIndex, selection.columnIndex, value);
+    activeCell.setAttribute('aria-description', [...stateLabels(selection.rowIndex, selection.columnIndex), ...(linksForValue(value, selection.columnKey, engine.getFormat(selection.rowIndex, selection.columnIndex).contentFormat).length ? ['Contains links. Alt+Enter opens links.'] : [])].join('; '));
     if (activeCell.textContent !== content) activeCell.textContent = content;
     scroller.setAttribute('aria-activedescendant', activeCell.id);
-    scroller.setAttribute('aria-label', `${viewportLabel}: row ${selection.rowIndex + 1}, ${title}, ${text}`);
+    scroller.setAttribute('aria-label', `${viewportLabel}: row ${selection.rowIndex + 1}, ${content}`);
+    if (viewportAccessibility && accessibleCells.has(`${selection.rowIndex}:${selection.columnIndex}`)) { const node = accessibleCell(selection.rowIndex, selection.columnIndex, value); activeRow.hidden = true; scroller.setAttribute('aria-activedescendant', node.id); }
   }
 
   function render(): void {
@@ -1495,8 +2896,36 @@ export function createGrid(options: GridOptions): Grid {
     freezeVertical.style.left = `${indexWidth + Math.max(0, view.frozenWidth - 1)}px`; freezeVertical.style.top = '0px'; freezeVertical.style.width = '2px'; freezeVertical.style.height = `${headerHeight + view.height}px`;
     freezeHorizontal.hidden = !engine.frozenRows || view.frozenHeight >= view.height;
     freezeHorizontal.style.top = `${headerHeight + Math.max(0, view.frozenHeight - 1)}px`; freezeHorizontal.style.left = '0px'; freezeHorizontal.style.height = '2px'; freezeHorizontal.style.width = `${indexWidth + view.width}px`;
+    // Show selected boundaries above the frozen seam without breaking the rest of the separator.
+    for(const [line,axis,seam,offset] of [[freezeVertical,'column',engine.frozenColumns,headerHeight],[freezeHorizontal,'row',engine.frozenRows,indexWidth]] as const){
+      const segments:string[]=[];
+      for(const range of getSelectionRanges()){
+        const first=axis==='column'?range.startColumn:range.startRow,last=axis==='column'?range.endColumn:range.endRow;
+        if(first!==seam&&last+1!==seam)continue;
+        for(const region of view.regions){
+          const start=axis==='column'?Math.max(range.startRow,region.rows.start):Math.max(range.startColumn,region.columns.start);
+          const end=axis==='column'?Math.min(range.endRow+1,region.rows.end):Math.min(range.endColumn+1,region.columns.end);
+          if(start>=end)continue;
+          const layout=axis==='column'?rowAxis:columnAxis,shift=axis==='column'?region.offsetY:region.offsetX;
+          const clipStart=axis==='column'?region.clip.y:region.clip.x,clipEnd=clipStart+(axis==='column'?region.clip.height:region.clip.width);
+          const from=offset+Math.max(clipStart,layout.position(start)+shift),to=offset+Math.min(clipEnd,layout.position(end)+shift);
+          if(to>from)segments.push(`linear-gradient(${axis==='column'?'to bottom':'to right'},transparent ${from}px,var(--acheron-selection-color) ${from}px,var(--acheron-selection-color) ${to}px,transparent ${to}px)`);
+        }
+      }
+      line.style.background=segments.length?segments.join(',')+',var(--acheron-freeze-color)':'var(--acheron-freeze-color)';
+    }
     endResize();
     positionEditor();
+    const range = getSelectionRange();
+    selectionHandles.forEach((button, i) => {
+      button.hidden = (!touchSelection && i === 0) || !range || !!editor; if (button.hidden || !range) return;
+      const size = touchSelection ? 20 : 10; const half = size / 2;
+      button.style.width = button.style.height = `${size}px`; button.style.borderRadius = touchSelection ? '50%' : '0'; button.style.borderWidth = touchSelection ? '3px' : '2px';
+      const rect = view.cellRect(i === 0 ? range.startRow : range.endRow, i === 0 ? range.startColumn : range.endColumn);
+      const x = rect.x + (i ? rect.width : 0); const y = rect.y + (i ? rect.height : 0);
+      button.hidden = x < rect.clip.x || x > rect.clip.x + rect.clip.width || y < rect.clip.y || y > rect.clip.y + rect.clip.height;
+      button.style.left = `${indexWidth + Math.max(half, Math.min(view.width - half, x)) - half}px`; button.style.top = `${headerHeight + Math.max(half, Math.min(view.height - half, y)) - half}px`;
+    });
     closeMenu();
     fullDraw = true;
     schedule();
@@ -1508,40 +2937,148 @@ export function createGrid(options: GridOptions): Grid {
   const observer = new ResizeObserver(() => {
     const width = root.clientWidth; const height = root.clientHeight;
     if (width === observedWidth && height === observedHeight) return;
+    clearCopyFeedback(); clearLayoutMotion();
     observedWidth = width; observedHeight = height; render();
   });
   observer.observe(root);
+  scroller.addEventListener('scroll', renderCopyFeedback, { passive: true });
+  scroller.addEventListener('scroll', clearLayoutMotion, { passive: true });
   scroller.addEventListener('scroll', render, { passive: true });
+  scroller.addEventListener('scroll',clearChoiceHover,{passive:true});
+  root.addEventListener('pointerleave', cancelLinkPreviewHover);
+  root.addEventListener('pointerleave',clearChoiceHover);
   scroller.addEventListener('pointerdown', onPointerDown);
+  scroller.addEventListener('click', onLinkClick);
   scroller.addEventListener('contextmenu', onContextMenu);
   root.addEventListener('contextmenu', onHeaderContextMenu);
   root.addEventListener('keydown', searchShortcut, true);
+  root.addEventListener('dblclick', onAxisDoubleClick, true);
   root.addEventListener('pointerdown', onHeaderPointerDown, true);
   root.addEventListener('keydown', cancelResizeKey, true);
   root.addEventListener('pointermove', onHeaderPointerMove);
   root.addEventListener('pointerup', commitResize);
   root.addEventListener('pointercancel', endResize);
   root.addEventListener('lostpointercapture', endResize);
-  scroller.addEventListener('pointermove', onPointerMove);
-  scroller.addEventListener('pointerup', onPointerEnd);
-  scroller.addEventListener('pointercancel', onPointerEnd);
-  scroller.addEventListener('lostpointercapture', onPointerEnd);
+  root.addEventListener('pointermove', onPointerMove);
+  const removeTooltips = installTooltips(root);
+  root.addEventListener('pointerup',commitTouchReorder,true);
+  root.addEventListener('pointerup', onPointerEnd);
+  root.addEventListener('pointercancel', onPointerEnd);
+  root.addEventListener('lostpointercapture', onPointerEnd);
+  scroller.addEventListener('cut', onCut);
   scroller.addEventListener('copy', onCopy);
   scroller.addEventListener('paste', onPaste);
   scroller.addEventListener('keydown', onKeyDown);
   scroller.addEventListener('dblclick', onDoubleClick);
+  win.addEventListener('blur', onPointerEnd);
   win.addEventListener('resize', render);
+  win.addEventListener('scroll',positionEditor,{capture:true,passive:true});
   render();
   function onDoubleClick(event: MouseEvent): void {
     const cell = pointerCell(event);
+    if(cell&&openMedia(cell.row,cell.col))return;
     const selection = engine.getSelection();
     if (cell && columnEditors.get(columns[cell.col]!.key)?.type === 'checkbox') return;
     if (event.target !== editor && cell && selection?.rowIndex === cell.row && selection.columnIndex === cell.col && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) beginEdit();
   }
+  const layoutMotion = new Set<HTMLElement>();
+  const motionPreference = win.matchMedia('(prefers-reduced-motion: reduce)');
+  const motionEnabled = () => options.motion !== false && motionDuration > 0 && !motionPreference.matches;
+  const cancelMotion = () => { if (motionPreference.matches) { clearLayoutMotion(); root.getAnimations({ subtree: true }).forEach(animation => animation.cancel()); } };
+  motionPreference.addEventListener('change', cancelMotion);
+  function clearLayoutMotion(): void { for (const node of layoutMotion) { node.getAnimations().forEach(animation => animation.cancel()); node.remove(); } layoutMotion.clear(); }
+  function animateLayout<T>(run: () => T, axis: 'row' | 'column'): T {
+    clearLayoutMotion();
+    if (!motionEnabled() || !canvas.clientWidth || !canvas.clientHeight) return run();
+    if (frame !== undefined) { win.cancelAnimationFrame(frame); frame = undefined; draw(); }
+    const oldView = viewport();
+    const indices = [...new Set(oldView.regions.flatMap(region => {
+      const range = axis === 'row' ? region.rows : region.columns;
+      return Array.from({ length: range.end - range.start }, (_, i) => range.start + i);
+    }))].slice(0, 64);
+    const old = indices.map(index => { const rect = oldView.cellRect(axis === 'row' ? index : 0, axis === 'column' ? index : 0); return { key: axis === 'row' ? dataSource.getRowId(engine.getRowSourceIndex(index)) : columns[index]!.key, position: axis === 'row' ? headerHeight + rect.y : rect.x, size: axis === 'row' ? rect.height : rect.width }; });
+    const snapshot = doc.createElement('canvas'); snapshot.width = canvas.width; snapshot.height = canvas.height; snapshot.getContext('2d')!.drawImage(canvas, 0, 0);
+    const result = run();
+    if (frame !== undefined) { win.cancelAnimationFrame(frame); frame = undefined; } draw();
+    const nextView = viewport(); const positions = new Map<string | number, number>();
+    for (const region of nextView.regions) {
+      const range = axis === 'row' ? region.rows : region.columns;
+      for (let i = range.start; i < range.end; i++) { const rect = nextView.cellRect(axis === 'row' ? i : 0, axis === 'column' ? i : 0); positions.set(axis === 'row' ? dataSource.getRowId(engine.getRowSourceIndex(i)) : columns[i]!.key, axis === 'row' ? headerHeight + rect.y : rect.x); }
+    }
+    const ratio = snapshot.width / canvas.clientWidth;
+    for (const strip of old) {
+      const next = positions.get(strip.key); if (next === strip.position) continue;
+      const start = Math.max(axis === 'row' ? headerHeight : 0, strip.position), end = Math.min(axis === 'row' ? canvas.clientHeight : canvas.clientWidth, strip.position + strip.size);
+      if (end <= start) continue;
+      const tile = doc.createElement('canvas'); tile.dataset.gridMotion = axis; tile.setAttribute('aria-hidden', 'true');
+      const width = axis === 'row' ? canvas.clientWidth : end - start, height = axis === 'row' ? end - start : canvas.clientHeight;
+      tile.width = Math.ceil(width * ratio); tile.height = Math.ceil(height * ratio);
+      tile.getContext('2d')!.drawImage(snapshot, (axis === 'row' ? 0 : start) * ratio, (axis === 'row' ? start : 0) * ratio, width * ratio, height * ratio, 0, 0, tile.width, tile.height);
+      const destination = next ?? start;
+      tile.style.cssText = `position:absolute;pointer-events:none;z-index:8;left:${indexWidth + (axis === 'column' ? destination : 0)}px;top:${axis === 'row' ? destination : 0}px;width:${width}px;height:${height}px`;
+      root.append(tile); layoutMotion.add(tile);
+      const delta = start - destination;
+      const animation = tile.animate([{ transform: axis === 'row' ? `translateY(${delta}px)` : `translateX(${delta}px)`, opacity: 1 }, { transform: 'translate(0,0)', opacity: 1, offset: .8 }, { transform: 'translate(0,0)', opacity: 0 }], { duration: motionDuration, easing: 'cubic-bezier(.22,1,.36,1)' });
+      const remove = () => { tile.remove(); layoutMotion.delete(tile); }; animation.finished.then(remove, remove);
+    }
+    return result;
+  }
+  const enteringGroups = new Set<string>();
+  function groupRows(start:number,end:number):string {
+    return structureAction(()=>{const id=engine.groupRows(start,end);enteringGroups.add(id);return id;});
+  }
+  function structureAction<T>(run:()=>T, axis?: 'row' | 'column'):T {
+    if(editor||destroyed)throw new Error('Save or cancel the editor before changing structure.');
+    return axis ? animateLayout(run, axis) : run();
+  }
   return {
+    subscribe:engine.subscribe,
+    takeObserverErrors:engine.takeObserverErrors,
+    captureRowIdentity:engine.captureRowIdentity,
+    refreshData:(ids?:readonly RowId[]|'values')=>{finishEdit(false);clearCopyFeedback();pendingCutText=undefined;engine.refreshData(ids);},
+    exportState:engine.exportState,
+    restoreState:(state:unknown)=>{if(editor)throw new Error('Finish editing before restoring state.');if(!state||typeof state!=='object'||!('configuration' in state))throw new TypeError('Invalid grid state.');const restored=restoreGridConfiguration(state.configuration,columns,engine.sourceRowCount);reorderedHeaderGroups(restored.columns,options.headerGroups);engine.restoreState(state);},
+    setColumnEditor:(key:string,config:ColumnEditor|null)=>{
+      if(destroyed)throw new Error('Grid is destroyed.');const column=columns.find(column=>column.key===key);if(!column)throw new Error('Unknown editor column.');
+      const valid=config===null?null:validateColumnEditor(column,config);if(editor&&engine.getSelection()?.columnKey===key)finishEdit(false);
+      if(valid)columnEditors.set(key,valid);else columnEditors.delete(key);clearChoiceHover();render();
+    },
+    exportConfiguration: () => {
+      if (!managesView) throw new Error('Export configuration requires core-managed view; persist host view separately.');
+      return engine.exportConfiguration();
+    },
+    getMerge:engine.getMerge,getMergedCells:engine.getMergedCells,canMerge:engine.canMerge,
+    mergeCells:(range:SelectionRange)=>structureAction(()=>engine.mergeCells(range)),
+    unmergeCells:(range:SelectionRange)=>structureAction(()=>engine.unmergeCells(range)),
+    getRowGroups:engine.getRowGroups,
+    groupRows,
+    ungroupRows:(id:string)=>structureAction(()=>engine.ungroupRows(id)),
+    setGroupCollapsed:(id:string,collapsed:boolean)=>structureAction(()=>engine.setGroupCollapsed(id,collapsed), 'row'),
+    setView:(view:LocalViewOptions)=>structureAction(()=>{engine.setView(view);currentView=engine.view;}),
+    get view(){return managesView ? engine.view : currentView ?? {};},
+    cutSelectionBlocks, cancelCut,
+    copySelectionBlocks,
+    pasteSelectionBlocks,
+    get rowCount() { return rowCount; }, get columns() { return columns; },
+    insertColumns:(index:number,added:readonly Column[])=>structureAction(()=>engine.insertColumns(index,added)),
+    deleteColumns:(indices:readonly number[])=>structureAction(()=>engine.deleteColumns(indices)),
+    insertRows: (index:number,rows:readonly DataRow[])=>structureAction(()=>engine.insertRows(index,rows)),
+    deleteRows: (indices:readonly number[])=>structureAction(()=>engine.deleteRows(indices)),
+    moveRows: (indices:readonly number[],beforeIndex:number)=>structureAction(()=>engine.moveRows(indices,beforeIndex), 'row'),
+    moveColumns: (indices:readonly number[],beforeIndex:number)=>structureAction(()=>engine.moveColumns(indices,beforeIndex), 'column'),
+    setTheme(patch) {
+      if (destroyed) throw new Error('Grid is destroyed.');
+      const next = Object.freeze({ ...theme, ...patch }); validateTheme(next); clearLayoutMotion(); clearCopyFeedback(); theme = next; measuredRows.clear();
+      for (const [key, value] of Object.entries(theme)) root.style.setProperty('--acheron-' + key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase()), value);
+      for (const [name, image] of Object.entries(stateIcons)) {
+        const color = theme.iconColor.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        image.src = `data:image/svg+xml,${encodeURIComponent(stateIconSvg[name as keyof typeof stateIconSvg].replace('currentColor', color))}`;
+      }
+      render();
+    },
     render: () => { if (!searchBar.hidden) refreshSearch(); else render(); },
     openSearch,
-    selectColumn, selectRow,
+    selectColumn, selectRow, selectAll, autoFitColumn, autoFitRow,
     get frozenRows() { return engine.frozenRows; },
     get frozenColumns() { return engine.frozenColumns; },
     setFrozen,
@@ -1564,18 +3101,26 @@ export function createGrid(options: GridOptions): Grid {
     setRowHeight: (index, height) => resizeAxis(rowAxis, index, height),
     destroy() {
       if (destroyed) return;
+      cancelLinkPreviewHover(); root.removeEventListener('pointerleave', cancelLinkPreviewHover);
+      pendingCutText=undefined; cutRevision++;
+      win.clearTimeout(lockNoticeTimer); clearCopyFeedback(); clearLayoutMotion(); motionPreference.removeEventListener('change', cancelMotion);
+      if(choices){disposeChoicePanel(choices);choices.remove();} choices = null;disposeEditorIntegration(); win.removeEventListener('beforeunload', guardEditNavigation);
+      clearReorder();
       engine.destroy();
       destroyed = true;
       for (const image of Object.values(stateIcons)) image.onload = null;
       closeMenu();
       if (searchTimer !== undefined) win.clearTimeout(searchTimer);
       searchMatches.clear();
+      richCache.clear();
       visibleImages.clear(); releaseUnusedImages();
       root.removeEventListener('contextmenu', onHeaderContextMenu);
       root.removeEventListener('keydown', searchShortcut, true);
       activeDialog?.remove();
       activeDialog = null;
+      mediaUpload?.abort();for(const src of ownedImageUrls)win.URL.revokeObjectURL(src);ownedImageUrls.clear();
       endResize();
+      root.removeEventListener('dblclick', onAxisDoubleClick, true);
       root.removeEventListener('pointerdown', onHeaderPointerDown, true);
       root.removeEventListener('keydown', cancelResizeKey, true);
       root.removeEventListener('pointermove', onHeaderPointerMove);
@@ -1586,21 +3131,32 @@ export function createGrid(options: GridOptions): Grid {
       dirty.clear();
       const input = editor;
       editor = null;
+      richEditor?.remove(); richEditor = null;
       input?.remove();
-      dragPointer = null;
-      scroller.removeEventListener('pointermove', onPointerMove);
-      scroller.removeEventListener('pointerup', onPointerEnd);
-      scroller.removeEventListener('pointercancel', onPointerEnd);
-      scroller.removeEventListener('lostpointercapture', onPointerEnd);
+      onPointerEnd();
+      removeTooltips();
+      root.removeEventListener('pointermove', onPointerMove);
+      root.removeEventListener('pointerup',commitTouchReorder,true);
+      root.removeEventListener('pointerup', onPointerEnd);
+      root.removeEventListener('pointercancel', onPointerEnd);
+      root.removeEventListener('lostpointercapture', onPointerEnd);
+      scroller.removeEventListener('cut', onCut);
       scroller.removeEventListener('copy', onCopy);
       scroller.removeEventListener('paste', onPaste);
       scroller.removeEventListener('dblclick', onDoubleClick);
       scroller.removeEventListener('pointerdown', onPointerDown);
+      scroller.removeEventListener('click', onLinkClick);
       scroller.removeEventListener('keydown', onKeyDown);
       if (frame !== undefined) win.cancelAnimationFrame(frame);
       observer.disconnect();
+      scroller.removeEventListener('scroll', renderCopyFeedback);
+      scroller.removeEventListener('scroll', clearLayoutMotion);
       scroller.removeEventListener('scroll', render);
+      scroller.removeEventListener('scroll',clearChoiceHover);
+      root.removeEventListener('pointerleave',clearChoiceHover);
+      win.removeEventListener('blur', onPointerEnd);
       win.removeEventListener('resize', render);
+      win.removeEventListener('scroll',positionEditor,true);
       root.remove();
     },
   };

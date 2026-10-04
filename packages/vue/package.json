@@ -1,0 +1,42 @@
+{
+  "name": "@acheron-grid/vue",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Vue lifecycle adapter for Acheron Grid",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "dependencies": {
+    "@acheron-grid/canvas": "0.1.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/haodn-dev/acheron-grid.git",
+    "directory": "packages/vue"
+  },
+  "bugs": {
+    "url": "https://github.com/haodn-dev/acheron-grid/issues"
+  },
+  "homepage": "https://acheron-grid.haoduong.dev/",
+  "author": "Hao Duong",
+  "peerDependencies": {
+    "vue": ">=3.5 <4"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

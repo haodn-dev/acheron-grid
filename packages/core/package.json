@@ -1,7 +1,6 @@
 {
   "name": "@acheron-grid/core",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "type": "module",
   "description": "Headless TypeScript data grid engine",
   "files": [
@@ -33,6 +32,9 @@
   "bugs": {
     "url": "https://github.com/haodn-dev/acheron-grid/issues"
   },
-  "homepage": "https://github.com/haodn-dev/acheron-grid#readme",
-  "author": "Hao Duong"
+  "homepage": "https://acheron-grid.haoduong.dev/",
+  "author": "Hao Duong",
+  "publishConfig": {
+    "access": "public"
+  }
 }

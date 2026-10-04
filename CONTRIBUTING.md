@@ -18,10 +18,10 @@ Run `npm run playground` for the standalone example. No framework or application
 
 - Keep `packages/core` independent of browser globals and frameworks. Canvas imports only the public core API.
 - Route writes through the existing mutation/permission/history pipeline. Avoid per-dataset-cell state; use sparse metadata and viewport work.
-- Preserve validation, atomic batch writes, accessibility semantics and cleanup. Source count and row identity remain stable for each mounted engine.
+- Preserve validation, atomic batch writes, accessibility semantics and cleanup. Change source structure through the public structural commands; do not mutate source count/order externally behind a mounted engine.
 - Update the relevant public guide and add a focused regression test for behavior changes. Write source comments and public documentation in English.
 
-Run `npm run typecheck` and `npm test`. For rendering or interaction changes, also run `npm run test:browser`; for example changes, run `npm run test:playground`. Use `npm run benchmark` when changing render hot paths. Do not run suites sharing a server port simultaneously. There is no lint script.
+Run `npm run typecheck` and `npm test`. For rendering or interaction changes, also run `npm run test:browser`; for example changes, run `npm run test:playground`. Run `npm run test:mcp` for MCP or bundled documentation changes. Use `npm run benchmark` when changing render hot paths. Do not run suites sharing a server port simultaneously. There is no lint script.
 
 Describe the problem, resulting behavior and actual checks in a pull request. Include screenshots when a visual change needs comparison. Do not publish a package as part of an ordinary contribution.
 

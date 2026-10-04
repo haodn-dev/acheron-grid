@@ -17,3 +17,5 @@ Thumbs.db
 
 /test-results/
 /playwright-report/
+/playground-results/
+/playground-report/

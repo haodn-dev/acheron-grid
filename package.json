@@ -6,20 +6,27 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspace @acheron-grid/core && npm run build --workspace @acheron-grid/canvas",
-    "typecheck": "npm run typecheck --workspace @acheron-grid/core && npm run typecheck --workspace @acheron-grid/canvas",
-    "test": "npm run build && node --test packages/core/tests/*.test.mjs packages/canvas/tests/*.test.mjs",
+    "build": "npm run build --workspace @acheron-grid/core && npm run build --workspace @acheron-grid/canvas && npm run build --workspace @acheron-grid/markdown && npm run build --workspace @acheron-grid/react && npm run build --workspace @acheron-grid/vue",
+    "typecheck": "npm run build && npm run typecheck --workspace @acheron-grid/core && npm run typecheck --workspace @acheron-grid/canvas && npm run typecheck --workspace @acheron-grid/markdown && npm run typecheck --workspace @acheron-grid/react && npm run typecheck --workspace @acheron-grid/vue",
+    "test": "npm run build && node --test packages/core/tests/*.test.mjs packages/canvas/tests/*.test.mjs packages/react/tests/*.test.mjs",
     "test:browser": "npm run build && playwright test",
     "benchmark": "npm run build && playwright test --config benchmark.config.mjs",
     "playground": "npm run build && node examples/vanilla/server.mjs",
-    "test:playground": "npm run build && playwright test --config playground.config.mjs"
+    "test:playground": "npm run build && playwright test --config playground.config.mjs",
+    "test:package": "npm run build && node tests/packed-consumer.mjs",
+    "test:mcp": "npm run test --workspace @acheron-grid/mcp"
   },
   "engines": {
     "node": ">=22"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
-    "typescript": "~5.9.3"
+    "@types/react": "18.3.31",
+    "esbuild": "0.27.7",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "typescript": "~5.9.3",
+    "vue": "3.5.32"
   },
   "license": "MIT",
   "repository": {
