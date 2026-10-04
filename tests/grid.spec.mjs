@@ -1782,6 +1782,7 @@ test('grouped headers share frozen geometry, leaf actions and accessible row spa
   await page.getByRole('columnheader', { name: 'android', exact: true }).press('Enter'); await grid.press('F2');
   const select = page.getByRole('combobox', { name: 'Edit row 1, android' }); await expect(select).toHaveValue(''); await select.selectOption('OK'); await select.press('Enter');
   expect(await page.evaluate(() => window.source.getValue(0, 'android'))).toBe('OK');
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const b = await leaf.evaluate(el => { const { x, y, width, height } = el.getBoundingClientRect(); return { x, y, width, height }; }); await page.mouse.move(b.x + b.width - 1, b.y + b.height / 2); await page.mouse.down(); await page.mouse.move(b.x + b.width + 39, b.y + b.height / 2); await page.mouse.up();
   expect(await page.evaluate(() => window.events.some(event => event.type === 'column:resize'))).toBe(true);
   await grid.press('Control+Home'); await grid.press('ArrowRight');
@@ -2048,7 +2049,7 @@ test('dropdown arrows change single-choice drafts, skip disabled options and ret
 test('touch moves selected rows and columns through shared preview, history and veto',async({page})=>{
   await page.goto('/');await page.evaluate(async()=>{const {createGrid}=await import('/canvas/index.js');const {LocalDataSource}=await import('/core/index.js');window.requests=[];window.allowMove=true;window.source=new LocalDataSource(Array.from({length:100},(_,id)=>({id,a:'A'+id,b:'B'+id,c:'C'+id})),row=>row.id);window.grid=createGrid({container:document.querySelector('#grid'),dataSource:window.source,accessibility:'viewport',columns:['a','b','c'].map(key=>({key,title:key,editable:true})),onReorder:request=>{window.requests.push(request);request.axis==='row'?window.grid.moveRows(request.indices,request.beforeIndex):window.grid.moveColumns(request.indices,request.beforeIndex);},canReorder:()=>window.allowMove});window.grid.selectRow(1);});
   const session=await page.context().newCDPSession(page);
-  const point=async locator=>{const box=await locator.boundingBox();return {x:box.x+box.width/2,y:box.y+box.height/2};};
+  const point=async locator=>{await expect(locator).toBeVisible();const box=await locator.boundingBox();return {x:box.x+box.width/2,y:box.y+box.height/2};};
   const send=async(type,p)=>session.send('Input.dispatchTouchEvent',{type,touchPoints:p?[{...p,id:1}]:[]});
   const from=await point(page.getByRole('button',{name:'Select row 2',exact:true})),to=await point(page.getByRole('button',{name:'Select row 5',exact:true}));to.y+=8;
   await send('touchStart',from);await send('touchMove',to);await expect(page.locator('[data-grid-reorder-guide]')).toBeVisible();expect(await page.evaluate(()=>window.requests.length)).toBe(0);await send('touchEnd');

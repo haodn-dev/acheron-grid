@@ -16,6 +16,9 @@ This file summarizes the current unreleased development preview. It does not ann
 
 ### Refinements
 
+- Root typecheck builds dependency declarations first, including on a clean checkout.
+- Single-cell paste fills selected ranges atomically; same-grid cut stages source clearing until successful paste, with one undo/redo entry.
+
 - Uniform multi-cell selection tint without an extra active-cell border by default.
 - Refined group gutter controls and short menu/editor transitions without text scaling.
 - Interrupted popup exits start from their current visual state; replayed table-lock notices cancel previous animation.

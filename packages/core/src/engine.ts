@@ -104,6 +104,7 @@ export function createGridEngine(options: GridEngineOptions) {
     | { kind: 'structure'; request: Readonly<StructureRequest>; reverseRequest: Readonly<StructureRequest>; before: StructureState; after: StructureState; forward: readonly RowSplice[]; backward: readonly RowSplice[]; rowMap: readonly number[]; columnMap: readonly number[] };
   const past: HistoryCommand[] = [];
   const future: HistoryCommand[] = [];
+  let pendingCut: { cells: readonly (CellUpdate & { rowId: RowId })[]; columnKeys: readonly string[]; blockCount: number } | undefined;
   const formats = new Map<string, FormatEntry>();
   let orderedFormats: FormatEntry[] = [];
   let formatOrder = 0;
@@ -526,30 +527,55 @@ export function createGridEngine(options: GridEngineOptions) {
     });
   }
   function copySelection():string { return blocksToTsv(clipboardBlocks()); }
-  function pasteBlocks(blocks:readonly ClipboardBlock[],structured:boolean):void {
+  function cutSelectionBlocks(): string {
+    const blocks = clipboardBlocks();
+    if (!blocks.length) throw new Error('Select cells before cutting.');
+    const cells = new Map<string, CellUpdate & { rowId: RowId }>();
+    for (const range of displaySelectionRanges()) for (let row=range.startRow;row<=range.endRow;row++) for (let col=range.startColumn;col<=range.endColumn;col++) {
+      const rowIndex=sourceRow(row),columnKey=columns[col]!.key;
+      if (mergeAt(rowIndex,col)) throw new Error('Unmerge cells before cutting.');
+      requirePermission(rowIndex,col,'writable');
+      cells.set(JSON.stringify([rowIndex,columnKey]),{rowIndex,columnKey,rowId:dataSource.getRowId(rowIndex),value:dataSource.getValue(rowIndex,columnKey)});
+    }
+    const text=encodeBlocks(blocks);
+    pendingCut={cells:[...cells.values()],columnKeys:columns.map(column=>column.key),blockCount:blocks.length};
+    return text;
+  }
+  function pasteBlocks(blocks:readonly ClipboardBlock[],structured:boolean,move=false):void {
     assertAlive();
     const ranges=displaySelectionRanges().sort((a,b)=>a.startRow-b.startRow||a.startColumn-b.startColumn);
     if(!ranges.length)return;
-    if(structured&&ranges.length>1&&ranges.length!==blocks.length)throw new Error('Clipboard and target range counts must match.');
-    const placements=structured
+    const cut=move ? pendingCut : undefined;
+    if (move && !cut) throw new Error('No pending cut.');
+    if (cut) {
+      if (blocks.length!==cut.blockCount || ranges.length>1 && ranges.length!==blocks.length) throw new Error('Cut requires matching destination ranges.');
+      if (cut.columnKeys.length!==columns.length || cut.columnKeys.some((key,index)=>key!==columns[index]!.key)) throw new Error('Columns changed after cut. Cut again.');
+      for (const cell of cut.cells) {
+        if (cell.rowIndex>=rowCount || dataSource.getRowId(cell.rowIndex)!==cell.rowId || !Object.is(dataSource.getValue(cell.rowIndex,cell.columnKey),cell.value)) throw new Error('Cut source changed. Cut again.');
+        requirePermission(cell.rowIndex,columnIndices.get(cell.columnKey)!,'writable');
+      }
+    }
+    const broadcast=!move && blocks.length===1 && blocks[0]!.values.length===1 && blocks[0]!.values[0]!.length===1;
+    if(structured&&!broadcast&&ranges.length>1&&ranges.length!==blocks.length)throw new Error('Clipboard and target range counts must match.');
+    const placements: (ClipboardBlock & { col: number; height?: number; width?: number })[]=broadcast ? ranges.map(range=>({...blocks[0]!,row:range.startRow,col:range.startColumn,height:range.endRow-range.startRow+1,width:range.endColumn-range.startColumn+1})) : structured
       ? ranges.length===1 ? blocks.map(block=>({...block,row:ranges[0]!.startRow+block.row,col:ranges[0]!.startColumn+block.column}))
         : blocks.map((block,i)=>({...block,row:ranges[i]!.startRow,col:ranges[i]!.startColumn}))
       : ranges.map(range=>({...blocks[0]!,row:range.startRow,col:range.startColumn}));
     let cells=0;
     const texts=new Map<string,{rowIndex:number;columnKey:string;columnIndex:number;text:string;format?:CellFormat}>();
     for(const place of placements) {
-      const height=place.values.length,width=place.values[0]!.length;
+      const height=place.height ?? place.values.length,width=place.width ?? place.values[0]!.length;
       cells+=height*width;if(cells>clipboardCellLimit)throw new RangeError('Paste has too many cells.');
       if(place.row+height>visibleRowCount()||place.col+width>columns.length)throw new RangeError('Paste extends beyond grid bounds.');
       for(let row=0;row<height;row++)for(let col=0;col<width;col++){
-        const rowIndex=sourceRow(place.row+row),columnIndex=place.col+col,columnKey=columns[columnIndex]!.key,text=place.values[row]![col]!,key=JSON.stringify([rowIndex,columnKey]),previous=texts.get(key);
+        const rowIndex=sourceRow(place.row+row),columnIndex=place.col+col,columnKey=columns[columnIndex]!.key,text=place.values[broadcast?0:row]![broadcast?0:col]!,key=JSON.stringify([rowIndex,columnKey]),previous=texts.get(key);
         const span=mergeAt(rowIndex,columnIndex);
         if(span&&(rowIndex!==span.startRow||columnIndex!==span.startColumn)) {
           if(text!=='')throw new Error('Paste would overwrite a hidden merged value. Unmerge first.');
           continue;
         }
         if(previous&&previous.text!==text)throw new Error('Overlapping paste targets contain conflicting values.');
-        const format = place.formats?.[row]?.[col];
+        const format = place.formats?.[broadcast?0:row]?.[broadcast?0:col];
         if (previous && JSON.stringify(previous.format) !== JSON.stringify(format)) throw new Error('Overlapping paste targets contain conflicting formats.');
         texts.set(key,{rowIndex,columnKey,columnIndex,text,...(format ? { format } : {})});
       }
@@ -563,6 +589,7 @@ export function createGridEngine(options: GridEngineOptions) {
       if(!column.parse&&current!=null&&typeof current!=='string')throw new Error('Column requires a parser: '+column.key);
       return {rowIndex:cell.rowIndex,columnKey:column.key,value:column.parse?column.parse(cell.text):cell.text};
     });
+    if (cut) for (const cell of cut.cells) if (!texts.has(JSON.stringify([cell.rowIndex,cell.columnKey]))) updates.push({rowIndex:cell.rowIndex,columnKey:cell.columnKey,value:null});
     const formatChanges: FormatChange[] = [];
     for (const cell of texts.values()) if (cell.format && Object.keys(cell.format).length) {
       const bounds = { startRow: cell.rowIndex, endRow: cell.rowIndex, startColumn: cell.columnIndex, endColumn: cell.columnIndex };
@@ -574,6 +601,7 @@ export function createGridEngine(options: GridEngineOptions) {
       formatChanges.push({ key, previous, value: { target, bounds: Object.freeze(bounds), patch: Object.freeze({ ...previous?.patch, ...cell.format }), orders: Object.freeze(orders), order: formatOrder } });
     }
     applyUpdates(updates,'paste',formatChanges);
+    if (move) pendingCut=undefined;
   }
   function paste(text:string):void { pasteBlocks([{row:0,column:0,values:decodeTsv(text)}],false); }
 
@@ -1089,6 +1117,9 @@ export function createGridEngine(options: GridEngineOptions) {
     clearSelection: () => command(clearSelection),
     editCell: (row: number, col: number, text: string) => command(() => editCell(sourceRow(row), col, text)),
     updateCells: (updates: readonly CellUpdate[]) => command(() => applyUpdates(updates.map(update=>({...update,rowIndex:sourceRow(update.rowIndex)})))),
+    cutSelectionBlocks:()=>command(cutSelectionBlocks),
+    cancelCut:()=>command(()=>{pendingCut=undefined;}),
+    pasteCutSelectionBlocks:(text:string)=>command(()=>pasteBlocks(decodeBlocks(text),true,true)),
     copySelectionBlocks:()=>query(()=>encodeBlocks(clipboardBlocks())),
     pasteSelectionBlocks:(text:string)=>command(()=>pasteBlocks(decodeBlocks(text),true)),
     copySelection: () => query(copySelection), paste: (text: string) => command(() => paste(text)),
@@ -1109,7 +1140,7 @@ export function createGridEngine(options: GridEngineOptions) {
       onEvent = undefined;
       resolver = undefined;
       past.length = future.length = 0;
-      selection = anchor = null;
+      selection = anchor = null; pendingCut=undefined;
       retainedRanges.length = 0;
       formats.clear(); orderedFormats.length = 0;
       merges=[];groups=[];

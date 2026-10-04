@@ -24,7 +24,7 @@ Core does not import Canvas or framework code. `@acheron-grid/core/headless` rem
 ## Implemented features
 
 - Virtualized rows and columns, sparse sizes, resize guides and runtime frozen panes.
-- A default fixed row index, whole-row/column selection, rectangular and multiple ranges, keyboard navigation and TSV clipboard operations.
+- A default fixed row index, whole-row/column selection, rectangular and multiple ranges, keyboard navigation and TSV clipboard operations, single-cell paste across ranges and staged same-grid cut/paste.
 - Native text/select/checkbox editors, searchable choices and multiple tags, multiline overlays, parsing/validation, image cells and custom cell drawing.
 - Safe HTML rich text and optional Markdown parsing; visual editing hides markup while preserving source strings and partial formatting.
 - Structural row/column insertion, deletion and reordering, merged cells and nested manual row groups with undo/redo.
@@ -99,7 +99,7 @@ Run commands from the repository root after `npm ci`:
 | Command | Purpose |
 | --- | --- |
 | `npm run build` | Build core, Canvas, optional Markdown, React and Vue adapters; ESM and TypeScript declarations |
-| `npm run typecheck` | Check all packages and the headless dependency boundary |
+| `npm run typecheck` | Build dependency declarations, then check all packages and the headless boundary |
 | `npm test` | Build and run Node.js tests |
 | `npm run test:mcp` | Verify MCP documentation, host authorization and grid tools |
 | `npm run test:browser` | Build and run Chromium grid integration tests |

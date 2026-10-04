@@ -186,3 +186,17 @@ const restoredEngine = createGridEngine({
 `exportConfiguration()` returns a detached version-1 JSON-compatible snapshot of column keys/order/current widths, source frozen-row count, frozen-column count and local sort/filters. `restoreGridConfiguration(input, columns, rowCount)` validates unknown input and returns initialization options. It requires exactly the current column keys once each; unknown versions, missing/duplicate/unknown keys, invalid sizes, counts or view definitions throw before grid construction. Existing application column definitions (including parsers and permission policies) are reused; configuration cannot supply executable definitions.
 
 Storage is host-owned; the core does not access localStorage or a server. Filter queries may contain sensitive text, so choose storage and access controls accordingly. Apply returned options to a new engine; this API does not change a mounted grid or create undo history. Configuration excludes cell data, row order/heights, default row height, merges/groups, formatting, locks, selection and history. Frozen rows are a count, not stable row identities; restore against the intended source order. Keep rowHeight and other host options explicit. Structural column additions/deletions require the host's matching schema when restoring.
+
+## Cut and single-cell paste
+
+A one-cell clipboard value fills every cell in the selected target range(s), including its structured cell formatting. Permissions, parsers and formatting permissions are validated before the combined write. Larger clipboard rectangles retain their existing anchor/paired-range behavior; matrix tiling is not implemented.
+
+```ts
+engine.select(0, 0);
+const cut = engine.cutSelectionBlocks(); // Stages a move; source is unchanged.
+engine.select(1, 1);
+engine.pasteCutSelectionBlocks(cut);    // Destination write and source clear: one undo.
+// engine.cancelCut();                 // Cancel without changing source data.
+```
+
+Cut is a staged move within the same engine. Source cells must be copyable and writable; paste validates destination permissions/parsers and unchanged source row IDs, column order and values before writing. A failed validation leaves both sides unchanged. Source content is cleared to `null`; source cell formatting remains, while copied formatting is applied at the destination. Overlapping source/destination cells preserve the pasted result. Undo/redo replays the combined change once. Cut from merged cells is rejected; unmerge first. Use the payload from the staged cut with `pasteCutSelectionBlocks`; ordinary `paste`/`pasteSelectionBlocks` remain copy operations. The host owns clipboard transfer and must not treat arbitrary external clipboard data as a staged move. Cross-engine/browser/application moves and matrix tiling are not supported.

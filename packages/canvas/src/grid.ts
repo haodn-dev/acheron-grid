@@ -146,6 +146,8 @@ export interface Grid {
   getSelection(): CellSelection | null;
   getSelectionRange(): SelectionRange | null;
   getSelectionRanges(): SelectionRange[];
+  cutSelectionBlocks(): string;
+  cancelCut(): void;
   copySelectionBlocks(): string;
   pasteSelectionBlocks(text: string): void;
   copySelection(): string;
@@ -396,6 +398,8 @@ export function createGrid(options: GridOptions): Grid {
   root.append(copyFeedback);
   let copyFeedbackTimer: number | undefined;
   let copyFeedbackRevision = 0;
+  let pendingCutText: string | undefined;
+  let cutRevision=0;
   function clearCopyFeedback(): void {
     copyFeedbackRevision++;
     win.clearTimeout(copyFeedbackTimer); copyFeedbackTimer = undefined;
@@ -950,7 +954,7 @@ export function createGrid(options: GridOptions): Grid {
     filter.addEventListener('input', filterActions);
     const fingerprint = JSON.stringify(getSelectionRanges());
     const menuIcons:readonly (readonly [string,keyof typeof icons,string])[]=[
-      ['Copy','copy','clipboard'],['Paste','clipboard-paste','clipboard'],
+      ['Copy','copy','clipboard'],['Cut','scissors','clipboard'],['Paste','clipboard-paste','clipboard'],
       ['Select row','rows-3','selection'],['Select column','columns-3','selection'],
       ['Sort ascending','arrow-up','view'],['Sort descending','arrow-down','view'],['Filter','funnel','view'],['Clear sort','list-filter','view'],
       ['Insert row above','between-horizontal-start','structure'],['Insert row','between-horizontal-end','structure'],['Insert rows','rows-3','structure'],
@@ -978,7 +982,7 @@ export function createGrid(options: GridOptions): Grid {
         try { await action(); }
         catch (error) {
           if (!destroyed) {
-            actionError.textContent = `${error instanceof Error ? error.message : 'Action failed.'}${label === 'Copy' || label === 'Paste' ? ' Use Ctrl/Cmd+C or Ctrl/Cmd+V if the browser blocks menu clipboard access.' : ''}`;
+            actionError.textContent = `${error instanceof Error ? error.message : 'Action failed.'}${label === 'Copy' || label === 'Cut' || label === 'Paste' ? ' Use Ctrl/Cmd+C or Ctrl/Cmd+V if the browser blocks menu clipboard access.' : ''}`;
             actionError.style.display = 'block';
           }
         }
@@ -986,6 +990,7 @@ export function createGrid(options: GridOptions): Grid {
       popup.append(button);
     }
     item('Copy', rowCount > 0 && getSelectionRanges().length > 0 && engine.getCellPermission(selection.rowIndex, selection.columnIndex).copyable && !!win.navigator.clipboard?.writeText, writeClipboard);
+    item('Cut', rowCount > 0 && getSelectionRanges().length > 0 && engine.canEdit(selection.rowIndex,selection.columnIndex) && !!win.navigator.clipboard?.writeText, () => writeClipboard(true));
     item('Paste', !!win.navigator.clipboard?.readText && engine.canPaste(), async () => {
       let text = '', html = '';
       if (win.navigator.clipboard.read) {
@@ -1570,11 +1575,26 @@ export function createGrid(options: GridOptions): Grid {
       return { ...block, values, formats };
     });
   }
-  function copySelectionBlocks(): string { const text = encodeBlocks(clipboardBlocks()); showCopyFeedback(getSelectionRanges()); return text; }
+  function cancelCut(): void { cutRevision++; pendingCutText=undefined; engine.cancelCut(); clearCopyFeedback(); }
+  function cutSelectionBlocks(): string {
+    cancelCut();
+    const blocks=clipboardBlocks();
+    engine.cutSelectionBlocks();
+    pendingCutText=encodeBlocks(blocks); showCopyFeedback(getSelectionRanges()); return pendingCutText;
+  }
+  function copySelectionBlocks(): string { cancelCut(); const text = encodeBlocks(clipboardBlocks()); showCopyFeedback(getSelectionRanges()); return text; }
   function pasteSelectionBlocks(text: string): void {
     if (destroyed || editor) throw new Error('Finish editing before pasting cells.');
     const ranges = getSelectionRanges().sort((a,b) => a.startRow - b.startRow || a.startColumn - b.startColumn);
-    const blocks = decodeBlocks(text).map((block, index) => {
+    const moving=pendingCutText!==undefined && text===pendingCutText;
+    const original=decodeBlocks(text);
+    const scalar=!moving && original.length===1 && original[0]!.values.length===1 && original[0]!.values[0]!.length===1;
+    if (scalar && ranges.reduce((total,range)=>total+(range.endRow-range.startRow+1)*(range.endColumn-range.startColumn+1),0)>100_000) throw new RangeError('Paste has too many cells.');
+    const expanded=scalar && ranges.length ? ranges.map(range=>{
+      const first=original[0]!,height=range.endRow-range.startRow+1,width=range.endColumn-range.startColumn+1;
+      return {...first,row:0,column:0,values:Array.from({length:height},()=>Array<string>(width).fill(first.values[0]![0]!)),...(first.formats ? {formats:Array.from({length:height},()=>Array.from({length:width},()=>({...first.formats![0]![0]!})))} : {})};
+    }) : original;
+    const blocks = expanded.map((block, index) => {
       const range = ranges.length > 1 ? ranges[index] : ranges[0];
       if (!range) return block;
       const formats = block.formats?.map(line => line.map(format => ({ ...format })));
@@ -1591,7 +1611,8 @@ export function createGrid(options: GridOptions): Grid {
       }));
       return { ...block, values, ...(formats ? { formats } : {}) };
     });
-    engine.pasteSelectionBlocks(encodeBlocks(blocks));
+    if (moving) { engine.pasteCutSelectionBlocks(encodeBlocks(blocks)); pendingCutText=undefined; }
+    else { engine.pasteSelectionBlocks(encodeBlocks(blocks)); if (pendingCutText) cancelCut(); }
   }
   function clipboardPlain(blocks: readonly ClipboardBlock[]): string {
     return blocksToTsv(blocks.map(block => ({ ...block, values: block.values.map((line, row) => line.map((value, col) => block.formats?.[row]?.[col]?.contentFormat === 'html' ? readHtml(value, doc).text : value)) })));
@@ -1621,17 +1642,24 @@ export function createGrid(options: GridOptions): Grid {
     const formats = values.map(line => line.map(() => ({ contentFormat: 'html' as const })));
     return decodeBlocks(encodeBlocks([{ row: 0, column: 0, values, formats }]));
   }
-  async function writeClipboard(): Promise<void> {
+  async function writeClipboard(cut=false): Promise<void> {
+    cancelCut();
+    const cutRequest=cutRevision;
     const blocks = clipboardBlocks(); const text = clipboardPlain(blocks);
     const copiedRanges = getSelectionRanges().map(range => ({ ...range }));
     const revision = copyFeedbackRevision;
+    if (cut) engine.cutSelectionBlocks();
     if (win.navigator.clipboard.write && win.ClipboardItem) await win.navigator.clipboard.write([new win.ClipboardItem({ 'text/plain': new win.Blob([text], { type: 'text/plain' }), 'text/html': new win.Blob([clipboardHtml(blocks)], { type: 'text/html' }) })]);
     else await win.navigator.clipboard.writeText(text);
+    if (cut && cutRequest!==cutRevision) return;
+    if (cut && !destroyed && revision===copyFeedbackRevision) pendingCutText=encodeBlocks(blocks);
+    else if(cut) engine.cancelCut();
     if (!destroyed && revision === copyFeedbackRevision) showCopyFeedback(copiedRanges);
   }
   function copySelection(): string {
     if (destroyed) throw new Error('Grid is destroyed.');
     if (editor) throw new Error('Finish editing before copying cells.');
+    cancelCut();
     const text = clipboardPlain(clipboardBlocks());
     showCopyFeedback(getSelectionRanges());
     return text;
@@ -1643,10 +1671,21 @@ export function createGrid(options: GridOptions): Grid {
     engine.paste(text);
   }
 
+  function onCut(event: ClipboardEvent): void {
+    if (event.target===editor || !engine.getSelection() || !event.clipboardData) return;
+    event.preventDefault();
+    cancelCut();
+    try {
+      const blocks=clipboardBlocks();engine.cutSelectionBlocks();
+      event.clipboardData.setData('text/plain',clipboardPlain(blocks));event.clipboardData.setData('text/html',clipboardHtml(blocks));
+      pendingCutText=encodeBlocks(blocks);event.clipboardData.setData(gridClipboardType,pendingCutText);showCopyFeedback(getSelectionRanges());
+    } catch(error) { pendingCutText=undefined;engine.cancelCut();win.alert(error instanceof Error ? error.message : 'Unable to cut cells.'); }
+  }
   function onCopy(event: ClipboardEvent): void {
     const selection = engine.getSelection();
     if (event.target === editor || !selection || !event.clipboardData) return;
     event.preventDefault();
+    cancelCut();
     try { const blocks=clipboardBlocks(); event.clipboardData.setData('text/plain',clipboardPlain(blocks)); event.clipboardData.setData('text/html',clipboardHtml(blocks));event.clipboardData.setData(gridClipboardType,encodeBlocks(blocks)); showCopyFeedback(getSelectionRanges()); }
     catch (error) { win.alert(error instanceof Error ? error.message : 'Unable to copy cells.'); }
   }
@@ -1872,7 +1911,7 @@ export function createGrid(options: GridOptions): Grid {
       return;
     }
     if (event.key === 'Escape') {
-      clearCopyFeedback();
+      cancelCut();
       onPointerEnd(); axisAnchor = null;
       addNextSelection = false;
       if (selection) {
@@ -2744,6 +2783,7 @@ export function createGrid(options: GridOptions): Grid {
   root.addEventListener('pointerup', onPointerEnd);
   root.addEventListener('pointercancel', onPointerEnd);
   root.addEventListener('lostpointercapture', onPointerEnd);
+  scroller.addEventListener('cut', onCut);
   scroller.addEventListener('copy', onCopy);
   scroller.addEventListener('paste', onPaste);
   scroller.addEventListener('keydown', onKeyDown);
@@ -2818,6 +2858,7 @@ export function createGrid(options: GridOptions): Grid {
     setGroupCollapsed:(id:string,collapsed:boolean)=>structureAction(()=>engine.setGroupCollapsed(id,collapsed), 'row'),
     setView:(view:LocalViewOptions)=>structureAction(()=>{engine.setView(view);currentView=engine.view;}),
     get view(){return managesView ? engine.view : currentView ?? {};},
+    cutSelectionBlocks, cancelCut,
     copySelectionBlocks,
     pasteSelectionBlocks,
     get rowCount() { return rowCount; }, get columns() { return columns; },
@@ -2862,6 +2903,7 @@ export function createGrid(options: GridOptions): Grid {
     setRowHeight: (index, height) => resizeAxis(rowAxis, index, height),
     destroy() {
       if (destroyed) return;
+      pendingCutText=undefined; cutRevision++;
       win.clearTimeout(lockNoticeTimer); clearCopyFeedback(); clearLayoutMotion(); motionPreference.removeEventListener('change', cancelMotion);
       choices?.remove(); choices = null; win.removeEventListener('beforeunload', guardEditNavigation);
       clearReorder();
@@ -2898,6 +2940,7 @@ export function createGrid(options: GridOptions): Grid {
       root.removeEventListener('pointerup', onPointerEnd);
       root.removeEventListener('pointercancel', onPointerEnd);
       root.removeEventListener('lostpointercapture', onPointerEnd);
+      scroller.removeEventListener('cut', onCut);
       scroller.removeEventListener('copy', onCopy);
       scroller.removeEventListener('paste', onPaste);
       scroller.removeEventListener('dblclick', onDoubleClick);

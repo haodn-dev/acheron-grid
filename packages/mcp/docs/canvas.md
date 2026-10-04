@@ -491,3 +491,11 @@ Successful cell copy through Ctrl/Cmd+C, the context menu, `copySelection()` or 
 With motion enabled the marker fades in for at most 120ms; reduced motion or `motion:false` keeps the static marker. There is no indefinite marching animation or Canvas repaint loop. Visual feedback is bounded to the first 64 selected ranges; clipboard content is unaffected. Programmatic copy methods return content and show feedback, but do not themselves write to the operating-system clipboard.
 
 Menu/choice surfaces use a 2px translation without scaling text (up to 160ms enter, 100ms exit). Interrupted exits start from the rendered opacity/transform. Table-lock notice moves 2px and cancels prior notice animation before replay. Selection, focus, scrolling and resize guides remain immediate; layout transitions retain the existing bounded strip snapshot and reduced-motion behavior.
+
+## Cut and repeating a single copied cell
+
+Ctrl/Cmd+X and the searchable menu's **Cut** action stage a same-grid move. The source stays unchanged until a successful paste; destination writes and source clearing share one undo/redo entry. Escape or copying another value cancels the pending move. Source changes, locks, parsers and destination formatting permissions are checked before deletion. The source is cleared to `null`, retaining its cell formatting; the destination receives the copied content/formatting. Cut from merged cells is rejected.
+
+`grid.cutSelectionBlocks()` returns a structured staged-cut payload; paste that exact payload through `grid.pasteSelectionBlocks(payload)` on the same grid. `grid.cancelCut()` cancels it. Ctrl/Cmd+V and menu paste recognize the matching structured/HTML clipboard payload. After the first successful move, further pastes act as copies. Copying/pasting through an editor keeps native text behavior. Cross-grid/app moves are not implemented; they do not delete the original source. Plain-text-only clipboard transfers cannot authenticate the structured pending cut and remain copy operations.
+
+Copy one cell, select multiple rows/cells, then paste to fill the target range(s). A structured one-cell payload repeats its formatting too. All target cells validate atomically. Multi-cell matrices retain existing placement rules; automatic matrix tiling is not provided.
