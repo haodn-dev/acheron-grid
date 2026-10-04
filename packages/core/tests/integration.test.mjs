@@ -33,7 +33,7 @@ test('restore column order respects structural veto and table locks without chan
  const engine=createGridEngine({columns,dataSource:source,canChangeStructure:value=>{request=value;return allowed;}});
  engine.editCell(0,0,'Changed');const saved=engine.exportState();const reordered=structuredClone(saved);reordered.configuration.columns.reverse();allowed=false;
  assert.throws(()=>engine.restoreState(reordered),/Structural change/);assert.deepEqual(engine.exportState(),saved);assert.equal(engine.canUndo(),true);assert.deepEqual(request.order,[1,0]);
- allowed=true;engine.setLocked({scope:'table'},true);const locked=engine.exportState();assert.throws(()=>engine.restoreState(reordered),/Structural change/);assert.deepEqual(engine.exportState(),locked);
+ allowed=true;engine.setLocked({scope:'table'},true);const locked=engine.exportState();assert.throws(()=>engine.restoreState(reordered),/Unlock the table/);assert.deepEqual(engine.exportState(),locked);
  engine.setLocked({scope:'table'},false);engine.restoreState(reordered);assert.deepEqual(engine.columns.map(column=>column.key),['b','a']);assert.equal(engine.canUndo(),false);engine.destroy();
 });
 
@@ -44,4 +44,12 @@ test('remote values use own properties and failed-page metadata is bounded witho
  assert.equal(source.getPageState(0),null);assert.equal(source.getPageState(1),null);assert.equal(source.getPageState(2).status,'error');assert.equal(source.getPageState(4).status,'loading');
  fail=false;await source.loadPage(2);assert.equal(source.getPageState(2).status,'ready');assert.equal(source.getValue(2,'a'),null);assert.equal(source.getValue(2,'toString'),'own');assert.equal(source.getValue(2,'constructor'),undefined);assert.equal(source.getValue(0,'a'),undefined);
  release({total:5,rows:[{a:1}]});await loading;assert.equal(source.getValue(4,'toString'),undefined);source.destroy();
+});
+
+test('restore retains projected selection extension and checks removal policies atomically',()=>{
+ const left=fixture().engine,right=fixture().engine;for(const engine of [left,right]){engine.setView({sort:{columnKey:'a',direction:'desc'}});engine.selectRange({startRow:1,endRow:4,startColumn:0,endColumn:0});}
+ right.restoreState(JSON.parse(JSON.stringify(left.exportState())));left.select(2,0,true);right.select(2,0,true);assert.deepEqual(right.getSelectionRanges(),left.getSelectionRanges());
+ let allow=true;const source=new LocalDataSource([{a:'a',b:'b'},{a:'c',b:'d'}],(_,i)=>i);const engine=createGridEngine({columns,dataSource:source,canChangeLayout:()=>allow,resolveCellPermission:()=>({formatting:allow})});
+ engine.mergeCells({startRow:0,endRow:1,startColumn:0,endColumn:0});const saved=engine.exportState();const without=structuredClone(saved);without.merges=[];allow=false;assert.throws(()=>engine.restoreState(without),/Removing merged/);assert.deepEqual(engine.exportState(),saved);
+ allow=true;engine.unmergeCells(saved.merges[0]);engine.format([{scope:'cell',rowIndex:0,columnIndex:0}],{background:'#fff'});const formatted=engine.exportState();const cleared=structuredClone(formatted);cleared.formats=[];allow=false;assert.throws(()=>engine.restoreState(cleared),/formatting/);assert.deepEqual(engine.exportState(),formatted);
 });

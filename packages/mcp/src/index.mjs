@@ -4,7 +4,7 @@ import { ListResourcesRequestSchema, ReadResourceRequestSchema, ListToolsRequest
 export function createGridMcpServer({ engine, documents = {}, authorize, validateWrite, allowWrites = false }) {
     if (engine && typeof authorize !== 'function') throw new TypeError('Grid access requires an authorize callback.');
     if (allowWrites && typeof validateWrite !== 'function') throw new TypeError('Writes require host validation.');
-    const server = new Server({ name: 'acheron-grid', version: '0.0.0' }, { capabilities: { resources: {}, tools: {} } });
+    const server = new Server({ name: 'acheron-grid', version: '0.1.0' }, { capabilities: { resources: {}, tools: {} } });
     const resources = Object.entries(documents).map(([name, text]) => {
         if (!/^[a-z0-9-]+$/.test(name) || typeof text !== 'string') throw new TypeError('Invalid document.');
         return { uri: `acheron://docs/${name}`, name, mimeType: 'text/markdown', text };

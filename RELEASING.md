@@ -22,9 +22,10 @@ npx playwright install chromium
 npm run test:browser
 npm run test:playground
 npm pack --dry-run --workspaces
+npm run test:package
 ```
 
-Run the browser/playground suites sequentially; their server ports must be available. Inspect dry-run contents for built ESM/declarations, README and license files. Dry-run success is not evidence that package installation or registry publication will succeed. Before a package release, test the packed artifacts in an independent TypeScript application, including React/Vue where relevant. Verify install/import, cleanup, clipboard, reduced motion and intended browser support. Do not infer full screen-reader coverage or FPS from the existing Chromium suite.
+Run the browser/playground suites sequentially; their server ports must be available. Inspect dry-run contents for built ESM/declarations, README and license files. Dry-run success is not evidence that package installation or registry publication will succeed. Before a package release, test the packed artifacts in an independent TypeScript application, including React/Vue where relevant. The test:package script installs all six tarballs in a temporary independent project, typechecks public imports, renders React/Vue SSR, and mounts/updates/destroys Canvas in Chromium. Its printed temporary directory is retained for diagnosis. Verify clipboard, reduced motion and intended browser support with the integration suites. Do not infer full screen-reader coverage or FPS from the existing Chromium suite.
 
 CI checks Node 22/24 on Ubuntu and retains failed-browser diagnostics. Confirm the workflow for the intended release commit; local checks do not establish remote CI status.
 

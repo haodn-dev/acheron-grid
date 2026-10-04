@@ -1138,15 +1138,16 @@ export function createGridEngine(options: GridEngineOptions) {
   function exportState():GridState {
     assertAlive();
     const layers=[...formats.values()].flatMap(entry=>Object.entries(entry.orders).map(([property,order])=>({order:order!,target:entry.target,patch:{[property]:entry.patch[property as keyof CellFormatPatch]}}))).sort((a,b)=>a.order-b.order);
-    return {version:1,configuration:exportConfiguration(),rowIds:Array.from({length:rowCount},(_,i)=>dataSource.getRowId(i)),rowHeights:rowAxis.snapshot(),manualRows:[...manualRows],ranges:getSelectionRanges().map(range=>({...range})),selection:selection?{...selection}:null,anchor:anchor?{...anchor}:null,merges:merges.map(span=>({...span})),groups:groups.map(group=>({...group})),locks:[...(tableLocked?[{scope:'table' as const}]:[]),...[...lockedRows].map(rowIndex=>({scope:'row' as const,rowIndex})),...[...lockedColumns].map(columnIndex=>({scope:'column' as const,columnIndex})),...[...lockedCells].map(key=>{const [rowIndex,columnIndex]=key.split(':').map(Number);return {scope:'cell' as const,rowIndex:rowIndex!,columnIndex:columnIndex!};})],formats:layers.map(({target,patch})=>({target:JSON.parse(JSON.stringify(target)) as CellFormatTarget,patch}))};
+    return {version:1,configuration:exportConfiguration(),rowIds:Array.from({length:rowCount},(_,i)=>dataSource.getRowId(i)),rowHeights:rowAxis.snapshot(),manualRows:[...manualRows],activeParts,displayAnchor:displayAnchor?{...displayAnchor}:null,ranges:getSelectionRanges().map(range=>({...range})),selection:selection?{...selection}:null,anchor:anchor?{...anchor}:null,merges:merges.map(span=>({...span})),groups:groups.map(group=>({...group})),locks:[...(tableLocked?[{scope:'table' as const}]:[]),...[...lockedRows].map(rowIndex=>({scope:'row' as const,rowIndex})),...[...lockedColumns].map(columnIndex=>({scope:'column' as const,columnIndex})),...[...lockedCells].map(key=>{const [rowIndex,columnIndex]=key.split(':').map(Number);return {scope:'cell' as const,rowIndex:rowIndex!,columnIndex:columnIndex!};})],formats:layers.map(({target,patch})=>({target:JSON.parse(JSON.stringify(target)) as CellFormatTarget,patch}))};
   }
   function restoreState(input:unknown):void {
     assertAlive();const saved=readGridState(input);
+    if(tableLocked)throw new Error('Unlock the table before restoring state.');
     if(saved.rowIds.length!==rowCount||saved.rowIds.some((id,i)=>!Object.is(id,dataSource.getRowId(i))))throw new Error('State row identities do not match the current source.');
     const configuration=restoreGridConfiguration(saved.configuration,columns,rowCount);
-    const order=configuration.columns.map(column=>columnIndices.get(column.key)!);
-    if(order.some((index,i)=>index!==i)) {
-      const request=Object.freeze({...structureRequest('column','move',order.map((_,i)=>i),0,order.length),order:Object.freeze(order),columns:Object.freeze(configuration.columns)});
+    const restoredOrder=configuration.columns.map(column=>columnIndices.get(column.key)!);
+    if(restoredOrder.some((index,i)=>index!==i)) {
+      const request=Object.freeze({...structureRequest('column','move',restoredOrder.map((_,i)=>i),0,restoredOrder.length),order:Object.freeze(restoredOrder),columns:Object.freeze(configuration.columns)});
       if(!structureAllowed(request))throw new Error('Structural change is disabled.');
     }
     const staged=createGridEngine({...options,...configuration,view:{},onEvent:()=>{},onInvalidate:()=>{},onObserverError:()=>{}});
@@ -1167,6 +1168,17 @@ export function createGridEngine(options: GridEngineOptions) {
       staged.setView(configuration.view);
       const valid=staged.exportState();
       const nextProjection=buildProjection(configuration.view,rowCount,valid.merges,saved.groups,configuration.frozenRows);
+      const restoredParts=saved.activeParts ?? 1, restoredAnchor=saved.displayAnchor ?? null;
+      if(!Number.isSafeInteger(restoredParts)||restoredParts<1||restoredParts>Math.max(1,valid.ranges.length))throw new TypeError('Invalid active selection parts.');
+      if(restoredAnchor&&(!Number.isSafeInteger(restoredAnchor.row)||!Number.isSafeInteger(restoredAnchor.col)||restoredAnchor.row<0||restoredAnchor.row>=(nextProjection?.length ?? rowCount)||restoredAnchor.col<0||restoredAnchor.col>=columns.length))throw new TypeError('Invalid display anchor.');
+      for(const span of merges)if(!saved.merges.some(next=>JSON.stringify(next)===JSON.stringify(span))&&!layoutAllowed({kind:'unmerge',range:span}))throw new Error('Removing merged cells is disabled.');
+      for(const group of groups) {
+        const next=saved.groups.find(item=>item.id===group.id&&item.startRow===group.startRow&&item.endRow===group.endRow);
+        if(!next&&!layoutAllowed({kind:'ungroup',group})||next&&next.collapsed!==group.collapsed&&!layoutAllowed({kind:next.collapsed?'collapse':'expand',group}))throw new Error('Changing row groups is disabled.');
+      }
+      for(const span of valid.merges)for(let row=span.startRow;row<=span.endRow;row++)for(let col=span.startColumn;col<=span.endColumn;col++)requirePermission(row,restoredOrder[col]!,'writable');
+      for(const group of valid.groups)for(let row=group.startRow;row<=group.endRow;row++)if(lockedRows.has(row))throw new Error('Changing locked row groups is disabled.');
+      if(JSON.stringify(exportState().formats)!==JSON.stringify(valid.formats))for(const entry of formats.values())requireFormatPermission(entry.bounds);
       const nextFormats=new Map<string,FormatEntry>();let order=0;
       for(const entry of valid.formats){
         const target=entry.target,bounds:SelectionRange=target.scope==='range'?{...target.range}:{startRow:target.scope==='row'||target.scope==='cell'?target.rowIndex:0,endRow:target.scope==='row'||target.scope==='cell'?target.rowIndex:rowCount-1,startColumn:target.scope==='column'||target.scope==='cell'?target.columnIndex:0,endColumn:target.scope==='column'||target.scope==='cell'?target.columnIndex:columns.length-1};
@@ -1187,6 +1199,7 @@ export function createGridEngine(options: GridEngineOptions) {
       const active=retainedRanges.pop();if(active&&rowCount&&columns.length){selection={rowIndex:active.startRow,columnIndex:active.startColumn,columnKey:columns[active.startColumn]!.key,rowId:dataSource.getRowId(active.startRow)};anchor={rowIndex:active.endRow,columnIndex:active.endColumn,columnKey:columns[active.endColumn]!.key,rowId:dataSource.getRowId(active.endRow)};}
       if(saved.selection&&saved.anchor){selection={...saved.selection};anchor={...saved.anchor};}
       view=Object.freeze({...configuration.view});installProjection(nextProjection);past.length=future.length=0;pendingCut=undefined;
+      activeParts=restoredParts;displayAnchor=restoredAnchor?{...restoredAnchor}:null;
       notify({type:'structure',rowMap:old.map(displayRow),columnMap:oldColumns.map(column=>columnIndices.get(column.key)??-1)},Object.freeze({type:'state:restore'}));
     } finally {staged.destroy();}
   }

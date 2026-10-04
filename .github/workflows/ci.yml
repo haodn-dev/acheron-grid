@@ -41,6 +41,8 @@ jobs:
         run: npx playwright test --config playground.config.mjs --workers=1 --output=playground-results
         env:
           PLAYWRIGHT_HTML_OUTPUT_DIR: playground-report
+      - name: Independent packed consumer
+        run: npm run test:package
       - name: Failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v7

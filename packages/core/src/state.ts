@@ -12,6 +12,8 @@ export interface GridState {
   readonly ranges: readonly SelectionRange[];
   readonly selection: Readonly<CellSelection> | null;
   readonly anchor: Readonly<CellSelection> | null;
+  readonly activeParts?: number;
+  readonly displayAnchor?: Readonly<{row:number;col:number}> | null;
   readonly merges: readonly SelectionRange[];
   readonly groups: readonly RowGroup[];
   readonly locks: readonly CellLockTarget[];

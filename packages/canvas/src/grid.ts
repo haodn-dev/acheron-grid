@@ -3,6 +3,7 @@ import { icons } from './icons.js';
 import { choicePanel, choiceValue, positionChoicePanel, disposeChoicePanel } from './choices.js';
 import type { ChoiceEditorOptions, ChoiceOption } from './choices.js';
 import { mediaItems, parseMediaValue, validateMediaValue } from './media.js';
+import { createMediaEditor } from './media-editor.js';
 import type { MediaItem } from './media.js';
 import { reorderedIndices } from './reorder.js';
 import type { ReorderRequest, RowChangeRequest } from './reorder.js';
@@ -1483,6 +1484,16 @@ export function createGrid(options: GridOptions): Grid {
       if (custom && (custom.ownerDocument !== doc || custom.parentNode || !['INPUT', 'SELECT', 'TEXTAREA'].includes(custom.tagName))) {
         throw new Error('Cell editor must be a detached input, select or textarea from the grid document.');
       }
+      if(!custom&&mediaColumn(column.key)) {
+        if(activeDialog?.open)return;
+        const dialog=createMediaEditor(doc,value,avatarColumns.has(column.key),next=>{
+          if(destroyed||engine.getRowId(selection.rowIndex)!==selection.rowId||columns[selection.columnIndex]?.key!==column.key||!Object.is(engine.getValue(selection.rowIndex,column.key),value))throw new Error('This cell changed. Cancel and reopen the editor.');
+          engine.editCell(selection.rowIndex,selection.columnIndex,JSON.stringify(next));
+        });
+        activeDialog=dialog;root.append(dialog);
+        dialog.addEventListener('close',()=>{dialog.remove();if(activeDialog===dialog)activeDialog=null;if(!destroyed)scroller.focus({preventScroll:true});});
+        dialog.showModal();return;
+      }
       const configured = columnEditors.get(column.key);
       if (!custom && (configured?.type === 'select' || configured?.type === 'multiselect')) {
         const select = doc.createElement('select');
@@ -2305,7 +2316,11 @@ export function createGrid(options: GridOptions): Grid {
       const image = item.image;
       const ratio = shape ? Math.max(width/image.naturalWidth,height/image.naturalHeight) : Math.max(0, Math.min(1, (width - 16) / image.naturalWidth, (height - 8) / image.naturalHeight));
       const w = image.naturalWidth * ratio; const h = image.naturalHeight * ratio;
-      if (ratio > 0) ctx.drawImage(image, x + (width - w) / 2, y + (height - h) / 2, w, h);
+      if (ratio > 0) {
+        ctx.save();
+        if(!shape){ctx.beginPath();ctx.roundRect(x+(width-w)/2,y+(height-h)/2,w,h,6);ctx.clip();}
+        ctx.drawImage(image, x + (width - w) / 2, y + (height - h) / 2, w, h);ctx.restore();
+      }
     } else {
       ctx.font = theme.font; ctx.fillStyle = textColor; ctx.textBaseline = 'middle';
       if(shape){ctx.textAlign='center';ctx.fillText(shape==='avatar'?label.trim().split(/\s+/).slice(0,2).map(part=>part[0]).join('').toLocaleUpperCase()||'?':item?.state==='loading'?'…':'—',x+width/2,y+height/2);}
@@ -2428,7 +2443,7 @@ export function createGrid(options: GridOptions): Grid {
   function accessibleText(row: number, col: number, value: unknown): string {
     const column = columns[col]!; const label = options.getCellLabel?.(row, column.key, value);
     if (label !== undefined) return label;
-    if(mediaColumn(column.key)){const items=mediaItems(value);return `${column.title}: ${items.length} ${avatarColumns.has(column.key)?'people':'images'}${items.length?'; '+items.map((item,i)=>item.name ?? item.alt ?? (item.src?.split('/').pop() || String(i+1))).join(', '):''}. Alt+Enter opens details.`;}
+    if(mediaColumn(column.key)){const items=mediaItems(value);return `${column.title}: ${items.length} ${avatarColumns.has(column.key)?'people':'images'}${items.length?'; '+items.map((item,i)=>item.name ?? item.alt ?? ((avatarColumns.has(column.key)?'Person ':'Image ')+(i+1))).join(', '):''}. Alt+Enter opens details.`;}
     return `${column.title}: ${displayedText(value, column.key, engine.getFormat(row, col).contentFormat)}`;
   }
   function accessibleCell(row: number, col: number, value: unknown): HTMLElement {
