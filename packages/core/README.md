@@ -295,3 +295,9 @@ The source is **read-only**. Writes still require synchronous atomic setters on 
 ### Sort/filter with groups and merges
 
 Related rows form indivisible blocks. Sorting uses the first row in a block; filtering retains the whole block if any member matches. Frozen blocks keep their leading order. Collapsed children remain hidden. Group creation still requires an expanded unsorted view; collapsing cannot hide a merge or cross a frozen boundary. This preserves outline structure rather than sorting individual children through another group.
+
+### State restoration and remote cache limits
+
+Restoring a different column order checks structural permissions before committing, including the table lock and projected-view restrictions. The host structural callback receives the complete target `order` and `columns`; denied restores preserve state and history.
+
+The async source reads own row properties only. It retains at most `maxPages` successful pages and, separately, `maxPages` recent error states. Loading states are retained until requests settle or are canceled. This is not a request concurrency limit; hosts should bound concurrent loads. Evicted error states return `null` from `getPageState`; calling `loadPage` can retry them.

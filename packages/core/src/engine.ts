@@ -1144,6 +1144,11 @@ export function createGridEngine(options: GridEngineOptions) {
     assertAlive();const saved=readGridState(input);
     if(saved.rowIds.length!==rowCount||saved.rowIds.some((id,i)=>!Object.is(id,dataSource.getRowId(i))))throw new Error('State row identities do not match the current source.');
     const configuration=restoreGridConfiguration(saved.configuration,columns,rowCount);
+    const order=configuration.columns.map(column=>columnIndices.get(column.key)!);
+    if(order.some((index,i)=>index!==i)) {
+      const request=Object.freeze({...structureRequest('column','move',order.map((_,i)=>i),0,order.length),order:Object.freeze(order),columns:Object.freeze(configuration.columns)});
+      if(!structureAllowed(request))throw new Error('Structural change is disabled.');
+    }
     const staged=createGridEngine({...options,...configuration,view:{},onEvent:()=>{},onInvalidate:()=>{},onObserverError:()=>{}});
     try {
       for(const size of saved.rowHeights){if(!Array.isArray(size)||size.length!==2)throw new TypeError('Invalid row height.');staged.setRowHeight(size[0],size[1]);}

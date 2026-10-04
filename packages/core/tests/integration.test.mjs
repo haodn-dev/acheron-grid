@@ -27,3 +27,21 @@ test('async paging shares requests, exposes errors, rejects malformed responses 
  const invalid=createAsyncDataSource({pageSize:2,createAbortController:()=>new AbortController(),load:async()=>({total:3,rows:[{a:'missing'}]})});await assert.rejects(invalid.loadPage(0),/Invalid page/);assert.equal(invalid.getPageState(0).status,'error');assert.equal(invalid.getRowCount(),0);
  const good=createAsyncDataSource({pageSize:2,rowCount:4,maxPages:1,createAbortController:()=>new AbortController(),load:async({offset})=>({total:4,rows:[{a:offset},{a:offset+1}]})});await good.loadPage(0);assert.equal(good.getValue(1,'a'),1);await good.loadPage(2);assert.equal(good.getValue(0,'a'),undefined);assert.equal(good.getValue(2,'a'),2);good.reset();assert.equal(good.getRowCount(),0);good.destroy();assert.throws(()=>good.loadPage(0),/destroyed/);
 });
+
+test('restore column order respects structural veto and table locks without changing state or history',()=>{
+ const source=new LocalDataSource([{a:'A',b:'B'}],(_,i)=>i);let allowed=true;let request;
+ const engine=createGridEngine({columns,dataSource:source,canChangeStructure:value=>{request=value;return allowed;}});
+ engine.editCell(0,0,'Changed');const saved=engine.exportState();const reordered=structuredClone(saved);reordered.configuration.columns.reverse();allowed=false;
+ assert.throws(()=>engine.restoreState(reordered),/Structural change/);assert.deepEqual(engine.exportState(),saved);assert.equal(engine.canUndo(),true);assert.deepEqual(request.order,[1,0]);
+ allowed=true;engine.setLocked({scope:'table'},true);const locked=engine.exportState();assert.throws(()=>engine.restoreState(reordered),/Structural change/);assert.deepEqual(engine.exportState(),locked);
+ engine.setLocked({scope:'table'},false);engine.restoreState(reordered);assert.deepEqual(engine.columns.map(column=>column.key),['b','a']);assert.equal(engine.canUndo(),false);engine.destroy();
+});
+
+test('remote values use own properties and failed-page metadata is bounded without losing pending loads',async()=>{
+ let fail=true,release;const source=createAsyncDataSource({pageSize:1,maxPages:1,rowCount:5,createAbortController:()=>new AbortController(),load:async({offset})=>{if(offset===4)return new Promise(resolve=>release=resolve);if(fail)throw Error('offline');return {total:5,rows:[{a:null,toString:'own'}]};}});
+ const loading=source.loadPage(4);await Promise.resolve();
+ for(let offset=0;offset<3;offset++)await assert.rejects(source.loadPage(offset),/offline/);
+ assert.equal(source.getPageState(0),null);assert.equal(source.getPageState(1),null);assert.equal(source.getPageState(2).status,'error');assert.equal(source.getPageState(4).status,'loading');
+ fail=false;await source.loadPage(2);assert.equal(source.getPageState(2).status,'ready');assert.equal(source.getValue(2,'a'),null);assert.equal(source.getValue(2,'toString'),'own');assert.equal(source.getValue(2,'constructor'),undefined);assert.equal(source.getValue(0,'a'),undefined);
+ release({total:5,rows:[{a:1}]});await loading;assert.equal(source.getValue(4,'toString'),undefined);source.destroy();
+});

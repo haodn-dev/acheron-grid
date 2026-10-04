@@ -21,7 +21,12 @@ export function createAsyncDataSource<S>(options: AsyncDataSourceOptions<S>) {
   const pending=new Map<number,{controller:ReturnType<typeof options.createAbortController>;promise:Promise<void>}>();
   const listeners=new Set<(state:PageState)=>void>();
   const observerErrors:unknown[]=[];
-  function emit(state:PageState):void {states.set(state.offset,Object.freeze(state));for(const listener of [...listeners])try{listener(state);}catch(error){observerErrors.push(error);if(observerErrors.length>10)observerErrors.shift();}}
+  function emit(state:PageState):void {
+    states.delete(state.offset);states.set(state.offset,Object.freeze(state));
+    const errors=[...states.values()].filter(item=>item.status==='error');
+    for(const item of errors.slice(0,Math.max(0,errors.length-maxPages)))states.delete(item.offset);
+    for(const listener of [...listeners])try{listener(state);}catch(error){observerErrors.push(error);if(observerErrors.length>10)observerErrors.shift();}
+  }
   function alive():void {if(destroyed)throw new Error('Async data source is destroyed.');}
   function index(row:number):void {alive();if(!Number.isSafeInteger(row)||row<0||row>=count)throw new RangeError('Invalid async row index.');}
   function loadPage(offset:number):Promise<void> {
@@ -40,7 +45,7 @@ export function createAsyncDataSource<S>(options: AsyncDataSourceOptions<S>) {
     pending.set(offset,{controller,promise});emit({offset,status:'loading'});return promise;
   }
   function cancel():void {generation++;for(const item of pending.values())item.controller.abort();pending.clear();for(const [offset,state] of states)if(state.status==='loading')states.delete(offset);}
-  const source:DataSource={getRowCount:()=>{alive();return count;},getRowId:row=>{index(row);return options.getRowId?.(row) ?? row;},getValue:(row,key)=>{index(row);return pages.get(Math.floor(row/pageSize)*pageSize)?.[row%pageSize]?.[key];}};
+  const source:DataSource={getRowCount:()=>{alive();return count;},getRowId:row=>{index(row);return options.getRowId?.(row) ?? row;},getValue:(row,key)=>{index(row);const value=pages.get(Math.floor(row/pageSize)*pageSize)?.[row%pageSize];return value&&Object.hasOwn(value,key)?value[key]:undefined;}};
   return Object.freeze({
     ...source,
     pageSize,
