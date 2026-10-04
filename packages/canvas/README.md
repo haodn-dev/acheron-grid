@@ -17,7 +17,7 @@ An experimental Canvas browser renderer for the headless @acheron-grid/core engi
 - TSV copy/paste, atomic local batches, delta undo/redo and typed events.
 - Per-column rich text with HTML or an optional host-provided Markdown adapter.
 
-This package is a development preview, not a published release. Remote data sources and framework adapters are not implemented. The active cell has a bounded ARIA grid mirror; full screen-reader coverage has not been verified. A headless render-callback benchmark is available; end-to-end frame rate has not been verified.
+This package is a development preview, not a published release. Remote data sources are not implemented. React and Vue lifecycle adapters are available in separate packages. The active cell has a bounded ARIA grid mirror; full screen-reader coverage has not been verified. A headless render-callback benchmark is available; end-to-end frame rate has not been verified.
 
 ## Build from source
 
@@ -291,7 +291,7 @@ Right-click → **Format cells…** opens the native color dialog. Choose select
 
 Canvas exposes core `format(targets, patch)`, `canFormat(targets)`, and `getFormat(row, col)`; see the [core formatting contract](../core/README.md#sparse-cell-formatting). Set `permissions: { formatting: false }`, column permissions, or a resolver veto to disable formatting in the menu, API and history, independently of editing. Existing colors remain visible. The demo admin checkbox illustrates this host policy; it is not server authorization.
 
-Default text, checkbox strokes, cell backgrounds and native editor colors use effective styles. Custom renderers receive frozen `cell.format` and decide how to apply content colors; their paint may override the cell background. Color changes repaint the viewport, while value updates retain dirty-cell drawing. Headers retain the theme. Bold/italic and rich formatting clipboard are supported; arbitrary font families, per-cell borders and persistence remain outside this preview.
+Default text, checkbox strokes, cell backgrounds and native editor colors use effective styles. Custom renderers receive frozen `cell.format` and decide how to apply content colors; their paint may override the cell background. Color changes repaint the viewport, while value updates retain dirty-cell drawing. Headers retain the theme. Bold/italic and rich formatting clipboard are supported; arbitrary font families, per-cell borders and persistence of cell formatting remain outside this preview.
 
 ## Active-cell accessibility
 
