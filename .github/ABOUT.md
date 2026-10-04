@@ -12,7 +12,7 @@ TypeScript data grid with a headless core, Canvas rendering, React/Vue adapters,
 
 **Website**
 
-Leave the project website unset until a public demo/documentation domain is confirmed. Do not use `acheron-grid-demo.test`. Author website: [Hao Duong](https://haoduong.dev/).
+Project website: [Acheron Grid](https://acheron-grid.haoduong.dev/). Author website: [Hao Duong](https://haoduong.dev/).
 
 **Status**
 
