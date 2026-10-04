@@ -165,7 +165,8 @@ test('notification observes committed history, teardown drops callback and histo
   assert.throws(() => engine.select(0, 0), /destroyed/);
   assert.equal(notified, 101);
   const { engine: throwing } = fixture({ onInvalidate() { throw new Error('Renderer failed.'); } });
-  assert.throws(() => throwing.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Committed' }]), /Renderer failed/);
+  assert.doesNotThrow(() => throwing.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Committed' }]));
+  assert.equal(throwing.takeObserverErrors()[0].message,'Renderer failed.');
   assert.equal(throwing.getValue(0, 'name'), 'Committed');
   assert.equal(throwing.canUndo(), true);
 });
@@ -265,7 +266,8 @@ test('events follow committed invalidation, omit no-ops and call both throwing h
   const error = new Error('First failure');
   let called = 0;
   const { engine: failing } = fixture({ onInvalidate: () => { throw error; }, onEvent: () => { called++; throw new Error('Second failure'); } });
-  assert.throws(() => failing.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Committed' }]), thrown => thrown === error);
+  assert.doesNotThrow(() => failing.updateCells([{ rowIndex: 0, columnKey: 'name', value: 'Committed' }]));
+  assert.equal(failing.takeObserverErrors().length,2);
   assert.equal(called, 1);
   assert.equal(failing.getValue(0, 'name'), 'Committed');
   assert.equal(failing.canUndo(), true);

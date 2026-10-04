@@ -46,3 +46,9 @@ test('pasting a multiline block selects the entire destination and rejected past
  await viewport.click({position:{x:170,y:75}});await page.evaluate(()=>{try{window.grid.pasteSelectionBlocks(window.payload);}catch{}});
  expect(await page.evaluate(()=>window.grid.getSelectionRange())).toEqual({startRow:2,endRow:2,startColumn:1,endColumn:1});
 });
+
+test('cut and paste whole rows transfers values, preserves row identities and is undoable',async({page})=>{
+ await setup(page);await page.evaluate(()=>{window.grid.selectRow(0);window.payload=window.grid.cutSelectionBlocks();window.grid.selectRow(2);window.grid.pasteSelectionBlocks(window.payload);});
+ expect(await page.evaluate(()=>[window.source.getValue(0,'a'),window.source.getValue(0,'b'),window.source.getValue(2,'a'),window.source.getValue(2,'b'),window.source.getRowId(0),window.source.getRowId(2)])).toEqual([null,null,'First','One',1,3]);
+ await page.evaluate(()=>window.grid.undo());expect(await page.evaluate(()=>[window.source.getValue(0,'a'),window.source.getValue(2,'a')])).toEqual(['First','Third']);
+});

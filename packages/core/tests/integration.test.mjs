@@ -1,0 +1,29 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {createGridEngine,LocalDataSource,createAsyncDataSource} from '../dist/index.js';
+const columns=[{key:'a',title:'A',editable:true},{key:'b',title:'B',editable:true}];
+function fixture(){const source=new LocalDataSource(Array.from({length:8},(_,id)=>({id,a:'A'+id,b:'B'+id})),row=>row.id);return {source,engine:createGridEngine({columns,dataSource:source})};}
+test('multiple observers can unsubscribe, failures never turn committed writes into failed mutations',()=>{
+ const {engine,source}=fixture();let a=0,b=0;const errors=[];const off=engine.subscribe({onEvent:()=>a++});engine.subscribe({onInvalidate:()=>{throw new Error('Observer');},onEvent:()=>b++});
+ engine.updateCells([{rowIndex:0,columnKey:'a',value:'New'}]);assert.equal(source.getValue(0,'a'),'New');assert.equal(a,1);assert.equal(b,1);assert.equal(engine.takeObserverErrors().length,1);off();engine.undo();assert.equal(a,1);assert.equal(b,2);engine.destroy();assert.throws(()=>engine.subscribe({}),/destroyed/);
+});
+test('external refresh remaps sparse state by stable IDs and drops unsafe history',()=>{
+ const {engine,source}=fixture();engine.select(2,0);engine.setLocked({scope:'row',rowIndex:2},true);engine.format([{scope:'cell',rowIndex:2,columnIndex:1}],{background:'#123456'});engine.setRowHeight(2,55);const ids=engine.captureRowIdentity();const moved=source.getRow(2);source.spliceRows([{index:2,deleteCount:1,rows:[]},{index:0,deleteCount:0,rows:[moved]}]);engine.refreshData(ids);
+ assert.equal(engine.getSelection().rowId,2);assert.equal(engine.getSelection().rowIndex,0);assert.equal(engine.isLocked({scope:'row',rowIndex:0}),true);assert.equal(engine.getFormat(0,1).background,'#123456');assert.equal(engine.rows.size(0),55);assert.equal(engine.canUndo(),false);
+ source.spliceRows([{index:0,deleteCount:1,rows:[]}]);engine.refreshData();assert.equal(engine.rowCount,7);assert.equal(engine.getSelection(),null);assert.equal(engine.isLocked({scope:'row',rowIndex:0}),false);
+});
+test('state restores outlines, sparse formatting priority, selection, locks, sizes and view atomically',()=>{
+ const {engine}=fixture();engine.format([{scope:'row',rowIndex:1}],{background:'#123456'});engine.format([{scope:'cell',rowIndex:1,columnIndex:0}],{background:'#abcdef'});engine.format([{scope:'row',rowIndex:1}],{fontWeight:'bold'});engine.mergeCells({startRow:3,endRow:4,startColumn:0,endColumn:1});const group=engine.groupRows(0,2);engine.selectRange({startRow:5,endRow:6,startColumn:0,endColumn:1});engine.setLocked({scope:'row',rowIndex:6},true);engine.setRowHeight(1,61);engine.setGroupCollapsed(group,true);const saved=JSON.parse(JSON.stringify(engine.exportState()));
+ engine.restoreState(saved);assert.equal(engine.getRowGroups()[0].id,group);assert.equal(engine.getRowGroups()[0].collapsed,true);assert.equal(engine.getMergedCells().length,1);assert.deepEqual(engine.exportState(),saved);assert.equal(engine.canUndo(),false);
+ const crossesFreeze=structuredClone(saved);crossesFreeze.configuration.frozenRows=2;assert.throws(()=>engine.restoreState(crossesFreeze),/frozen boundary/);assert.deepEqual(engine.exportState(),saved);
+ const broken=structuredClone(saved);broken.formats.push({target:{scope:'cell',rowIndex:999,columnIndex:0},patch:{background:'#000'}});assert.throws(()=>engine.restoreState(broken));assert.deepEqual(engine.exportState(),saved);engine.setGroupCollapsed(group,false);assert.equal(engine.getFormat(1,0).background,'#abcdef');assert.equal(engine.getFormat(1,0).fontWeight,'bold');
+});
+test('sort and filter preserve outline blocks and collapsed children',()=>{
+ const {engine,source}=fixture();source.setValue(0,'a','Z');source.setValue(3,'a','A');engine.groupRows(0,2);engine.mergeCells({startRow:3,endRow:4,startColumn:0,endColumn:1});engine.setView({sort:{columnKey:'a',direction:'asc'}});assert.deepEqual(Array.from({length:engine.rowCount},(_,i)=>engine.getRowId(i)),[3,4,5,6,7,0,1,2]);
+ engine.setView({filters:[{columnKey:'b',query:'B1',operator:'equals'}]});assert.deepEqual(Array.from({length:engine.rowCount},(_,i)=>engine.getRowId(i)),[0,1,2]);engine.setGroupCollapsed(engine.getRowGroups()[0].id,true);assert.equal(engine.rowCount,1);assert.equal(engine.getRowId(0),0);
+});
+test('async paging shares requests, exposes errors, rejects malformed responses and ignores canceled responses',async()=>{
+ let calls=0, resolve;const pending=new Promise(r=>resolve=r);const source=createAsyncDataSource({pageSize:2,createAbortController:()=>new AbortController(),load:async()=>{calls++;return pending;}});const a=source.loadPage(0),b=source.loadPage(0);assert.equal(a,b);await Promise.resolve();assert.equal(calls,1);source.cancel();resolve({total:2,rows:[{a:'stale'},{a:'stale'}]});await a;assert.equal(source.getRowCount(),0);
+ const invalid=createAsyncDataSource({pageSize:2,createAbortController:()=>new AbortController(),load:async()=>({total:3,rows:[{a:'missing'}]})});await assert.rejects(invalid.loadPage(0),/Invalid page/);assert.equal(invalid.getPageState(0).status,'error');assert.equal(invalid.getRowCount(),0);
+ const good=createAsyncDataSource({pageSize:2,rowCount:4,maxPages:1,createAbortController:()=>new AbortController(),load:async({offset})=>({total:4,rows:[{a:offset},{a:offset+1}]})});await good.loadPage(0);assert.equal(good.getValue(1,'a'),1);await good.loadPage(2);assert.equal(good.getValue(0,'a'),undefined);assert.equal(good.getValue(2,'a'),2);good.reset();assert.equal(good.getRowCount(),0);good.destroy();assert.throws(()=>good.loadPage(0),/destroyed/);
+});

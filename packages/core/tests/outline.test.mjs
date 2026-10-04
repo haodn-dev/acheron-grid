@@ -42,7 +42,7 @@ test('merge validates overlap, freeze, view, host policy and structural remappin
   engine.setFrozen(0,0);engine.mergeCells(span);
   assert.equal(engine.canMerge({...span,startRow:2,endRow:3}),false);
   assert.throws(()=>engine.setFrozen(2,0));assert.equal(engine.frozenRows,0);
-  assert.throws(()=>engine.setView({sort:{columnKey:'a',direction:'asc'}}));
+  engine.setView({sort:{columnKey:'a',direction:'asc'}}); assert.equal(engine.getMergedCells().length,1); engine.setView({});
   assert.throws(()=>engine.moveRows([1],6),/split/);assert.equal(engine.getRowId(1),1);
   engine.moveRows([1,2],6);assert.deepEqual(engine.getMergedCells()[0],{...span,startRow:4,endRow:5});
   engine.undo();assert.deepEqual(engine.getMergedCells()[0],span);
@@ -71,5 +71,5 @@ test('nested row groups keep source identity, freeze, selection, source height a
   engine.setGroupCollapsed(parent,false);engine.setFrozen(2,0);
   assert.throws(()=>engine.setGroupCollapsed(parent,true),/frozen/);
   engine.setFrozen(0,0);engine.mergeCells(span);assert.throws(()=>engine.setGroupCollapsed(child,true),/Unmerge/);
-  assert.throws(()=>engine.setView({filters:[{columnKey:'a',query:'A'}]}));
+  engine.setView({filters:[{columnKey:'a',query:'A'}]});assert.equal(engine.getRowGroups().length,2);
 });

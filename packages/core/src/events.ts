@@ -5,6 +5,8 @@ import type { CellSelection, SelectionRange, CellLockTarget, CellFormatTarget, C
 
 export type GridChangeSource = 'api' | 'edit' | 'paste' | 'undo' | 'redo';
 export type GridEvent =
+  | { readonly type: 'data:refresh'; readonly previousRowCount: number; readonly rowCount: number; readonly identitiesReconciled: boolean }
+  | { readonly type: 'state:restore' }
   | { readonly type: 'merge:change' | 'group:change'; readonly source: 'api' | 'undo' | 'redo' }
   | {readonly type:'view:change'; readonly view:Readonly<LocalViewOptions>; readonly rowCount:number; readonly sourceRowCount:number}
   | { readonly type: 'structure:change'; readonly source: 'api' | 'undo' | 'redo'; readonly request: Readonly<StructureRequest>; readonly rowCount: number; readonly columnKeys: readonly string[] }

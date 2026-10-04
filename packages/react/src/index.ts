@@ -28,9 +28,8 @@ export const AcheronGrid = forwardRef<AcheronGridHandle, AcheronGridProps>(funct
   useImperativeHandle(ref, () => ({ getGrid: () => grid.current }), []);
   useEffect(() => {
     if (!container.current) return;
-    const instance = createGrid({ ...props.options, container: container.current, onEvent: event => {
-      props.options.onEvent?.(event); callbacks.current.onEvent?.(event);
-    } });
+    const instance = createGrid({ ...props.options, container: container.current });
+    instance.subscribe({onEvent:event=>callbacks.current.onEvent?.(event)});
     grid.current = instance;
     callbacks.current.onReady?.(instance);
     return () => { grid.current = null; instance.destroy(); callbacks.current.onReady?.(null); };

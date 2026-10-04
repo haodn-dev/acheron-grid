@@ -133,8 +133,59 @@ test('validation distinguishes reject from allowed warnings',async({page})=>{
  const editor=page.getByRole('textbox');await editor.fill('bad');await expect(editor).toHaveAttribute('aria-invalid','true');
  await editor.press('Enter');await expect(editor).toBeVisible();expect(await page.evaluate(()=>window.source.getValue(0,'a'))).toBe('Alpha 0');
  await editor.press('Escape');await viewport.click({position:{x:220,y:45}});await viewport.press('F2');await editor.fill('bad');
- await expect(page.getByText('Use another value. — You can save this value.',{exact:true})).toBeVisible();await editor.press('Enter');
+ await expect(page.getByText('Use another value. You can save this value.',{exact:true})).toBeVisible();await editor.press('Enter');
  expect(await page.evaluate(()=>window.source.getValue(1,'b'))).toBe('bad');
  await expect(page.getByRole('gridcell',{name:'Allow: bad',exact:true})).toHaveAttribute('aria-invalid','true');
  await page.screenshot({path:'test-results/validation-ui.png'});
+});
+
+test('multiselect preserves input order and typing after arrows filters options',async({page})=>{
+ await setup(page);await page.evaluate(async()=>{
+ window.grid.destroy();const {createGrid}=await import('/canvas/index.js');window.source.setValue(0,'a','Review, Design, Content');
+ window.grid=createGrid({container:document.querySelector('#grid'),dataSource:window.source,columns:[{key:'a',title:'Tags',editable:true}],columnEditors:{a:{type:'multiselect',values:['Design','Content','Review','Public']}},choiceEditor:{},rowHeight:32,columnWidth:240});
+ });const viewport=page.getByRole('grid');await viewport.press('Control+Home');await viewport.press('F2');
+ const panel=page.locator('[data-grid-choices]');await panel.getByRole('searchbox').press('ArrowDown');await expect(panel.locator('input:focus')).toHaveCSS('outline-style','none');await page.keyboard.type('Pub');
+ await expect(panel.getByRole('searchbox')).toHaveValue('Pub');await expect(panel.getByRole('checkbox')).toHaveCount(1);
+ await panel.getByRole('checkbox',{name:'Public',exact:true}).check();await panel.getByRole('button',{name:'Apply',exact:true}).click();
+ expect(await page.evaluate(()=>window.source.getValue(0,'a'))).toBe('Review, Design, Content, Public');
+ await viewport.press('F2');await panel.getByRole('button',{name:'Apply',exact:true}).click();
+ expect(await page.evaluate(()=>window.source.getValue(0,'a'))).toBe('Review, Design, Content, Public');
+});
+test('suggested context menu is optional and search still finds hidden commands',async({page})=>{
+ await setup(page);const viewport=page.getByRole('grid');await viewport.click({button:'right',position:{x:80,y:45}});
+ const mode=page.getByRole('menuitemcheckbox',{name:'Suggested actions',exact:true});await mode.click();await expect(mode).toHaveAttribute('aria-checked','true');
+ await expect(page.getByRole('menuitem',{name:/^Resize row/})).toBeHidden();await page.keyboard.type('Resize row');await expect(page.getByRole('menuitem',{name:/^Resize row/})).toBeVisible();
+ await page.keyboard.press('Escape');await page.getByRole('menuitem',{name:'Show all actions',exact:true}).click();await expect(page.getByRole('menuitem',{name:/^Resize row/})).toBeVisible();
+});
+test('link previews are opt-in, show full URLs and recover from metadata failures',async({page})=>{
+ await setup(page);await page.evaluate(async()=>{window.grid.destroy();const {createGrid}=await import('/canvas/index.js');window.source.setValue(0,'a','https://example.com/full/path?query=1');window.loads=0;
+ window.grid=createGrid({container:document.querySelector('#grid'),dataSource:window.source,columns:[{key:'a',title:'Link'}],linkPreview:{load:async()=>{window.loads++;throw new Error('Offline');}}});});
+ const viewport=page.getByRole('grid');await viewport.press('Control+Home');await viewport.press('Alt+Enter');
+ const dialog=page.getByRole('dialog',{name:'Cell links'});await expect(dialog.getByText('Preview unavailable. The link is still available.')).toBeVisible();await expect(dialog.getByRole('link')).toHaveAttribute('href','https://example.com/full/path?query=1');
+ await dialog.getByRole('button',{name:'Hide website details'}).click();expect(await page.evaluate(()=>window.loads)).toBe(1);await expect(dialog.getByText('https://example.com/full/path?query=1',{exact:true})).toHaveCount(1);
+});
+
+test('a fully cell-locked row is indicated in its index and described when index is hidden',async({page})=>{
+ await setup(page);await page.evaluate(()=>{for(let columnIndex=0;columnIndex<3;columnIndex++)window.grid.setLocked({scope:'cell',rowIndex:1,columnIndex},true);});
+ const row=page.getByRole('button',{name:'Select row 2',exact:true});await expect(row.locator('svg')).toHaveCount(1);await expect(row).toHaveAttribute('aria-description',/Row locked/);
+ await page.evaluate(async()=>{window.grid.destroy();const {createGrid}=await import('/canvas/index.js');window.grid=createGrid({container:document.querySelector('#grid'),dataSource:window.source,indexColumn:false,accessibility:'viewport',columns:['a','b','c'].map(key=>({key,title:key,editable:true}))});window.grid.setLocked({scope:'row',rowIndex:1},true);});
+ const cells=page.getByRole('row').filter({has:page.getByRole('gridcell',{name:'a: Alpha 1',exact:true})}).getByRole('gridcell');await expect(cells).toHaveCount(3);
+ for(const cell of await cells.all())await expect(cell).toHaveAttribute('aria-description',/Row locked/);
+});
+
+test('enabled link preview opens on hover without moving keyboard focus',async({page})=>{
+ await setup(page);await page.evaluate(async()=>{window.grid.destroy();const {createGrid}=await import('/canvas/index.js');window.source.setValue(0,'a','https://example.com/page');window.grid=createGrid({container:document.querySelector('#grid'),dataSource:window.source,columns:[{key:'a',title:'Link'}],linkPreview:{load:async()=>({title:'Example preview',description:'Details'})}});});
+ const viewport=page.getByRole('grid');await viewport.focus();const box=await viewport.boundingBox();const row=await page.getByRole('button',{name:'Select row 1',exact:true}).boundingBox();await page.mouse.move(box.x+100,row.y+row.height/2);
+ const dialog=page.getByRole('dialog',{name:'Cell links'});await expect(dialog.getByText('Example preview',{exact:true})).toBeVisible();await expect(viewport).toBeFocused();await expect(dialog.getByRole('link')).toHaveAttribute('href','https://example.com/page');
+});
+
+test('link popup is automatic without metadata and contains its own open icon',async({page})=>{
+ await setup(page);await page.evaluate(()=>window.source.setValue(0,'a','https://example.com/page'));
+ const viewport=page.getByRole('grid'),box=await viewport.boundingBox(),row=await page.getByRole('button',{name:'Select row 1',exact:true}).boundingBox();await page.mouse.move(box.x+100,row.y+row.height/2);
+ const popup=page.getByRole('dialog',{name:'Cell links'});await expect(popup.getByRole('link').locator('svg')).toHaveCount(1);await expect(popup.getByText('https://example.com/page',{exact:true})).toBeVisible();await expect(page.locator('[data-grid-link-badges]')).toBeHidden();await expect(popup.getByRole('button',{name:/website details/})).toHaveCount(0);
+});
+
+test('host can prohibit metadata loading and user cannot enable it',async({page})=>{
+ await setup(page);await page.evaluate(async()=>{window.grid.destroy();const {createGrid}=await import('/canvas/index.js');window.source.setValue(0,'a','https://example.com/page');window.loads=0;window.grid=createGrid({container:document.querySelector('#grid'),dataSource:window.source,columns:[{key:'a',title:'Link'}],linkPreview:{allowMetadata:false,load:async()=>{window.loads++;return {title:'Remote'};}}});});
+ const viewport=page.getByRole('grid');await viewport.press('Control+Home');await viewport.press('Alt+Enter');const popup=page.getByRole('dialog',{name:'Cell links'});await expect(popup.getByRole('link')).toHaveAttribute('href','https://example.com/page');await expect(popup.getByRole('button',{name:/website details/})).toHaveCount(0);expect(await page.evaluate(()=>window.loads)).toBe(0);
 });

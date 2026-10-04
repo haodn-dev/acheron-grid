@@ -9,18 +9,9 @@ async function setup(page) {
   });
 }
 
-test('link badges expose each safe link on hover and cell selection only', async ({ page }) => {
-  await page.goto('/');
-  await page.evaluate(async () => {
-    const { createGrid } = await import('/canvas/index.js'); const { LocalDataSource } = await import('/core/index.js');
-    window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: new LocalDataSource([{ id: 1, text: 'https://example.com/one https://example.org/two' }, { id: 2, text: 'plain' }], row => row.id), columns: [{ key: 'text', title: 'Text' }], columnWidth: 400 });
-  });
-  const badges = page.locator('[data-grid-link-badges]'), viewport = page.getByRole('grid');
-  await viewport.hover({ position: { x: 200, y: 16 } }); await expect(badges).toBeVisible(); await expect(badges.getByRole('link')).toHaveCount(2);
-  await expect(badges.getByRole('link').nth(1)).toHaveAttribute('href', 'https://example.org/two');
-  await page.mouse.move(1000, 700); await expect(badges).toBeHidden();
-  await viewport.press('Control+Home'); await expect(badges).toBeVisible();
-  await viewport.press('ArrowDown'); await expect(badges).toBeHidden();
+test('link actions live in the popover without floating cell badges', async ({page})=>{
+ await page.goto('/');await page.evaluate(async()=>{const {createGrid}=await import('/canvas/index.js');const {LocalDataSource}=await import('/core/index.js');window.grid=createGrid({container:document.querySelector('#grid'),dataSource:new LocalDataSource([{id:1,text:'https://example.com/one https://example.org/two'}],row=>row.id),columns:[{key:'text',title:'Text'}],columnWidth:400});});
+ const viewport=page.getByRole('grid');await viewport.press('Control+Home');await viewport.press('Alt+Enter');const popup=page.getByRole('dialog',{name:'Cell links'});await expect(popup.getByRole('link')).toHaveCount(2);await expect(popup.getByRole('link').nth(1)).toHaveAttribute('href','https://example.org/two');await expect(popup.getByRole('link').locator('svg')).toHaveCount(2);await expect(page.locator('[data-grid-link-badges]')).toHaveCount(0);
 });
 
 test('selected-cell font shortcuts toggle metadata, preserve data and replay history', async ({ page }) => {

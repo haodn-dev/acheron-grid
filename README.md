@@ -114,9 +114,9 @@ See [Contributing](CONTRIBUTING.md) for changes and bug reports.
 
 ## Limits and planned work
 
-Data sources and validation are synchronous. Rows and columns can change through structural commands with state remapping and undo/redo; external source structure changes require a new view/mount. Local values, user state and history are in memory. Version-1 configuration exports a subset of layout/view state for initialization; storage, backend authorization and schema migration belong to the application. Cell data, row order/heights, groups, merges, formatting, locks, selection and history are not included.
+Data sources and validation are synchronous. Rows and columns can change through structural commands with state remapping and undo/redo; external source changes reconcile through `captureRowIdentity` / `refreshData`. Local values, user state and history are in memory. Version-1 configuration exports a subset of layout/view state for initialization; storage, backend authorization and schema migration belong to the application. `exportState` additionally persists row heights, groups, merges, formatting, locks and selection; data, policies and history are excluded.
 
-Native browser scroll dimensions impose practical limits. Remote/async data, multi-column sorting and complete assistive-technology coverage are not implemented. Only Chromium is currently covered by browser tests.
+Native browser scroll dimensions impose practical limits. Read-only async paging is supported through `createAsyncDataSource`; async setters, multi-column sorting and complete assistive-technology coverage are not implemented. Only Chromium is currently covered by browser tests.
 
 Formula evaluation, charts, pivot tables, multi-sheet workbooks, Excel calculation compatibility and real-time collaboration are outside the current scope.
 
@@ -148,3 +148,30 @@ Columns can validate typed values with `validate(value)`, returning an error mes
 ```
 
 Canvas displays live editor feedback and a corner marker for saved invalid values; hover or the viewport accessibility mirror exposes the message. See the vanilla example for both policies.
+
+### Choice order, contextual actions and link previews
+
+Multiselect commits preserve the original input order by default. Newly selected values append in configured option order. `choiceEditor: { valueOrder: 'options' }` opts into configured order. Typing from an option moves focus into the filter; Space continues to toggle a choice.
+
+`contextMenuSuggestions: true` starts with up to eight enabled actions relevant to the selection. Suggested actions can be switched off in the menu; Show all actions and typing always expose the complete command list. Suggestions use deterministic selection rules, with no model, telemetry or automatic command execution.
+
+Whole-row Cut/Paste transfers cell contents and leaves record IDs and row positions intact. All source and destination cells must permit writing. Use Move rows to change record positions, including rows with read-only ID columns.
+
+Hovering a link cell opens its name and full address by default, with an external-link icon inside each entry. `linkPreview: false` (or omitted) avoids metadata requests. For optional website details, provide a host callback:
+
+```ts
+linkPreview: {
+  enabled: false, // keep the link popover; the user can enable website details
+  load: async (href, signal) => {
+    const response = await fetch('/api/link-preview?url=' + encodeURIComponent(href), { signal });
+    if (!response.ok) throw new Error('Preview unavailable');
+    return response.json(); // { title?, description?, image? }
+  }
+}
+```
+
+Use `linkPreview: false` to omit the loader entirely, or set `allowMetadata: false` on the configuration object to prohibit loading and hide the user toggle. `enabled: false` only sets the initial state and still allows the user to enable website details. Enforce permitted destinations on the backend as well.
+
+Canvas aborts pending previews on close and preserves the link on failure. The host controls trusted domains, metadata caching and network access; core performs no network requests.
+
+Developer integration examples: [headless refresh, state and async paging](packages/core/README.md#headless-integration-recipes), [remote choices, custom editor cleanup and URL metadata](packages/canvas/README.md#developer-integration-recipes).

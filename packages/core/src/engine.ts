@@ -1,4 +1,7 @@
 import type { GridConfiguration } from './configuration.js';
+import { restoreGridConfiguration } from './configuration.js';
+import { readGridState } from './state.js';
+import type { GridState } from './state.js';
 import { LocalDataView } from './data-source.js';
 import type { LocalViewOptions } from './data-source.js';
 import { blocksToTsv, encodeBlocks, decodeBlocks } from './clipboard.js';
@@ -22,6 +25,7 @@ export type GridInvalidation =
   | { readonly type: 'structure'; readonly rowMap: readonly number[]; readonly columnMap: readonly number[] };
 
 export interface GridEngineOptions {
+  onObserverError?: (error: unknown) => void;
   allowMerging?: boolean;
   allowRowGrouping?: boolean;
   canChangeLayout?: (request: Readonly<LayoutRequest>) => boolean;
@@ -84,6 +88,14 @@ export function createGridEngine(options: GridEngineOptions) {
   let busy = false;
   let destroyed = false;
   let onInvalidate = options.onInvalidate;
+  const subscribers = new Set<{ readonly onEvent?: (event: GridEvent) => void; readonly onInvalidate?: (change: GridInvalidation) => void }>();
+  const observerErrors: unknown[] = [];
+  function observe(callback: (() => void) | undefined): void {
+    try { callback?.(); } catch (error) {
+      observerErrors.push(error); if (observerErrors.length > 10) observerErrors.shift();
+      try { options.onObserverError?.(error); } catch (reportError) { observerErrors.push(reportError); if(observerErrors.length>10)observerErrors.shift(); }
+    }
+  }
   let selection: CellSelection | null = null;
   let anchor: CellSelection | null = null;
   const retainedRanges: SelectionRange[] = [];
@@ -119,7 +131,7 @@ export function createGridEngine(options: GridEngineOptions) {
   function viewAxis(): GridAxis { return projectedAxis ?? rowAxis; }
   function visibleFrozenRows():number {
     if(!projection||!groups.some(group=>group.collapsed))return Math.min(frozenRows,visibleRowCount());
-    let low=0,high=projection.length;while(low<high){const mid=(low+high)>>>1;if(projection[mid]!<frozenRows)low=mid+1;else high=mid;}return low;
+    return projection.filter(row=>row<frozenRows).length;
   }
   function rebuildViewAxis(): void {
     if (!projection) { projectedAxis = null; return; }
@@ -129,14 +141,26 @@ export function createGridEngine(options: GridEngineOptions) {
     }));
     projectedAxis = axis;
   }
-  function buildProjection(next: LocalViewOptions): number[] | null {
+  function buildProjection(next: LocalViewOptions, count=rowCount, spans:readonly Readonly<SelectionRange>[]=merges, outlines:readonly Readonly<RowGroup>[]=groups, frozen=frozenRows): number[] | null {
     if (!next.sort && !next.filters?.length) {
-      const hidden = groups.filter(group => group.collapsed);
-      return hidden.length ? Array.from({length:rowCount}, (_,i)=>i).filter(row => !hidden.some(group => row>group.startRow && row<=group.endRow)) : null;
+      const hidden = outlines.filter(group => group.collapsed);
+      return hidden.length ? Array.from({length:count}, (_,i)=>i).filter(row => !hidden.some(group => row>group.startRow && row<=group.endRow)) : null;
     }
-    if (merges.length || groups.length) throw new Error('Unmerge cells and remove row groups before sorting or filtering.');
     for (const key of [next.sort?.columnKey, ...(next.filters ?? []).map(filter => filter.columnKey)]) {
       if (key !== undefined && !columnIndices.has(key)) throw new Error('Unknown view column: ' + key);
+    }
+    if(spans.length||outlines.length) {
+      // Outline blocks move as units; filters retain the entire block if any member matches.
+      const intervals=[...spans.map(span=>[span.startRow,span.endRow] as const),...outlines.map(group=>[group.startRow,group.endRow] as const)].sort((a,b)=>a[0]-b[0]);
+      const combined:[number,number][]=[];
+      for(const interval of intervals){const last=combined.at(-1);if(last&&interval[0]<=last[1])last[1]=Math.max(last[1],interval[1]);else combined.push([...interval]);}
+      const matches=new LocalDataView(dataSource,{...(next.filters?{filters:next.filters}:{})}), matching=new Set(Array.from({length:matches.getRowCount()},(_,i)=>matches.getSourceIndex(i)));
+      const blocks:{start:number;end:number}[]=[];let intervalIndex=0;
+      for(let row=0;row<count;){const interval=combined[intervalIndex];const end=interval?.[0]===row?interval[1]:row;if(interval?.[0]===row)intervalIndex++;if(Array.from({length:end-row+1},(_,i)=>row+i).some(i=>matching.has(i)))blocks.push({start:row,end});row=end+1;}
+      const pinned=blocks.filter(block=>block.start<frozen), movable=blocks.filter(block=>block.start>=frozen);
+      const ordered=new LocalDataView({getRowCount:()=>movable.length,getRowId:i=>i,getValue:(i,key)=>dataSource.getValue(movable[i]!.start,key)}, {...(next.sort?{sort:next.sort}:{})});
+      const hidden=outlines.filter(group=>group.collapsed);
+      return [...pinned,...Array.from({length:ordered.getRowCount()},(_,i)=>movable[ordered.getSourceIndex(i)]!)].flatMap(block=>Array.from({length:block.end-block.start+1},(_,i)=>block.start+i).filter(row=>!hidden.some(group=>row>group.startRow&&row<=group.endRow)));
     }
     const local = new LocalDataView(dataSource, next);
     return next.sort || next.filters?.length ? Array.from({length: local.getRowCount()}, (_, i) => local.getSourceIndex(i)) : null;
@@ -261,7 +285,7 @@ export function createGridEngine(options: GridEngineOptions) {
     try {
       if((range.endRow-range.startRow+1)*(range.endColumn-range.startColumn+1)>clipboardCellLimit)return false;
       const span=mergeRange(range);validateMergeFreeze([span]);
-      return !view.sort && !view.filters?.length && (span.startRow!==span.endRow || span.startColumn!==span.endColumn) && !merges.some(other=>intersects(span,other)) && layoutAllowed({kind:'merge',range:span});
+      return (span.startRow!==span.endRow || span.startColumn!==span.endColumn) && !merges.some(other=>intersects(span,other)) && layoutAllowed({kind:'merge',range:span});
     } catch {return false;}
   }
   function mergeCells(range:SelectionRange):void {
@@ -277,7 +301,8 @@ export function createGridEngine(options: GridEngineOptions) {
     sourceRow(startRow);sourceRow(endRow);
     if(projection || view.sort || view.filters?.length || endRow<=startRow) throw new Error('Group at least two contiguous rows in an expanded, unsorted view.');
     if(groups.some(group=>group.startRow===startRow&&group.endRow===endRow || group.startRow<=endRow&&startRow<=group.endRow && !(startRow<=group.startRow&&endRow>=group.endRow || group.startRow<=startRow&&group.endRow>=endRow)))throw new Error('Row groups must be nested or disjoint.');
-    const group=Object.freeze({id:'group-'+(++groupId),startRow,endRow,collapsed:false});
+    let id:string;do{id='group-'+(++groupId);}while(groups.some(group=>group.id===id));
+    const group=Object.freeze({id,startRow,endRow,collapsed:false});
     changeOutline([{kind:'group',group}],merges,[...groups,group]);return group.id;
   }
   function findGroup(id:string):Readonly<RowGroup> {const group=groups.find(group=>group.id===id);if(!group)throw new Error('Unknown row group.');return group;}
@@ -328,11 +353,12 @@ export function createGridEngine(options: GridEngineOptions) {
         change={type:'structure',rowMap:old.map(displayRow),columnMap:columns.map((_,i)=>i)};
       } else change={type:'cells',cells:change.cells.flatMap(cell=> {const rowIndex=displayRow(cell.rowIndex);return rowIndex<0?[]:[{...cell,rowIndex}];})};
     } else if (change.type === 'layout') rebuildViewAxis();
-    let failed = false;
-    let firstError: unknown;
-    try { onInvalidate?.(change); } catch (error) { failed = true; firstError = error; }
-    try { onEvent?.(event); } catch (error) { if (!failed) { failed = true; firstError = error; } }
-    if (failed) throw firstError;
+    observe(() => onInvalidate?.(change));
+    observe(() => onEvent?.(event));
+    for (const subscriber of [...subscribers]) {
+      if(!subscribers.has(subscriber))continue;
+      observe(() => subscriber.onInvalidate?.(change)); observe(() => subscriber.onEvent?.(event));
+    }
   }
 
   function getCellPermission(rowIndex: number, columnIndex: number): CellPermission {
@@ -835,8 +861,8 @@ export function createGridEngine(options: GridEngineOptions) {
   }
 
 
-  function snapshotStructure(): StructureState {
-    return {merges,groups,columns, rowCount, rowIds:Array.from({length:rowCount},(_,i)=>dataSource.getRowId(i)), rows:rowAxis.snapshot(), widths:columnAxis.snapshot(), selection:getSelection(), anchor:anchor ? {...anchor} : null,
+  function snapshotStructure(rowIds?: readonly RowId[]): StructureState {
+    return {merges,groups,columns, rowCount, rowIds:rowIds ?? Array.from({length:rowCount},(_,i)=>dataSource.getRowId(i)), rows:rowAxis.snapshot(), widths:columnAxis.snapshot(), selection:getSelection(), anchor:anchor ? {...anchor} : null,
       ranges:retainedRanges.map(range=>({...range})), manualRows:[...manualRows], lockedRows:[...lockedRows], lockedColumns:[...lockedColumns], lockedCells:[...lockedCells],
       formats:new Map(formats), frozenRows, frozenColumns};
   }
@@ -866,7 +892,7 @@ export function createGridEngine(options: GridEngineOptions) {
   function mappedRanges(range: SelectionRange, rows: readonly number[], cols: readonly number[]): SelectionRange[] {
     return mappedIntervals(range.startRow,range.endRow,rows).flatMap(([startRow,endRow])=>mappedIntervals(range.startColumn,range.endColumn,cols).map(([startColumn,endColumn])=>({startRow,endRow,startColumn,endColumn})));
   }
-  function mappedState(before: StructureState, order: readonly number[], axis: 'row'|'column', rowMap: number[], columnMap: number[], addedColumns:readonly Column[]=[]): StructureState {
+  function mappedState(before: StructureState, order: readonly number[], axis: 'row'|'column', rowMap: number[], columnMap: number[], addedColumns:readonly Column[]=[], externalIds?: readonly RowId[]): StructureState {
     let inserted=0;
     const nextColumns=axis==='column' ? Object.freeze(order.map(i=>i<0 ? addedColumns[inserted++]! : columns[i]!)) : columns;
     const nextCount=axis==='row' ? order.length : rowCount;
@@ -882,7 +908,7 @@ export function createGridEngine(options: GridEngineOptions) {
     ranges.push(...activeRanges);
     if(ranges.length>128)throw new RangeError('Structural change would exceed the selection range limit.');
     const activeRange=ranges.pop();
-    const cellAt=(rowIndex:number,columnIndex:number):CellSelection => ({rowIndex,columnIndex,columnKey:nextColumns[columnIndex]!.key,rowId:axis==='row' ? dataSource.getRowId(order[rowIndex]!) : dataSource.getRowId(rowIndex)});
+    const cellAt=(rowIndex:number,columnIndex:number):CellSelection => ({rowIndex,columnIndex,columnKey:nextColumns[columnIndex]!.key,rowId:externalIds?.[rowIndex] ?? (axis==='row' ? dataSource.getRowId(order[rowIndex]!) : dataSource.getRowId(rowIndex))});
     let mappedSelection=nextSelection, mappedAnchor=nextAnchor;
     if (activeRange && nextCount && nextColumns.length) {
       const exact=nextSelection && nextAnchor && Math.min(nextSelection.rowIndex,nextAnchor.rowIndex)===activeRange.startRow && Math.max(nextSelection.rowIndex,nextAnchor.rowIndex)===activeRange.endRow && Math.min(nextSelection.columnIndex,nextAnchor.columnIndex)===activeRange.startColumn && Math.max(nextSelection.columnIndex,nextAnchor.columnIndex)===activeRange.endColumn;
@@ -1077,19 +1103,102 @@ export function createGridEngine(options: GridEngineOptions) {
     });
   }
 
+  function refreshData(previousRowIds?: readonly RowId[] | 'values'): void {
+    assertAlive();
+    const count=dataSource.getRowCount();
+    if(!Number.isSafeInteger(count)||count<0||!Number.isFinite(count*rowHeight))throw new RangeError('Invalid refreshed row count.');
+    if(previousRowIds==='values') {
+      if(count!==rowCount||selection&&!Object.is(selection.rowId,dataSource.getRowId(selection.rowIndex)))throw new Error('Values-only refresh requires unchanged row identities and count.');
+      const old=projection ?? Array.from({length:rowCount},(_,i)=>i), next=buildProjection(view);
+      installProjection(next);past.length=future.length=0;pendingCut=undefined;
+      notify({type:'structure',rowMap:old.map(displayRow),columnMap:columns.map((_,i)=>i)},Object.freeze({type:'data:refresh',previousRowCount:rowCount,rowCount,identitiesReconciled:true}));return;
+    }
+    const ids=Array.from({length:count},(_,i)=>dataSource.getRowId(i));
+    const validIds=(values:readonly RowId[])=>values.every(id=>typeof id==='string'||typeof id==='number'&&Number.isFinite(id))&&new Set(values).size===values.length;
+    if(!validIds(ids)||previousRowIds && (previousRowIds.length!==rowCount||!validIds(previousRowIds)))throw new TypeError('Invalid refresh row identities.');
+    const lookup=new Map(ids.map((id,i)=>[id,i])), oldIds=previousRowIds ?? Array.from({length:rowCount},(_,i)=>i);
+    const rowMap=oldIds.map(id=>previousRowIds ? lookup.get(id) ?? -1 : -1), columnsMap=columns.map((_,i)=>i);
+    const previousLookup=new Map(previousRowIds?.map((id,i)=>[id,i]) ?? []), order=ids.map(id=>previousLookup.get(id) ?? -1);
+    const before=snapshotStructure(oldIds), contiguous=(start:number,end:number)=>rowMap.slice(start,end+1).every((row,i,rows)=>row>=0&&row===rows[0]!+i);
+    before.merges=before.merges.filter(span=>contiguous(span.startRow,span.endRow)&&!(rowMap[span.startRow]!<Math.min(frozenRows,count)&&rowMap[span.endRow]!>=Math.min(frozenRows,count)));
+    before.groups=before.groups.filter(group=>contiguous(group.startRow,group.endRow));
+    const oldDisplay=projection ?? Array.from({length:rowCount},(_,i)=>i), next=mappedState(before,order,'row',rowMap,columnsMap,[],ids);
+    next.rowIds=ids;
+    for(const cell of [next.selection,next.anchor])if(cell)cell.rowId=ids[cell.rowIndex]!;
+    const oldCount=rowCount;
+    const nextProjection=buildProjection(view,count,next.merges,next.groups);
+    restoreStructure(next); installProjection(nextProjection);
+    past.length=future.length=0;pendingCut=undefined;
+    notify({type:'structure',rowMap:oldDisplay.map(row=>rowMap[row]!<0?-1:displayRow(rowMap[row]!)),columnMap:columnsMap},Object.freeze({type:'data:refresh',previousRowCount:oldCount,rowCount:count,identitiesReconciled:previousRowIds!==undefined}));
+  }
+
+  function exportConfiguration():GridConfiguration {
+    assertAlive();return {version:1,columns:columns.map((column,index)=>({key:column.key,width:columnAxis.size(index)})),frozenRows,frozenColumns,view:{...view,...(view.sort?{sort:{...view.sort}}:{}),...(view.filters?{filters:view.filters.map(filter=>({...filter}))}:{})}};
+  }
+  function exportState():GridState {
+    assertAlive();
+    const layers=[...formats.values()].flatMap(entry=>Object.entries(entry.orders).map(([property,order])=>({order:order!,target:entry.target,patch:{[property]:entry.patch[property as keyof CellFormatPatch]}}))).sort((a,b)=>a.order-b.order);
+    return {version:1,configuration:exportConfiguration(),rowIds:Array.from({length:rowCount},(_,i)=>dataSource.getRowId(i)),rowHeights:rowAxis.snapshot(),manualRows:[...manualRows],ranges:getSelectionRanges().map(range=>({...range})),selection:selection?{...selection}:null,anchor:anchor?{...anchor}:null,merges:merges.map(span=>({...span})),groups:groups.map(group=>({...group})),locks:[...(tableLocked?[{scope:'table' as const}]:[]),...[...lockedRows].map(rowIndex=>({scope:'row' as const,rowIndex})),...[...lockedColumns].map(columnIndex=>({scope:'column' as const,columnIndex})),...[...lockedCells].map(key=>{const [rowIndex,columnIndex]=key.split(':').map(Number);return {scope:'cell' as const,rowIndex:rowIndex!,columnIndex:columnIndex!};})],formats:layers.map(({target,patch})=>({target:JSON.parse(JSON.stringify(target)) as CellFormatTarget,patch}))};
+  }
+  function restoreState(input:unknown):void {
+    assertAlive();const saved=readGridState(input);
+    if(saved.rowIds.length!==rowCount||saved.rowIds.some((id,i)=>!Object.is(id,dataSource.getRowId(i))))throw new Error('State row identities do not match the current source.');
+    const configuration=restoreGridConfiguration(saved.configuration,columns,rowCount);
+    const staged=createGridEngine({...options,...configuration,view:{},onEvent:()=>{},onInvalidate:()=>{},onObserverError:()=>{}});
+    try {
+      for(const size of saved.rowHeights){if(!Array.isArray(size)||size.length!==2)throw new TypeError('Invalid row height.');staged.setRowHeight(size[0],size[1]);}
+      const manual=new Set(saved.manualRows);if(manual.size!==saved.manualRows.length||saved.manualRows.some(row=>!Number.isSafeInteger(row)||row<0||row>=rowCount))throw new RangeError('Invalid manual rows.');
+      for(const entry of saved.formats){if(!entry||!entry.target||!entry.patch)throw new TypeError('Invalid state format.');staged.format([entry.target],entry.patch);}
+      for(const span of saved.merges)staged.mergeCells(span);
+      const ids=new Set<string>();
+      for(const group of saved.groups){if(!group||typeof group.id!=='string'||!group.id||ids.has(group.id)||typeof group.collapsed!=='boolean')throw new TypeError('Invalid state group.');ids.add(group.id);const stagedGroup=staged.groupRows(group.startRow,group.endRow);if(group.collapsed){staged.setGroupCollapsed(stagedGroup,true);staged.setGroupCollapsed(stagedGroup,false);}}
+      // Restore selection in source coordinates before installing a sorted/filtered projection.
+      for(const range of saved.ranges)if(!staged.selectRange(range,'add'))throw new Error('State selection is not selectable.');
+      for(const cell of [saved.selection,saved.anchor])if(cell!==null){
+        if(!cell||!Number.isSafeInteger(cell.rowIndex)||!Number.isSafeInteger(cell.columnIndex)||cell.rowIndex<0||cell.rowIndex>=rowCount||cell.columnIndex<0||cell.columnIndex>=columns.length||cell.columnKey!==configuration.columns[cell.columnIndex]!.key||!Object.is(cell.rowId,saved.rowIds[cell.rowIndex])||!staged.getCellPermission(cell.rowIndex,cell.columnIndex).selectable||!saved.ranges.some(range=>cell.rowIndex>=range.startRow&&cell.rowIndex<=range.endRow&&cell.columnIndex>=range.startColumn&&cell.columnIndex<=range.endColumn))throw new TypeError('Invalid state selection endpoint.');
+      }
+      if((saved.selection===null)!==(saved.anchor===null)||(!saved.selection&&saved.ranges.length))throw new TypeError('Invalid state selection.');
+      for(const target of saved.locks)staged.setLocked(target,true);
+      staged.setView(configuration.view);
+      const valid=staged.exportState();
+      const nextProjection=buildProjection(configuration.view,rowCount,valid.merges,saved.groups,configuration.frozenRows);
+      const nextFormats=new Map<string,FormatEntry>();let order=0;
+      for(const entry of valid.formats){
+        const target=entry.target,bounds:SelectionRange=target.scope==='range'?{...target.range}:{startRow:target.scope==='row'||target.scope==='cell'?target.rowIndex:0,endRow:target.scope==='row'||target.scope==='cell'?target.rowIndex:rowCount-1,startColumn:target.scope==='column'||target.scope==='cell'?target.columnIndex:0,endColumn:target.scope==='column'||target.scope==='cell'?target.columnIndex:columns.length-1};
+        const key=JSON.stringify([target.scope,bounds.startRow,bounds.endRow,bounds.startColumn,bounds.endColumn]),previous=nextFormats.get(key),orders={...previous?.orders};
+        for(const property of Object.keys(entry.patch) as (keyof CellFormatPatch)[])orders[property]=++order;
+        nextFormats.set(key,{target:Object.freeze(target),bounds:Object.freeze(bounds),patch:Object.freeze({...previous?.patch,...entry.patch}),orders:Object.freeze(orders),order});
+      }
+      const old=projection ?? Array.from({length:rowCount},(_,i)=>i), oldColumns=columns;
+      columns=Object.freeze([...configuration.columns]);columnIndices.clear();columns.forEach((column,i)=>columnIndices.set(column.key,i));
+      columnAxis.replace(columns.length,configuration.columns.map((column,i)=>[i,configuration.columnWidths[column.key]!] as const));rowAxis.replace(rowCount,valid.rowHeights);
+      manualRows.clear();for(const row of manual)manualRows.add(row);
+      merges=valid.merges.map(span=>Object.freeze({...span}));groups=valid.groups.map((group,i)=>Object.freeze({...group,id:saved.groups[i]!.id,collapsed:saved.groups[i]!.collapsed}));groupId=0;
+      lockedRows.clear();lockedColumns.clear();lockedCells.clear();tableLocked=false;
+      for(const target of valid.locks){if(target.scope==='table')tableLocked=true;else if(target.scope==='row')lockedRows.add(target.rowIndex);else if(target.scope==='column')lockedColumns.add(target.columnIndex);else lockedCells.add(`${target.rowIndex}:${target.columnIndex}`);}
+      formats.clear();for(const [key,entry] of nextFormats)formats.set(key,entry);orderedFormats=[...formats.values()].sort((a,b)=>a.order-b.order);formatOrder=order;
+      frozenRows=configuration.frozenRows;frozenColumns=configuration.frozenColumns;selection=anchor=null;retainedRanges.length=0;activeParts=1;displayAnchor=null;
+      for(const range of valid.ranges)retainedRanges.push({...range});
+      const active=retainedRanges.pop();if(active&&rowCount&&columns.length){selection={rowIndex:active.startRow,columnIndex:active.startColumn,columnKey:columns[active.startColumn]!.key,rowId:dataSource.getRowId(active.startRow)};anchor={rowIndex:active.endRow,columnIndex:active.endColumn,columnKey:columns[active.endColumn]!.key,rowId:dataSource.getRowId(active.endRow)};}
+      if(saved.selection&&saved.anchor){selection={...saved.selection};anchor={...saved.anchor};}
+      view=Object.freeze({...configuration.view});installProjection(nextProjection);past.length=future.length=0;pendingCut=undefined;
+      notify({type:'structure',rowMap:old.map(displayRow),columnMap:oldColumns.map(column=>columnIndices.get(column.key)??-1)},Object.freeze({type:'state:restore'}));
+    } finally {staged.destroy();}
+  }
+
   if(options.view) { view=Object.freeze({...options.view, ...(options.view.sort ? {sort:Object.freeze({...options.view.sort})} : {}), ...(options.view.filters ? {filters:Object.freeze(options.view.filters.map(filter=>Object.freeze({...filter})))} : {})}); installProjection(buildProjection(view)); }
   return Object.freeze({
+    subscribe: (subscriber: { readonly onEvent?: (event: GridEvent) => void; readonly onInvalidate?: (change: GridInvalidation) => void }) => {
+      assertAlive(); const snapshot=Object.freeze({...subscriber}); subscribers.add(snapshot); return () => {subscribers.delete(snapshot);};
+    },
+    takeObserverErrors: () => observerErrors.splice(0),
+    captureRowIdentity: () => query(()=>{assertAlive();return Object.freeze(Array.from({length:rowCount},(_,i)=>dataSource.getRowId(i)));}),
+    refreshData: (previousRowIds?: readonly RowId[] | 'values') => command(()=>refreshData(previousRowIds)),
+    exportState: ():GridState => query(exportState),
+    restoreState: (state:unknown) => command(()=>restoreState(state)),
     setView:(next:LocalViewOptions)=>command(()=>setView(next)),
     get view(){return view;},
-    exportConfiguration: (): GridConfiguration => query(() => {
-      assertAlive();
-      return {
-      version: 1,
-      columns: columns.map((column, index) => ({ key: column.key, width: columnAxis.size(index) })),
-      frozenRows, frozenColumns,
-      view: { ...(view.sort ? { sort: { ...view.sort } } : {}), ...(view.filters ? { filters: view.filters.map(filter => ({ ...filter })) } : {}) },
-      };
-    }),
+    exportConfiguration: (): GridConfiguration => query(exportConfiguration),
     get sourceRowCount(){return rowCount;},
     getRowId:(row:number)=>dataSource.getRowId(sourceRow(row)),
     get columns() { return columns; }, get rowCount() { return visibleRowCount(); }, get frozenRows() { return visibleFrozenRows(); }, get frozenColumns() { return frozenColumns; },
@@ -1147,6 +1256,7 @@ export function createGridEngine(options: GridEngineOptions) {
       onInvalidate = undefined;
       onEvent = undefined;
       resolver = undefined;
+      subscribers.clear(); observerErrors.length=0;
       past.length = future.length = 0;
       selection = anchor = null; pendingCut=undefined;
       retainedRanges.length = 0;
