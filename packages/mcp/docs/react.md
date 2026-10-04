@@ -35,3 +35,11 @@ export function Sheet() {
 - Use `grid.updateCells()` for value changes, `grid.render()` after externally changing a compatible source, or replace `options` to intentionally recreate. This is not a controlled `rows` component.
 
 Tested with React/React DOM 19.1.0 and React 18-compatible type declarations; the complete React version matrix is not verified. Screen-reader support follows Canvas limits. Custom rendering and editors remain Canvas hooks, not React cell components.
+
+## Configuration persistence
+
+Get the mounted grid through `getGrid()` or the ready callback and call `grid.exportConfiguration()`. To restore, import `restoreGridConfiguration` from `@acheron-grid/core`, validate the saved JSON against application columns/source row count, and spread its returned options into a new `options` object with `dataSource` and the application's theme/editors/permissions. Replacing `options` intentionally remounts the grid; it resets selection/history and discards unsaved editor drafts. Runtime `view`/freeze props override restored initial values when supplied. Core-managed view mode is required for export; host-managed projections remain host-owned. No automatic storage is performed.
+
+## Custom editors, remote options and runtime state
+
+Use the mounted instance from `getGrid()` for `setColumnEditor`, `refreshData`, `subscribe`, `exportState` and `restoreState`. Remote select/multiselect search and URL metadata use the same Canvas options in both adapters. Keep construction options stable; replacing them intentionally remounts the grid. Use `onEditorMount` to mount external UI and return its unmount/cleanup function. Unsubscribe application listeners and destroy host-owned async sources on unmount. See the [Canvas developer integration recipes](../canvas/README.md#developer-integration-recipes) and [core headless recipes](../core/README.md#headless-integration-recipes) for copyable examples and limits. State snapshots do not include data or undo history.

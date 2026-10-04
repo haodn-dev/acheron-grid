@@ -43,7 +43,7 @@ The engine owns selection/anchor, sparse row/column layout, text parsing, TSV op
 
 `select(rowIndex, columnIndex, extend?)` rejects invalid coordinates and returns whether selection changed; denied targets return false; `clearSelection()` clears the range. `getSelection()` and `getSelectionRange()` return copies for the active cell/range. `addSelection(rowIndex, columnIndex)` retains earlier rectangles and starts a new active range. `getSelectionRanges()` returns copies in insertion order, active range last. Extending changes only that last range; plain select replaces all ranges. Selection is bounded to 128 rectangles, allows overlaps and does not allocate per selected cell. `rows` and `columnsLayout` expose read-only `size`, `position`, `indexAt` and `range` geometry queries; mutations use `setRowHeight` and `setColumnWidth`. Columns are frozen snapshots. `getValue`, `canEdit`, `canPaste`, `canUndo` and `canRedo` provide queries. `editCell(rowIndex, columnIndex, text)` applies the same editable/parser rules as the DOM editor; `updateCells` retains its programmatic, already-validated-value semantics. `canPaste` checks the starting cell and write capability; `paste` validates the entire rectangle before writing.
 
-An optional synchronous `onInvalidate(change)` renderer hook receives cells, selection, layout or structure notifications after committed state/history. These notifications describe repaint needs, separate from public domain events. The hook may query committed state; if it throws, the exception propagates and does not roll back an already committed mutation. `destroy()` drops the hook and history, clears selection without notification and is idempotent. Mutations/copy/paste throw after destruction; undo/redo return false. As with the browser API, source values are shallow references and external source writes are outside history. Row count changes only through structural commands; external source structure changes require a new mount.
+An optional synchronous `onInvalidate(change)` renderer hook receives cells, selection, layout or structure notifications after committed state/history. These notifications describe repaint needs, separate from public domain events. The hook may query committed state; observer errors are isolated and reported through `onObserverError` or `takeObserverErrors()`. `destroy()` drops the hook and history, clears selection without notification and is idempotent. Mutations/copy/paste throw after destruction; undo/redo return false. As with the browser API, source values are shallow references and external source writes are outside history. Call `refreshData()` after external source changes; see External data and lifecycle below.
 
 Build/typecheck includes a separate ES2022-only TypeScript configuration with no DOM or ambient Node types. Unit tests also compile the headless dependency closure and verify it excludes browser modules.
 
@@ -53,7 +53,7 @@ DataSource exposes synchronous getRowCount/getRowId/getValue and optional setVal
 
 updateCells accepts already-validated values and intentionally does not apply column parsers or the editor's editable flag. editCell and paste apply resolved editable/pasteable permissions and text parsers. All writes, including API updates and undo/redo, require writable permission. Batches with more than one changed cell require `setValues`; a source with only `setValue` can accept single-cell writes. Batch setters must be synchronous and atomic, leaving data unchanged on failure. Validation completes before writes. Duplicate updates use the last value, Object.is no-ops preserve history, and undo/redo retain at most 100 delta commands with shallow value references. External writes are outside history; replay rejects row identity/current value conflicts. Explicit resize and freeze changes share this history.
 
-Clipboard processing is limited to 100,000 cells and 10 million UTF-16 code units. Async sources are not implemented. React and Vue adapters live in separate packages. Multiple selection ranges support packed TSV and an internal structured clipboard payload.
+Clipboard processing is limited to 100,000 cells and 10 million UTF-16 code units. `createAsyncDataSource` provides explicit read-only async paging around a synchronous cache; async setters remain unsupported. React and Vue adapters live in separate packages. Multiple selection ranges support packed TSV and an internal structured clipboard payload.
 
 ## Browser import migration
 
@@ -85,7 +85,7 @@ Pass synchronous `onEvent(event)` to either factory. The discriminated `GridEven
 - `freeze:change`: previous/current row and column prefix counts; freeze changes participate in history.
 - `format:change`: source `api/undo/redo` and sparse target/patch changes; formatting shares value history.
 
-State and history commit before renderer invalidation, then the domain event. Failures before commit and no-ops emit nothing. Both notification hooks are attempted even if one throws; the first error propagates after both, without rolling back committed state. Event envelopes/payload metadata are frozen; values remain shallow caller-owned references. Parser, resolver, setter and notification hooks cannot issue nested engine mutations; queries of committed state are allowed. Destroy silently releases hooks/history. Canvas legacy selection callbacks remain separate and are not duplicated by onEvent.
+State and history commit before renderer invalidation, then the domain event. Failures before commit and no-ops emit nothing. All notification hooks and subscribers are attempted independently; errors are isolated, retained in a bounded queue and reported to `onObserverError`, without rolling back committed state. Event envelopes/payload metadata are frozen; values remain shallow caller-owned references. Parser, resolver, setter and notification hooks cannot issue nested engine mutations; queries of committed state are allowed. Destroy silently releases hooks/history. Canvas legacy selection callbacks remain separate and are not duplicated by onEvent.
 
 ## Frozen panes and viewport geometry
 
@@ -167,7 +167,7 @@ Merged cells use the top-left value; other source values remain intact. `getMerg
 
 Manual row groups can be nested or disjoint. Their first row remains visible when collapsed. `getRowGroups()` and `getMergedCells()` return immutable **source-coordinate** metadata; `getRowSourceIndex(visibleRow)` maps visible rows. Editing, selection, locks and row sizes retain record identity across collapse/expand. Grouping, ungrouping, collapse/expand and merge/unmerge share undo/redo. Use `allowMerging`, `allowRowGrouping` or `canChangeLayout(request)` to control capabilities. Merge/unmerge require writable cells; row grouping respects table/row locks and the host veto.
 
-Current limits: 1,024 spans/groups each; merge permission checks cover at most 100,000 cells. Sorting/filtering requires removing merges and groups. Collapsing rows that contain merged cells, or crossing a frozen boundary, is rejected. Expand all groups before structural changes. Moving an intact span/group preserves it; operations splitting it are rejected, and deletion of a member dissolves its metadata (undo restores it). Collapse rebuilds an O(row-count) local projection; metadata stays sparse and rendering remains viewport based.
+Current limits: 1,024 spans/groups each; merge permission checks cover at most 100,000 cells. Sorting/filtering keeps merged/grouped rows in blocks, sorting by the first row and retaining a block when any row matches. Collapsing rows that contain merged cells, or crossing a frozen boundary, is rejected. Expand all groups before structural changes. Moving an intact span/group preserves it; operations splitting it are rejected, and deletion of a member dissolves its metadata (undo restores it). Collapse rebuilds an O(row-count) local projection; metadata stays sparse and rendering remains viewport based.
 
 ## Portable layout and view configuration
 
@@ -202,3 +202,96 @@ engine.pasteCutSelectionBlocks(cut);    // Destination write and source clear: o
 Cut is a staged move within the same engine. Source cells must be copyable and writable; paste validates destination permissions/parsers and unchanged source row IDs, column order and values before writing. A failed validation leaves both sides unchanged. Source content is cleared to `null`; source cell formatting remains, while copied formatting is applied at the destination. Overlapping source/destination cells preserve the pasted result. Undo/redo replays the combined change once. Cut from merged cells is rejected; unmerge first. Use the payload from the staged cut with `pasteCutSelectionBlocks`; ordinary `paste`/`pasteSelectionBlocks` remain copy operations. The host owns clipboard transfer and must not treat arbitrary external clipboard data as a staged move. Cross-engine/browser/application moves and matrix tiling are not supported.
 
 Successful paste selects the full destination rectangle, including all pasted rows and columns. Failed paste leaves selection unchanged.
+
+## Headless integration recipes
+
+Use these recipes with the public `@acheron-grid/core` API. Core has no browser globals or framework dependencies. The package reference above covers command, permission and history contracts.
+
+### External data and lifecycle
+
+```ts
+import { createGridEngine, LocalDataSource } from '@acheron-grid/core';
+
+const source = new LocalDataSource([{ id: 'r1', name: 'Ada' }], row => row.id);
+const engine = createGridEngine({
+  dataSource: source,
+  columns: [{ key: 'name', title: 'Name', editable: true }],
+  onObserverError: error => console.error('Grid observer failed', error),
+});
+const unsubscribe = engine.subscribe({
+  onEvent: event => console.log(event.type),
+  onInvalidate: change => console.log(change),
+});
+
+source.setValue(0, 'name', 'Grace');
+engine.refreshData('values'); // Same row IDs, order and count.
+
+const previousIds = engine.captureRowIdentity();
+source.spliceRows([{ index: 0, deleteCount: 0, rows: [{ id: 'r2', name: 'Lin' }] }]);
+engine.refreshData(previousIds); // Remap sparse state by stable IDs.
+
+unsubscribe();
+engine.destroy();
+```
+
+Capture IDs **before** a structural source change. This explicit operation scans all rows; engine construction does not. Reconciliation preserves valid selection, sizes, locks and formatting by ID, and drops groups/merges that cannot remain contiguous. With no previous IDs, `refreshData()` safely drops row-dependent state. All refresh modes clear undo/redo and pending cut state because external writes are outside history. `refreshData('values')` is a host guarantee that IDs, order and count did not change; use the identity snapshot for structural changes.
+
+Subscribers are independent and can unsubscribe during dispatch. Events observe committed state. Observer errors do not turn a successful mutation into a failed operation; `onObserverError` reports them and `takeObserverErrors()` drains the last ten recorded errors. Parser, permission and setter failures still fail the actual command. Notification callbacks can query state but cannot issue nested mutations.
+
+### Persist layout and domain state
+
+```ts
+const saved = JSON.stringify(engine.exportState());
+// Store in your application, then load with the same ordered row IDs/schema.
+engine.restoreState(JSON.parse(saved));
+```
+
+The versioned snapshot includes configuration, row heights, selection endpoints/ranges, groups, merges, locks and sparse formatting. Restoration validates before committing and rechecks application permissions. Row IDs must match the current source in the same order. Supply the same column schema and policies when creating the engine; snapshots do not serialize callbacks.
+
+Data values, undo/redo, editor drafts and pending clipboard operations are not persisted. Restore clears history. Use `exportConfiguration()` when you only need column order/widths, frozen prefixes and view configuration. Treat stored snapshots as untrusted input and handle restore errors; do not overwrite a working grid with an incompatible saved schema.
+
+### Async pages and cancellation
+
+```ts
+import { createAsyncDataSource, createGridEngine } from '@acheron-grid/core';
+
+const source = createAsyncDataSource<AbortSignal>({
+  pageSize: 100,
+  maxPages: 10,
+  createAbortController: () => new AbortController(),
+  load: async ({ offset, limit, signal }) => {
+    const response = await fetch(`/api/rows?offset=${offset}&limit=${limit}`, { signal });
+    if (!response.ok) throw new Error(`Rows request failed: ${response.status}`);
+    return await response.json(); // { rows: Record<string, unknown>[], total: number }
+  },
+});
+const unsubscribe = source.subscribe(page => {
+  // Render loading/error status in your application.
+  console.log(page.offset, page.status, page.error);
+});
+await source.loadPage(0); // Discover total before creating the grid.
+const engine = createGridEngine({
+  dataSource: source,
+  columns: [{ key: 'name', title: 'Name' }],
+});
+
+async function loadVisibleRows(first: number, last: number) {
+  const previousIds = engine.captureRowIdentity();
+  await source.loadRange(first, last); // Inclusive indices; window must fit maxPages.
+  engine.refreshData(previousIds);
+}
+await loadVisibleRows(100, 199);
+
+// Unmount: release both objects; destroying the grid does not own the source.
+unsubscribe();
+engine.destroy();
+source.destroy();
+```
+
+`loadPage(offset)` requires a page-aligned offset. Requests for the same page share one promise; cached pages use bounded LRU eviction. Unloaded cell values are `undefined`. `getPageState(offset)` returns loading/ready/error state or null. Handle rejected promises in your UI; calling `loadPage` again retries a failed page. `cancel()` aborts pending requests; stale responses cannot populate the cache. `reset(total?)` cancels and clears pages for a new server query. After resetting a query, call `engine.refreshData()` to discard old row identity state.
+
+The source is **read-only**. Writes still require synchronous atomic setters on a custom source; there is no remote save queue or optimistic rollback. Default identities are stable positions within one server query. Do not reuse positional identities across changed server ordering. The host owns server sorting/filtering, authorization and request validation. Local search/sort/filter only sees cached values; it is not a server-wide query. Injecting the abort controller keeps core free of DOM/Node ambient types.
+
+### Sort/filter with groups and merges
+
+Related rows form indivisible blocks. Sorting uses the first row in a block; filtering retains the whole block if any member matches. Frozen blocks keep their leading order. Collapsed children remain hidden. Group creation still requires an expanded unsorted view; collapsing cannot hide a merge or cross a frozen boundary. This preserves outline structure rather than sorting individual children through another group.

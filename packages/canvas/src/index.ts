@@ -1,4 +1,6 @@
 export { createGrid } from './grid.js';
+export { parseMediaValue } from './media.js';
+export type { MediaItem, MediaValue } from './media.js';
 export type { ColumnType, ColumnEditor, GridOptions, Grid, GridTheme, CellRenderer, CellRenderInfo, CellEditor, CellEditorInfo, CellEditorFactory } from './grid.js';
 
 export { detectLinks } from './links.js';

@@ -2,6 +2,8 @@ import { installTooltips } from './tooltips.js';
 import { icons } from './icons.js';
 import { choicePanel, choiceValue, positionChoicePanel, disposeChoicePanel } from './choices.js';
 import type { ChoiceEditorOptions, ChoiceOption } from './choices.js';
+import { mediaItems, parseMediaValue, validateMediaValue } from './media.js';
+import type { MediaItem } from './media.js';
 import { reorderedIndices } from './reorder.js';
 import type { ReorderRequest, RowChangeRequest } from './reorder.js';
 import { headerLayout, reorderedHeaderGroups } from './headers.js';
@@ -66,6 +68,8 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
   onViewChange?: (view: LocalViewOptions) => void;
   theme?: Partial<GridTheme>;
   imageColumns?: readonly string[];
+  avatarColumns?: readonly string[];
+  mediaOptions?: { readonly size?: number; readonly maxVisible?: number; readonly upload?: (file:File, context:Readonly<{columnKey:string;signal:AbortSignal}>)=>Promise<MediaItem> };
   columnEditors?: Readonly<Record<string, ColumnEditor>>;
   richTextColumns?: Readonly<Record<string, RichTextFormat>>;
   markdownToHtml?: (source: string) => string;
@@ -230,7 +234,7 @@ export function createGrid(options: GridOptions): Grid {
   let headerHeight = headerRowHeight * headers.levels;
   let leafHeaders = headers.cells.filter(cell => cell.leaf).sort((a, b) => a.start - b.start);
   if (!Number.isFinite(headerHeight) || headerHeight <= 0) throw new RangeError('Grid sizes must be positive finite numbers.');
-  const engine = createGridEngine({ columns: options.columns, dataSource,
+  const engine = createGridEngine({ columns: options.columns.map(column => (options.imageColumns?.includes(column.key) || options.avatarColumns?.includes(column.key)) && !column.parse ? {...column, parse:parseMediaValue} : column), dataSource,
     ...(options.allowMerging===undefined?{}:{allowMerging:options.allowMerging}),
     ...(options.allowRowGrouping===undefined?{}:{allowRowGrouping:options.allowRowGrouping}),
     ...(options.canChangeLayout===undefined?{}:{canChangeLayout:options.canChangeLayout}),
@@ -296,6 +300,13 @@ export function createGrid(options: GridOptions): Grid {
   let indexWidth = options.indexColumn === false ? 0 : Math.max(48, String(rowCount).length * 8 + 16);
   if (options.imageColumns !== undefined && !Array.isArray(options.imageColumns)) throw new TypeError('Image columns must be column keys.');
   const imageColumns = new Set(options.imageColumns ?? []);
+  if(options.avatarColumns!==undefined&&!Array.isArray(options.avatarColumns))throw new TypeError('Avatar columns must be column keys.');
+  const avatarColumns=new Set(options.avatarColumns ?? []);
+  for(const key of avatarColumns)if(!columns.some(column=>column.key===key)||imageColumns.has(key))throw new TypeError('Unknown or conflicting avatar column.');
+  const mediaSize=options.mediaOptions?.size ?? 32,mediaLimit=options.mediaOptions?.maxVisible ?? 4;
+  if(!Number.isFinite(mediaSize)||mediaSize<20||mediaSize>96||!Number.isSafeInteger(mediaLimit)||mediaLimit<1||mediaLimit>20)throw new RangeError('Invalid media size or visible count.');
+  const mediaColumn=(key:string)=>imageColumns.has(key)||avatarColumns.has(key);
+  const ownedImageUrls=new Set<string>();let mediaUpload:AbortController|undefined;
   for (const key of imageColumns) if (!columns.some(column => column.key === key)) throw new TypeError('Unknown image column.');
   const imageCache = new Map<string, { image: HTMLImageElement; state: 'loading' | 'ready' | 'error' }>();
   const visibleImages = new Set<string>();
@@ -826,7 +837,7 @@ export function createGrid(options: GridOptions): Grid {
       ctx.font = theme.font;
       for (const row of visibleIndices('row')) {
         const value = engine.getValue(row, column.key);
-        if (imageColumns.has(column.key)) width = Math.max(width, 64);
+        if (mediaColumn(column.key)) { width=Math.max(width,mediaSize*2+16);continue; }
         else if (columnEditors.get(column.key)?.type === 'checkbox') width = Math.max(width, 36);
         else {
           const rich = richText(value, column.key, engine.getFormat(row, index).contentFormat);
@@ -858,7 +869,7 @@ export function createGrid(options: GridOptions): Grid {
           if (!Number.isFinite(custom) || custom <= 0) throw new RangeError('Measured cell height must be positive and finite.');
           height = Math.max(height, custom); continue;
         }
-        if (imageColumns.has(key)) { height = Math.max(height, 56); continue; }
+        if (mediaColumn(key)) { height = Math.max(height, mediaSize+8); continue; }
         const rich = richText(value, key, engine.getFormat(index, col).contentFormat);
         if (rich) {
           const layout = layoutRichText(ctx, rich, theme.font, Math.max(0, columnAxis.size(col) - 20), !!options.wrapText, Math.ceil(1000 / lineHeight));
@@ -1412,7 +1423,7 @@ export function createGrid(options: GridOptions): Grid {
 
   function invalidate(changes: readonly { rowIndex: number; columnKey: string }[]): void {
     const selection = engine.getSelection();
-    for (const change of changes) { dirty.set(JSON.stringify([change.rowIndex, change.columnKey]), change); if (imageColumns.has(change.columnKey)) fullDraw = true; }
+    for (const change of changes) { dirty.set(JSON.stringify([change.rowIndex, change.columnKey]), change); if (mediaColumn(change.columnKey)) fullDraw = true; }
     if (selection && changes.some(change => change.rowIndex === selection.rowIndex && change.columnKey === selection.columnKey)) syncAccessibleCell();
     schedule();
   }
@@ -1485,7 +1496,7 @@ export function createGrid(options: GridOptions): Grid {
       } else editor = custom ?? doc.createElement(options.multilineEditor ? 'textarea' : 'input');
       if (!custom) {
         if (editor instanceof win.HTMLSelectElement && editor.multiple) { const original = String(value ?? '').split(',').map(item => item.trim()).filter(Boolean);editor.dataset.choiceOriginalValues = JSON.stringify([...new Set(original)]);const selected = new Set(original); for (const option of Array.from(editor.options)) option.selected = selected.has(option.value); }
-        else editor.value = value == null ? '' : String(value);
+        else editor.value = value == null ? '' : mediaColumn(column.key)&&Array.isArray(value)?JSON.stringify(value):String(value);
       }
     } catch (error) {
       actionError.textContent = error instanceof Error ? error.message : 'Unable to create cell editor.';
@@ -1629,6 +1640,7 @@ export function createGrid(options: GridOptions): Grid {
         const format = block.formats?.[row]?.[col] ?? engine.getFormat(rowIndex, columnIndex), rich = richText(text, columns[columnIndex]!.key, format.contentFormat);
         if (rich?.unavailable) throw new Error('Rich text cannot be copied until it can be displayed.');
         (formats[row] ??= []).push({ ...format, ...(rich ? { contentFormat: 'html' as const } : {}) });
+        if(mediaColumn(columns[columnIndex]!.key)){const value=engine.getValue(rowIndex,columns[columnIndex]!.key);return Array.isArray(value)?JSON.stringify(validateMediaValue(value)):text;}
         return rich ? richTextHtml(rich, doc) : text;
       }));
       return { ...block, values, formats };
@@ -1751,10 +1763,32 @@ export function createGrid(options: GridOptions): Grid {
 
   function onPaste(event: ClipboardEvent): void {
     const selection = engine.getSelection();
+    const files=Array.from(event.clipboardData?.files ?? []).filter(file=>file.type.startsWith('image/'));
+    if(event.target!==editor&&selection&&files.length){event.preventDefault();void pasteImages(files);return;}
     if (event.target === editor || !selection || !event.clipboardData || !event.clipboardData.types.some(type => ['text/plain','text/html',gridClipboardType].includes(type))) return;
     event.preventDefault();
     try { if(event.clipboardData.types.includes(gridClipboardType))pasteSelectionBlocks(event.clipboardData.getData(gridClipboardType));else if(event.clipboardData.types.includes('text/html'))pasteSelectionBlocks(encodeBlocks(htmlClipboardBlocks(event.clipboardData.getData('text/html'))));else paste(event.clipboardData.getData('text/plain')); }
     catch (error) { win.alert(error instanceof Error ? error.message : 'Unable to paste cells.'); }
+  }
+
+  async function pasteImages(files:readonly File[]):Promise<void> {
+    const selection=engine.getSelection();if(!selection)return;
+    const key=selection.columnKey,target=JSON.stringify(getSelectionRanges()),originalValue=engine.getValue(selection.rowIndex,selection.columnKey),created:string[]=[];let controller:AbortController|undefined;
+    try {
+      if(!mediaColumn(key))throw new Error('Select an image or people column before pasting images.');
+      if(files.length>100||files.some(file=>file.size>20*1024*1024))throw new Error('Paste at most 100 images, each no larger than 20 MiB.');
+      if(!engine.canPaste())throw new Error('This cell does not allow pasting.');
+      mediaUpload?.abort();controller=new win.AbortController();mediaUpload=controller;
+      const values=await Promise.all(files.map(async file=>{
+        if(options.mediaOptions?.upload)return await options.mediaOptions.upload(file,Object.freeze({columnKey:key,signal:controller!.signal}));
+        const src=win.URL.createObjectURL(file);created.push(src);return {src,alt:file.name};
+      }));
+      if(destroyed||controller.signal.aborted||JSON.stringify(getSelectionRanges())!==target||engine.getSelection()?.rowId!==selection.rowId||engine.getSelection()?.columnKey!==key||!Object.is(engine.getValue(selection.rowIndex,key),originalValue))throw new Error('Image paste canceled because its destination changed.');
+      const value=validateMediaValue(values);
+      pasteSelectionBlocks(encodeBlocks([{row:0,column:0,values:[[JSON.stringify(value)]]}]));
+      for(const src of created)ownedImageUrls.add(src);
+      if(mediaUpload===controller)mediaUpload=undefined;
+    } catch(error){controller?.abort();if(mediaUpload===controller)mediaUpload=undefined;for(const src of created)win.URL.revokeObjectURL(src);if(!destroyed)win.alert(error instanceof Error?error.message:'Unable to paste images.');}
   }
 
   function select(rowIndex: number, columnIndex: number, extend = false, reveal = true, add = false): void {
@@ -1930,7 +1964,7 @@ export function createGrid(options: GridOptions): Grid {
         bounds.top + Math.min(rect.clip.y + rect.clip.height, rect.y + rect.height));
       return;
     }
-    if (event.altKey && event.key === 'Enter' && selection) { event.preventDefault(); const rect = viewport().cellRect(selection.rowIndex, selection.columnIndex); const bounds = scroller.getBoundingClientRect(); openLinks(selection.rowIndex, selection.columnIndex, bounds.left + rect.x, bounds.top + rect.y + rect.height); return; }
+    if (event.altKey && event.key === 'Enter' && selection) { event.preventDefault(); if(openMedia(selection.rowIndex,selection.columnIndex))return;const rect = viewport().cellRect(selection.rowIndex, selection.columnIndex); const bounds = scroller.getBoundingClientRect(); openLinks(selection.rowIndex, selection.columnIndex, bounds.left + rect.x, bounds.top + rect.y + rect.height); return; }
     if (event.isComposing || event.altKey) return;
     const control = event.ctrlKey || event.metaKey;
     if (control && selection && ['b', 'i'].includes(event.key.toLowerCase())) {
@@ -2030,7 +2064,7 @@ export function createGrid(options: GridOptions): Grid {
     return linksForValue(engine.getValue(row, columns[col]!.key), columns[col]!.key, engine.getFormat(row, col).contentFormat);
   }
   function linksForValue(value: unknown, key: string, contentFormat?: CellFormat['contentFormat']) {
-    if (options.detectLinks === false || imageColumns.has(key)) return [];
+    if (options.detectLinks === false || mediaColumn(key)) return [];
     const rich = richText(value, key, contentFormat);
     if (!rich) return detectLinks(value);
     const links = detectLinks(rich.text);
@@ -2172,7 +2206,7 @@ export function createGrid(options: GridOptions): Grid {
       ctx.fillStyle = background;
       ctx.fillRect(x, y, width, height);
     }
-    if (!header && imageColumns.has(columns[columnIndex]!.key)) { imageCell(value, x, y, width, height, textColor); highlightSearch(x, y, width, height, rowIndex, columnIndex); return; }
+    if (!header && mediaColumn(columns[columnIndex]!.key)) { if(avatarColumns.has(columns[columnIndex]!.key)||Array.isArray(value))mediaCell(value,x,y,width,height,textColor,avatarColumns.has(columns[columnIndex]!.key));else imageCell(value, x, y, width, height, textColor); highlightSearch(x, y, width, height, rowIndex, columnIndex); return; }
     if (!header && columnEditors.get(columns[columnIndex]!.key)?.type === 'checkbox' && typeof value === 'boolean') {
       const size = Math.max(0, Math.min(16, width - 20, height - 8)); const left = x + 10; const top = y + (height - size) / 2;
       ctx.save(); ctx.strokeStyle = textColor; ctx.lineWidth = 1;
@@ -2241,13 +2275,13 @@ export function createGrid(options: GridOptions): Grid {
     if (!header) highlightSearch(x, y, width, height, rowIndex, columnIndex);
   }
 
-  function imageCell(value: unknown, x: number, y: number, width: number, height: number, textColor: string): void {
-    if (value == null || value === '') return;
+  function imageCell(value: unknown, x: number, y: number, width: number, height: number, textColor: string, shape?:'avatar'|'thumbnail', label=''): void {
+    if (!shape && (value == null || value === '')) return;
     let item: { image: HTMLImageElement; state: 'loading' | 'ready' | 'error' } | undefined;
     try {
       if (typeof value !== 'string') throw new TypeError('Image URL must be a string.');
       const url = new win.URL(value, doc.baseURI);
-      if (!['http:', 'https:', 'blob:', 'data:'].includes(url.protocol) || (url.protocol === 'data:' && !/^data:image\//i.test(value))) throw new TypeError('Unsupported image URL.');
+      if (url.username || url.password || !['http:', 'https:', 'blob:', 'data:'].includes(url.protocol) || (url.protocol === 'data:' && !/^data:image\//i.test(value))) throw new TypeError('Unsupported image URL.');
       const src = url.href;
       visibleImages.add(src); item = imageCache.get(src);
       if (!item) {
@@ -2266,16 +2300,50 @@ export function createGrid(options: GridOptions): Grid {
     } catch { /* Invalid URLs use the same unavailable state as failed image loads. */ }
     const ctx = context!;
     ctx.save(); ctx.beginPath(); ctx.rect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2)); ctx.clip();
+    if(shape){ctx.beginPath();ctx.roundRect(x+1,y+1,width-2,height-2,shape==='avatar'?width/2:6);ctx.clip();ctx.fillStyle=theme.headerBackground;ctx.fillRect(x,y,width,height);}
     if (item?.state === 'ready') {
       const image = item.image;
-      const ratio = Math.max(0, Math.min(1, (width - 16) / image.naturalWidth, (height - 8) / image.naturalHeight));
+      const ratio = shape ? Math.max(width/image.naturalWidth,height/image.naturalHeight) : Math.max(0, Math.min(1, (width - 16) / image.naturalWidth, (height - 8) / image.naturalHeight));
       const w = image.naturalWidth * ratio; const h = image.naturalHeight * ratio;
       if (ratio > 0) ctx.drawImage(image, x + (width - w) / 2, y + (height - h) / 2, w, h);
     } else {
       ctx.font = theme.font; ctx.fillStyle = textColor; ctx.textBaseline = 'middle';
-      ctx.fillText(item?.state === 'loading' ? 'Loading…' : 'Image unavailable', x + 8, y + height / 2);
+      if(shape){ctx.textAlign='center';ctx.fillText(shape==='avatar'?label.trim().split(/\s+/).slice(0,2).map(part=>part[0]).join('').toLocaleUpperCase()||'?':item?.state==='loading'?'…':'—',x+width/2,y+height/2);}
+      else ctx.fillText(item?.state === 'loading' ? 'Loading…' : 'Image unavailable', x + 8, y + height / 2);
     }
     ctx.restore(); ctx.beginPath();
+    if(shape){ctx.save();ctx.strokeStyle=theme.background;ctx.lineWidth=2;ctx.roundRect(x+1,y+1,width-2,height-2,shape==='avatar'?width/2:6);ctx.stroke();ctx.restore();ctx.beginPath();}
+  }
+
+  function mediaCell(value:unknown,x:number,y:number,width:number,height:number,textColor:string,avatars:boolean):void {
+    const items=mediaItems(value);if(!items.length)return;
+    const size=Math.max(0,Math.min(mediaSize,height-8,width-16));if(size<12)return;
+    const step=avatars?size*.76:size+6,available=Math.max(0,width-16);
+    let count=Math.min(mediaLimit,items.length,Math.max(1,Math.floor((available-size)/step)+1));
+    if(count<items.length&&count*step+size>available)count=Math.max(0,count-1);
+    for(let i=0;i<count;i++){const item=items[i]!;imageCell(item.src,x+8+i*step,y+(height-size)/2,size,size,textColor,avatars?'avatar':'thumbnail',item.name ?? item.alt ?? '');}
+    if(count<items.length){const ctx=context!;ctx.save();ctx.fillStyle=theme.headerBackground;ctx.beginPath();ctx.roundRect(x+8+count*step,y+(height-size)/2,size,size,avatars?size/2:6);ctx.fill();ctx.fillStyle=textColor;ctx.font=theme.font;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('+'+(items.length-count),x+8+count*step+size/2,y+height/2);ctx.restore();ctx.beginPath();}
+  }
+
+  function openMedia(row:number,col:number):boolean {
+    const key=columns[col]!.key;if(!mediaColumn(key))return false;
+    if(activeDialog?.open||!finishEdit(true))return true;
+    const items=mediaItems(engine.getValue(row,key)),avatars=avatarColumns.has(key);
+    const dialog=doc.createElement('dialog');dialog.dataset.gridDialog='';dialog.setAttribute('aria-label',avatars?'Cell people':'Cell images');activeDialog=dialog;
+    dialog.style.cssText='width:min(560px,calc(100vw - 48px));max-height:75vh;box-sizing:border-box';
+    const title=doc.createElement('h2');title.textContent=columns[col]!.title+' · '+items.length;
+    const list=doc.createElement('div');list.style.cssText=avatars?'display:grid;gap:12px':'display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px';
+    for(const [i,item] of items.entries()){
+      const figure=doc.createElement('figure');figure.style.cssText='margin:0;display:flex;gap:12px;'+(avatars?'align-items:center':'flex-direction:column');
+      const label=item.name ?? item.alt ?? (avatars?'Person ':'Image ')+(i+1);
+      const fallback=doc.createElement('span');fallback.textContent=avatars?label.trim().split(/\s+/).slice(0,2).map(part=>part[0]).join('').toLocaleUpperCase():'Image unavailable';fallback.style.cssText='display:grid;place-items:center;background:var(--acheron-header-background);min-height:48px;padding:8px;border-radius:8px';
+      figure.append(fallback);
+      if(item.src){try{const url=new win.URL(item.src,doc.baseURI);if(url.username||url.password||!['http:','https:','blob:','data:'].includes(url.protocol)||url.protocol==='data:'&&!/^data:image\//i.test(item.src))throw new Error();const image=doc.createElement('img');image.alt=label;image.referrerPolicy='no-referrer';image.loading='lazy';image.style.cssText=avatars?'width:44px;height:44px;object-fit:cover;border-radius:50%':'width:100%;height:160px;object-fit:contain;border-radius:8px';image.onload=()=>fallback.remove();image.onerror=()=>image.remove();image.src=url.href;figure.prepend(image);}catch{/* Keep a readable fallback for invalid image URLs. */}}
+      const caption=doc.createElement('figcaption');caption.textContent=label;figure.append(caption);list.append(figure);
+    }
+    if(!items.length)list.textContent=avatars?'No people':'No images';
+    const close=doc.createElement('button');close.type='button';close.textContent='Close';close.onclick=()=>dialog.close();
+    dialog.append(title,list,close);root.append(dialog);dialog.addEventListener('close',()=>{dialog.remove();if(activeDialog===dialog)activeDialog=null;if(!destroyed)scroller.focus({preventScroll:true});});dialog.showModal();close.focus();return true;
   }
 
   function highlightSearch(x: number, y: number, width: number, height: number, row: number, col: number): void {
@@ -2360,7 +2428,8 @@ export function createGrid(options: GridOptions): Grid {
   function accessibleText(row: number, col: number, value: unknown): string {
     const column = columns[col]!; const label = options.getCellLabel?.(row, column.key, value);
     if (label !== undefined) return label;
-    return `${column.title}: ${imageColumns.has(column.key) ? value ? 'Image' : 'No image' : displayedText(value, column.key, engine.getFormat(row, col).contentFormat)}`;
+    if(mediaColumn(column.key)){const items=mediaItems(value);return `${column.title}: ${items.length} ${avatarColumns.has(column.key)?'people':'images'}${items.length?'; '+items.map((item,i)=>item.name ?? item.alt ?? (item.src?.split('/').pop() || String(i+1))).join(', '):''}. Alt+Enter opens details.`;}
+    return `${column.title}: ${displayedText(value, column.key, engine.getFormat(row, col).contentFormat)}`;
   }
   function accessibleCell(row: number, col: number, value: unknown): HTMLElement {
     const key = `${row}:${col}`;
@@ -2892,6 +2961,7 @@ export function createGrid(options: GridOptions): Grid {
   render();
   function onDoubleClick(event: MouseEvent): void {
     const cell = pointerCell(event);
+    if(cell&&openMedia(cell.row,cell.col))return;
     const selection = engine.getSelection();
     if (cell && columnEditors.get(columns[cell.col]!.key)?.type === 'checkbox') return;
     if (event.target !== editor && cell && selection?.rowIndex === cell.row && selection.columnIndex === cell.col && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) beginEdit();
@@ -3033,6 +3103,7 @@ export function createGrid(options: GridOptions): Grid {
       root.removeEventListener('keydown', searchShortcut, true);
       activeDialog?.remove();
       activeDialog = null;
+      mediaUpload?.abort();for(const src of ownedImageUrls)win.URL.revokeObjectURL(src);ownedImageUrls.clear();
       endResize();
       root.removeEventListener('dblclick', onAxisDoubleClick, true);
       root.removeEventListener('pointerdown', onHeaderPointerDown, true);

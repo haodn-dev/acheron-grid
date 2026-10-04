@@ -17,7 +17,7 @@ An experimental Canvas browser renderer for the headless @acheron-grid/core engi
 - TSV copy/paste, atomic local batches, delta undo/redo and typed events.
 - Per-column rich text with HTML or an optional host-provided Markdown adapter.
 
-This package is a development preview, not a published release. Remote data sources are not implemented. React and Vue lifecycle adapters are available in separate packages. The active cell has a bounded ARIA grid mirror; full screen-reader coverage has not been verified. A headless render-callback benchmark is available; end-to-end frame rate has not been verified.
+This package is a development preview, not a published release. Explicit read-only remote paging is available through core's `createAsyncDataSource`; the host controls loading. React and Vue lifecycle adapters are available in separate packages. The active cell has a bounded ARIA grid mirror; full screen-reader coverage has not been verified. A headless render-callback benchmark is available; end-to-end frame rate has not been verified.
 
 ## Build from source
 
@@ -123,13 +123,13 @@ createEditor: (cell, doc) => {
 
 The factory initializes the control's value, options, type and constraints. The grid owns its accessible label, positioning, styles, focus and removal. Only one editor is mounted; its overlay follows the cell's pane and clips during scrolling. Native validation runs before the shared edit command; `Column.parse` receives the control's string value, or `'true'`/`'false'` from a checkbox's checked state. Non-string values require a parser. Current permissions are checked at commit, with the same events/history/partial repaint as text editing.
 
-Enter commits, Escape cancels, and blur commits unless the editor is pinned; IME composition does not commit. Textareas accept Alt/Ctrl/Cmd+Enter for a newline; Tab/Shift+Tab save and move to the next/previous cell. Other controls retain native Tab behavior. Failed validation/parser/write keeps the draft with `aria-invalid` and an associated inline alert; input/change clears the error for retry. Native control keys and clipboard stay in the editor. Factory errors or invalid/attached/foreign-document elements produce an alert without mounting an editor. Destroy removes the editor and discards its draft. Factories must not mutate grid/source or install external listeners requiring cleanup; composite widgets, framework components, async validation and custom lifecycle callbacks are not supported.
+Enter commits, Escape cancels, and blur commits unless the editor is pinned; IME composition does not commit. Textareas accept Alt/Ctrl/Cmd+Enter for a newline; Tab/Shift+Tab save and move to the next/previous cell. Other controls retain native Tab behavior. Failed validation/parser/write keeps the draft with `aria-invalid` and an associated inline alert; input/change clears the error for retry. Native control keys and clipboard stay in the editor. Factory errors or invalid/attached/foreign-document elements produce an alert without mounting an editor. Destroy removes the editor and discards its draft. Factories must not mutate grid/source. Use `onEditorMount` to mount external UI and return its cleanup; see Developer integration recipes. Async validation is not supported.
 
 ## API
 
 `LocalDataSource(rows, getRowId)` copies the row array and shallow-copies each row. IDs must be unique strings or finite numbers. Nested objects are not cloned. Use setValue(index, columnKey, value) to replace an existing field without mutating caller rows. Row IDs stay stable through structural commands. Invalid indices and missing fields are rejected; missing properties return `undefined`, while invalid row indices throw `RangeError`.
 
-The `DataSource` interface exposes `getRowCount()`, `getRowId(index)`, and `getValue(index, columnKey)`. Use grid structural commands to change row count while preserving the mount. External source dimension changes are not automatically observed; remount for changes made outside those commands. Custom sources must provide synchronous values and valid counts.
+The `DataSource` interface exposes `getRowCount()`, `getRowId(index)`, and `getValue(index, columnKey)`. Use grid structural commands to change row count while preserving the mount. External source dimension changes are not automatically observed; call `refreshData(previousIds)` after capturing identities before a host structural change. Custom sources must provide synchronous values and valid counts.
 
 `createGrid(options)` returns `selectRow(index)`, `selectColumn(index)`, `openSearch()`, `setFrozen(rows, columns)`, `setLocked(target, locked)`, `format(targets, patch)`, size/query helpers, `render()`, `updateCells(updates)`, `undo()`, `redo()`, `getCellPermission(rowIndex, columnIndex)`, `getSelection()`, `getSelectionRange()`, `copySelection()`, `paste(text)` and `destroy()`. `render()` schedules a viewport redraw, coalesced into the next animation frame. `destroy()` removes only the grid's own DOM and releases its listeners and observer; repeated calls are safe. Calls to `render()` after destruction do nothing.
 
@@ -137,7 +137,7 @@ Column keys must be unique. All cell dimensions must be positive finite numbers.
 
 ## Limits
 
-All local rows reside in memory. Virtualization bounds cell rendering work, not data storage. Native scrolling is subject to browser scroll-size limits, so this preview does not guarantee arbitrary dataset dimensions. Composite editors and asynchronous editor lifecycle are not implemented.
+All local rows reside in memory. Virtualization bounds cell rendering work, not data storage. Native scrolling is subject to browser scroll-size limits, so this preview does not guarantee arbitrary dataset dimensions. External editor UI can use `onEditorMount`; asynchronous validation and setters are not implemented.
 
 ## Selection and keyboard
 
@@ -160,7 +160,7 @@ const columns = [
 
 Columns are read-only by default. Without a parser, only string/null/undefined values can be edited; saved values are strings. A parser can return a typed value or throw a validation error. Parser/setter errors keep the draft input open with an inline validation alert. Unchanged text does not call the setter. IME composition does not commit on Enter. Keep identity columns read-only: local row IDs remain stable even if their original field value changes.
 
-After calling `dataSource.setValue(...)` outside the editor, call `grid.render()` to redraw. Grid commands repaint only changed cells in the viewport through the existing frame scheduler. Async writes and automatic source subscriptions are not implemented.
+After external value writes with unchanged row identities/order/count, call `grid.refreshData('values')` to reconcile and redraw. Grid commands repaint only changed cells in the viewport through the existing frame scheduler. Async writes and automatic source subscriptions are not implemented.
 
 ## Batch updates and history
 
@@ -177,7 +177,7 @@ Each call is one undoable command, including edits committed through the DOM edi
 
 `LocalDataSource.setValues(updates)` validates all fields and builds replacement rows before committing the batch. Custom sources must provide a synchronous, atomic `setValues(updates)` for multiple-cell commands; a single-cell command can use `setValue`. Setters must leave data unchanged when throwing. A failed command or replay does not move history. Async setters are unsupported.
 
-The grid retains the latest 100 commands, with shallow old/new value references. This limits command count, not memory bytes. New changes clear redo; no-ops preserve it. Undo/redo reject conflicts if a recorded row ID or current value differs after external mutation. Direct source writes are outside history and require `grid.render()`.
+The grid retains the latest 100 commands, with shallow old/new value references. This limits command count, not memory bytes. New changes clear redo; no-ops preserve it. Undo/redo reject conflicts if a recorded row ID or current value differs after external mutation. Direct source writes are outside history; use `refreshData` to reconcile and clear stale history.
 
 When the viewport has focus, Ctrl/Cmd+Z undoes and Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y redoes. The DOM editor keeps native text undo. `updateCells` throws while editing or after destruction; undo/redo return `false` while editing, after destruction or when the stack is empty. Destroy releases both history stacks.
 
@@ -275,7 +275,7 @@ Host policies retain their false veto after unlock. Set `allowLockChanges: false
 
 ## Configured column editors
 
-Use `columnEditors: { status: { type: 'select', values: ['Review', 'Active'] }, approved: { type: 'checkbox' } }` for native editors without a factory. Select values must be a nonempty array of unique nonempty strings; configurations are snapshotted at construction. A custom `createEditor` result takes precedence. Provide a column parser to validate allowed choices on paste as well as editing.
+Use `columnEditors: { status: { type: 'select', values: ['Review', 'Active'] }, approved: { type: 'checkbox' } }` for native editors without a factory. Select values may be unique strings or `{ value, label, disabled }` objects; configurations are snapshotted, and `setColumnEditor` replaces a runtime configuration. A custom `createEditor` result takes precedence. Provide a column parser to validate allowed choices on paste as well as editing.
 
 Checkbox cells store booleans and draw a checkbox in Canvas. Clicking the box toggles through the edit command; clicking elsewhere selects normally. F2 opens a native checkbox; Space changes it, Enter saves, Escape cancels. Editable checkbox columns require a parser accepting only `'true'`/`'false'` and returning a boolean; read-only checkbox columns can omit it. Non-boolean values cannot open the built-in editor. Permissions/locks, parsing, events and undo/redo share the existing pipeline. Custom renderers can override checkbox drawing. No DOM checkbox is created for each row.
 
@@ -499,3 +499,212 @@ Ctrl/Cmd+X and the searchable menu's **Cut** action stage a same-grid move. The 
 `grid.cutSelectionBlocks()` returns a structured staged-cut payload; paste that exact payload through `grid.pasteSelectionBlocks(payload)` on the same grid. `grid.cancelCut()` cancels it. Ctrl/Cmd+V and menu paste recognize the matching structured/HTML clipboard payload. After the first successful move, further pastes act as copies. Copying/pasting through an editor keeps native text behavior. Cross-grid/app moves are not implemented; they do not delete the original source. Plain-text-only clipboard transfers cannot authenticate the structured pending cut and remain copy operations.
 
 Copy one cell, select multiple rows/cells, then paste to fill the target range(s). A structured one-cell payload repeats its formatting too. All target cells validate atomically. Multi-cell matrices retain existing placement rules; automatic matrix tiling is not provided.
+
+## Developer integration recipes
+
+### Multiple images and people in one cell
+
+```ts
+const rows = [{
+  id: 'r1',
+  photos: [{ src: '/images/front.jpg', alt: 'Front' }, { src: '/images/back.jpg', alt: 'Back' }],
+  people: [{ id: 'ada', name: 'Ada Lovelace', src: '/avatars/ada.jpg' }, { id: 'lin', name: 'Lin Chen' }],
+}];
+const grid = createGrid({
+  container, dataSource: new LocalDataSource(rows, row => row.id),
+  columns: [{ key: 'photos', title: 'Photos', editable: true }, { key: 'people', title: 'People', editable: true }],
+  imageColumns: ['photos'], avatarColumns: ['people'],
+  rowHeight: 48, columnWidth: 200,
+  mediaOptions: { size: 32, maxVisible: 4 },
+});
+```
+
+Image columns accept an existing single URL string or a list of strings/`{src, alt}` objects. People lists use `{id?, name, src?}`; missing/broken avatar images display initials. Lists preserve order, with at most 100 items per cell. Thumbnails have rounded corners; avatars overlap slightly. `+N` summarizes overflow without resizing the row. Double-click or Alt+Enter opens a themed, keyboard-accessible details dialog with names/alt text. Empty lists remain empty. `getCellLabel` can replace generated accessible descriptions. `renderCell` still takes precedence if the host wants another presentation.
+
+`mediaOptions.size` is 20–96 CSS pixels, `maxVisible` is 1–20; cell dimensions can reduce the visible count. Use explicit row heights or auto-fit. Image loading uses only visible thumbnails and a viewport-bounded cache, with the existing URL protocol checks, anonymous CORS and no-referrer policy. Gallery images load lazily. Remote servers must permit Canvas CORS for thumbnail drawing.
+
+Ctrl/Cmd+C/X/V between configured media cells preserves list values, names, IDs and alt text using the structured grid clipboard. Paste uses the normal parser/validation/permission pipeline and one undo command; cut clears its source only after a successful destination write. Plain text clipboard representation is JSON for lists. Canvas installs `parseMediaValue` as the default parser on media columns; a supplied column parser takes precedence. The helper is exported for a headless host or custom parser. F2 edits the JSON representation; double-click opens details rather than editing JSON. Pasting a media list into an ordinary text column leaves JSON text, not a media widget.
+
+To paste a screenshot/image directly, select a configured editable image/people cell, focus the grid viewport and press Ctrl/Cmd+V. Browser clipboard image files replace that cell's list; multiple files become one list. A selected range receives the same list through normal scalar broadcasting. Paste while a native text editor is open retains native editor behavior. The browser must expose image files in the paste event; plain HTML containing an image is not an image-file upload.
+
+By default pasted files create **temporary blob URLs owned by the grid**, retained for undo/redo and revoked on destroy. They are not a durable upload and must not be saved as permanent URLs or reused after their owner is destroyed. To persist images, provide a host upload hook:
+
+```ts
+mediaOptions: {
+  upload: async (file, { columnKey, signal }) => {
+    const body = new FormData();
+    body.append('file', file); body.append('column', columnKey);
+    const response = await fetch('/api/images', { method: 'POST', body, signal });
+    if (!response.ok) throw new Error('Image upload failed');
+    const { url } = await response.json();
+    return { src: url, alt: file.name };
+  },
+}
+```
+
+Paste accepts at most 100 image files, each up to 20 MiB. Uploads commit only when all results validate and the destination selection/row identity/value is still unchanged. Superseded uploads and grid destruction abort the supplied signal. Failure never clears cut sources or partially writes the grid. The host owns file-content validation, allowed origins, storage, authorization and cleanup of uploads that were completed on the server but never attached to a cell. Context-menu text paste does not upload files; use the native paste shortcut for clipboard images.
+
+Canvas accepts application hooks without coupling the engine to a framework or backend. These examples extend the `createGrid({ container, dataSource, columns, ... })` setup in the package reference above. Give the container a non-zero width/height and call `grid.destroy()` on unmount.
+
+### Searchable select and multiselect
+
+```ts
+const grid = createGrid({
+  container, dataSource, columns,
+  choiceEditor: {}, // Enable searchable panels globally; false uses native controls.
+  columnEditors: {
+    status: {
+      type: 'select',
+      values: [
+        { value: 'active', label: 'Active' },
+        { value: 'archived', label: 'Archived', disabled: true },
+      ],
+      choiceEditor: {
+        placeholder: 'Find a status',
+        searchLabel: 'Search statuses',
+        optionsLabel: 'Statuses',
+        noMatchLabel: 'No matching status',
+        applyLabel: 'Apply', cancelLabel: 'Cancel',
+        matches: (query, option) =>
+          `${option.label} ${option.value}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
+      },
+    },
+    tags: {
+      type: 'multiselect',
+      values: ['Design', 'Content', 'Review'],
+      choiceEditor: {
+        valueOrder: 'input',
+        selectedLabel: count => `${count} tags selected`,
+      },
+    },
+  },
+});
+```
+
+Values are stored independently from labels. Disabled options cannot be chosen through the editor; enforce business constraints in the column parser and server too. Multiselect stores comma-separated values, so values cannot contain commas. `valueOrder: 'input'` preserves the original value order; `'options'` explicitly follows the supplied option order. Opening the editor never randomly reorders existing values.
+
+Per-column `choiceEditor` overrides global settings. Use `{ searchable: false }` for a panel without search or `false` for a native select. Arrow keys navigate; typing from an option moves focus to the search input. Enter applies, Escape cancels and Space toggles multiple choices. Customize `placeholder`, `searchLabel`, `optionsLabel`, `selectedLabel`, `noMatchLabel`, `emptyLabel`, `applyLabel`, `cancelLabel`, `loadingLabel` and `errorLabel` for localization.
+
+Replace a lookup list after loading your own API:
+
+```ts
+grid.setColumnEditor('status', {
+  type: 'select',
+  values: [{ value: 'active', label: 'Active' }, { value: 'review', label: 'Review' }],
+  choiceEditor: {},
+});
+// grid.setColumnEditor('status', null) removes the configured editor.
+```
+
+The configuration is validated and snapshotted. Replacing the editor for the currently edited column cancels its draft. A non-null `createEditor` factory result takes precedence over configured column editors.
+
+### Remote option search
+
+```ts
+grid.setColumnEditor('tags', {
+  type: 'multiselect',
+  values: ['Design'], // Initial/current choices; provide a nonempty list.
+  choiceEditor: {
+    searchDelay: 180,
+    loadingLabel: 'Loading tags...',
+    errorLabel: 'Could not load tags. Search again to retry.',
+    loadOptions: async (query, { signal, columnKey }) => {
+      const url = new URL('/api/options', location.origin);
+      url.searchParams.set('q', query);
+      url.searchParams.set('column', columnKey ?? '');
+      const response = await fetch(url, { signal });
+      if (!response.ok) throw new Error(`Options request failed: ${response.status}`);
+      return await response.json(); // [{ value: 'design', label: 'Design', disabled: false }]
+    },
+  },
+});
+```
+
+The panel loads the initial empty query, debounces later queries, aborts superseded requests and cancels on apply/cancel/destroy. Stale responses are ignored. Selected values remain available even when absent from the latest result. The server owns matching when `loadOptions` is present; `matches` applies only to local lists. Results must have unique string values with optional string labels and boolean disabled flags. The host owns authentication, validation and pagination of its option endpoint; there is no infinite-scroll protocol.
+
+### Custom chip rendering
+
+```ts
+const choiceEditor = {
+  renderOption: (option, document) => {
+    const chip = document.createElement('span');
+    chip.textContent = option.label;
+    chip.className = `status-chip status-${option.value}`;
+    return chip;
+  },
+};
+```
+
+`renderOption` receives value, label, disabled, selected, multiple and columnKey. Return a detached element from the supplied document; use `textContent` for untrusted labels. The panel owns checkbox/radio semantics. Reuse the same application color mapping in `renderCell` so painted chips and editor chips agree in both themes. Canvas does not impose a status palette on host data.
+
+### External editor UI and cleanup
+
+```ts
+const grid = createGrid({
+  container, dataSource, columns,
+  editorOptions: { pinned: true },
+  createEditor: (cell, document) => {
+    if (cell.columnKey !== 'name') return null;
+    const input = document.createElement('input');
+    input.type = 'text';
+    return input;
+  },
+  onEditorMount: (cell, editor) => {
+    // Optional React/Vue portal or application popover, anchored to editor.
+    const onInput = () => console.log(cell.columnKey, editor.value);
+    editor.addEventListener('input', onInput);
+    return () => editor.removeEventListener('input', onInput);
+  },
+});
+```
+
+The factory returns a detached input/select/textarea from the grid document; Canvas initializes its value and mounts it. `onEditorMount` runs after mounting and may return cleanup, called on apply/cancel/destroy. Use that cleanup to unmount a framework portal, remove listeners and abort application requests. Cleanup errors go to `onObserverError`. Mount errors cancel the draft and show an accessible error.
+
+External UI writes to the backing control's `value` and dispatches `input`/`change` in its document. Enter commits through normal parsing/permissions/history; Escape cancels. `pinned: true` prevents portal focus from committing on blur. The host owns portal focus/keyboard/ARIA semantics. Returning an arbitrary framework node from `createEditor` is unsupported. Parsing and validation remain synchronous; use column `invalidInput: 'allow'` for a visible warning that permits saving, or the default rejection policy to retain an invalid draft. Never use client validation as server authorization.
+
+### Link popup and optional website metadata
+
+```ts
+const grid = createGrid({
+  container, dataSource, columns,
+  detectLinks: true,
+  allowOpenLinks: true,
+  linkPreview: {
+    enabled: true,
+    allowMetadata: true,
+    load: async (href, signal) => {
+      const response = await fetch('/api/link-preview', {
+        method: 'POST', signal,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: href }),
+      });
+      if (!response.ok) throw new Error(`Preview request failed: ${response.status}`);
+      return await response.json(); // { title?: string, description?: string, image?: string }
+    },
+  },
+});
+```
+
+Canvas does not fetch websites by itself. A basic popup with distinguishable URLs and an open action remains available without metadata. `linkPreview: false` disables metadata; an object with `allowMetadata: false` prevents loader calls and removes the website-details toggle. `enabled: false` starts website details hidden but allows the user to enable them when metadata is permitted. Closing/replacing the popup aborts the loader signal. Handle backend errors; failed metadata does not remove the basic URL entry.
+
+Use a same-origin backend endpoint. Next.js route handlers work for this; a static export needs a separate backend. Enforce the policy on the server too: allowed origins, HTTP/HTTPS only, public network destinations, redirect checks, response size/time limits and authorization. Turning off metadata in UI is not a server security boundary. The bundled demo uses its own trusted-origin policy; the library does not hardcode those origins. Images and metadata are optional; do not inject remote HTML.
+
+### Other extension points and ownership
+
+| Area | Public extension point | Host responsibility |
+| --- | --- | --- |
+| Data and remote loading | `dataSource`, `createAsyncDataSource` from core | Storage, server queries, authorization, async save coordination |
+| External source changes | `captureRowIdentity`, `refreshData` | Capture IDs before structure changes; use `'values'` only for unchanged identities |
+| Notifications | `subscribe`, `onEvent`, `onObserverError` | Unsubscribe on unmount; avoid nested mutations from callbacks |
+| Persisted state | `exportState`, `restoreState`, `exportConfiguration` | Persist/version storage; supply matching row IDs/schema and application policies |
+| Painted content | `renderCell`, `measureCellHeight` | Return handled=true only when fully painted; honor bounds/format; provide height measurement |
+| Accessible content | `getCellLabel`, `accessibility` | Describe custom content and use viewport accessibility when appropriate |
+| Parsing/validation | column parser, `invalidInput`, permissions/resolver | Validate paste and editor values; enforce server authorization |
+| Appearance | `theme`, `selectionStyle`, `motion`, choice renderer | Shared light/dark tokens, reduced-motion support and meaningful labels |
+| Host sorting/filtering | `viewMode: 'host'`, `onViewChange` | Fetch/reconcile a server view; local search does not query unloaded records |
+| Structural changes | `canChangeStructure`, `onRowChange`, `onReorder`, column types | Veto disallowed actions and persist application data |
+| Context menu | `contextMenuSuggestions` | Enable contextual suggestions or the complete built-in menu; custom menu items are not supported |
+
+Canvas forwards the headless refresh, state and subscription APIs. See the core integration recipes for complete paging/refresh contracts. `destroy()` releases grid-owned UI and listeners; it does not destroy a host-owned source, subscriptions outside the grid or a metadata backend.
+
+React/Vue adapters expose the grid instance through their documented ref/getGrid API. Keep construction options stable and call runtime methods on that instance; replacing factory options is not a reactive configuration update. Mount external components through `onEditorMount` and return their unmount function. Use the same hooks in vanilla, React and Vue; no framework dependency is added to core.

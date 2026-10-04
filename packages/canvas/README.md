@@ -502,6 +502,48 @@ Copy one cell, select multiple rows/cells, then paste to fill the target range(s
 
 ## Developer integration recipes
 
+### Multiple images and people in one cell
+
+```ts
+const rows = [{
+  id: 'r1',
+  photos: [{ src: '/images/front.jpg', alt: 'Front' }, { src: '/images/back.jpg', alt: 'Back' }],
+  people: [{ id: 'ada', name: 'Ada Lovelace', src: '/avatars/ada.jpg' }, { id: 'lin', name: 'Lin Chen' }],
+}];
+const grid = createGrid({
+  container, dataSource: new LocalDataSource(rows, row => row.id),
+  columns: [{ key: 'photos', title: 'Photos', editable: true }, { key: 'people', title: 'People', editable: true }],
+  imageColumns: ['photos'], avatarColumns: ['people'],
+  rowHeight: 48, columnWidth: 200,
+  mediaOptions: { size: 32, maxVisible: 4 },
+});
+```
+
+Image columns accept an existing single URL string or a list of strings/`{src, alt}` objects. People lists use `{id?, name, src?}`; missing/broken avatar images display initials. Lists preserve order, with at most 100 items per cell. Thumbnails have rounded corners; avatars overlap slightly. `+N` summarizes overflow without resizing the row. Double-click or Alt+Enter opens a themed, keyboard-accessible details dialog with names/alt text. Empty lists remain empty. `getCellLabel` can replace generated accessible descriptions. `renderCell` still takes precedence if the host wants another presentation.
+
+`mediaOptions.size` is 20–96 CSS pixels, `maxVisible` is 1–20; cell dimensions can reduce the visible count. Use explicit row heights or auto-fit. Image loading uses only visible thumbnails and a viewport-bounded cache, with the existing URL protocol checks, anonymous CORS and no-referrer policy. Gallery images load lazily. Remote servers must permit Canvas CORS for thumbnail drawing.
+
+Ctrl/Cmd+C/X/V between configured media cells preserves list values, names, IDs and alt text using the structured grid clipboard. Paste uses the normal parser/validation/permission pipeline and one undo command; cut clears its source only after a successful destination write. Plain text clipboard representation is JSON for lists. Canvas installs `parseMediaValue` as the default parser on media columns; a supplied column parser takes precedence. The helper is exported for a headless host or custom parser. F2 edits the JSON representation; double-click opens details rather than editing JSON. Pasting a media list into an ordinary text column leaves JSON text, not a media widget.
+
+To paste a screenshot/image directly, select a configured editable image/people cell, focus the grid viewport and press Ctrl/Cmd+V. Browser clipboard image files replace that cell's list; multiple files become one list. A selected range receives the same list through normal scalar broadcasting. Paste while a native text editor is open retains native editor behavior. The browser must expose image files in the paste event; plain HTML containing an image is not an image-file upload.
+
+By default pasted files create **temporary blob URLs owned by the grid**, retained for undo/redo and revoked on destroy. They are not a durable upload and must not be saved as permanent URLs or reused after their owner is destroyed. To persist images, provide a host upload hook:
+
+```ts
+mediaOptions: {
+  upload: async (file, { columnKey, signal }) => {
+    const body = new FormData();
+    body.append('file', file); body.append('column', columnKey);
+    const response = await fetch('/api/images', { method: 'POST', body, signal });
+    if (!response.ok) throw new Error('Image upload failed');
+    const { url } = await response.json();
+    return { src: url, alt: file.name };
+  },
+}
+```
+
+Paste accepts at most 100 image files, each up to 20 MiB. Uploads commit only when all results validate and the destination selection/row identity/value is still unchanged. Superseded uploads and grid destruction abort the supplied signal. Failure never clears cut sources or partially writes the grid. The host owns file-content validation, allowed origins, storage, authorization and cleanup of uploads that were completed on the server but never attached to a cell. Context-menu text paste does not upload files; use the native paste shortcut for clipboard images.
+
 Canvas accepts application hooks without coupling the engine to a framework or backend. These examples extend the `createGrid({ container, dataSource, columns, ... })` setup in the package reference above. Give the container a non-zero width/height and call `grid.destroy()` on unmount.
 
 ### Searchable select and multiselect
