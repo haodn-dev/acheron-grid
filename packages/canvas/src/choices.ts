@@ -17,13 +17,15 @@ export function choicePanel(select: HTMLSelectElement, root: HTMLElement, option
   const list = doc.createElement('div'); list.id='acheron-choices-'+(++choiceId);list.setAttribute('role','group');list.setAttribute('aria-label','Available options');query.setAttribute('aria-controls',list.id);query.setAttribute('aria-keyshortcuts','ArrowUp ArrowDown'); list.style.cssText = `overflow:auto;max-height:${Math.min(options.maxHeight ?? 220, Math.max(80, doc.defaultView!.innerHeight - 180))}px;margin:8px 0;scrollbar-width:thin`;
   const styles=doc.createElement('style');styles.textContent='[data-grid-choices] label:focus-within{background:color-mix(in srgb,var(--acheron-selection-color) 12%,var(--acheron-background))}';panel.append(styles);
   query.setAttribute('aria-description','Up and Down navigate options. Enter applies. Escape cancels. Space toggles multiple selections.');
-  const summary = doc.createElement('div'); summary.setAttribute('role', 'status'); summary.style.cssText = 'font-size:11px;opacity:.7;margin-bottom:8px';
+  const summary = doc.createElement('div'); summary.setAttribute('role', 'status'); summary.style.cssText = 'font-size:12px;color:var(--acheron-header-text-color);margin-bottom:8px';
   function draw(): void {
     list.replaceChildren(); summary.textContent = select.multiple ? `${select.selectedOptions.length} selected` : 'Choose one option';
     for (const option of Array.from(select.options)) {
       if (!option.text.toLowerCase().includes(query.value.toLowerCase())) continue;
       const label = doc.createElement('label'); label.style.cssText = 'display:flex;align-items:center;gap:8px;padding:7px;border-radius:4px;cursor:pointer';
       const input = doc.createElement('input'); input.type = select.multiple ? 'checkbox' : 'radio'; input.disabled = option.disabled || option.parentElement instanceof doc.defaultView!.HTMLOptGroupElement && option.parentElement.disabled; input.dataset.optionIndex=String(option.index); input.checked = option.selected; input.setAttribute('aria-label', option.text || options.emptyLabel || 'Empty'); input.style.accentColor = 'var(--acheron-selection-color)';
+      if (input.disabled) { label.style.opacity='.45'; label.style.cursor='default'; }
+      if (option.selected) label.style.background='color-mix(in srgb,var(--acheron-selection-color) 8%,var(--acheron-background))';
       const custom = options.renderOption?.(Object.freeze({ value: option.value, selected: option.selected, multiple: select.multiple, ...(columnKey === undefined ? {} : { columnKey }) }), doc);
       if (custom && (custom.ownerDocument !== doc || custom.parentNode)) throw new TypeError('Choice option renderer must return a detached element from the grid document.');
       const text = custom ?? doc.createElement('span'); if (!custom) text.textContent = option.text || options.emptyLabel || 'Empty';

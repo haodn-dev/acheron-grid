@@ -179,3 +179,11 @@ test('popup surfaces preserve light/dark themes and keyboard opening',async({pag
   await page.keyboard.press('Escape');
  }
 });
+
+test('long tooltips stay inside a narrow viewport',async({page})=>{
+ await page.setViewportSize({width:320,height:480});await setup(page);
+ await page.evaluate(()=>{const root=document.querySelector('[data-grid-viewport]').parentElement;const button=document.createElement('button');button.textContent='Help';button.title='Long tooltip '.repeat(15);button.style.cssText='position:fixed;right:8px;bottom:8px';root.append(button);});
+ await page.getByRole('button',{name:'Help',exact:true}).hover();
+ const tip=page.getByRole('tooltip');await expect(tip).toBeVisible();
+ const box=await tip.boundingBox();expect(box.x).toBeGreaterThanOrEqual(8);expect(box.y).toBeGreaterThanOrEqual(8);expect(box.x+box.width).toBeLessThanOrEqual(312);expect(box.y+box.height).toBeLessThanOrEqual(472);
+});

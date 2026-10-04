@@ -501,8 +501,8 @@ export function createGrid(options: GridOptions): Grid {
       anchor.append(icon, doc.createTextNode(String(index + 1))); linkBadges.append(anchor);
       anchor.addEventListener('pointerenter', () => { anchor.style.background = 'color-mix(in srgb,var(--acheron-link-color) 14%,var(--acheron-background))'; });
       anchor.addEventListener('pointerleave', () => { anchor.style.background = 'var(--acheron-header-background)'; });
-      anchor.addEventListener('focus', () => { anchor.style.outline = '1px solid var(--acheron-link-color)'; anchor.style.outlineOffset = '-1px'; });
-      anchor.addEventListener('blur', () => { anchor.style.outline = ''; });
+      anchor.addEventListener('focus', () => { anchor.style.background = 'color-mix(in srgb,var(--acheron-link-color) 14%,var(--acheron-background))'; anchor.style.outline = '1px solid var(--acheron-link-color)'; anchor.style.outlineOffset = '-1px'; });
+      anchor.addEventListener('blur', () => { anchor.style.outline = ''; anchor.style.background = 'var(--acheron-header-background)'; });
     });
     }
     linkBadges.style.left = `${indexWidth + left + 1}px`; linkBadges.style.top = `${headerHeight + top + 1}px`;
@@ -946,7 +946,7 @@ export function createGrid(options: GridOptions): Grid {
     popup.className = 'acheron-context-menu';
     popup.style.cssText = 'position:fixed;margin:0;padding:6px;min-width:200px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;border:1px solid var(--acheron-grid-line-color);border-radius:10px;box-shadow:0 12px 32px #0003;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font)';
     const style = doc.createElement('style');
-    style.textContent = '.acheron-context-menu [hidden]{display:none!important}.acheron-context-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:0;border-radius:4px;background:transparent;text-align:left;color:inherit;font:inherit;cursor:pointer;outline:none}.acheron-context-menu button:hover:not(:disabled),.acheron-context-menu button:focus-visible{background:var(--acheron-header-background)}.acheron-context-menu button:focus-visible{box-shadow:inset 0 0 0 1px var(--acheron-grid-line-color)}.acheron-context-menu button:disabled{opacity:.45;cursor:default}.acheron-context-menu svg{flex:none;color:var(--acheron-icon-color)}.acheron-context-menu [role=separator]{height:1px;background:var(--acheron-grid-line-color);margin:5px 4px}';
+    style.textContent = '.acheron-context-menu [hidden]{display:none!important}.acheron-context-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:0;border-radius:4px;background:transparent;text-align:left;color:inherit;font:inherit;cursor:pointer;outline:none}.acheron-context-menu button:hover:not(:disabled),.acheron-context-menu button:focus-visible{background:var(--acheron-header-background)}.acheron-context-menu button:focus-visible{box-shadow:inset 0 0 0 2px var(--acheron-selection-color)}.acheron-context-menu button:disabled{opacity:.45;cursor:default}.acheron-context-menu svg{flex:none;color:var(--acheron-icon-color)}.acheron-context-menu [role=separator]{height:1px;background:var(--acheron-grid-line-color);margin:5px 4px}';
     popup.append(style);
     style.textContent += '.acheron-context-menu:popover-open{display:grid;gap:2px}.acheron-context-menu:not(:popover-open){display:none}';
     popup.addEventListener('toggle', () => { if (!popup.matches(':popover-open') && menu === popup) closeMenu(); });
