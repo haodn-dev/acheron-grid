@@ -418,9 +418,10 @@ export function createGrid(options: GridOptions): Grid {
     copyFeedback.getAnimations({ subtree: true }).forEach(animation => animation.cancel());
     copyFeedback.replaceChildren();
   }
-  function showCopyFeedback(ranges: readonly SelectionRange[]): void {
+  function showCopyFeedback(ranges: readonly SelectionRange[], cut = false): void {
     clearCopyFeedback();
     if (destroyed || !ranges.length) return;
+    copyFeedback.dataset.operation = cut ? 'cut' : 'copy';
     copiedRanges = ranges.slice(0, 64).map(range => ({ ...range }));
     renderCopyFeedback();
     if (motionEnabled()) copyFeedback.animate([{ opacity: .35 }, { opacity: 1 }], { duration: Math.min(120, motionDuration), easing: 'cubic-bezier(.22,1,.36,1)' });
@@ -442,7 +443,8 @@ export function createGrid(options: GridOptions): Grid {
       dashes.style.cssText = 'position:absolute;left:-1px;top:-1px;width:calc(100% + 2px);height:calc(100% + 2px);overflow:visible';
       const outline = doc.createElementNS('http://www.w3.org/2000/svg', 'rect');
       outline.setAttribute('x', '.5'); outline.setAttribute('y', '.5');
-      outline.style.cssText = 'width:calc(100% - 1px);height:calc(100% - 1px);fill:none;stroke:var(--acheron-selection-color);stroke-width:1;stroke-dasharray:4 3';
+      const cutting = copyFeedback.dataset.operation === 'cut';
+      outline.style.cssText = `width:calc(100% - 1px);height:calc(100% - 1px);fill:${cutting ? 'var(--acheron-selection-color)' : 'none'};fill-opacity:.08;stroke:var(--acheron-selection-color);stroke-width:1;stroke-dasharray:${cutting ? '8 6' : '4 3'}`;
       dashes.append(outline); border.append(dashes); pane.append(border); copyFeedback.append(pane);
       if (motionEnabled()) outline.animate([{ strokeDashoffset: '0' }, { strokeDashoffset: '-14' }], { duration: 1200, iterations: Infinity, easing: 'linear' });
     }
@@ -1601,7 +1603,7 @@ export function createGrid(options: GridOptions): Grid {
     cancelCut();
     const blocks=clipboardBlocks();
     engine.cutSelectionBlocks();
-    pendingCutText=encodeBlocks(blocks); showCopyFeedback(getSelectionRanges()); return pendingCutText;
+    pendingCutText=encodeBlocks(blocks); showCopyFeedback(getSelectionRanges(), true); return pendingCutText;
   }
   function copySelectionBlocks(): string { cancelCut(); const text = encodeBlocks(clipboardBlocks()); showCopyFeedback(getSelectionRanges()); return text; }
   function pasteSelectionBlocks(text: string): void {
@@ -1675,7 +1677,7 @@ export function createGrid(options: GridOptions): Grid {
     if (cut && cutRequest!==cutRevision) return;
     if (cut && !destroyed && revision===copyFeedbackRevision) pendingCutText=encodeBlocks(blocks);
     else if(cut) engine.cancelCut();
-    if (!destroyed && revision === copyFeedbackRevision) showCopyFeedback(copiedRanges);
+    if (!destroyed && revision === copyFeedbackRevision) showCopyFeedback(copiedRanges, cut);
   }
   function copySelection(): string {
     if (destroyed) throw new Error('Grid is destroyed.');
@@ -1699,7 +1701,7 @@ export function createGrid(options: GridOptions): Grid {
     try {
       const blocks=clipboardBlocks();engine.cutSelectionBlocks();
       event.clipboardData.setData('text/plain',clipboardPlain(blocks));event.clipboardData.setData('text/html',clipboardHtml(blocks));
-      pendingCutText=encodeBlocks(blocks);event.clipboardData.setData(gridClipboardType,pendingCutText);showCopyFeedback(getSelectionRanges());
+      pendingCutText=encodeBlocks(blocks);event.clipboardData.setData(gridClipboardType,pendingCutText);showCopyFeedback(getSelectionRanges(), true);
     } catch(error) { pendingCutText=undefined;engine.cancelCut();win.alert(error instanceof Error ? error.message : 'Unable to cut cells.'); }
   }
   function onCopy(event: ClipboardEvent): void {

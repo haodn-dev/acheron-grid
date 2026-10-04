@@ -92,3 +92,16 @@ test('layout motion updates state immediately and cancels on scroll or reduced m
   await page.evaluate(() => { window.grid.moveColumns([0], 3); window.grid.destroy(); });
   await expect(page.locator('[data-grid-motion]')).toHaveCount(0);
 });
+
+test('copy and cut have distinct persistent outlines',async({page})=>{
+ await setup(page);
+ await page.getByLabel(/^Data grid viewport/).click({position:{x:80,y:45}});
+ await page.evaluate(()=>window.grid.copySelectionBlocks());
+ await expect(page.locator('[data-operation=copy] rect')).toHaveCSS('stroke-dasharray','4px, 3px');
+ await page.evaluate(()=>window.grid.cutSelectionBlocks());
+ await expect(page.locator('[data-operation=cut] rect')).toHaveCSS('stroke-dasharray','8px, 6px');
+ await page.getByLabel(/^Data grid viewport/).click({position:{x:220,y:80}});
+ await expect(page.locator('[data-operation=cut] rect')).toBeVisible();
+});
+
+
