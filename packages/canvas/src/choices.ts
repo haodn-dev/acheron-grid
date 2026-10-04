@@ -12,7 +12,7 @@ export function choicePanel(select: HTMLSelectElement, root: HTMLElement, option
   if (options.maxHeight !== undefined && (!Number.isFinite(options.maxHeight) || options.maxHeight <= 0)) throw new RangeError('Choice maxHeight must be positive.');
   const doc = root.ownerDocument; const panel = doc.createElement('div'); panel.dataset.gridChoices = '';
   panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', select.getAttribute('aria-label') ?? 'Choose values');
-  panel.style.cssText = 'position:fixed;z-index:10;box-sizing:border-box;width:260px;padding:10px;border:1px solid var(--acheron-grid-line-color);border-radius:8px;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);box-shadow:0 8px 24px #0f172a25';
+  panel.style.cssText = 'position:fixed;z-index:10;box-sizing:border-box;width:260px;padding:10px;border:1px solid var(--acheron-grid-line-color);border-radius:10px;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);box-shadow:0 12px 32px #0003';
   const query = doc.createElement('input'); query.type = 'search'; query.placeholder = options.placeholder ?? 'Search options'; query.setAttribute('aria-label', 'Search options'); query.style.cssText = 'outline:none;box-shadow:none;width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--acheron-grid-line-color);border-radius:4px;background:inherit;color:inherit;font:inherit';
   const list = doc.createElement('div'); list.id='acheron-choices-'+(++choiceId);list.setAttribute('role','group');list.setAttribute('aria-label','Available options');query.setAttribute('aria-controls',list.id);query.setAttribute('aria-keyshortcuts','ArrowUp ArrowDown'); list.style.cssText = `overflow:auto;max-height:${Math.min(options.maxHeight ?? 220, Math.max(80, doc.defaultView!.innerHeight - 180))}px;margin:8px 0;scrollbar-width:thin`;
   const styles=doc.createElement('style');styles.textContent='[data-grid-choices] label:focus-within{background:color-mix(in srgb,var(--acheron-selection-color) 12%,var(--acheron-background))}';panel.append(styles);
@@ -35,7 +35,7 @@ export function choicePanel(select: HTMLSelectElement, root: HTMLElement, option
   query.addEventListener('input', () => { draw(); positionChoicePanel(panel, select); });
   const actions = doc.createElement('div'); actions.style.cssText = 'display:flex;justify-content:flex-end;gap:6px';
   for (const [text, commit] of [[options.cancelLabel ?? 'Cancel', false], [options.applyLabel ?? 'Apply', true]] as const) {
-    const button = doc.createElement('button'); button.type = 'button'; button.textContent = text; button.style.cssText = 'padding:6px 10px;border:1px solid var(--acheron-grid-line-color);border-radius:4px;background:var(--acheron-header-background);color:inherit;font:inherit'; button.addEventListener('click', () => finish(commit)); actions.append(button);
+    const button = doc.createElement('button'); button.type = 'button'; button.textContent = text; button.style.cssText = 'padding:6px 10px;border:1px solid var(--acheron-grid-line-color);border-radius:4px;background:var(--acheron-header-background);color:inherit;font:inherit'; if (commit) { button.style.borderColor='var(--acheron-selection-color)'; button.style.background='color-mix(in srgb,var(--acheron-selection-color) 12%,var(--acheron-background))'; } button.addEventListener('click', () => finish(commit)); actions.append(button);
   }
   panel.addEventListener('keydown', event => {
     event.stopPropagation();if(event.isComposing)return;

@@ -167,3 +167,15 @@ test('multi-cell selection keeps one uniform tint without an inner active border
     return pixel(112).join(',') === pixel(115).join(',');
   })).toBe(true);
 });
+
+test('popup surfaces preserve light/dark themes and keyboard opening',async({page})=>{
+ await setup(page);
+ await page.emulateMedia({reducedMotion:'reduce'});
+ for(const dark of [false,true]) {
+  await page.evaluate(dark=>window.grid.setTheme(dark?{background:'#171915',textColor:'#eeefe5',headerBackground:'#292d25',gridLineColor:'#393d33',selectionColor:'#ff885f',iconColor:'#aaaea1'}:{background:'#f4f3ed',textColor:'#23241f',headerBackground:'#eaeae1',gridLineColor:'#d5d6cb',selectionColor:'#d44b21',iconColor:'#62645a'}),dark);
+  const grid=page.getByRole('grid');await grid.press('Control+Home');await grid.press('Shift+F10');
+  await expect(page.getByRole('menu')).toBeVisible();
+  await page.screenshot({path:`test-results/popup-${dark?'dark':'light'}.png`});
+  await page.keyboard.press('Escape');
+ }
+});

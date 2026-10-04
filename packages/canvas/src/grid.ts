@@ -344,6 +344,17 @@ export function createGrid(options: GridOptions): Grid {
     [data-grid-search]:not([hidden]) { display:flex;align-items:center;flex-wrap:wrap;gap:4px }
     dialog[data-grid-dialog] [data-dialog-actions] { display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:4px }
   `;
+  dialogStyles.textContent += `
+    dialog[data-grid-dialog], [data-grid-choices], .acheron-context-menu { -webkit-font-smoothing:antialiased; }
+    dialog[data-grid-dialog] button, [data-grid-choices] button { min-height:32px;cursor:pointer;touch-action:manipulation; }
+    dialog[data-grid-dialog] button:hover:not(:disabled), [data-grid-choices] button:hover:not(:disabled) { filter:brightness(.96); }
+    [data-grid-choices] button:focus-visible, [data-grid-choices] input:focus-visible { outline:2px solid var(--acheron-selection-color);outline-offset:2px; }
+    .acheron-context-menu button:focus-visible { box-shadow:inset 0 0 0 2px var(--acheron-selection-color); }
+    @media(pointer:coarse) {
+      .acheron-context-menu button, [data-grid-choices] label, [data-grid-choices] button, dialog[data-grid-dialog] button { min-height:44px; }
+      [data-grid-choices] input[type=search] { min-height:40px; }
+    }
+  `;
   root.append(dialogStyles);
   const scroller = doc.createElement('div');
   const viewportLabel = dataSource.setValue && columns.some(column => column.editable) ? 'Data grid viewport' : 'Read-only data grid viewport';
@@ -550,7 +561,7 @@ export function createGrid(options: GridOptions): Grid {
   freezeVertical.dataset.gridFreezeLine = 'column'; freezeHorizontal.dataset.gridFreezeLine = 'row';
   const actionError = doc.createElement('div');
   actionError.setAttribute('role', 'alert');
-  actionError.style.cssText = 'display:none;position:absolute;bottom:20px;left:12px;right:24px;z-index:2;padding:10px;background:#fff1f2;color:#9f1239;border:1px solid #fda4af;border-radius:6px;font:13px system-ui';
+  actionError.style.cssText = 'display:none;position:absolute;bottom:20px;left:12px;right:24px;z-index:2;padding:10px;background:color-mix(in srgb,#ef4444 12%,var(--acheron-background));color:var(--acheron-text-color);border:1px solid color-mix(in srgb,#ef4444 50%,var(--acheron-grid-line-color));border-radius:6px;font:13px system-ui';
   root.append(actionError);
   const lockNotice = doc.createElement('div');
   lockNotice.dataset.gridLockNotice = ''; lockNotice.setAttribute('role', 'status'); lockNotice.hidden = true;
@@ -563,7 +574,7 @@ export function createGrid(options: GridOptions): Grid {
   const editorError = doc.createElement('div');
   editorError.id = `acheron-editor-error-${++editorId}`;
   editorError.setAttribute('role', 'alert');
-  editorError.style.cssText = 'display:none;position:absolute;pointer-events:none;z-index:3;padding:8px;border:1px solid #fda4af;border-radius:4px;background:#fff1f2;color:#9f1239;font:13px system-ui';
+  editorError.style.cssText = 'display:none;position:absolute;pointer-events:none;z-index:3;padding:8px;border:1px solid color-mix(in srgb,#ef4444 50%,var(--acheron-grid-line-color));border-radius:6px;background:color-mix(in srgb,#ef4444 12%,var(--acheron-background));color:var(--acheron-text-color);font:13px system-ui';
   root.append(editorError);
   const selectionStatus = doc.createElement('div');
   selectionStatus.setAttribute('role', 'status');
@@ -933,7 +944,7 @@ export function createGrid(options: GridOptions): Grid {
     popup.setAttribute('role', 'menu');
     popup.setAttribute('aria-label', header ? 'Column actions' : 'Cell actions');
     popup.className = 'acheron-context-menu';
-    popup.style.cssText = 'position:fixed;margin:0;padding:6px;min-width:200px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;border:1px solid var(--acheron-grid-line-color);border-radius:8px;box-shadow:0 8px 24px #0f172a26;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font)';
+    popup.style.cssText = 'position:fixed;margin:0;padding:6px;min-width:200px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;border:1px solid var(--acheron-grid-line-color);border-radius:10px;box-shadow:0 12px 32px #0003;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font)';
     const style = doc.createElement('style');
     style.textContent = '.acheron-context-menu [hidden]{display:none!important}.acheron-context-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:0;border-radius:4px;background:transparent;text-align:left;color:inherit;font:inherit;cursor:pointer;outline:none}.acheron-context-menu button:hover:not(:disabled),.acheron-context-menu button:focus-visible{background:var(--acheron-header-background)}.acheron-context-menu button:focus-visible{box-shadow:inset 0 0 0 1px var(--acheron-grid-line-color)}.acheron-context-menu button:disabled{opacity:.45;cursor:default}.acheron-context-menu svg{flex:none;color:var(--acheron-icon-color)}.acheron-context-menu [role=separator]{height:1px;background:var(--acheron-grid-line-color);margin:5px 4px}';
     popup.append(style);
@@ -1998,7 +2009,7 @@ export function createGrid(options: GridOptions): Grid {
     if (!links.length) return;
     closeMenu();
     const popup = doc.createElement('div'); menu = popup; popup.popover = 'auto'; popup.setAttribute('role', 'dialog'); popup.setAttribute('aria-label', 'Cell links');
-    popup.style.cssText = 'position:fixed;margin:0;padding:12px;max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);overflow:auto;border:1px solid var(--acheron-grid-line-color);border-radius:8px;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);box-shadow:0 8px 24px #0f172a26';
+    popup.style.cssText = 'position:fixed;margin:0;padding:12px;max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);overflow:auto;border:1px solid var(--acheron-grid-line-color);border-radius:8px;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);box-shadow:0 12px 32px #0003';
     for (const link of links) {
       const anchor = doc.createElement('a'); anchor.textContent = link.text; anchor.href = link.href; anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; anchor.referrerPolicy = 'no-referrer';
       anchor.style.cssText = 'display:block;padding:8px;color:var(--acheron-link-color);text-decoration:underline;overflow-wrap:anywhere'; popup.append(anchor);
