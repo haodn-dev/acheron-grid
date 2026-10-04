@@ -483,3 +483,11 @@ grid = createGrid({ container, dataSource, ...restored, viewMode: 'core' });
 The same version-1 configuration contract as the headless engine applies: order/widths, frozen counts and local sort/filters only. Storage is host-owned. Validation runs before mounting when you call the restore helper first. Reuse your application theme, editors, permissions and other options explicitly. No live restore or history/selection/data/row-group persistence is implied. Nested header groups must remain compatible with restored column order; the existing header validation still applies.
 
 `grid.exportConfiguration()` requires core-managed views (`viewMode: 'core'`, or the default without `onViewChange`). Host-managed view mode throws because the renderer cannot know the original source projection; persist that host state separately. Destroyed grids also reject export.
+
+## Copy feedback and motion details
+
+Successful cell copy through Ctrl/Cmd+C, the context menu, `copySelection()` or `copySelectionBlocks()` briefly shows a 1px dashed outline, including a single cell. The marker is pointer-transparent, clipped by frozen panes, and expires after 1.8 seconds. Selection/data/layout changes, scrolling, resizing, Escape, theme changes and destroy clear it. A pending menu clipboard write cannot show stale feedback after state changes. Native text selection inside an editor retains native copy behavior.
+
+With motion enabled the marker fades in for at most 120ms; reduced motion or `motion:false` keeps the static marker. There is no indefinite marching animation or Canvas repaint loop. Visual feedback is bounded to the first 64 selected ranges; clipboard content is unaffected. Programmatic copy methods return content and show feedback, but do not themselves write to the operating-system clipboard.
+
+Menu/choice surfaces use a 2px translation without scaling text (up to 160ms enter, 100ms exit). Interrupted exits start from the rendered opacity/transform. Table-lock notice moves 2px and cancels prior notice animation before replay. Selection, focus, scrolling and resize guides remain immediate; layout transitions retain the existing bounded strip snapshot and reduced-motion behavior.

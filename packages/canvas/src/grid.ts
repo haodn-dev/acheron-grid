@@ -239,6 +239,7 @@ export function createGrid(options: GridOptions): Grid {
     ...(options.frozenRows === undefined ? {} : { frozenRows: options.frozenRows }),
     ...(options.frozenColumns === undefined ? {} : { frozenColumns: options.frozenColumns }),
     onInvalidate(change) {
+    clearCopyFeedback();
     if (change.type === 'cells') { if (engine.getMergedCells().length) fullDraw=true; if (options.autoRowHeight) { change.cells.forEach(cell => measuredRows.delete(cell.rowIndex)); fullDraw = true; } invalidate(change.cells); if (!searchBar.hidden) refreshSearch(); }
     else if (change.type === 'layout' || change.type === 'structure') {
       if (change.type === 'structure') {
@@ -388,6 +389,39 @@ export function createGrid(options: GridOptions): Grid {
   indexGutter.setAttribute('aria-label', 'Row index');
   indexGutter.style.touchAction = 'none';
   root.append(scroller, canvas, headerSurface, indexGutter);
+  const copyFeedback = doc.createElement('div');
+  copyFeedback.dataset.gridCopyFeedback = '';
+  copyFeedback.setAttribute('aria-hidden', 'true');
+  copyFeedback.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:3';
+  root.append(copyFeedback);
+  let copyFeedbackTimer: number | undefined;
+  let copyFeedbackRevision = 0;
+  function clearCopyFeedback(): void {
+    copyFeedbackRevision++;
+    win.clearTimeout(copyFeedbackTimer); copyFeedbackTimer = undefined;
+    if (!copyFeedback.hasChildNodes()) return;
+    copyFeedback.getAnimations({ subtree: true }).forEach(animation => animation.cancel());
+    copyFeedback.replaceChildren();
+  }
+  function showCopyFeedback(ranges: readonly SelectionRange[]): void {
+    clearCopyFeedback();
+    if (destroyed || !ranges.length) return;
+    const view = viewport();
+    // Bound visual feedback independently of clipboard data size.
+    for (const region of view.regions) for (const range of ranges.slice(0, 64)) {
+      if (range.endRow < region.rows.start || range.startRow >= region.rows.end || range.endColumn < region.columns.start || range.startColumn >= region.columns.end) continue;
+      const clip = region.clip;
+      const pane = doc.createElement('div');
+      pane.style.cssText = `position:absolute;overflow:hidden;left:${indexWidth + clip.x}px;top:${headerHeight + clip.y}px;width:${clip.width}px;height:${clip.height}px`;
+      const border = doc.createElement('div');
+      border.style.cssText = `position:absolute;box-sizing:border-box;left:${columnAxis.position(range.startColumn) + region.offsetX - clip.x}px;top:${rowAxis.position(range.startRow) + region.offsetY - clip.y}px;width:${columnAxis.position(range.endColumn + 1) - columnAxis.position(range.startColumn)}px;height:${rowAxis.position(range.endRow + 1) - rowAxis.position(range.startRow)}px;border:1px solid var(--acheron-background)`;
+      const dashes = doc.createElement('div');
+      dashes.style.cssText = 'position:absolute;inset:-1px;border:1px dashed var(--acheron-selection-color)';
+      border.append(dashes); pane.append(border); copyFeedback.append(pane);
+    }
+    if (motionEnabled()) copyFeedback.animate([{ opacity: .35 }, { opacity: 1 }], { duration: Math.min(120, motionDuration), easing: 'cubic-bezier(.22,1,.36,1)' });
+    copyFeedbackTimer = win.setTimeout(clearCopyFeedback, 1800);
+  }
   container.append(root);
   let frame: number | undefined;
   let destroyed = false;
@@ -735,10 +769,10 @@ export function createGrid(options: GridOptions): Grid {
     const wasLocked = engine.isLocked(target);
     engine.setLocked(target, locked);
     if (target.scope === 'table') {
-      win.clearTimeout(lockNoticeTimer); lockNotice.hidden = true;
+      win.clearTimeout(lockNoticeTimer); lockNotice.getAnimations().forEach(animation => animation.cancel()); lockNotice.hidden = true;
       if (locked && !wasLocked && options.tableLockNotice !== false) {
         lockNotice.hidden = false;
-        if (motionEnabled()) lockNotice.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'translateY(0)', offset: .045 }, { opacity: 1, offset: .95 }, { opacity: 0 }], { duration: 4000, easing: 'ease-out' });
+        if (motionEnabled()) lockNotice.animate([{ opacity: 0, transform: 'translateY(2px)' }, { opacity: 1, transform: 'translateY(0)', offset: .045 }, { opacity: 1, offset: .95 }, { opacity: 0 }], { duration: 4000, easing: 'ease-out' });
         lockNoticeTimer = win.setTimeout(() => { lockNotice.hidden = true; }, 4000);
       }
     }
@@ -842,13 +876,16 @@ export function createGrid(options: GridOptions): Grid {
   function enterSurface(node: HTMLElement): void {
     if (!motionEnabled()) return;
     node.style.transformOrigin = 'top left';
-    node.animate([{ opacity: 0, transform: 'translateY(-4px) scale(.98)' }, { opacity: 1, transform: 'translateY(0) scale(1)' }], { duration: Math.min(160, motionDuration), easing: 'cubic-bezier(.22,1,.36,1)' });
+    node.animate([{ opacity: 0, transform: 'translateY(-2px)' }, { opacity: 1, transform: 'translateY(0)' }], { duration: Math.min(160, motionDuration), easing: 'cubic-bezier(.22,1,.36,1)' });
   }
   function exitSurface(node: HTMLElement): void {
     node.style.pointerEvents = 'none'; node.inert = true; node.setAttribute('aria-hidden', 'true');
     node.removeAttribute('data-grid-choices');
     if (!motionEnabled() || destroyed) { node.remove(); return; }
-    node.animate([{ opacity: 1 }, { opacity: 0, transform: 'translateY(-2px)' }], { duration: Math.min(100, motionDuration), easing: 'ease-out' }).finished.then(() => node.remove(), () => node.remove());
+    const opacity = win.getComputedStyle(node).opacity;
+    const transform = win.getComputedStyle(node).transform;
+    node.getAnimations().forEach(animation => animation.cancel());
+    node.animate([{ opacity, transform }, { opacity: 0, transform: 'translateY(-1px)' }], { duration: Math.min(100, motionDuration), easing: 'ease-out' }).finished.then(() => node.remove(), () => node.remove());
   }
   function closeMenu(focus = false): void {
     if (menu) exitSurface(menu);
@@ -1533,7 +1570,7 @@ export function createGrid(options: GridOptions): Grid {
       return { ...block, values, formats };
     });
   }
-  function copySelectionBlocks(): string { return encodeBlocks(clipboardBlocks()); }
+  function copySelectionBlocks(): string { const text = encodeBlocks(clipboardBlocks()); showCopyFeedback(getSelectionRanges()); return text; }
   function pasteSelectionBlocks(text: string): void {
     if (destroyed || editor) throw new Error('Finish editing before pasting cells.');
     const ranges = getSelectionRanges().sort((a,b) => a.startRow - b.startRow || a.startColumn - b.startColumn);
@@ -1586,13 +1623,18 @@ export function createGrid(options: GridOptions): Grid {
   }
   async function writeClipboard(): Promise<void> {
     const blocks = clipboardBlocks(); const text = clipboardPlain(blocks);
+    const copiedRanges = getSelectionRanges().map(range => ({ ...range }));
+    const revision = copyFeedbackRevision;
     if (win.navigator.clipboard.write && win.ClipboardItem) await win.navigator.clipboard.write([new win.ClipboardItem({ 'text/plain': new win.Blob([text], { type: 'text/plain' }), 'text/html': new win.Blob([clipboardHtml(blocks)], { type: 'text/html' }) })]);
     else await win.navigator.clipboard.writeText(text);
+    if (!destroyed && revision === copyFeedbackRevision) showCopyFeedback(copiedRanges);
   }
   function copySelection(): string {
     if (destroyed) throw new Error('Grid is destroyed.');
     if (editor) throw new Error('Finish editing before copying cells.');
-    return clipboardPlain(clipboardBlocks());
+    const text = clipboardPlain(clipboardBlocks());
+    showCopyFeedback(getSelectionRanges());
+    return text;
   }
 
   function paste(text: string): void {
@@ -1605,7 +1647,7 @@ export function createGrid(options: GridOptions): Grid {
     const selection = engine.getSelection();
     if (event.target === editor || !selection || !event.clipboardData) return;
     event.preventDefault();
-    try { const blocks=clipboardBlocks(); event.clipboardData.setData('text/plain',clipboardPlain(blocks)); event.clipboardData.setData('text/html',clipboardHtml(blocks));event.clipboardData.setData(gridClipboardType,encodeBlocks(blocks)); }
+    try { const blocks=clipboardBlocks(); event.clipboardData.setData('text/plain',clipboardPlain(blocks)); event.clipboardData.setData('text/html',clipboardHtml(blocks));event.clipboardData.setData(gridClipboardType,encodeBlocks(blocks)); showCopyFeedback(getSelectionRanges()); }
     catch (error) { win.alert(error instanceof Error ? error.message : 'Unable to copy cells.'); }
   }
 
@@ -1830,6 +1872,7 @@ export function createGrid(options: GridOptions): Grid {
       return;
     }
     if (event.key === 'Escape') {
+      clearCopyFeedback();
       onPointerEnd(); axisAnchor = null;
       addNextSelection = false;
       if (selection) {
@@ -2671,9 +2714,11 @@ export function createGrid(options: GridOptions): Grid {
   const observer = new ResizeObserver(() => {
     const width = root.clientWidth; const height = root.clientHeight;
     if (width === observedWidth && height === observedHeight) return;
+    clearCopyFeedback(); clearLayoutMotion();
     observedWidth = width; observedHeight = height; render();
   });
   observer.observe(root);
+  scroller.addEventListener('scroll', clearCopyFeedback, { passive: true });
   scroller.addEventListener('scroll', clearLayoutMotion, { passive: true });
   scroller.addEventListener('scroll', render, { passive: true });
   scroller.addEventListener('scroll',clearChoiceHover,{passive:true});
@@ -2784,7 +2829,7 @@ export function createGrid(options: GridOptions): Grid {
     moveColumns: (indices:readonly number[],beforeIndex:number)=>structureAction(()=>engine.moveColumns(indices,beforeIndex), 'column'),
     setTheme(patch) {
       if (destroyed) throw new Error('Grid is destroyed.');
-      const next = Object.freeze({ ...theme, ...patch }); validateTheme(next); clearLayoutMotion(); theme = next; measuredRows.clear();
+      const next = Object.freeze({ ...theme, ...patch }); validateTheme(next); clearLayoutMotion(); clearCopyFeedback(); theme = next; measuredRows.clear();
       for (const [key, value] of Object.entries(theme)) root.style.setProperty('--acheron-' + key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase()), value);
       for (const [name, image] of Object.entries(stateIcons)) {
         const color = theme.iconColor.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
@@ -2817,7 +2862,7 @@ export function createGrid(options: GridOptions): Grid {
     setRowHeight: (index, height) => resizeAxis(rowAxis, index, height),
     destroy() {
       if (destroyed) return;
-      win.clearTimeout(lockNoticeTimer); clearLayoutMotion(); motionPreference.removeEventListener('change', cancelMotion);
+      win.clearTimeout(lockNoticeTimer); clearCopyFeedback(); clearLayoutMotion(); motionPreference.removeEventListener('change', cancelMotion);
       choices?.remove(); choices = null; win.removeEventListener('beforeunload', guardEditNavigation);
       clearReorder();
       engine.destroy();
@@ -2861,6 +2906,7 @@ export function createGrid(options: GridOptions): Grid {
       scroller.removeEventListener('keydown', onKeyDown);
       if (frame !== undefined) win.cancelAnimationFrame(frame);
       observer.disconnect();
+      scroller.removeEventListener('scroll', clearCopyFeedback);
       scroller.removeEventListener('scroll', clearLayoutMotion);
       scroller.removeEventListener('scroll', render);
       scroller.removeEventListener('scroll',clearChoiceHover);
