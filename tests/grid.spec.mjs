@@ -1849,6 +1849,7 @@ test('active cell tints all ancestor headers and leaves unrelated headers unchan
     const {createGrid}=await import('/canvas/index.js'); const {LocalDataSource}=await import('/core/index.js');
     window.grid=createGrid({container:document.querySelector('#grid'),dataSource:new LocalDataSource([{id:1,a:'A',b:'B',c:'C'}],row=>row.id),columns:['a','b','c'].map(key=>({key,title:key})),headerHeight:24,columnWidth:100,headerGroups:[{title:'Parent',children:[{title:'Child',children:['a','b']}]}]});
   });
+  await expect.poll(()=>page.locator('canvas').evaluate(canvas=>parseFloat(canvas.style.width)>0)).toBe(true);
   const pixels=async()=>page.evaluate(()=>{const canvas=document.querySelector('canvas'), ctx=canvas.getContext('2d'), scale=canvas.width/parseFloat(canvas.style.width); return [[10,5],[10,29],[10,53],[210,5]].map(([x,y])=>[...ctx.getImageData(x*scale,y*scale,1,1).data]);});
   const before=await pixels(); await page.getByRole('grid').press('Control+Home'); await expect.poll(pixels).not.toEqual(before);
   const after=await pixels(); for(let i=0;i<3;i++) expect(after[i]).not.toEqual(before[i]); expect(after[3]).toEqual(before[3]);
@@ -1878,6 +1879,7 @@ test('custom backgrounds reach cell edges with only one grid boundary pixel', as
     const {createGrid}=await import('/canvas/index.js'); const {LocalDataSource}=await import('/core/index.js');
     window.grid=createGrid({container:document.querySelector('#grid'),indexColumn:false,rowHeight:40,headerHeight:24,columnWidth:100,dataSource:new LocalDataSource([{id:1,a:'A',b:'B'}],row=>row.id),columns:[{key:'a',title:'A'},{key:'b',title:'B'}],theme:{gridLineColor:'#888888'},renderCell:(ctx,cell)=>{ctx.fillStyle='#ff0000';ctx.fillRect(cell.x,cell.y,cell.width,cell.height);return true;}});
   });
+  await expect.poll(()=>page.locator('canvas').evaluate(canvas=>parseFloat(canvas.style.width)>0)).toBe(true);
   await expect.poll(()=>page.evaluate(()=>{const canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d'),scale=canvas.width/parseFloat(canvas.style.width);return [0,1,98,100,101].map(x=>[...ctx.getImageData(x*scale,30*scale,1,1).data].slice(0,3));})).toEqual(Array.from({length:5},()=>[255,0,0]));
 });
 
