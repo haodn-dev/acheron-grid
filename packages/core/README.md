@@ -180,6 +180,10 @@ async function changeQuery(criteria: LocalViewOptions) {
 
 Import `LocalViewOptions` as a type from core. This supports read-only server sorting/filtering; it does not provide remote saves, live subscriptions or consistent dataset revision tokens across pages.
 
+For a fixed editable local draft, see the [host-owned remote save example](../../examples/remote-save.md). It demonstrates revision checks, idempotent retry after an uncertain outcome, preserved newer edits and explicit rollback through engine history. It is a source integration example, not an async setter or a published remote-write adapter.
+
+For a fixed editable local draft, see the [host-owned remote save example](../../examples/remote-save.md). It demonstrates revision checks, idempotent retry after an uncertain outcome, preserved newer edits and explicit rollback through engine history. It is a source integration example, not an async setter or a published remote-write adapter.
+
 ## Selection and clipboard
 
 ### Multiple sort keys (unreleased)
