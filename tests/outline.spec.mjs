@@ -157,6 +157,18 @@ test('suggested context menu is optional and search still finds hidden commands'
  await expect(page.getByRole('menuitem',{name:/^Resize row/})).toBeHidden();await page.keyboard.type('Resize row');await expect(page.getByRole('menuitem',{name:/^Resize row/})).toBeVisible();
  await page.keyboard.press('Escape');await page.getByRole('menuitem',{name:'Show all actions',exact:true}).click();await expect(page.getByRole('menuitem',{name:/^Resize row/})).toBeVisible();
 });
+test('metadata images set anonymous loading and no-referrer before starting the request',async({page})=>{
+ await page.route('https://example.com/preview.svg',route=>route.fulfill({contentType:'image/svg+xml',headers:{'Access-Control-Allow-Origin':'*'},body:'<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'}));
+ await setup(page);await page.evaluate(async()=>{
+   window.grid.destroy();const {createGrid}=await import('/canvas/index.js');window.source.setValue(0,'a','https://example.com/page');
+   const property=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');window.imagePolicy=[];
+   Object.defineProperty(HTMLImageElement.prototype,'src',{...property,set(value){if(value==='https://example.com/preview.svg')window.imagePolicy.push([this.crossOrigin,this.referrerPolicy]);property.set.call(this,value);}});
+   window.grid=createGrid({container:document.querySelector('#grid'),dataSource:window.source,columns:[{key:'a',title:'Link'}],linkPreview:{load:async()=>({title:'Preview',image:'https://example.com/preview.svg'})}});
+ });
+ await page.getByRole('grid').press('Control+Home');await page.getByRole('grid').press('Alt+Enter');
+ await expect.poll(()=>page.evaluate(()=>window.imagePolicy)).toEqual([['anonymous','no-referrer']]);
+});
+
 test('link previews are opt-in, show full URLs and recover from metadata failures',async({page})=>{
  await setup(page);await page.evaluate(async()=>{window.grid.destroy();const {createGrid}=await import('/canvas/index.js');window.source.setValue(0,'a','https://example.com/full/path?query=1');window.loads=0;
  window.grid=createGrid({container:document.querySelector('#grid'),dataSource:window.source,columns:[{key:'a',title:'Link'}],linkPreview:{load:async()=>{window.loads++;throw new Error('Offline');}}});});

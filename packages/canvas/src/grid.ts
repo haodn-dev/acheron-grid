@@ -2140,7 +2140,7 @@ export function createGrid(options: GridOptions): Grid {
           const title=doc.createElement('strong');title.textContent=(info.title ?? new URL(link.href).hostname).slice(0,160);detail.append(title);
           if(info.description){const description=doc.createElement('p');description.textContent=info.description.slice(0,320);description.style.margin='6px 0 0';detail.append(description);}
           const image=info.image && safeWebUrl(info.image);
-          if(image){const img=doc.createElement('img');img.crossOrigin='anonymous';img.src=image;img.alt='';img.referrerPolicy='no-referrer';img.style.cssText='width:100%;max-height:140px;object-fit:cover;border-radius:4px;margin-top:8px';img.addEventListener('load',positionLinks,{once:true});detail.append(img);}
+          if(image){const img=doc.createElement('img');img.crossOrigin='anonymous';img.alt='';img.referrerPolicy='no-referrer';img.src=image;img.style.cssText='width:100%;max-height:140px;object-fit:cover;border-radius:4px;margin-top:8px';img.addEventListener('load',positionLinks,{once:true});detail.append(img);}
           positionLinks();
         }).catch(()=>{if(!controller.signal.aborted && menu===popup){detail.textContent='Preview unavailable. The link is still available.';positionLinks();}});
       }
