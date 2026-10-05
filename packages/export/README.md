@@ -26,3 +26,5 @@ Returns a single-sheet XLSX `Uint8Array`. It uses the same rectangular copy perm
 Existing clipboard limits apply. Additional limits: 32,767 UTF-16 units per text cell, 20 million units across XML parts, 40 MB of uncompressed archive input and Excel's sheet/name dimensions. ZIP creation is synchronous, intended for bounded selections. Use a host worker for expensive exports. No workbook import, styles, media, formulas, date semantics, merged spans, multi-sheet export, streaming or automatic remote traversal.
 
 ZIP/UTF-8 support comes from [fflate](https://github.com/101arrowz/fflate), MIT licensed, confined to this optional module. Its license is included in the package.
+
+Default CSV escaping also covers leading control characters and full-width formula operators. Spreadsheet applications can reinterpret CSV after edits or re-saving; use XLSX inline strings for untrusted text when available. CSV escaping is not a universal spreadsheet execution guarantee. See [CSV injection guidance](https://community.owasp.org/attacks/CSV_Injection).

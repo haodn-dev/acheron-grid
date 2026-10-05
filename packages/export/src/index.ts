@@ -23,7 +23,7 @@ export function exportSelectionCsv(engine: Pick<GridEngine, 'getSelectionRanges'
   let length = options.bom ? 1 : 0;
   const lines = rows.map((row, rowIndex) => {
     const fields = row.map((text, columnIndex) => {
-      if (options.formulaProtection !== 'preserve' && /^\s*[=+\-@]/.test(text)) text = "'" + text;
+      if (options.formulaProtection !== 'preserve' && /^(?:[\s\u0000-\u001f\u007f]*[=+\-@＝＋－＠]|\s*[\u0000-\u001f\u007f])/.test(text)) text = "'" + text;
       const field = /[,"\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
       length += field.length + (columnIndex ? 1 : 0);
       if (length > 10_000_000) throw new RangeError('CSV output is too large.');

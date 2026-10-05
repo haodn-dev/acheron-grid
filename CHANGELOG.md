@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Harden CSV controls/full-width formula prefixes and anonymous image loading in details/previews. Document host security boundaries and update the build dependency fixing its Windows development-server advisory.
+
 - React/Vue dispose newly created grids when initialization fails. Media uploads report progress/cancel, bound concurrent jobs per paste and guard every broadcast destination against asynchronous overwrite.
 
 - Bounded literal find/replace goes through editable/writable validation and one undo command; Canvas exposes replaceText and a read-only getValue query.

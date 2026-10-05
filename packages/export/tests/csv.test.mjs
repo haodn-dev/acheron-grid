@@ -15,6 +15,12 @@ test('CSV preserves Unicode, separators, multiline fields and quotes with option
   engine.destroy();
 });
 
+test('CSV escapes leading control characters and full-width formula operators',()=>{
+  for(const value of ['\tplain','\rplain','\nplain','\u0000=1+1','＝1+1','＋1','－1','＠SUM(A1)']){
+    const engine=fixture([{a:value,b:'safe'}]);assert.equal(exportSelectionCsv(engine).startsWith(value.includes('\r')||value.includes('\n')?'"\'':'\''),true);engine.destroy();
+  }
+});
+
 test('formula-like text is escaped by default and preserve is explicit', () => {
   const engine = fixture([{ a: '=1+1', b: -3 }, { a: ' \t@SUM(A1)', b: '+123' }]);
   assert.equal(exportSelectionCsv(engine), "'=1+1,'-3\r\n' \t@SUM(A1),'+123");
