@@ -1,6 +1,17 @@
 # @acheron-grid/mcp
 
+Documentation revision 2 · npm 0.1.0 + explicitly marked source additions. See [documentation versions](../../guides/versions.md).
+
+
 Optional Model Context Protocol adapter. Core and Canvas do not depend on the MCP SDK. Uses the official MCP TypeScript SDK v1 with resources and tools.
+
+## Installation
+
+```sh
+npm install @acheron-grid/mcp@0.1.0
+```
+
+Install core/Canvas at the same version when used. For newer APIs, use a built source checkout and install matching packed artifacts; see [Getting started](../../guides/getting-started.md).
 
 ## Documentation server
 
@@ -10,7 +21,7 @@ From the source checkout, after installing dependencies:
 node packages/mcp/src/cli.mjs
 ```
 
-Configure your MCP client to launch that command over stdio, using an absolute path. The source CLI exposes six bundled package README snapshots as `acheron://docs/core`, `canvas`, `react`, `vue`, `markdown` and `export`. The export resource is an unreleased source addition. It exposes no grid data or write tools. stdout belongs to the protocol; no HTTP listener or authentication service is started.
+Configure your MCP client to launch that command over stdio, using an absolute path. The source CLI exposes seven bundled package README snapshots as `acheron://docs/core`, `canvas`, `react`, `vue`, `markdown`, `export` and `charts`. Published npm 0.1.0 exposes the original five resources; export/charts resources are Unreleased additions. It exposes no grid data or write tools. stdout belongs to the protocol; no HTTP listener or authentication service is started.
 
 ## Connect a host-owned grid
 

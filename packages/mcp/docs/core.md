@@ -1,5 +1,8 @@
 # @acheron-grid/core
 
+Documentation revision 2 · npm 0.1.0 + explicitly marked source additions. See [documentation versions](../../../guides/versions.md).
+
+
 An experimental headless TypeScript data-grid engine. Core owns data, selection, layout, editing, TSV clipboard operations and delta history. It has no runtime dependencies or browser/framework types.
 
 Use core for a custom renderer or headless data workflow. For a ready-made interactive grid, start with the [Canvas guide](https://acheron-grid.haoduong.dev/reference/canvas); React and Vue adapters are separate packages.
@@ -72,7 +75,7 @@ Build/typecheck includes a separate ES2022-only TypeScript configuration with no
 
 DataSource exposes synchronous getRowCount/getRowId/getValue and optional setValue/setValues. Row IDs remain stable through core-owned structure changes. LocalDataSource copies the row array and shallow row snapshots, with unique stable row IDs; nested values remain caller-owned.
 
-updateCells accepts already-validated values and intentionally does not apply column parsers or the editor's editable flag. editCell and paste apply resolved editable/pasteable permissions and text parsers. All writes, including API updates and undo/redo, require writable permission. Batches with more than one changed cell require `setValues`; a source with only `setValue` can accept single-cell writes. Batch setters must be synchronous and atomic, leaving data unchanged on failure. Validation completes before writes. Duplicate updates use the last value, Object.is no-ops preserve history, and undo/redo retain at most 100 delta commands with shallow value references. External writes are outside history; replay rejects row identity/current value conflicts. Explicit resize and freeze changes share this history.
+updateCells accepts typed values and runs column validation and intentionally does not apply column parsers or the editor's editable flag. editCell and paste apply resolved editable/pasteable permissions and text parsers. All writes, including API updates and undo/redo, require writable permission. Batches with more than one changed cell require `setValues`; a source with only `setValue` can accept single-cell writes. Batch setters must be synchronous and atomic, leaving data unchanged on failure. Validation completes before writes. Duplicate updates use the last value, Object.is no-ops preserve history, and undo/redo retain at most 100 delta commands with shallow value references. External writes are outside history; replay rejects row identity/current value conflicts. Explicit resize and freeze changes share this history.
 
 Clipboard processing is limited to 100,000 cells and 10 million UTF-16 code units. `createAsyncDataSource` provides explicit read-only async paging around a synchronous cache; async setters remain unsupported. React and Vue adapters live in separate packages. Multiple selection ranges support packed TSV and an internal structured clipboard payload.
 
@@ -191,8 +194,6 @@ After replacing a snapshot, call `engine.refreshData()` to discard identity-depe
 Duplicates and wrong-stream messages are ignored. A sequence gap, unknown row/column or queue overflow clears pending updates and sets `stale`; keep showing the last applied cache with a stale indicator, then fetch a new snapshot before receiving again. Snapshots cannot move the cursor backward. `disconnect()` marks stale; `reset(newUniqueStreamId)` invalidates the old subscription before resync. Host transport must guard late responses and use a new stream ID for each query/reconnect generation. The source does not start timers or network connections. `destroy()` releases its cache and rejects later operations.
 
 Snapshots are O(rows × configured columns); rows and pending cells are bounded independently. Values are shallow snapshots, so nested values remain caller-owned. Inserts, deletes and sort-membership changes require a fresh snapshot; remote paged live editing, automatic reconnect, durable storage and collaborative editing are not included. The builder's live sample is simulated, not a server connection.
-
-For a fixed editable local draft, see the [host-owned remote save example](../../../examples/remote-save.md). It demonstrates revision checks, idempotent retry after an uncertain outcome, preserved newer edits and explicit rollback through engine history. It is a source integration example, not an async setter or a published remote-write adapter.
 
 ## Selection and clipboard
 

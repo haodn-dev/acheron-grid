@@ -1,0 +1,268 @@
+{
+  "schema": 1,
+  "sourceRevision": "9cff1ab87353f39cdbf2bedb0b5de3219ef60e92",
+  "release": {
+    "version": "0.1.0",
+    "tag": "v0.1.0",
+    "revision": "f34e22765456d644bcae08ebb52241ae6a71238b"
+  },
+  "documents": [
+    {
+      "id": "getting-started",
+      "path": "guides/getting-started.md",
+      "revision": 1,
+      "updated": "2026-10-05",
+      "sha256": "2488e4eadb3c081f9206c5c453136b8f8e707d047eda9c49100e3524b56ed531",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Complete pinned-install browser example and troubleshooting."
+        }
+      ]
+    },
+    {
+      "id": "integration",
+      "path": "guides/integration.md",
+      "revision": 2,
+      "updated": "2026-10-05",
+      "sha256": "c75c34f1b88926cb32b7439104a295d3c32e14a790b961d7e3056ca0b5ec8c78",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Previous public reference; see source revision 9cff1ab."
+        },
+        {
+          "revision": 2,
+          "summary": "Clarify typed values, parsing, coordinates, lifecycle and permissions."
+        }
+      ]
+    },
+    {
+      "id": "frameworks",
+      "path": "guides/frameworks.md",
+      "revision": 1,
+      "updated": "2026-10-05",
+      "sha256": "2c3ef218e65317e5b149592434da688c36e1d7c57c20a5ee5dcac48e82af9ea6",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Canonical React/Vue lifecycle guide."
+        }
+      ]
+    },
+    {
+      "id": "ai",
+      "path": "guides/ai-integration.md",
+      "revision": 1,
+      "updated": "2026-10-05",
+      "sha256": "6f61e7863961f9986aa58664949861e2aaa547b1e41a89ba76eefe8f37659b4b",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Canonical public integration and host boundaries."
+        }
+      ]
+    },
+    {
+      "id": "versions",
+      "path": "guides/versions.md",
+      "revision": 1,
+      "updated": "2026-10-05",
+      "sha256": "d262cfbebcd8b88d92681ee24c900e6a91bb6c4d5485e0cdfbdd5920d205d32e",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Separate package releases, source previews and per-document revisions."
+        }
+      ]
+    },
+    {
+      "id": "core-api",
+      "path": "guides/core-api.md",
+      "revision": 1,
+      "updated": "2026-10-05",
+      "sha256": "e61dcf64ca8a0acc49ab6ddf57090c2f80afd4800fb445ae7f76fb1f173f61b9",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Generated source API signatures and construction options."
+        }
+      ]
+    },
+    {
+      "id": "canvas-api",
+      "path": "guides/canvas-api.md",
+      "revision": 1,
+      "updated": "2026-10-05",
+      "sha256": "b9e7df9dfb8b5353360ae53c754f026d1bacdfcaf5e60d8ce5e27067a88a27f8",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Generated source API signatures and construction options."
+        }
+      ]
+    },
+    {
+      "id": "core",
+      "path": "packages/core/README.md",
+      "revision": 2,
+      "updated": "2026-10-05",
+      "sha256": "a7799b0a418b696ec538423ea88b636b5b673f8c41418d2506e5481f65957ac0",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Previous public reference; see source revision 9cff1ab."
+        },
+        {
+          "revision": 2,
+          "summary": "Align publication status, installation and current source contracts."
+        }
+      ]
+    },
+    {
+      "id": "canvas",
+      "path": "packages/canvas/README.md",
+      "revision": 2,
+      "updated": "2026-10-05",
+      "sha256": "0e852a0a16dda50074e447de034184767822831d577350bafb697b29e627b724",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Previous public reference; see source revision 9cff1ab."
+        },
+        {
+          "revision": 2,
+          "summary": "Align publication status, installation and current source contracts."
+        }
+      ]
+    },
+    {
+      "id": "react",
+      "path": "packages/react/README.md",
+      "revision": 2,
+      "updated": "2026-10-05",
+      "sha256": "f62ac01d2770b97c199698e016fcd29797dd1ad06e8fb087777ce122a10b6320",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Previous public reference; see source revision 9cff1ab."
+        },
+        {
+          "revision": 2,
+          "summary": "Align publication status, installation and current source contracts."
+        }
+      ]
+    },
+    {
+      "id": "vue",
+      "path": "packages/vue/README.md",
+      "revision": 2,
+      "updated": "2026-10-05",
+      "sha256": "b07785017a4ab1be1990e671c845e8d79ee6c53503613e83a97f0157c0167249",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Previous public reference; see source revision 9cff1ab."
+        },
+        {
+          "revision": 2,
+          "summary": "Align publication status, installation and current source contracts."
+        }
+      ]
+    },
+    {
+      "id": "markdown",
+      "path": "packages/markdown/README.md",
+      "revision": 2,
+      "updated": "2026-10-05",
+      "sha256": "d217ddca505f1fafc43fe340a4dca9c366ad209045c494308cf1114e0f1ed816",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Previous public reference; see source revision 9cff1ab."
+        },
+        {
+          "revision": 2,
+          "summary": "Align publication status, installation and current source contracts."
+        }
+      ]
+    },
+    {
+      "id": "mcp",
+      "path": "packages/mcp/README.md",
+      "revision": 2,
+      "updated": "2026-10-05",
+      "sha256": "22c33d1936854ebaae197c7037473876ead5d579004408de85bed593eefdc30d",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Previous public reference; see source revision 9cff1ab."
+        },
+        {
+          "revision": 2,
+          "summary": "Align publication status, installation and current source contracts."
+        }
+      ]
+    },
+    {
+      "id": "export",
+      "path": "packages/export/README.md",
+      "revision": 2,
+      "updated": "2026-10-05",
+      "sha256": "37f2fb03038831398f7c6aa88ffdad7a8813d1c593f3fe9bb467ac8ccd574bf1",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Previous public reference; see source revision 9cff1ab."
+        },
+        {
+          "revision": 2,
+          "summary": "Align publication status, installation and current source contracts."
+        }
+      ]
+    },
+    {
+      "id": "charts",
+      "path": "packages/charts/README.md",
+      "revision": 2,
+      "updated": "2026-10-05",
+      "sha256": "ba230475dc4facdd0e42e41b2648dea1b30b5c0fe65034dc7572ca1ba9df1cf9",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Previous public reference; see source revision 9cff1ab."
+        },
+        {
+          "revision": 2,
+          "summary": "Align publication status, installation and current source contracts."
+        }
+      ]
+    },
+    {
+      "id": "security",
+      "path": "SECURITY.md",
+      "revision": 1,
+      "updated": "2026-10-05",
+      "sha256": "5dd41a4694f2e90ed7676334928d4bda629f5cd01b11cfde95e18008e16eefd5",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Host authorization and untrusted-data boundaries."
+        }
+      ]
+    },
+    {
+      "id": "support",
+      "path": "SUPPORT.md",
+      "revision": 1,
+      "updated": "2026-10-05",
+      "sha256": "aebf2974eb230347ef796f261c3883a1a7756b6d60a2ace80cd6a52f41646355",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Verified environments and practical limits."
+        }
+      ]
+    }
+  ]
+}

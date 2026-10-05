@@ -2,11 +2,26 @@
 
 Optional, free MIT-licensed CSV and XLSX selection export. Unreleased source preview; this package is not yet on npm. It uses public core APIs and requires no browser globals. The host owns saving/downloading the returned text or bytes.
 
-```ts
-import { exportSelectionCsv } from '@acheron-grid/export';
+## Installation and complete example
 
-const csv = exportSelectionCsv(engine, { includeHeaders: true, bom: true });
+Build a source revision that includes export. Pack core and export, then install both tarballs in the same command; `npm install @acheron-grid/export@0.1.0` is not a published installation path. See [source installation](../../guides/getting-started.md#build-a-source-preview).
+
+```ts
+import { createGridEngine, LocalDataSource } from '@acheron-grid/core';
+import { exportSelectionCsv, exportSelectionXlsx } from '@acheron-grid/export';
+
+const engine = createGridEngine({
+  columns: [{key:'name',title:'Name'}, {key:'score',title:'Score'}],
+  dataSource: new LocalDataSource([{id:'r1',name:'Ada',score:42}], row=>row.id),
+});
+engine.selectRange({startRow:0,endRow:0,startColumn:0,endColumn:1});
+const csv = exportSelectionCsv(engine, {includeHeaders:true,bom:true});
+const workbook = exportSelectionXlsx(engine, {includeHeaders:true,sheetName:'Scores'});
+console.log(csv, workbook.byteLength);
+engine.destroy();
 ```
+
+The example is headless and does not download a file. In the browser, create a Blob from the result, trigger your application's download and revoke its object URL afterward.
 
 Select exactly one rectangular range before exporting. The core copy pipeline enforces `copyable`, visible order, merged-cell placeholders and clipboard limits (100,000 cells / 10 million UTF-16 code units). Disjoint selections are rejected. CSV uses commas, CRLF and double-quote escaping. Output also has a 10-million-unit cap after escaping, including headers, separators and an optional UTF-8 BOM marker.
 

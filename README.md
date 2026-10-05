@@ -10,6 +10,10 @@ Acheron Grid displays and edits tabular data without a framework dependency. The
 
 Every Acheron feature and optional module is intended to remain open source and free to use, with no premium feature gates or license keys. See [benchmark evidence and its limits](BENCHMARKS.md).
 
+## Start here
+
+[Getting started](guides/getting-started.md) → [Integration guide](guides/integration.md) → [Package reference](packages/core/README.md). [Documentation versions and changes](guides/versions.md) explain npm 0.1.0 versus source preview.
+
 ## Status
 
 The original six packages are published on npm at 0.1.0 as development previews. APIs may change before 1.0. Changes under Unreleased and the new export/charts modules are source previews; build from source or install packed artifacts to try them. The project is licensed under [MIT](LICENSE).

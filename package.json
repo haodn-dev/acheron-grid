@@ -15,7 +15,9 @@
     "playground": "npm run build && node examples/vanilla/server.mjs",
     "test:playground": "npm run build && playwright test --config playground.config.mjs",
     "test:package": "npm run build && node tests/packed-consumer.mjs",
-    "test:mcp": "npm run test --workspace @acheron-grid/mcp"
+    "test:mcp": "npm run test --workspace @acheron-grid/mcp",
+    "docs:sync": "node scripts/sync-docs.mjs",
+    "test:docs": "node tests/docs-consumer.mjs"
   },
   "engines": {
     "node": ">=22"

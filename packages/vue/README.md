@@ -1,10 +1,21 @@
 # @acheron-grid/vue
 
-Vue 3 lifecycle adapter for the Acheron Grid Canvas renderer. MIT licensed. Development preview; install from a local built checkout, not npm.
+Documentation revision 2 · npm 0.1.0 + explicitly marked source additions. See [documentation versions](../../guides/versions.md).
+
+
+Vue 3 lifecycle adapter for the Acheron Grid Canvas renderer. MIT licensed. Version 0.1.0 is available on npm as a development preview. Newer changes require a matching source build.
+
+## Installation
+
+```sh
+npm install @acheron-grid/vue@0.1.0
+```
+
+Install core/Canvas at the same version when used. For newer APIs, use a built source checkout and install matching packed artifacts; see [Getting started](../../guides/getting-started.md).
 
 ## Usage
 
-Install `@acheron-grid/core`, `@acheron-grid/canvas` and this package from the same checkout. Supply Vue 3.5 as a peer dependency. This adapter does not bundle Vue.
+Install core, Canvas and this adapter at the same published version, or install their packed source artifacts together. Supply Vue 3.5 as a peer dependency. This adapter does not bundle Vue.
 
 ```vue
 <script setup lang="ts">
@@ -44,4 +55,4 @@ Get the mounted grid through `getGrid()` or the ready callback and call `grid.ex
 
 ## Custom editors, remote options and runtime state
 
-Use the mounted instance from `getGrid()` for `setColumnEditor`, `refreshData`, `subscribe`, `exportState` and `restoreState`. Remote select/multiselect search and URL metadata use the same Canvas options in both adapters. Keep construction options stable; replacing them intentionally remounts the grid. Use `onEditorMount` to mount external UI and return its unmount/cleanup function. Unsubscribe application listeners and destroy host-owned async sources on unmount. See the [Canvas developer integration recipes](../canvas/README.md#developer-integration-recipes) and [core headless recipes](../core/README.md#headless-integration-recipes) for copyable examples and limits. State snapshots do not include data or undo history.
+Use the mounted instance from `getGrid()` for `setColumnEditor`, `refreshData`, `subscribe`, `exportState` and `restoreState`. Remote select/multiselect search and URL metadata use the same Canvas options in both adapters. Keep construction options stable; replacing them intentionally remounts the grid. Use `onEditorMount` to mount external UI and return its unmount/cleanup function. Unsubscribe application listeners and destroy host-owned async sources on unmount. See the [Canvas developer integration recipes](../canvas/README.md#developer-integration-recipes) and [core headless recipes](../core/README.md#data-and-lifecycle) for copyable examples and limits. State snapshots do not include data or undo history.
