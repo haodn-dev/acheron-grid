@@ -111,6 +111,20 @@ export interface LocalViewOptions {
   readonly filters?: readonly { readonly columnKey: string; readonly query: string; readonly operator?: 'contains' | 'equals' | 'not-empty' | 'empty' }[];
 }
 
+/** Shared immutable criteria for local projections and host-managed server queries. */
+export function snapshotLocalView(options: LocalViewOptions): Readonly<LocalViewOptions> {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) throw new TypeError('Invalid local view.');
+  const filters = options.filters ?? [];
+  if (options.filters !== undefined && !Array.isArray(options.filters) || !Array.isArray(filters) || Array.from(filters).some(filter => !filter || typeof filter.columnKey !== 'string' || !filter.columnKey || typeof filter.query !== 'string' || (filter.operator !== undefined && !['contains', 'equals', 'not-empty', 'empty'].includes(filter.operator)))) throw new TypeError('Invalid local filters.');
+  const sorts = options.sorts ?? (options.sort ? [options.sort] : []);
+  if (options.sort !== undefined && (!options.sort || typeof options.sort !== 'object') || options.sort && options.sorts !== undefined || options.sorts !== undefined && !Array.isArray(options.sorts) || !Array.isArray(sorts) || Array.from(sorts).some(sort => !sort || typeof sort.columnKey !== 'string' || !sort.columnKey || !['asc', 'desc'].includes(sort.direction)) || new Set(sorts.map(sort => sort.columnKey)).size !== sorts.length) throw new TypeError('Invalid local sort.');
+  return Object.freeze({
+    ...(options.sort ? { sort: Object.freeze({ ...options.sort }) } : {}),
+    ...(options.sorts !== undefined ? { sorts: Object.freeze(options.sorts.map(sort => Object.freeze({ ...sort }))) } : {}),
+    ...(options.filters !== undefined ? { filters: Object.freeze(options.filters.map(filter => Object.freeze({ ...filter }))) } : {}),
+  });
+}
+
 /** An immutable local row projection. Build a new view to reapply sorting/filtering after edits. */
 export class LocalDataView implements DataSource {
   private readonly indices: number[];
@@ -120,10 +134,9 @@ export class LocalDataView implements DataSource {
   constructor(private readonly source: DataSource, options: LocalViewOptions = {}) {
     const count = source.getRowCount();
     if (!Number.isSafeInteger(count) || count < 0) throw new RangeError('Invalid local row count.');
-    const filters = options.filters ?? [];
-    if (!Array.isArray(filters) || filters.some(filter => !filter || typeof filter.columnKey !== 'string' || !filter.columnKey || typeof filter.query !== 'string' || (filter.operator !== undefined && !['contains', 'equals', 'not-empty', 'empty'].includes(filter.operator)))) throw new TypeError('Invalid local filters.');
-    const sorts = options.sorts ?? (options.sort ? [options.sort] : []);
-    if (options.sort && options.sorts !== undefined || options.sorts !== undefined && !Array.isArray(options.sorts) || !Array.isArray(sorts) || sorts.some(sort => !sort || typeof sort.columnKey !== 'string' || !sort.columnKey || !['asc', 'desc'].includes(sort.direction)) || new Set(sorts.map(sort => sort.columnKey)).size !== sorts.length) throw new TypeError('Invalid local sort.');
+    const criteria = snapshotLocalView(options);
+    const filters = criteria.filters ?? [];
+    const sorts = criteria.sorts ?? (criteria.sort ? [criteria.sort] : []);
     this.indices = Array.from({ length: count }, (_, index) => index).filter(index => filters.every(filter => {
       const value = source.getValue(index, filter.columnKey);
       const empty = value == null || value === '';

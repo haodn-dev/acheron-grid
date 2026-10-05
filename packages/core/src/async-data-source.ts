@@ -1,4 +1,5 @@
-import type { DataSource, RowId } from './data-source.js';
+import { snapshotLocalView } from './data-source.js';
+import type { DataSource, RowId, LocalViewOptions } from './data-source.js';
 
 export interface PageState { readonly offset: number; readonly status: 'loading' | 'ready' | 'error'; readonly error?: unknown; }
 export interface AsyncDataSourceOptions<S> {
@@ -7,9 +8,10 @@ export interface AsyncDataSourceOptions<S> {
   readonly maxPages?: number;
   readonly maxConcurrentLoads?: number;
   readonly maxPendingLoads?: number;
+  readonly query?: LocalViewOptions;
   readonly createAbortController: () => { readonly signal: S; abort(): void };
-  readonly load: (request: { readonly offset: number; readonly limit: number; readonly signal: S }) => Promise<{ readonly rows: readonly Readonly<Record<string, unknown>>[]; readonly total: number }>;
-  /** Stable positional identity within one server query; reset() begins a new query. */
+  readonly load: (request: { readonly offset: number; readonly limit: number; readonly signal: S; readonly query: Readonly<LocalViewOptions> }) => Promise<{ readonly rows: readonly Readonly<Record<string, unknown>>[]; readonly total: number }>;
+  /** Stable positional identity within one server query; query changes invalidate identity. */
   readonly getRowId?: (index: number) => RowId;
 }
 
@@ -19,6 +21,7 @@ export function createAsyncDataSource<S>(options: AsyncDataSourceOptions<S>) {
   const maxConcurrentLoads=options.maxConcurrentLoads ?? 4, maxPendingLoads=options.maxPendingLoads ?? 100;
   let activeLoads=0;
   let count=options.rowCount ?? 0, destroyed=false, generation=0;
+  let query=snapshotLocalView(options.query === undefined ? {} : options.query);
   if(![pageSize,maxPages,maxConcurrentLoads,maxPendingLoads].every(value=>Number.isSafeInteger(value)&&value>0)||!Number.isSafeInteger(count)||count<0)throw new RangeError('Invalid async source dimensions.');
   const pages=new Map<number,readonly Readonly<Record<string,unknown>>[]>();
   const states=new Map<number,PageState>();
@@ -44,10 +47,10 @@ export function createAsyncDataSource<S>(options: AsyncDataSourceOptions<S>) {
     const existing=pending.get(offset);if(existing)return existing.promise;
     if(pages.has(offset)){const cached=pages.get(offset)!;pages.delete(offset);pages.set(offset,cached);return Promise.resolve();}
     if(pending.size>=maxPendingLoads)throw new RangeError('Async pending load limit reached.');
-    const controller=options.createAbortController(), revision=generation;
+    const controller=options.createAbortController(), revision=generation, requestQuery=query;
     let wake!:()=>void, started=false;
     const slot=new Promise<void>(resolve=>{wake=resolve;});
-    const promise=slot.then(()=>{if(destroyed||revision!==generation||pending.get(offset)?.controller!==controller)throw new Error('Page load canceled.');return options.load({offset,limit:pageSize,signal:controller.signal});}).then(result=>{
+    const promise=slot.then(()=>{if(destroyed||revision!==generation||pending.get(offset)?.controller!==controller)throw new Error('Page load canceled.');return options.load({offset,limit:pageSize,signal:controller.signal,query:requestQuery});}).then(result=>{
       if(destroyed||revision!==generation||pending.get(offset)?.controller!==controller)return;
       if(!Number.isSafeInteger(result.total)||result.total<0||!Array.isArray(result.rows)||result.rows.length>pageSize||offset+result.rows.length>result.total||result.rows.length!==Math.max(0,Math.min(pageSize,result.total-offset)))throw new TypeError('Invalid page result.');
       const rows=result.rows.map(row=>{if(!row||typeof row!=='object'||Array.isArray(row))throw new TypeError('Invalid page row.');return Object.freeze({...row});});
@@ -71,13 +74,15 @@ export function createAsyncDataSource<S>(options: AsyncDataSourceOptions<S>) {
     pageSize,
     maxConcurrentLoads,
     maxPendingLoads,
+    get query(){alive();return query;},
+    setQuery:(next:LocalViewOptions,rowCount=0)=>{alive();const snapshot=snapshotLocalView(next);if(!Number.isSafeInteger(rowCount)||rowCount<0)throw new RangeError('Invalid row count.');pages.clear();states.clear();count=rowCount;query=snapshot;cancel();},
     loadPage,
     loadRange,
     getPageState:(offset:number)=>states.get(offset) ?? null,
     subscribe:(listener:(state:PageState)=>void)=>{alive();listeners.add(listener);return()=>{listeners.delete(listener);};},
     takeObserverErrors:()=>observerErrors.splice(0),
     cancel,
-    reset:(rowCount=0)=>{alive();if(!Number.isSafeInteger(rowCount)||rowCount<0)throw new RangeError('Invalid row count.');cancel();pages.clear();states.clear();count=rowCount;},
-    destroy:()=>{if(destroyed)return;cancel();destroyed=true;pages.clear();states.clear();listeners.clear();observerErrors.length=0;},
+    reset:(rowCount=0)=>{alive();if(!Number.isSafeInteger(rowCount)||rowCount<0)throw new RangeError('Invalid row count.');pages.clear();states.clear();count=rowCount;cancel();},
+    destroy:()=>{if(destroyed)return;destroyed=true;pages.clear();states.clear();listeners.clear();observerErrors.length=0;cancel();},
   });
 }

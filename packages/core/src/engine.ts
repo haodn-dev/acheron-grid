@@ -2,7 +2,7 @@ import type { GridConfiguration } from './configuration.js';
 import { restoreGridConfiguration } from './configuration.js';
 import { readGridState } from './state.js';
 import type { GridState } from './state.js';
-import { LocalDataView } from './data-source.js';
+import { LocalDataView, snapshotLocalView as snapshotView } from './data-source.js';
 import type { LocalViewOptions } from './data-source.js';
 import { blocksToTsv, encodeBlocks, decodeBlocks } from './clipboard.js';
 import type { ClipboardBlock } from './clipboard.js';
@@ -140,11 +140,6 @@ export function createGridEngine(options: GridEngineOptions) {
       const index = reverseProjection.get(row); return index === undefined ? [] : [[index, size] as const];
     }));
     projectedAxis = axis;
-  }
-  function snapshotView(next: LocalViewOptions): Readonly<LocalViewOptions> {
-    return Object.freeze({...next, ...(next.sort ? {sort:Object.freeze({...next.sort})} : {}),
-      ...(next.sorts !== undefined ? {sorts:Object.freeze(next.sorts.map(sort=>Object.freeze({...sort})))} : {}),
-      ...(next.filters ? {filters:Object.freeze(next.filters.map(filter=>Object.freeze({...filter})))} : {})});
   }
   function buildProjection(next: LocalViewOptions, count=rowCount, spans:readonly Readonly<SelectionRange>[]=merges, outlines:readonly Readonly<RowGroup>[]=groups, frozen=frozenRows): number[] | null {
     if (!next.sort && !next.sorts?.length && !next.filters?.length) {

@@ -149,13 +149,36 @@ engine.destroy();
 source.destroy();
 ```
 
-`loadPage(offset)` requires a page-aligned offset. Requests for the same page share one promise; cached pages use bounded LRU eviction. Unloaded cell values are `undefined`. `getPageState(offset)` returns loading/ready/error state or null. Handle rejected promises in your UI; calling `loadPage` again retries a failed page. `cancel()` aborts pending requests; stale responses cannot populate the cache. `reset(total?)` cancels and clears pages for a new server query. After resetting a query, call `engine.refreshData()` to discard old row identity state.
+`loadPage(offset)` requires a page-aligned offset. Requests for the same page share one promise; cached pages use bounded LRU eviction. Unloaded cell values are `undefined`. `getPageState(offset)` returns loading/ready/error state or null. Handle rejected promises in your UI; calling `loadPage` again retries a failed page. `cancel()` aborts pending requests; stale responses cannot populate the cache. `reset(total?)` cancels and clears pages while retaining the current query. After resetting, call `engine.refreshData()` to discard old row identity state.
 
 The source is **read-only**. Writes still require synchronous atomic setters on a custom source; there is no remote save queue or optimistic rollback. Default identities are stable positions within one server query. Do not reuse positional identities across changed server ordering. The host owns server sorting/filtering, authorization and request validation. Local search/sort/filter only sees cached values; it is not a server-wide query. Injecting the abort controller keeps core free of DOM/Node ambient types.
 
 The async source reads own row properties only. It retains at most `maxPages` successful pages and, separately, `maxPages` recent error states. `maxConcurrentLoads` (default 4) bounds unresolved loader calls; `maxPendingLoads` (default 100) bounds requested pages, including queued work. Both must be positive safe integers. Queued requests share the `loading` state and start in request order. Repeated requests for the same page share one promise, including while queued. Capacity overflow throws before admitting the new request; `loadRange` checks the entire range before starting any pages. Evicted error states return `null` from `getPageState`; calling `loadPage` can retry them.
 
-Cancel/reset settles queued work without calling the loader and aborts running requests. Stale responses cannot populate the cache. Running requests keep their concurrency slots until the loader settles, even across reset; a loader that ignores abort and never settles can block later work. Host loaders should implement cancellation and a timeout. Async writes and server query parameters remain host-managed; resetting the source starts a new query.
+Cancel/reset settles queued work without calling the loader and aborts running requests. Stale responses cannot populate the cache. Running requests keep their concurrency slots until the loader settles, even across reset; a loader that ignores abort and never settles can block later work. Host loaders should implement cancellation and a timeout. Async writes and backend query execution remain host-managed.
+
+### Server query snapshots (unreleased)
+
+The source accepts initial `query: LocalViewOptions`. Its `query` getter exposes an immutable snapshot; every loader receives that snapshot as `request.query`. `setQuery(criteria, total = 0)` validates sort/filter criteria and row count before canceling old work and clearing cached pages/status. Each call starts a new generation, even for equal criteria. Invalid criteria leave the current source intact. `reset()` reloads the current query. These APIs are source previews and are not included in npm 0.1.0.
+
+The host maps query criteria to authorized backend parameters and defines server collation. They do not filter the page cache locally. Keep an application revision guard for UI completions, because canceled old promises can settle after a newer query starts:
+
+```ts
+let revision = 0;
+async function changeQuery(criteria: LocalViewOptions) {
+  source.setQuery(criteria);
+  const current = ++revision;
+  engine.refreshData(); // Clear identity state belonging to the previous query.
+  try {
+    await source.loadPage(0);
+    if (current === revision) engine.refreshData();
+  } catch (error) {
+    if (current === revision) throw error; // Host reports the current error.
+  }
+}
+```
+
+Import `LocalViewOptions` as a type from core. This supports read-only server sorting/filtering; it does not provide remote saves, live subscriptions or consistent dataset revision tokens across pages.
 
 ## Selection and clipboard
 
@@ -242,7 +265,7 @@ Runtime frozen changes preserve values, selection/ranges and data undo history. 
 
 LocalDataView remains an immutable projection that delegates reads/writes to source indices. For a live view, pass the original source to createGridEngine and use engine.setView(criteria), or initial options.view. The view getter is immutable; rowCount is the visible count, sourceRowCount is the original count, and getRowId(displayIndex) returns stable identity. Edits, paste, undo and redo automatically reapply criteria. Selection, locks, colors and heights remain in source coordinates and follow their records, including hidden rows. Public cell/selection/format/lock/resize APIs use display coordinates; permission resolvers and non-selection domain events use source coordinates. Selection events use display coordinates. Clear criteria before structural commands or structural undo/redo. Freeze remains a positional prefix, clamped for the visible view. A hidden selected record reappears when criteria are cleared; visible fragments are selected without including hidden intervening rows.
 
-This is O(source rows) index memory/filter work and O(matching rows log matching rows) sorting; it does not preserve virtualization while evaluating the full source. Only use it for local datasets sized for that cost. Source row order/count/identities must remain stable; column keys must be supplied by the application. No remote paging, async criteria or multi-column sort is implemented.
+This is O(source rows) index memory/filter work and O(matching rows log matching rows) sorting; it does not preserve virtualization while evaluating the full source. Only use it for local datasets sized for that cost. Source row order/count/identities must remain stable; column keys must be supplied by the application. Local projection does not execute server queries; use the separate async source for read-only paging.
 
 ### Merged cells and manual row groups
 
@@ -280,7 +303,7 @@ Changes emit structure:change with source api/undo/redo, rowCount and columnKeys
 Structural history retains row identity arrays, coordinate maps, sparse metadata snapshots and affected shallow rows. This uses O(rows + columns + metadata) memory per command, plus range/format fragmentation. Local sequential splices copy row arrays per contiguous block. This is intended for local datasets, not remote transactions or an unbounded million-row structural history. External identity/count changes or changed rows a replay would replace cause an error and leave history available for retry. Nested values remain caller-owned.
 
 
-Live local views use O(rows) index memory/filter work and O(matches log matches) sorting per value command. Sparse geometry is rebuilt from resized rows. Large source selections can split into many visible fragments when sorted/filtered. External source writes require setView(engine.view) to refresh membership/order; remote paging and async filtering are not implemented.
+Live local views use O(rows) index memory/filter work and O(matches log matches) sorting per value command. Sparse geometry is rebuilt from resized rows. Large source selections can split into many visible fragments when sorted/filtered. External source writes require setView(engine.view) to refresh membership/order; these local views do not execute asynchronous server filters.
 
 ### Sparse cell formatting
 

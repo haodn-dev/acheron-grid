@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Async sources capture immutable server sort/filter queries per request. Validated query changes cancel old loads and clear cache; reset retains the query. Host owns backend execution and engine refresh.
+
 - Optional free CSV export module reuses core copy permissions, supports quoted text/headers/BOM and default formula-text escaping. Source preview, not yet published.
 
 - MCP supports opt-in authorized row discovery, a bounded single-pass ID lookup or checked host resolver, and UTF-8 output budgets checked before write commit.
