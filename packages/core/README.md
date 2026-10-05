@@ -109,12 +109,16 @@ Subscribers are independent and can unsubscribe during dispatch. Events observe 
 
 ### Async pages and cancellation
 
+Request limits described below are unreleased source changes; published 0.1.0 consumers should continue to bound requests in the host until upgrading.
+
 ```ts
 import { createAsyncDataSource, createGridEngine } from '@acheron-grid/core';
 
 const source = createAsyncDataSource<AbortSignal>({
   pageSize: 100,
   maxPages: 10,
+  maxConcurrentLoads: 4,
+  maxPendingLoads: 100,
   createAbortController: () => new AbortController(),
   load: async ({ offset, limit, signal }) => {
     const response = await fetch(`/api/rows?offset=${offset}&limit=${limit}`, { signal });
@@ -149,9 +153,17 @@ source.destroy();
 
 The source is **read-only**. Writes still require synchronous atomic setters on a custom source; there is no remote save queue or optimistic rollback. Default identities are stable positions within one server query. Do not reuse positional identities across changed server ordering. The host owns server sorting/filtering, authorization and request validation. Local search/sort/filter only sees cached values; it is not a server-wide query. Injecting the abort controller keeps core free of DOM/Node ambient types.
 
-The async source reads own row properties only. It retains at most `maxPages` successful pages and, separately, `maxPages` recent error states. Loading states are retained until requests settle or are canceled. This is not a request concurrency limit; hosts should bound concurrent loads. Evicted error states return `null` from `getPageState`; calling `loadPage` can retry them.
+The async source reads own row properties only. It retains at most `maxPages` successful pages and, separately, `maxPages` recent error states. `maxConcurrentLoads` (default 4) bounds unresolved loader calls; `maxPendingLoads` (default 100) bounds requested pages, including queued work. Both must be positive safe integers. Queued requests share the `loading` state and start in request order. Repeated requests for the same page share one promise, including while queued. Capacity overflow throws before admitting the new request; `loadRange` checks the entire range before starting any pages. Evicted error states return `null` from `getPageState`; calling `loadPage` can retry them.
+
+Cancel/reset settles queued work without calling the loader and aborts running requests. Stale responses cannot populate the cache. Running requests keep their concurrency slots until the loader settles, even across reset; a loader that ignores abort and never settles can block later work. Host loaders should implement cancellation and a timeout. Async writes and server query parameters remain host-managed; resetting the source starts a new query.
 
 ## Selection and clipboard
+
+### Multiple sort keys (unreleased)
+
+`engine.setView({ sorts: [{ columnKey: 'team', direction: 'asc' }, { columnKey: 'score', direction: 'desc' }] })` applies keys in priority order. The existing `sort` object remains supported; use either `sort` or `sorts`, with no duplicate column keys. Empty `sorts` clears sorting. Nullish values stay last for both directions, and equal keys retain source order. Sorting/filtering move outline blocks together and reapply after edits/history. Criteria are isolated from caller mutations and included in state/configuration round-trips.
+
+Canvas accepts the same criteria through `view`/`setView`; headers describe all sorted columns. Its built-in single-column sort dialog replaces the multi-sort criteria. A host can provide controls for changing multi-sort priority. Local sorting reads all matching rows; it does not implement server-side ordering for remote datasets.
 
 ### Selection queries and navigation
 

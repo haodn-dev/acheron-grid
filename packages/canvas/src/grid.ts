@@ -1047,7 +1047,7 @@ export function createGrid(options: GridOptions): Grid {
       const affected=span?engine.getMergedCells().filter(merge=>merge.startRow<=engine.getRowSourceIndex(span.endRow)&&merge.endRow>=engine.getRowSourceIndex(span.startRow)&&merge.startColumn<=span.endColumn&&merge.endColumn>=span.startColumn):[];
       item('Unmerge cells',affected.length>0&&affected.every(range=>engine.canChangeLayout({kind:'unmerge',range})),()=>{if(span)structureAction(()=>engine.unmergeCells(span));});
       const wholeRows=!!span&&span.startColumn===0&&span.endColumn===columns.length-1&&span.endRow>span.startRow;
-      item('Group selected rows',wholeRows&&!engine.getRowGroups().some(group=>group.collapsed)&&!engine.view.sort&&!engine.view.filters?.length&&!!span&&engine.canChangeLayout({kind:'group',group:{id:'',startRow:span.startRow,endRow:span.endRow,collapsed:false}}),()=>{if(span)groupRows(span.startRow,span.endRow);});
+      item('Group selected rows',wholeRows&&!engine.getRowGroups().some(group=>group.collapsed)&&!engine.view.sort&&!engine.view.sorts?.length&&!engine.view.filters?.length&&!!span&&engine.canChangeLayout({kind:'group',group:{id:'',startRow:span.startRow,endRow:span.endRow,collapsed:false}}),()=>{if(span)groupRows(span.startRow,span.endRow);});
       const sourceRow=engine.getRowSourceIndex(row),rowGroups=engine.getRowGroups().filter(group=>sourceRow>=group.startRow&&sourceRow<=group.endRow).sort((a,b)=>(a.endRow-a.startRow)-(b.endRow-b.startRow));
       const group=rowGroups[0];
       if(group){item(group.collapsed?'Expand row group':'Collapse row group',engine.canChangeLayout({kind:group.collapsed?'expand':'collapse',group}),()=>structureAction(()=>engine.setGroupCollapsed(group.id,!group.collapsed), 'row'));item('Ungroup rows',engine.canChangeLayout({kind:'ungroup',group}),()=>structureAction(()=>engine.ungroupRows(group.id)));}
@@ -1247,7 +1247,7 @@ export function createGrid(options: GridOptions): Grid {
         const operator = condition.value as 'contains' | 'equals' | 'not-empty' | 'empty';
         filters.push({ columnKey: key, query: input.value, operator });
       }
-      const view: LocalViewOptions = sort === 'clear' ? {} : sort ? { ...currentView, sort: { columnKey: key, direction: sort } }
+      const view: LocalViewOptions = sort === 'clear' ? {} : sort ? { ...(currentView?.filters ? {filters:currentView.filters} : {}), sort: { columnKey: key, direction: sort } }
         : { ...currentView, filters };
       try { if(managesView)engine.setView(view); currentView=view; options.onViewChange?.(view); if (dialog.isConnected) dialog.close(); }
       catch (error) { status.textContent = error instanceof Error ? error.message : 'Unable to change view.'; }
@@ -2055,7 +2055,7 @@ export function createGrid(options: GridOptions): Grid {
     if (engine.isLocked({ scope: 'column', columnIndex: col })) labels.push('Column locked');
     if (col < engine.frozenColumns) labels.push('Column frozen');
     if (row === null) {
-      const sort = currentView?.sort;
+      const sort = currentView?.sorts?.find(item=>item.columnKey===columns[col]!.key) ?? currentView?.sort;
       if (sort?.columnKey === columns[col]!.key) labels.push(`Sorted ${sort.direction === 'asc' ? 'ascending' : 'descending'}`);
       const filter = currentView?.filters?.find(filter => filter.columnKey === columns[col]!.key);
       if (filter) labels.push(`Filtered: ${filter.operator ?? 'contains'} ${filter.query}`.trim());
@@ -2151,8 +2151,9 @@ export function createGrid(options: GridOptions): Grid {
       ctx.globalAlpha = rangeTintOpacity; ctx.fillStyle = theme.selectionColor; ctx.fillRect(x, y, width, height); ctx.globalAlpha = 1;
     }
     if (header) {
-      if (currentView?.sort?.columnKey === columns[columnIndex]!.key) {
-        stateIcon(currentView!.sort!.direction === 'asc' ? 'arrow-up' : 'arrow-down', x + width - 36, y + (height - 16) / 2);
+      const sort=currentView?.sorts?.find(item=>item.columnKey===columns[columnIndex]!.key) ?? currentView?.sort;
+      if (sort?.columnKey === columns[columnIndex]!.key) {
+        stateIcon(sort.direction === 'asc' ? 'arrow-up' : 'arrow-down', x + width - 36, y + (height - 16) / 2);
       }
       if (currentView?.filters?.some(filter => filter.columnKey === columns[columnIndex]!.key)) {
         stateIcon('funnel', x + width - 54, y + (height - 16) / 2);
@@ -2548,7 +2549,7 @@ export function createGrid(options: GridOptions): Grid {
         header.style.cssText = `position:absolute;left:${Math.max(band.x, columnAxis.position(col) + band.offset)}px;top:${layout.level * headerRowHeight}px;width:${Math.max(0, Math.min(band.x + band.width, columnAxis.position(col + 1) + band.offset) - Math.max(band.x, columnAxis.position(col) + band.offset))}px;height:${layout.rowSpan * headerRowHeight}px`;
         header.dataset.headerLevel = String(layout.level);
         header.setAttribute('aria-rowspan', String(layout.rowSpan));
-        if (viewportAccessibility) { header.setAttribute('role', 'columnheader'); header.setAttribute('aria-colindex', String(col + 1)); header.setAttribute('aria-label', columns[col]!.title); header.setAttribute('aria-description', stateLabels(null, col).join('; ')); const sort = currentView?.sort; header.setAttribute('aria-sort', sort?.columnKey === columns[col]!.key ? sort.direction === 'asc' ? 'ascending' : 'descending' : 'none'); }
+        if (viewportAccessibility) { header.setAttribute('role', 'columnheader'); header.setAttribute('aria-colindex', String(col + 1)); header.setAttribute('aria-label', columns[col]!.title); header.setAttribute('aria-description', stateLabels(null, col).join('; ')); const sort = currentView?.sorts?.[0] ?? currentView?.sort; header.setAttribute('aria-sort', sort?.columnKey === columns[col]!.key ? (currentView?.sorts?.length ?? 0)>1 ? 'other' : sort.direction === 'asc' ? 'ascending' : 'descending' : 'none'); }
         reorderHandle(header, 'column', col);
         headerNodes.push(header);
       }

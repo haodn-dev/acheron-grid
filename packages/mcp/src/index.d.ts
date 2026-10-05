@@ -3,7 +3,11 @@ import type { GridEngine, RowId } from '@acheron-grid/core';
 export interface GridMcpOptions {
  engine?: GridEngine;
  documents?: Readonly<Record<string, string>>;
- authorize?: (request: { operation: 'schema' | 'read' | 'write'; rowId?: RowId; columnKey?: string }) => boolean;
+ authorize?: (request: { operation: 'schema' | 'read' | 'write' | 'discover'; rowId?: RowId; columnKey?: string }) => boolean;
+ allowDiscovery?: boolean;
+ maxRowScan?: number;
+ maxOutputBytes?: number;
+ resolveRowIndex?: (rowId: RowId) => number | null | undefined;
  allowWrites?: boolean;
  validateWrite?: (cell: { rowId: RowId; columnKey: string; value: unknown }) => void;
 }

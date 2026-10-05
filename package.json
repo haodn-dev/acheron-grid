@@ -11,6 +11,7 @@
     "test": "npm run build && node --test packages/core/tests/*.test.mjs packages/canvas/tests/*.test.mjs packages/react/tests/*.test.mjs",
     "test:browser": "npm run build && playwright test",
     "benchmark": "npm run build && playwright test --config benchmark.config.mjs",
+    "benchmark:core": "npm run build && node --expose-gc tests/benchmark-core.mjs",
     "playground": "npm run build && node examples/vanilla/server.mjs",
     "test:playground": "npm run build && playwright test --config playground.config.mjs",
     "test:package": "npm run build && node tests/packed-consumer.mjs",

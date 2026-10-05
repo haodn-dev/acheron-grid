@@ -5,6 +5,8 @@ export interface AsyncDataSourceOptions<S> {
   readonly rowCount?: number;
   readonly pageSize?: number;
   readonly maxPages?: number;
+  readonly maxConcurrentLoads?: number;
+  readonly maxPendingLoads?: number;
   readonly createAbortController: () => { readonly signal: S; abort(): void };
   readonly load: (request: { readonly offset: number; readonly limit: number; readonly signal: S }) => Promise<{ readonly rows: readonly Readonly<Record<string, unknown>>[]; readonly total: number }>;
   /** Stable positional identity within one server query; reset() begins a new query. */
@@ -14,11 +16,13 @@ export interface AsyncDataSourceOptions<S> {
 /** Explicit asynchronous loading around a synchronous, read-only cache. No browser globals. */
 export function createAsyncDataSource<S>(options: AsyncDataSourceOptions<S>) {
   const pageSize=options.pageSize ?? 100, maxPages=options.maxPages ?? 10;
+  const maxConcurrentLoads=options.maxConcurrentLoads ?? 4, maxPendingLoads=options.maxPendingLoads ?? 100;
+  let activeLoads=0;
   let count=options.rowCount ?? 0, destroyed=false, generation=0;
-  if(![pageSize,maxPages].every(value=>Number.isSafeInteger(value)&&value>0)||!Number.isSafeInteger(count)||count<0)throw new RangeError('Invalid async source dimensions.');
+  if(![pageSize,maxPages,maxConcurrentLoads,maxPendingLoads].every(value=>Number.isSafeInteger(value)&&value>0)||!Number.isSafeInteger(count)||count<0)throw new RangeError('Invalid async source dimensions.');
   const pages=new Map<number,readonly Readonly<Record<string,unknown>>[]>();
   const states=new Map<number,PageState>();
-  const pending=new Map<number,{controller:ReturnType<typeof options.createAbortController>;promise:Promise<void>}>();
+  const pending=new Map<number,{controller:ReturnType<typeof options.createAbortController>;promise:Promise<void>;started:boolean;start():void;cancelQueued():void}>();
   const listeners=new Set<(state:PageState)=>void>();
   const observerErrors:unknown[]=[];
   function emit(state:PageState):void {
@@ -29,28 +33,46 @@ export function createAsyncDataSource<S>(options: AsyncDataSourceOptions<S>) {
   }
   function alive():void {if(destroyed)throw new Error('Async data source is destroyed.');}
   function index(row:number):void {alive();if(!Number.isSafeInteger(row)||row<0||row>=count)throw new RangeError('Invalid async row index.');}
+  function pump():void {
+    for(const item of pending.values()) {
+      if(activeLoads>=maxConcurrentLoads)break;
+      if(!item.started)item.start();
+    }
+  }
   function loadPage(offset:number):Promise<void> {
     alive();if(!Number.isSafeInteger(offset)||offset<0||offset%pageSize)throw new RangeError('Page offset must align with pageSize.');
     const existing=pending.get(offset);if(existing)return existing.promise;
     if(pages.has(offset)){const cached=pages.get(offset)!;pages.delete(offset);pages.set(offset,cached);return Promise.resolve();}
+    if(pending.size>=maxPendingLoads)throw new RangeError('Async pending load limit reached.');
     const controller=options.createAbortController(), revision=generation;
-    const promise=Promise.resolve().then(()=>{if(destroyed||revision!==generation||pending.get(offset)?.controller!==controller)throw new Error('Page load canceled.');return options.load({offset,limit:pageSize,signal:controller.signal});}).then(result=>{
+    let wake!:()=>void, started=false;
+    const slot=new Promise<void>(resolve=>{wake=resolve;});
+    const promise=slot.then(()=>{if(destroyed||revision!==generation||pending.get(offset)?.controller!==controller)throw new Error('Page load canceled.');return options.load({offset,limit:pageSize,signal:controller.signal});}).then(result=>{
       if(destroyed||revision!==generation||pending.get(offset)?.controller!==controller)return;
       if(!Number.isSafeInteger(result.total)||result.total<0||!Array.isArray(result.rows)||result.rows.length>pageSize||offset+result.rows.length>result.total||result.rows.length!==Math.max(0,Math.min(pageSize,result.total-offset)))throw new TypeError('Invalid page result.');
       const rows=result.rows.map(row=>{if(!row||typeof row!=='object'||Array.isArray(row))throw new TypeError('Invalid page row.');return Object.freeze({...row});});
       count=result.total;pages.set(offset,rows);
       while(pages.size>maxPages){const evicted=pages.keys().next().value!;pages.delete(evicted);states.delete(evicted);}
       emit({offset,status:'ready'});
-    }).catch(error=>{if(destroyed||revision!==generation||pending.get(offset)?.controller!==controller)return;emit({offset,status:'error',error});throw error;}).finally(()=>{if(pending.get(offset)?.controller===controller)pending.delete(offset);});
-    pending.set(offset,{controller,promise});emit({offset,status:'loading'});return promise;
+    }).catch(error=>{if(destroyed||revision!==generation||pending.get(offset)?.controller!==controller)return;emit({offset,status:'error',error});throw error;}).finally(()=>{if(started)activeLoads--;if(pending.get(offset)?.controller===controller)pending.delete(offset);pump();});
+    const item={controller,promise,started:false,start(){item.started=started=true;activeLoads++;wake();},cancelQueued:wake};
+    pending.set(offset,item);emit({offset,status:'loading'});pump();return promise;
   }
-  function cancel():void {generation++;for(const item of pending.values())item.controller.abort();pending.clear();for(const [offset,state] of states)if(state.status==='loading')states.delete(offset);}
+  function cancel():void {generation++;const canceled=[...pending.values()];pending.clear();for(const [offset,state] of states)if(state.status==='loading')states.delete(offset);for(const item of canceled){item.cancelQueued();item.controller.abort();}}
+  function loadRange(start:number,end:number):Promise<void> {
+    alive();if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<start||Math.floor(end/pageSize)-Math.floor(start/pageSize)+1>maxPages)throw new RangeError('Load range must fit the page cache.');
+    const offsets=Array.from({length:Math.floor(end/pageSize)-Math.floor(start/pageSize)+1},(_,i)=>(Math.floor(start/pageSize)+i)*pageSize);
+    if(pending.size+offsets.filter(offset=>!pages.has(offset)&&!pending.has(offset)).length>maxPendingLoads)throw new RangeError('Async pending load limit reached.');
+    return Promise.all(offsets.map(loadPage)).then(()=>{});
+  }
   const source:DataSource={getRowCount:()=>{alive();return count;},getRowId:row=>{index(row);return options.getRowId?.(row) ?? row;},getValue:(row,key)=>{index(row);const value=pages.get(Math.floor(row/pageSize)*pageSize)?.[row%pageSize];return value&&Object.hasOwn(value,key)?value[key]:undefined;}};
   return Object.freeze({
     ...source,
     pageSize,
+    maxConcurrentLoads,
+    maxPendingLoads,
     loadPage,
-    loadRange:(start:number,end:number)=>{alive();if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<start||Math.floor(end/pageSize)-Math.floor(start/pageSize)+1>maxPages)throw new RangeError('Load range must fit the page cache.');return Promise.all(Array.from({length:Math.floor(end/pageSize)-Math.floor(start/pageSize)+1},(_,i)=>loadPage((Math.floor(start/pageSize)+i)*pageSize))).then(()=>{});},
+    loadRange,
     getPageState:(offset:number)=>states.get(offset) ?? null,
     subscribe:(listener:(state:PageState)=>void)=>{alive();listeners.add(listener);return()=>{listeners.delete(listener);};},
     takeObserverErrors:()=>observerErrors.splice(0),
