@@ -14,7 +14,7 @@ Every Acheron feature and optional module is intended to remain open source and 
 
 ## Status
 
-Version 0.1.0 is prepared as the first development preview. APIs may change before 1.0. Packages have not yet been published; build from source or install the packed artifacts until publication. The project is licensed under [MIT](LICENSE).
+The original six packages are published on npm at 0.1.0 as development previews. APIs may change before 1.0. Changes under Unreleased and the new export module are source previews; build from source or install packed artifacts to try them. The project is licensed under [MIT](LICENSE).
 
 | Package | Purpose | Runtime dependencies |
 | --- | --- | --- |
@@ -24,6 +24,7 @@ Version 0.1.0 is prepared as the first development preview. APIs may change befo
 | [@acheron-grid/react](packages/react/README.md) | React lifecycle adapter | Canvas; React peer dependency |
 | [@acheron-grid/vue](packages/vue/README.md) | Vue 3 lifecycle adapter | Canvas; Vue peer dependency |
 | [@acheron-grid/mcp](packages/mcp/README.md) | Optional documentation server and host-authorized grid tools | MCP SDK; @acheron-grid/core |
+| [@acheron-grid/export](packages/export/README.md) | Optional CSV selection export; unreleased | @acheron-grid/core |
 
 Core does not import Canvas or framework code. `@acheron-grid/core/headless` remains an alias for the headless API.
 

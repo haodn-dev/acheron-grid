@@ -22,7 +22,8 @@ import {AcheronGrid as ReactGrid} from '@acheron-grid/react';
 import {AcheronGrid as VueGrid} from '@acheron-grid/vue';
 import {markdownToHtml} from '@acheron-grid/markdown';
 import {createGridMcpServer} from '@acheron-grid/mcp';
-export {createGridEngine,LocalDataSource,createAsyncDataSource,createGrid,ReactGrid,VueGrid,markdownToHtml,createGridMcpServer};
+import {exportSelectionCsv} from '@acheron-grid/export';
+export {createGridEngine,LocalDataSource,createAsyncDataSource,createGrid,ReactGrid,VueGrid,markdownToHtml,createGridMcpServer,exportSelectionCsv};
 `);
 run([join(consumer,'node_modules/typescript/bin/tsc'),'index.ts','--noEmit','--strict','--module','NodeNext','--target','ES2022','--skipLibCheck','false']);
 await writeFile(join(consumer,'runtime.mjs'),`
@@ -32,16 +33,19 @@ import {createElement} from 'react';import {renderToString} from 'react-dom/serv
 import {createSSRApp,h} from 'vue';import {renderToString as vueRender} from 'vue/server-renderer';
 import {AcheronGrid as ReactGrid} from '@acheron-grid/react';import {AcheronGrid as VueGrid} from '@acheron-grid/vue';
 import {markdownToHtml} from '@acheron-grid/markdown';import {createGridMcpServer} from '@acheron-grid/mcp';
+import {exportSelectionCsv} from '@acheron-grid/export';
 const options={columns:[{key:'a',title:'A',editable:true}],dataSource:new LocalDataSource([{a:'old'}],(_,i)=>i)};
-const engine=createGridEngine(options);engine.editCell(0,0,'new');assert.equal(engine.getValue(0,'a'),'new');engine.undo();assert.equal(engine.getValue(0,'a'),'old');engine.destroy();
+const engine=createGridEngine(options);engine.editCell(0,0,'new');assert.equal(engine.getValue(0,'a'),'new');engine.undo();assert.equal(engine.getValue(0,'a'),'old');engine.select(0,0);assert.equal(exportSelectionCsv(engine,{includeHeaders:true}),'A\\r\\nold');engine.destroy();
 assert.match(renderToString(createElement(ReactGrid,{options})),/div/);assert.match(await vueRender(createSSRApp({render:()=>h(VueGrid,{options})})),/div/);assert.match(markdownToHtml('**ok**'),/strong/);await createGridMcpServer({documents:{core:'test'}}).close();
 `);
 run(['runtime.mjs']);
 await writeFile(join(consumer,'browser.js'),`
 import {createGrid} from '@acheron-grid/canvas';import {LocalDataSource} from '@acheron-grid/core';
+import {exportSelectionCsv} from '@acheron-grid/export';
 window.grid=createGrid({container:document.querySelector('#grid'),columns:[{key:'a',title:'A',editable:true}],dataSource:new LocalDataSource([{a:'old'}],(_,i)=>i)});
+window.exportCsv=()=>exportSelectionCsv(window.grid);
 `);
 await build({entryPoints:[join(consumer,'browser.js')],outfile:join(consumer,'bundle.js'),bundle:true,platform:'browser'});
 const browser=await chromium.launch();
-try{const page=await browser.newPage();await page.setContent('<div id="grid" style="width:600px;height:300px"></div>');await page.addScriptTag({content:await readFile(join(consumer,'bundle.js'),'utf8')});await page.getByRole('grid').waitFor();await page.evaluate(()=>{window.grid.updateCells([{rowIndex:0,columnKey:'a',value:'new'}]);window.grid.destroy();});if(await page.getByRole('grid').count())throw new Error('Packed grid cleanup failed.');}finally{await browser.close();}
-console.log('PASS: six packed packages, strict TypeScript consumer, headless/React/Vue SSR, Markdown/MCP imports and browser mount/update/destroy.');
+try{const page=await browser.newPage();await page.setContent('<div id="grid" style="width:600px;height:300px"></div>');await page.addScriptTag({content:await readFile(join(consumer,'bundle.js'),'utf8')});await page.getByRole('grid').waitFor();await page.getByRole('grid').click({position:{x:40,y:16}});await page.evaluate(()=>{window.grid.updateCells([{rowIndex:0,columnKey:'a',value:'new'}]);if(window.exportCsv()!=='new')throw new Error('Packed CSV export failed.');window.grid.destroy();});if(await page.getByRole('grid').count())throw new Error('Packed grid cleanup failed.');}finally{await browser.close();}
+console.log('PASS:',packed.length,'packed packages, strict TypeScript consumer, headless/React/Vue SSR, Markdown/MCP/CSV imports and browser mount/update/export/destroy.');

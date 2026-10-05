@@ -10,7 +10,7 @@ From the source checkout, after installing dependencies:
 node packages/mcp/src/cli.mjs
 ```
 
-Configure your MCP client to launch that command over stdio, using an absolute path. The CLI exposes five bundled package README snapshots as `acheron://docs/core`, `canvas`, `react`, `vue` and `markdown`. It exposes no grid data or write tools. stdout belongs to the protocol; no HTTP listener or authentication service is started.
+Configure your MCP client to launch that command over stdio, using an absolute path. The source CLI exposes six bundled package README snapshots as `acheron://docs/core`, `canvas`, `react`, `vue`, `markdown` and `export`. The export resource is an unreleased source addition. It exposes no grid data or write tools. stdout belongs to the protocol; no HTTP listener or authentication service is started.
 
 ## Connect a host-owned grid
 
