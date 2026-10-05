@@ -2,8 +2,13 @@ import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
 import { cpus, totalmem } from 'node:os';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { createGridEngine, LocalDataSource, LocalDataView } from '@acheron-grid/core';
 
+const root = resolve(fileURLToPath(new URL('../', import.meta.url)));
+const revision = spawnSync('git', ['-c', `safe.directory=${root.replaceAll('\\', '/')}`, 'rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' });
+assert.equal(revision.status, 0, 'Cannot identify benchmark source revision.');
 const runs = [];
 for (const rowCount of [10_000, 100_000]) for (let repeat = 0; repeat < 3; repeat++) {
   const rows = Array.from({ length: rowCount }, (_, id) => ({ id, score: id * 48271 % 997, team: `team-${id % 10}` }));
@@ -67,7 +72,6 @@ for (const rowCount of [10_000, 100_000]) for (let repeat = 0; repeat < 3; repea
   globalThis.gc?.();
   runs.push({ rowCount, repeat, timings, retainedHeapDeltaBytes: process.memoryUsage().heapUsed - heapBefore });
 }
-const revision = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' });
 console.log(JSON.stringify({ schemaVersion: 1, workload: 'allocated local data and controlled commands',
   revision: revision.status === 0 ? revision.stdout.trim() : null,
   node: process.version, platform: process.platform, arch: process.arch,
