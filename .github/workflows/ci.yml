@@ -37,6 +37,18 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Browser integration
         run: npx playwright test --workers=1
+      - name: Benchmark correctness and raw samples
+        run: npx playwright test --config benchmark.config.mjs --repeat-each=3 --reporter=json --output=benchmark-artifacts > benchmark-report.json
+      - name: Benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-node-${{ matrix.node }}
+          path: |
+            benchmark-report.json
+            benchmark-artifacts/
+          retention-days: 7
+          if-no-files-found: ignore
       - name: Standalone playground
         run: npx playwright test --config playground.config.mjs --workers=1 --output=playground-results
         env:
