@@ -6,9 +6,9 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspace @acheron-grid/core && npm run build --workspace @acheron-grid/canvas && npm run build --workspace @acheron-grid/markdown && npm run build --workspace @acheron-grid/react && npm run build --workspace @acheron-grid/vue && npm run build --workspace @acheron-grid/export",
-    "typecheck": "npm run build && npm run typecheck --workspace @acheron-grid/core && npm run typecheck --workspace @acheron-grid/canvas && npm run typecheck --workspace @acheron-grid/markdown && npm run typecheck --workspace @acheron-grid/react && npm run typecheck --workspace @acheron-grid/vue && npm run typecheck --workspace @acheron-grid/export",
-    "test": "npm run build && node --test packages/core/tests/*.test.mjs packages/canvas/tests/*.test.mjs packages/react/tests/*.test.mjs packages/export/tests/*.test.mjs",
+    "build": "npm run build --workspace @acheron-grid/core && npm run build --workspace @acheron-grid/canvas && npm run build --workspace @acheron-grid/markdown && npm run build --workspace @acheron-grid/react && npm run build --workspace @acheron-grid/vue && npm run build --workspace @acheron-grid/export && npm run build --workspace @acheron-grid/charts",
+    "typecheck": "npm run build && npm run typecheck --workspace @acheron-grid/core && npm run typecheck --workspace @acheron-grid/canvas && npm run typecheck --workspace @acheron-grid/markdown && npm run typecheck --workspace @acheron-grid/react && npm run typecheck --workspace @acheron-grid/vue && npm run typecheck --workspace @acheron-grid/export && npm run typecheck --workspace @acheron-grid/charts",
+    "test": "npm run build && node --test packages/core/tests/*.test.mjs packages/canvas/tests/*.test.mjs packages/react/tests/*.test.mjs packages/export/tests/*.test.mjs packages/charts/tests/*.test.mjs",
     "test:browser": "npm run build && playwright test",
     "benchmark": "npm run build && playwright test --config benchmark.config.mjs",
     "benchmark:core": "npm run build && node --expose-gc tests/benchmark-core.mjs",

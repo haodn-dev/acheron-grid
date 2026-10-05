@@ -182,9 +182,25 @@ Import `LocalViewOptions` as a type from core. This supports read-only server so
 
 For a fixed editable local draft, see the [host-owned remote save example](../../../examples/remote-save.md). It demonstrates revision checks, idempotent retry after an uncertain outcome, preserved newer edits and explicit rollback through engine history. It is a source integration example, not an async setter or a published remote-write adapter.
 
-For a fixed editable local draft, see the [host-owned remote save example](../../examples/remote-save.md). It demonstrates revision checks, idempotent retry after an uncertain outcome, preserved newer edits and explicit rollback through engine history. It is a source integration example, not an async setter or a published remote-write adapter.
+### Read-only live cache (unreleased)
+
+`createLiveDataSource({streamId,columnKeys,maxRows:10000,maxPendingCells:10000})` exposes a synchronous read-only cache. Host transport supplies an authoritative `replaceSnapshot({streamId,sequence,rows})` with stable IDs and all configured fields. It then calls `receive({streamId,sequence,changes:[{rowId,columnKey,value}]})` for consecutive messages and `flush()` on its chosen schedule. Multiple updates to a cell coalesce to the last value; flush is atomic and returns the number of updated cells. Apply engine `permissions: {writable:false}` to disable edit/paste explicitly.
+
+After replacing a snapshot, call `engine.refreshData()` to discard identity-dependent state. After a nonempty flush, call `engine.refreshData('values')`; live data is external source state, so this clears local value history. The cache does not create user-edit commands or enforce server authorization.
+
+Duplicates and wrong-stream messages are ignored. A sequence gap, unknown row/column or queue overflow clears pending updates and sets `stale`; keep showing the last applied cache with a stale indicator, then fetch a new snapshot before receiving again. Snapshots cannot move the cursor backward. `disconnect()` marks stale; `reset(newUniqueStreamId)` invalidates the old subscription before resync. Host transport must guard late responses and use a new stream ID for each query/reconnect generation. The source does not start timers or network connections. `destroy()` releases its cache and rejects later operations.
+
+Snapshots are O(rows × configured columns); rows and pending cells are bounded independently. Values are shallow snapshots, so nested values remain caller-owned. Inserts, deletes and sort-membership changes require a fresh snapshot; remote paged live editing, automatic reconnect, durable storage and collaborative editing are not included. The builder's live sample is simulated, not a server connection.
+
+For a fixed editable local draft, see the [host-owned remote save example](../../../examples/remote-save.md). It demonstrates revision checks, idempotent retry after an uncertain outcome, preserved newer edits and explicit rollback through engine history. It is a source integration example, not an async setter or a published remote-write adapter.
 
 ## Selection and clipboard
+
+### Bounded literal find and replace (unreleased)
+
+`engine.replaceText(search,replacement,{scope:'view',caseSensitive:true})` replaces string values in the current visible view; use `scope:'selection'` for the selected ranges. Matching and replacement are literal, including `$` sequences; user regex patterns are not executed. It reports `{changedCells,matches}`. Numeric/media values are retained. Changed cells must be editable and writable and pass column validation. The batch is one atomic history command and reuses local-view refresh and typed cell events.
+
+Processing is limited to 100,000 scanned cells, 10 million UTF-16 units of input/output text, 1,000 units of search text and 10,000 units of replacement. Expansion is checked before constructing oversized results. Empty search/selection and invalid options are rejected. This is local synchronous replacement, not server-wide search. Canvas exposes the same `replaceText` method; finish/cancel an editor draft before replacing.
 
 ### Multiple sort keys (unreleased)
 

@@ -31,7 +31,7 @@ test('stdio CLI provides documents without exposing grid tools', async () => {
  const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
  const client = new Client({ name: 'stdio-test', version: '1' });
  await client.connect(new StdioClientTransport({ command: process.execPath, args: [new URL('../src/cli.mjs', import.meta.url).pathname.replace(/^\/(?:([A-Z]:))/, '$1')] }));
- try { assert.equal((await client.listResources()).resources.length, 6); assert.equal((await client.readResource({ uri: 'acheron://docs/export' })).contents[0].text.includes('exportSelectionCsv'), true); assert.equal((await client.listTools()).tools.length, 0); }
+ try { assert.equal((await client.listResources()).resources.length, 7); assert.equal((await client.readResource({ uri: 'acheron://docs/export' })).contents[0].text.includes('exportSelectionCsv'), true); assert.equal((await client.readResource({uri:'acheron://docs/charts'})).contents[0].text.includes('createChartRenderer'),true); assert.equal((await client.listTools()).tools.length, 0); }
  finally { await client.close(); }
 });
 

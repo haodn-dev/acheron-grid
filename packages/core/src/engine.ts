@@ -1252,6 +1252,29 @@ export function createGridEngine(options: GridEngineOptions) {
     clearSelection: () => command(clearSelection),
     editCell: (row: number, col: number, text: string) => command(() => editCell(sourceRow(row), col, text)),
     updateCells: (updates: readonly CellUpdate[]) => command(() => applyUpdates(updates.map(update=>({...update,rowIndex:sourceRow(update.rowIndex)})))),
+    replaceText:(search:string,replacement:string,options:{readonly scope?:'view'|'selection';readonly caseSensitive?:boolean}={})=>command(()=>{
+      if(typeof search!=='string'||!search||search.length>1000||typeof replacement!=='string'||replacement.length>10000||options.scope!==undefined&&!['view','selection'].includes(options.scope)||options.caseSensitive!==undefined&&typeof options.caseSensitive!=='boolean')throw new TypeError('Invalid replace options.');
+      const ranges=options.scope==='selection'?displaySelectionRanges():visibleRowCount()&&columns.length?[{startRow:0,endRow:visibleRowCount()-1,startColumn:0,endColumn:columns.length-1}]:[];
+      if(options.scope==='selection'&&!ranges.length)throw new Error('Select cells before replacing text.');
+      if(ranges.reduce((count,range)=>count+(range.endRow-range.startRow+1)*(range.endColumn-range.startColumn+1),0)>clipboardCellLimit)throw new RangeError('Replace cell limit reached.');
+      const pattern=new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),options.caseSensitive===false?'gi':'g');
+      const seen=new Set<string>(),updates:CellUpdate[]=[];let matches=0,characters=0,outputCharacters=0;
+      for(const range of ranges)for(let row=range.startRow;row<=range.endRow;row++)for(let col=range.startColumn;col<=range.endColumn;col++) {
+        const canonical=sourceRow(row),column=columns[col]!,key=JSON.stringify([canonical,column.key]);if(seen.has(key))continue;seen.add(key);
+        const previous=dataSource.getValue(canonical,column.key);if(typeof previous!=='string')continue;
+        characters+=previous.length;if(characters>clipboardTextLimit)throw new RangeError('Replace text limit reached.');
+        let occurrences=0;
+        while(pattern.exec(previous)) {occurrences++;if(previous.length+occurrences*(replacement.length-search.length)>clipboardTextLimit)throw new RangeError('Replace text limit reached.');}
+        matches+=occurrences;if(!occurrences)continue;
+        outputCharacters+=previous.length+occurrences*(replacement.length-search.length);
+        if(outputCharacters>clipboardTextLimit)throw new RangeError('Replace text limit reached.');
+        const value=previous.replace(pattern,()=>replacement);
+        if(value===previous)continue;
+        if(value.length>clipboardTextLimit)throw new RangeError('Replace text limit reached.');
+        requirePermission(canonical,col,'editable');updates.push({rowIndex:canonical,columnKey:column.key,value});
+      }
+      applyUpdates(updates);return Object.freeze({changedCells:updates.length,matches});
+    }),
     cutSelectionBlocks:()=>command(cutSelectionBlocks),
     cancelCut:()=>command(()=>{pendingCut=undefined;}),
     pasteCutSelectionBlocks:(text:string)=>command(()=>pasteBlocks(decodeBlocks(text),true,true)),

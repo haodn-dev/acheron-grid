@@ -5,10 +5,28 @@
   "description": "Optional headless CSV selection export for Acheron Grid",
   "license": "MIT",
   "author": "Hao Duong",
-  "files": ["dist", "README.md", "LICENSE"],
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "dependencies": { "@acheron-grid/core": "0.1.0" },
-  "scripts": { "build": "tsc -p tsconfig.json", "typecheck": "tsc -p tsconfig.json --noEmit" },
-  "publishConfig": { "access": "public" },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "LICENSE.fflate"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@acheron-grid/core": "0.1.0",
+    "fflate": "0.8.3"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "homepage": "https://acheron-grid.haoduong.dev/"
 }

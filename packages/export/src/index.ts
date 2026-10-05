@@ -1,5 +1,7 @@
 import { decodeBlocks } from '@acheron-grid/core';
 import type { GridEngine } from '@acheron-grid/core';
+export { exportSelectionXlsx } from './xlsx.js';
+export type { XlsxExportOptions } from './xlsx.js';
 
 export interface CsvExportOptions {
   readonly includeHeaders?: boolean;

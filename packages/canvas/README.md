@@ -1,5 +1,9 @@
 # @acheron-grid/canvas
 
+Unreleased: `grid.replaceText(search,replacement,options)` forwards bounded literal replacement through core editable/writable validation and one history command. `grid.getValue(rowIndex,columnKey)` reads visible coordinates; it does not replace server read authorization. Optional charts use `renderCell`; optional CSV/XLSX export uses the same copy permission pipeline.
+
+Image upload hooks now receive `onProgress(loaded,total?)` alongside `columnKey` and `signal`. The grid shows completed-file/byte progress and a cancel button. `mediaOptions.maxConcurrentUploads` defaults to four (1–100 allowed), scoped to one paste; host uploads must honor abort and implement timeouts. Every broadcast destination is checked for changed row identity/value before committing. Nested values remain shallow caller-owned references. The host owns durable URLs and orphan upload cleanup. These changes are source previews, not npm 0.1.0.
+
 An experimental Canvas browser renderer for the headless @acheron-grid/core engine.
 
 ## Current capabilities

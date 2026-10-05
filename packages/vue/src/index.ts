@@ -27,9 +27,11 @@ export const AcheronGrid = defineComponent({
     const mount = () => {
       if (!container.value) return;
       grid = createGrid({ ...props.options, container: container.value });
-      grid.subscribe({onEvent:event=>emit('event',event)});
-      emit('ready', grid);
-      sync();
+      try {
+        grid.subscribe({onEvent:event=>emit('event',event)});
+        sync();
+        emit('ready', grid);
+      } catch (error) { dispose(); throw error; }
     };
     const sync = () => {
       if (!grid) return;

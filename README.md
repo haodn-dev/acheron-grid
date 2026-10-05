@@ -10,11 +10,9 @@ Acheron Grid displays and edits tabular data without a framework dependency. The
 
 Every Acheron feature and optional module is intended to remain open source and free to use, with no premium feature gates or license keys. See [benchmark evidence and its limits](BENCHMARKS.md).
 
-Every Acheron feature and optional module is intended to remain open source and free to use, with no premium feature gates or license keys. See [benchmark evidence and its limits](BENCHMARKS.md).
-
 ## Status
 
-The original six packages are published on npm at 0.1.0 as development previews. APIs may change before 1.0. Changes under Unreleased and the new export module are source previews; build from source or install packed artifacts to try them. The project is licensed under [MIT](LICENSE).
+The original six packages are published on npm at 0.1.0 as development previews. APIs may change before 1.0. Changes under Unreleased and the new export/charts modules are source previews; build from source or install packed artifacts to try them. The project is licensed under [MIT](LICENSE).
 
 | Package | Purpose | Runtime dependencies |
 | --- | --- | --- |
@@ -24,7 +22,8 @@ The original six packages are published on npm at 0.1.0 as development previews.
 | [@acheron-grid/react](packages/react/README.md) | React lifecycle adapter | Canvas; React peer dependency |
 | [@acheron-grid/vue](packages/vue/README.md) | Vue 3 lifecycle adapter | Canvas; Vue peer dependency |
 | [@acheron-grid/mcp](packages/mcp/README.md) | Optional documentation server and host-authorized grid tools | MCP SDK; @acheron-grid/core |
-| [@acheron-grid/export](packages/export/README.md) | Optional CSV selection export; unreleased | @acheron-grid/core |
+| [@acheron-grid/export](packages/export/README.md) | Optional CSV/XLSX selection export; unreleased | @acheron-grid/core; fflate |
+| [@acheron-grid/charts](packages/charts/README.md) | Optional inline line/column/bar charts; unreleased | @acheron-grid/canvas |
 
 Core does not import Canvas or framework code. `@acheron-grid/core/headless` remains an alias for the headless API.
 

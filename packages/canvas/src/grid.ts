@@ -70,7 +70,7 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
   theme?: Partial<GridTheme>;
   imageColumns?: readonly string[];
   avatarColumns?: readonly string[];
-  mediaOptions?: { readonly size?: number; readonly maxVisible?: number; readonly upload?: (file:File, context:Readonly<{columnKey:string;signal:AbortSignal}>)=>Promise<MediaItem> };
+  mediaOptions?: { readonly size?: number; readonly maxVisible?: number; readonly maxConcurrentUploads?:number; readonly upload?: (file:File, context:Readonly<{columnKey:string;signal:AbortSignal;onProgress:(loaded:number,total?:number)=>void}>)=>Promise<MediaItem> };
   columnEditors?: Readonly<Record<string, ColumnEditor>>;
   richTextColumns?: Readonly<Record<string, RichTextFormat>>;
   markdownToHtml?: (source: string) => string;
@@ -112,6 +112,8 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
   indexColumn?: boolean;
 }
 export interface Grid {
+  getValue(rowIndex:number,columnKey:string):unknown;
+  replaceText(search:string,replacement:string,options?:Parameters<GridEngine['replaceText']>[2]):ReturnType<GridEngine['replaceText']>;
   subscribe: GridEngine['subscribe'];
   takeObserverErrors: GridEngine['takeObserverErrors'];
   captureRowIdentity(): readonly RowId[];
@@ -1784,22 +1786,42 @@ export function createGrid(options: GridOptions): Grid {
 
   async function pasteImages(files:readonly File[]):Promise<void> {
     const selection=engine.getSelection();if(!selection)return;
-    const key=selection.columnKey,target=JSON.stringify(getSelectionRanges()),originalValue=engine.getValue(selection.rowIndex,selection.columnKey),created:string[]=[];let controller:AbortController|undefined;
+    const key=selection.columnKey,ranges=getSelectionRanges(),target=JSON.stringify(ranges),created:string[]=[];let controller:AbortController|undefined,status:HTMLDivElement|undefined;
     try {
       if(!mediaColumn(key))throw new Error('Select an image or people column before pasting images.');
       if(files.length>100||files.some(file=>file.size>20*1024*1024))throw new Error('Paste at most 100 images, each no larger than 20 MiB.');
       if(!engine.canPaste())throw new Error('This cell does not allow pasting.');
+      if(ranges.reduce((count,range)=>count+(range.endRow-range.startRow+1)*(range.endColumn-range.startColumn+1),0)>100_000)throw new RangeError('Image paste selection is too large.');
+      const destinations=ranges.flatMap(range=>Array.from({length:range.endRow-range.startRow+1},(_,i)=>Array.from({length:range.endColumn-range.startColumn+1},(_,j)=>{
+        const row=range.startRow+i,col=range.startColumn+j;return {row,key:columns[col]!.key,id:engine.getRowId(row),value:engine.getValue(row,columns[col]!.key)};
+      })).flat());
+      const concurrency=options.mediaOptions?.maxConcurrentUploads ?? 4;
+      if(!Number.isSafeInteger(concurrency)||concurrency<1||concurrency>100)throw new RangeError('Invalid upload concurrency.');
       mediaUpload?.abort();controller=new win.AbortController();mediaUpload=controller;
-      const values=await Promise.all(files.map(async file=>{
-        if(options.mediaOptions?.upload)return await options.mediaOptions.upload(file,Object.freeze({columnKey:key,signal:controller!.signal}));
-        const src=win.URL.createObjectURL(file);created.push(src);return {src,alt:file.name};
+      status=doc.createElement('div');status.setAttribute('aria-label','Image upload');status.setAttribute('role','status');status.style.cssText='position:absolute;z-index:40;right:12px;bottom:12px;padding:10px;display:flex;gap:12px;align-items:center;background:var(--acheron-background);color:var(--acheron-text-color);border:1px solid var(--acheron-grid-line-color);font:13px sans-serif';
+      const label=doc.createElement('span'),cancel=doc.createElement('button');cancel.type='button';cancel.textContent='Cancel upload';cancel.addEventListener('click',()=>controller?.abort());status.append(label,cancel);root.append(status);controller.signal.addEventListener('abort',()=>status?.remove(),{once:true});
+      const progress=new Map<number,number>();let completed=0,nextFile=0;const values:MediaItem[]=[];
+      function reportProgress():void {label.textContent=`Uploading images: ${completed}/${files.length} completed${progress.size?`, ${[...progress.values()].reduce((sum,value)=>sum+value,0)} bytes`:''}`;}
+      reportProgress();
+      await Promise.all(Array.from({length:Math.min(concurrency,files.length)},async()=>{
+        while(nextFile<files.length) {
+          if(controller!.signal.aborted)throw new Error('Image upload canceled.');
+          const index=nextFile++,file=files[index]!;
+          if(options.mediaOptions?.upload)values[index]=await options.mediaOptions.upload(file,Object.freeze({columnKey:key,signal:controller!.signal,onProgress:(loaded:number,total?:number)=>{
+            if(mediaUpload!==controller||controller!.signal.aborted||!Number.isFinite(loaded)||loaded<0||total!==undefined&&(!Number.isFinite(total)||total<loaded))return;
+            progress.set(index,loaded);reportProgress();
+          }}));
+          else {const src=win.URL.createObjectURL(file);created.push(src);values[index]={src,alt:file.name};}
+          completed++;reportProgress();
+        }
       }));
-      if(destroyed||controller.signal.aborted||JSON.stringify(getSelectionRanges())!==target||engine.getSelection()?.rowId!==selection.rowId||engine.getSelection()?.columnKey!==key||!Object.is(engine.getValue(selection.rowIndex,key),originalValue))throw new Error('Image paste canceled because its destination changed.');
+      if(destroyed||controller.signal.aborted||JSON.stringify(getSelectionRanges())!==target||engine.getSelection()?.rowId!==selection.rowId||engine.getSelection()?.columnKey!==key||destinations.some(cell=>cell.row>=engine.rowCount||engine.getRowId(cell.row)!==cell.id||!Object.is(engine.getValue(cell.row,cell.key),cell.value)))throw new Error('Image paste canceled because its destination changed.');
       const value=validateMediaValue(values);
       pasteSelectionBlocks(encodeBlocks([{row:0,column:0,values:[[JSON.stringify(value)]]}]));
       for(const src of created)ownedImageUrls.add(src);
       if(mediaUpload===controller)mediaUpload=undefined;
-    } catch(error){controller?.abort();if(mediaUpload===controller)mediaUpload=undefined;for(const src of created)win.URL.revokeObjectURL(src);if(!destroyed)win.alert(error instanceof Error?error.message:'Unable to paste images.');}
+    } catch(error){const current=!controller||mediaUpload===controller&&!controller.signal.aborted;controller?.abort();if(mediaUpload===controller)mediaUpload=undefined;for(const src of created)win.URL.revokeObjectURL(src);if(!destroyed&&current)win.alert(error instanceof Error?error.message:'Unable to paste images.');}
+    finally {status?.remove();}
   }
 
   function select(rowIndex: number, columnIndex: number, extend = false, reveal = true, add = false): void {
@@ -3034,6 +3056,8 @@ export function createGrid(options: GridOptions): Grid {
   }
   return {
     subscribe:engine.subscribe,
+    getValue:engine.getValue,
+    replaceText:(search:string,replacement:string,options?:Parameters<GridEngine['replaceText']>[2])=>{finishEdit(false);clearCopyFeedback();return engine.replaceText(search,replacement,options);},
     takeObserverErrors:engine.takeObserverErrors,
     captureRowIdentity:engine.captureRowIdentity,
     refreshData:(ids?:readonly RowId[]|'values')=>{finishEdit(false);clearCopyFeedback();pendingCutText=undefined;engine.refreshData(ids);},

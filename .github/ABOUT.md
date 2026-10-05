@@ -16,4 +16,4 @@ Project website: [Acheron Grid](https://acheron-grid.haoduong.dev/). Author webs
 
 **Status**
 
-Experimental development preview; packages are not published. Do not describe this repository as a stable release or enterprise support offering.
+The original six packages are npm 0.1.0 development previews. Export/charts and Unreleased changes are source previews. Do not describe this repository as a stable release or enterprise support offering.

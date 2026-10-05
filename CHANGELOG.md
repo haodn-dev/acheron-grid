@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- React/Vue dispose newly created grids when initialization fails. Media uploads report progress/cancel, bound concurrent jobs per paste and guard every broadcast destination against asynchronous overwrite.
+
+- Bounded literal find/replace goes through editable/writable validation and one undo command; Canvas exposes replaceText and a read-only getValue query.
+- Optional XLSX export writes scalar values and literal strings to one sheet, with copy permissions, Unicode/XML checks and archive budgets. ZIP dependency stays outside core.
+
+- Read-only live cache supports stable-ID snapshots, consecutive sequences, bounded cell coalescing, atomic flush and stale/resync handling. Host owns transport and scheduling.
+- Optional free inline charts module renders line, column and horizontal bar series with gaps, signed baselines and a bounded point budget. Source preview, not yet published.
+
 - Host-owned remote save example covers local drafts, revision/idempotency receipts, validation/conflict preservation, explicit rollback and late-response guards without changing synchronous DataSource writes.
 
 - Host-owned remote save example covers local drafts, revision/idempotency receipts, validation/conflict preservation, explicit rollback and late-response guards without changing synchronous DataSource writes.
