@@ -8,6 +8,10 @@ Acheron Grid displays and edits tabular data without a framework dependency. The
 
 [Live demo and documentation](https://acheron-grid.haoduong.dev/)
 
+Every Acheron feature and optional module is intended to remain open source and free to use, with no premium feature gates or license keys. See [benchmark evidence and its limits](BENCHMARKS.md).
+
+Every Acheron feature and optional module is intended to remain open source and free to use, with no premium feature gates or license keys. See [benchmark evidence and its limits](BENCHMARKS.md).
+
 ## Status
 
 Version 0.1.0 is prepared as the first development preview. APIs may change before 1.0. Packages have not yet been published; build from source or install the packed artifacts until publication. The project is licensed under [MIT](LICENSE).

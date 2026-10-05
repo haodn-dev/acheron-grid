@@ -1,0 +1,140 @@
+{
+  "date": "2026-10-05",
+  "revision": "2aab4ae2e1d30419850a89f0c8eff6d281254ee3",
+  "note": "Existing unrelated touch test modification; benchmark and runtime match revision.",
+  "command": "npm run benchmark -- --repeat-each=3 --reporter=json",
+  "platform": "Microsoft Windows NT 10.0.26200.0",
+  "cpu": "Unavailable: hardware metadata access denied",
+  "logicalProcessors": 12,
+  "node": "v22.21.1",
+  "stats": {
+    "startTime": "2026-10-05T03:06:18.579Z",
+    "duration": 39771.07,
+    "expected": 6,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "runs": [
+    {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "viewport": "640x360 CSS px",
+      "devicePixelRatio": 1,
+      "rows": 1000000,
+      "columns": 1000,
+      "frozen": 0,
+      "scroll": {
+        "samples": 61,
+        "medianMs": 1.199999999254942,
+        "p95Ms": 2.600000001490116,
+        "maxCellReads": 44
+      },
+      "partial": {
+        "samples": 60,
+        "medianMs": 0.19999999925494194,
+        "p95Ms": 0.900000000372529,
+        "maxCellReads": 1
+      }
+    },
+    {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "viewport": "640x360 CSS px",
+      "devicePixelRatio": 1,
+      "rows": 1000000,
+      "columns": 1000,
+      "frozen": 1,
+      "scroll": {
+        "samples": 61,
+        "medianMs": 1.200000001117587,
+        "p95Ms": 1.699999999254942,
+        "maxCellReads": 55
+      },
+      "partial": {
+        "samples": 60,
+        "medianMs": 0.09999999962747097,
+        "p95Ms": 0.2999999988824129,
+        "maxCellReads": 1
+      }
+    },
+    {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "viewport": "640x360 CSS px",
+      "devicePixelRatio": 1,
+      "rows": 1000000,
+      "columns": 1000,
+      "frozen": 0,
+      "scroll": {
+        "samples": 61,
+        "medianMs": 0.8999999985098839,
+        "p95Ms": 1.300000000745058,
+        "maxCellReads": 44
+      },
+      "partial": {
+        "samples": 60,
+        "medianMs": 0.19999999925494194,
+        "p95Ms": 0.30000000074505806,
+        "maxCellReads": 1
+      }
+    },
+    {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "viewport": "640x360 CSS px",
+      "devicePixelRatio": 1,
+      "rows": 1000000,
+      "columns": 1000,
+      "frozen": 1,
+      "scroll": {
+        "samples": 60,
+        "medianMs": 1.400000000372529,
+        "p95Ms": 3.599999999627471,
+        "maxCellReads": 55
+      },
+      "partial": {
+        "samples": 60,
+        "medianMs": 0.10000000149011612,
+        "p95Ms": 0.40000000037252903,
+        "maxCellReads": 1
+      }
+    },
+    {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "viewport": "640x360 CSS px",
+      "devicePixelRatio": 1,
+      "rows": 1000000,
+      "columns": 1000,
+      "frozen": 0,
+      "scroll": {
+        "samples": 61,
+        "medianMs": 0.8999999985098839,
+        "p95Ms": 1.299999998882413,
+        "maxCellReads": 44
+      },
+      "partial": {
+        "samples": 60,
+        "medianMs": 0.09999999962747097,
+        "p95Ms": 0.3999999985098839,
+        "maxCellReads": 1
+      }
+    },
+    {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+      "viewport": "640x360 CSS px",
+      "devicePixelRatio": 1,
+      "rows": 1000000,
+      "columns": 1000,
+      "frozen": 1,
+      "scroll": {
+        "samples": 61,
+        "medianMs": 1.599999999627471,
+        "p95Ms": 10,
+        "maxCellReads": 55
+      },
+      "partial": {
+        "samples": 60,
+        "medianMs": 0.10000000149011612,
+        "p95Ms": 0.2999999988824129,
+        "maxCellReads": 1
+      }
+    }
+  ]
+}
