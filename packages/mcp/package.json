@@ -2,7 +2,7 @@
   "name": "@acheron-grid/mcp",
   "version": "0.1.0",
   "type": "module",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "exports": {
     ".": {
       "types": "./src/index.d.ts",
@@ -23,7 +23,8 @@
     "src",
     "docs",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "publishConfig": {
     "access": "public"

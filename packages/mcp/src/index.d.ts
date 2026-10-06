@@ -8,6 +8,8 @@ export interface GridMcpOptions {
  maxRowScan?: number;
  maxOutputBytes?: number;
  resolveRowIndex?: (rowId: RowId) => number | null | undefined;
+ /** Synchronous, side-effect-free token; change on data, view, permissions or dataset replacement. */
+ getRevision?: () => string;
  allowWrites?: boolean;
  validateWrite?: (cell: { rowId: RowId; columnKey: string; value: unknown }) => void;
 }

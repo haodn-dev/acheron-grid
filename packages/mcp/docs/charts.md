@@ -1,6 +1,6 @@
 # @acheron-grid/charts
 
-Optional free/MIT inline line, column and horizontal bar renderer. Source preview, not yet published to npm. It depends on Canvas; core does not depend on charts. It allocates no listeners or persistent cache.
+Optional free/Apache 2.0 inline line, column and horizontal bar renderer. Source preview, not yet published to npm. It depends on Canvas; core does not depend on charts. It allocates no listeners or persistent cache.
 
 ## Installation and complete example
 

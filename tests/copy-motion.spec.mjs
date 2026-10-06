@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './browser-fixtures.mjs';
 
 async function setup(page, motion = true) {
   await page.goto('/');

@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "revision": "3a15e7b388e2be2a669b536557d6b27239cb413a",
+  "node": "v24.13.0",
+  "platform": "win32",
+  "runs": [
+    {
+      "trial": 0,
+      "timings": {
+        "groupAndMerge": 47.5914,
+        "outlineSort": 20.080299999999994,
+        "outlineUpdate": 11.324399999999997,
+        "outlineFilter": 5.000699999999995,
+        "selectionSort": 3.8711000000000126,
+        "fragmentedRanges": 1.2837000000000103,
+        "remoteCacheChurn": 4.238799999999998,
+        "liveCoalescing": 5.540800000000019,
+        "liveFlush": 0.7630000000000052
+      },
+      "fragmentCount": 2322,
+      "loads": 161,
+      "maxActive": 2
+    },
+    {
+      "trial": 1,
+      "timings": {
+        "groupAndMerge": 45.423,
+        "outlineSort": 12.666399999999982,
+        "outlineUpdate": 14.8921,
+        "outlineFilter": 4.89730000000003,
+        "selectionSort": 4.29989999999998,
+        "fragmentedRanges": 1.6812999999999647,
+        "remoteCacheChurn": 4.2660999999999945,
+        "liveCoalescing": 7.554499999999962,
+        "liveFlush": 0.4116000000000213
+      },
+      "fragmentCount": 2322,
+      "loads": 161,
+      "maxActive": 2
+    },
+    {
+      "trial": 2,
+      "timings": {
+        "groupAndMerge": 42.45820000000003,
+        "outlineSort": 9.409400000000005,
+        "outlineUpdate": 10.968799999999987,
+        "outlineFilter": 3.8681000000000267,
+        "selectionSort": 3.4431999999999903,
+        "fragmentedRanges": 1.0533000000000357,
+        "remoteCacheChurn": 2.821299999999951,
+        "liveCoalescing": 5.536999999999978,
+        "liveFlush": 0.19580000000001974
+      },
+      "fragmentCount": 2322,
+      "loads": 161,
+      "maxActive": 2
+    }
+  ],
+  "limitations": "Three sequential CPU trials including assertion cost where indicated. In-memory remote loader; no network latency, device, FPS, peak memory or timing threshold."
+}

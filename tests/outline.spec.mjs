@@ -88,6 +88,7 @@ test('layout motion updates state immediately and cancels on scroll or reduced m
   await page.evaluate(() => { window.grid.moveRows([0], 4); document.querySelector('[role=grid]').dispatchEvent(new Event('scroll')); });
   await expect(page.locator('[data-grid-motion]')).toHaveCount(0);
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect.poll(() => page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true);
   expect(await page.evaluate(() => { window.grid.moveColumns([0], 3); return document.querySelectorAll('[data-grid-motion]').length; })).toBe(0);
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.evaluate(() => { window.grid.moveColumns([0], 3); window.grid.destroy(); });

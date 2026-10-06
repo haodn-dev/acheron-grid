@@ -56,7 +56,9 @@ TypeScript data grid with a headless core, Canvas rendering, and React/Vue adapt
 <Relevant synchronous-source, browser, accessibility and persistence limits>
 
 ## License
-MIT; embedded third-party assets retain their documented notices.
+Apache 2.0; embedded third-party assets retain their documented notices.
 ```
 
 Once release approval exists, verify npm scope ownership and authentication, publish only the approved artifacts in dependency order (core, canvas, markdown, react, vue, export, charts, mcp), and verify that each published package can be installed from the registry. Update the README and versioned notes from prepared to published only after successful publication. Create the agreed tag/draft from the verified release commit. A GitHub source release and npm publication are separate actions. Keep an unreleased section for subsequent work.
+
+Current source uses Apache-2.0. Published npm 0.1.0 remains MIT and cannot be overwritten; use a new package version when publication resumes. Each package must ship its Apache LICENSE and project NOTICE plus any applicable third-party license files.

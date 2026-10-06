@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './browser-fixtures.mjs';
 test('upload progress is bounded and any broadcast destination change cancels atomic paste',async({page})=>{
   await setup(page);
   await page.evaluate(async()=>{

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './browser-fixtures.mjs';
 
 async function setup(page) {
   await page.goto('/');
@@ -130,7 +130,8 @@ test('copy keeps rich text and colors across plain columns, with one atomic undo
   await expect(page.getByRole('gridcell', { name: 'plain: Bold and italic', exact: true })).toHaveCount(2);
 });
 
-test('context menu clipboard preserves styles and visual editors save partial marks without exposing source', async ({ page, context }) => {
+test('context menu clipboard preserves styles and visual editors save partial marks without exposing source', async ({ page, context, browserName }) => {
+  test.skip(browserName !== 'chromium', 'Playwright clipboard permission grants are Chromium-only; synthetic clipboard tests run on all engines.');
   await context.grantPermissions(['clipboard-read', 'clipboard-write']); await setup(page);
   const viewport = page.getByLabel(/^Data grid viewport/);
   await viewport.click({ button: 'right', position: { x: 24, y: 20 } }); await page.getByRole('menuitem', { name: 'Copy', exact: true }).click();

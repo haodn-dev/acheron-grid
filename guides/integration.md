@@ -247,4 +247,9 @@ Link popovers do not need metadata requests. A host `linkPreview.load` can provi
 
 ## Support boundaries
 
-Chromium automation does not establish full Safari/Firefox, screen-reader or physical touch-device coverage. Native scroll sizes limit extreme dimensions. The 10,000-row demo is a sample, not a frame-rate/memory guarantee. Formula calculation, pivots, multi-sheet workbooks, realtime collaboration and async writes are outside core V1. Optional inline charts and multi-column sorting are source previews, not npm 0.1.0. See the selected documentation channel before using them.
+Portable integration suites pass on Chromium, Firefox and Playwright WebKit; Chromium-only clipboard-permission/CDP-touch checks are excluded from the other engines. Synthetic clipboard fixtures do not establish operating-system clipboard interoperability. Safari, screen-reader and physical touch-device coverage remain unverified; see the current [support evidence](../SUPPORT.md). Native scroll sizes limit extreme dimensions. The 10,000-row demo is a sample, not a frame-rate/memory guarantee. Formula calculation, pivots, multi-sheet workbooks, realtime collaboration and async writes are outside core V1. Optional inline charts and multi-column sorting are source previews, not npm 0.1.0. See the selected documentation channel before using them.
+
+
+## Source editing and remote writes
+
+Source preview adds special paste, hidden axes, numeric display formatting, English/Vietnamese Canvas messages with host overrides, and a separate bounded optimistic remote snapshot source. See the [complete contract and examples](editing-and-remote.md). The async page recipe above remains read-only. These APIs are absent from npm 0.1.0.

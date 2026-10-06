@@ -171,7 +171,7 @@ copySelectionBlocks: () => string
 ### pasteSelectionBlocks
 
 ```ts
-pasteSelectionBlocks: (text: string) => void
+pasteSelectionBlocks: (text: string, options?: PasteOptions) => void
 ```
 
 
@@ -187,7 +187,7 @@ TSV text through copy permissions. No direct operating-system clipboard access i
 ### paste
 
 ```ts
-paste: (text: string) => void
+paste: (text: string, options?: PasteOptions) => void
 ```
 
 Parse TSV/editor text and preflight the complete destination before writing.
@@ -490,6 +490,54 @@ frozenColumns: number
 
 
 
+### setRowsHidden
+
+```ts
+setRowsHidden: (indices: readonly number[], hidden: boolean) => void
+```
+
+
+
+### setColumnsHidden
+
+```ts
+setColumnsHidden: (indices: readonly number[], hidden: boolean) => void
+```
+
+
+
+### getHiddenRows
+
+```ts
+getHiddenRows: () => readonly number[]
+```
+
+
+
+### getHiddenColumns
+
+```ts
+getHiddenColumns: () => readonly number[]
+```
+
+
+
+### isRowHidden
+
+```ts
+isRowHidden: (index: number) => boolean
+```
+
+
+
+### isColumnHidden
+
+```ts
+isColumnHidden: (index: number) => boolean
+```
+
+
+
 ### setFrozen
 
 ```ts
@@ -523,6 +571,9 @@ Call createGrid with GridOptions. Required fields are marked; options are read a
 | allowMerging | No | `boolean \| undefined` |
 | allowRowGrouping | No | `boolean \| undefined` |
 | canChangeLayout | No | `((request: Readonly<LayoutRequest>) => boolean) \| undefined` |
+| locale | No | `string \| undefined` |
+| messages | No | `Readonly<Record<string, string>> \| undefined` |
+| currency | No | `string \| undefined` |
 | view | No | `LocalViewOptions \| undefined` |
 | viewMode | No | `"core" \| "host" \| undefined` |
 | onViewChange | No | `((view: LocalViewOptions) => void) \| undefined` |
@@ -577,3 +628,4 @@ Call createGrid with GridOptions. Required fields are marked; options are read a
 | onEvent | No | `((event: GridEvent) => void) \| undefined` |
 | allowLockChanges | No | `boolean \| undefined` |
 | columnWidths | No | `Readonly<Record<string, number>> \| undefined` |
+| canChangeVisibility | No | `((request: Readonly<{ axis: "row" \| "column"; indices: readonly number[]; hidden: boolean; }>) => boolean) \| undefined` |

@@ -1,6 +1,6 @@
 # @acheron-grid/core
 
-Documentation revision 3 · npm 0.1.0 + explicitly marked source additions. See [documentation versions](../../guides/versions.md).
+Documentation revision 4 · npm 0.1.0 + explicitly marked source additions. See [documentation versions](../../guides/versions.md).
 
 
 An experimental headless TypeScript data-grid engine. Core owns data access and controlled mutations, selection, layout, editing, TSV clipboard operations and history. The host owns source storage and transport. Core has no runtime dependencies or browser/framework types.
@@ -71,6 +71,16 @@ An optional synchronous `onInvalidate(change)` renderer hook receives cells, sel
 Build/typecheck includes a separate ES2022-only TypeScript configuration with no DOM or ambient Node types. Unit tests also compile the headless dependency closure and verify it excludes browser modules.
 
 ## Data and lifecycle
+
+### Reading the complete API contract
+
+The [core API catalog](../../guides/core-api.md) lists every engine member, construction option, public export and source interface, with behavioral notes and exported type definitions. It describes source preview; the frozen npm 0.1.0 guide is a separate channel.
+
+Capability probes are intentionally narrower than commands. `getCellPermission().writable` describes effective policy and locks, not whether a source has a setter. `canEdit()` also checks source write support and editable/value parsing capability; actual parsing and validation can still fail. `canUndo()`/`canRedo()` indicate entries, not permission to replay under current locks, identities and values. Formatting permission is independent of value write permission.
+
+Engine cell/selection APIs use visible row indices. DataSource interfaces use their own row indexing; source metadata, structural requests and most domain events use source coordinates as specified by their contracts. Use `getRowSourceIndex()` explicitly at the boundary. Numeric viewport ranges are end-exclusive; selection rectangles are inclusive. A `LocalDataView` is a fixed projection, while core-owned `setView()` rebuilds its projection after value commands.
+
+Destroy is ownership-specific: engine disposal does not destroy the host source or its network transport. Data/layout/clipboard commands reject after disposal and undo/redo return false; `cancelCut()` is a harmless cleanup operation and remains safe when no staged cut exists. Retained read getters are not a live-instance guarantee; discard engine references after disposal.
 
 ### DataSource and mutation contracts
 
@@ -413,4 +423,9 @@ The createGrid methods and behavior remain the same; see the [Canvas guide](http
 
 ## License
 
-Licensed under [MIT](LICENSE). Copyright (c) 2026 Hao Duong. Lucide assets belong to the separate Canvas package and are not dependencies of this headless core.
+Licensed under [Apache 2.0](LICENSE). Copyright (c) 2026 Hao Duong. Lucide assets belong to the separate Canvas package and are not dependencies of this headless core.
+
+
+## Editing and remote writes (source preview)
+
+Paste special (`PasteOptions`), hidden row/column geometry and `numberFormat` metadata use the shared permission/atomic/history/state pipeline. `createRemoteDataSource` adds bounded optimistic JSON snapshots, explicit commit, exact retry after an uncertain result, resync and explicit conflict adoption. The host owns transport, server authorization, atomic revision checks and durable mutation deduplication. Read-only async paging and live streams retain their existing contracts. See the [complete editing and remote guide](../../guides/editing-and-remote.md) for APIs, examples and limits. These additions are not in npm 0.1.0.

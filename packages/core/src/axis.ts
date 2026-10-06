@@ -1,6 +1,7 @@
 /** Default sizes plus sparse overrides; no allocation per row. */
 export class GridAxis {
   private readonly overrides = new Map<number, number>();
+  private readonly hidden = new Set<number>();
   private keys: number[] = [];
   private deltas: number[] = [];
 
@@ -8,7 +9,14 @@ export class GridAxis {
     if (!Number.isSafeInteger(count) || count < 0 || !Number.isFinite(defaultSize) || defaultSize <= 0 || !Number.isFinite(count * defaultSize)) throw new RangeError('Invalid axis dimensions.');
   }
 
-  size(index: number): number { return this.overrides.get(index) ?? this.defaultSize; }
+  size(index: number): number { return this.hidden.has(index) ? 0 : this.storedSize(index); }
+  storedSize(index: number): number { return this.overrides.get(index) ?? this.defaultSize; }
+  isHidden(index:number):boolean {return this.hidden.has(index);}
+  hiddenIndices(): number[] { return [...this.hidden].sort((a,b)=>a-b); }
+  replaceHidden(indices: readonly number[]): void {
+    if(new Set(indices).size!==indices.length||indices.some(index=>!Number.isSafeInteger(index)||index<0||index>=this.count))throw new RangeError('Invalid hidden axis indices.');
+    this.hidden.clear();for(const index of indices)this.hidden.add(index);this.rebuild();
+  }
 
   position(index: number): number {
     let low = 0;
@@ -51,19 +59,20 @@ export class GridAxis {
     next.rebuild();
     if (!Number.isFinite(next.position(count))) throw new RangeError('Axis dimensions overflow.');
     this.count = count; this.overrides.clear();
+    this.hidden.clear();
     for (const [index, size] of sizes) this.overrides.set(index, size);
     this.rebuild();
   }
 
   private rebuild(): void {
-    this.keys = [...this.overrides.keys()].sort((a, b) => a - b);
+    this.keys = [...new Set([...this.overrides.keys(),...this.hidden])].sort((a, b) => a - b);
     let delta = 0;
-    this.deltas = this.keys.map(key => delta += this.overrides.get(key)! - this.defaultSize);
+    this.deltas = this.keys.map(key => delta += this.size(key) - this.defaultSize);
   }
 
   setSize(index: number, size: number): void {
     if (!Number.isSafeInteger(index) || index < 0 || index >= this.count || !Number.isFinite(size) || size <= 0) throw new RangeError('Invalid cell size or index.');
-    if (!Number.isFinite(this.position(this.count) - this.size(index) + size)) throw new RangeError('Axis dimensions overflow.');
+    if (!Number.isFinite(this.position(this.count) - this.size(index) + (this.hidden.has(index)?0:size))) throw new RangeError('Axis dimensions overflow.');
     if (size === this.defaultSize) this.overrides.delete(index);
     else this.overrides.set(index, size);
     // rebuild sparse prefix deltas on resize; a tree if frequent bulk resizing needs it.

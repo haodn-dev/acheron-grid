@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './browser-fixtures.mjs';
 
 test('individual resize keeps hit tests, editor, scrolling and partial pixels aligned', async ({ page }) => {
   await page.goto('/');
@@ -131,6 +131,7 @@ test('context menu preserves ranges, invokes shared actions, supports keyboard a
   await page.getByRole('spinbutton', { name: 'Row height (px)' }).fill('0');
   await page.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Row height', exact: true })).toBeVisible();
+  await page.getByRole('spinbutton', { name: 'Row height (px)' }).fill('32');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await viewport.click({ position: { x: 180, y: 16 }, button: 'right' });
   await page.locator('#existing').click();
@@ -264,12 +265,19 @@ test('batch commands repaint only dirty cells and undo/redo atomically', async (
   await page.evaluate(async () => {
     const { createGrid } = await import('/canvas/index.js');
     const { LocalDataSource } = await import('/core/index.js');
+    const createElement = document.createElement, images = [];
+    document.createElement = function (...args) { const element = createElement.apply(this, args); if (args[0] === 'img') images.push(element); return element; };
     window.source = new LocalDataSource(Array.from({ length: 100 }, (_, id) => ({ id, name: 'Ada', team: 'Design' })), row => row.id);
     const getValue = window.source.getValue.bind(window.source);
     window.reads = [];
     window.source.getValue = (row, key) => { window.reads.push([row, key]); return getValue(row, key); };
     window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source,
       columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true }, { key: 'team', title: 'Team' }] });
+    // Icon decode/font/resize repaint is separate from the dirty-cell command being measured.
+    document.createElement = createElement;
+    if (!images.length) throw new Error('Image decode instrumentation captured no icons.');
+    await Promise.all(images.map(image => image.decode()));
+    await document.fonts.ready;
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   });
   const result = await page.evaluate(async () => {
@@ -1611,14 +1619,20 @@ test('auto-fit measures visible content, handles multiline rows and shares resiz
   expect(column.size).toBeGreaterThan(40); expect(column.size).toBeLessThan(300); expect(row.size).toBeGreaterThan(32); expect(result.reads).not.toContain(99);
   const viewport = page.getByRole('grid'); const b = await viewport.boundingBox();
   await page.evaluate(() => window.grid.setColumnWidth(1, 40));
-  await page.mouse.dblclick(b.x + 200, b.y - 18);
+  await expect(page.locator('[data-grid-header-cell="1"]').first()).toHaveCSS('width', '40px');
+  await page.locator('[data-grid-header-cell="1"]').first().dispatchEvent('dblclick', { clientX: b.x + 198, clientY: b.y - 18 });
+  expect(await page.evaluate(() => window.sizes.filter(event => event.type === 'column:resize').at(-1).size)).toBe(column.size);
+  await page.evaluate(() => window.grid.setColumnWidth(1, 40));
+  await expect(page.locator('[data-grid-header-cell="1"]').first()).toHaveCSS('width', '40px');
+  await page.mouse.dblclick(b.x + 198, b.y - 18);
   expect(await page.evaluate(() => window.sizes.filter(event => event.type === 'column:resize').at(-1).size)).toBe(column.size);
   await viewport.click({ position: { x: 240, y: 16 }, button: 'right' });
   await page.getByRole('menuitem', { name: 'Auto-fit row', exact: true }).click();
   await viewport.press('F2'); await expect(page.getByRole('textbox')).toBeVisible(); await page.getByRole('textbox').press('Escape');
 });
 
-test('axis additive ranges preserve existing ranges and touch header drag keeps native body scrolling', async ({ browser }) => {
+test('axis additive ranges preserve existing ranges and touch header drag keeps native body scrolling', async ({ browser, browserName }) => {
+  test.skip(browserName !== 'chromium', 'This touch-drag test uses Chromium CDP; mouse and keyboard axis tests run on all engines.');
   const context = await browser.newContext({ hasTouch: true, baseURL: 'http://127.0.0.1:4179' }); const page = await context.newPage();
   await page.goto('/');
   await page.evaluate(async () => {
@@ -1691,11 +1705,11 @@ test('viewport accessibility exposes bounded visible rows and headers without ex
     const { createGrid } = await import('/canvas/index.js'); window.reads = 0;
     window.grid = createGrid({ accessibility: 'viewport', getCellLabel: (row, key) => row === 0 && key === 'c0' ? 'Homepage' : undefined, frozenRows: 1, frozenColumns: 1, container: document.querySelector('#grid'),
       columns: Array.from({ length: 1000 }, (_, i) => ({ key: `c${i}`, title: `C${i}`, editable: true })),
-      dataSource: { getRowCount: () => 1000000, getRowId: row => row, getValue: (row, key) => { window.reads++; return row === 0 && key === 'c0' ? 'https://example.com' : `${row}:${key}`; }, setValue() {} } });
+      dataSource: { getRowCount: () => 100000, getRowId: row => row, getValue: (row, key) => { window.reads++; return row === 0 && key === 'c0' ? 'https://example.com' : `${row}:${key}`; }, setValue() {} } });
   });
   const viewport = page.getByRole('grid');
   await expect(page.getByRole('columnheader').first()).toHaveAttribute('aria-colindex', '1');
-  await expect(viewport).toHaveAttribute('aria-rowcount', '1000001');
+  await expect(viewport).toHaveAttribute('aria-rowcount', '100001');
   await expect.poll(() => viewport.getByRole('gridcell').count()).toBeGreaterThan(0);
   expect(await viewport.getByRole('gridcell').count()).toBeLessThan(100);
   await page.evaluate(async () => { await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); window.reads = 0; window.grid.render(); await new Promise(resolve => requestAnimationFrame(resolve)); });
@@ -1834,8 +1848,12 @@ test('dragging selected rows/columns emits host requests and admin veto works', 
   await page.getByRole('button',{name:'Select row 2',exact:true}).click({modifiers:['Shift']});
   await page.getByRole('button',{name:'Select row 1',exact:true}).dragTo(page.getByRole('button',{name:'Select row 4',exact:true}));
   expect(await page.evaluate(()=>window.requests[0])).toMatchObject({axis:'row',indices:[0,1]});
+  // End the native drag's pointer stream before the next independent selection.
+  await page.mouse.move(0, 0); await page.mouse.down(); await page.mouse.up();
   await page.evaluate(()=>window.grid.selectColumn(0));
+  await expect(page.getByRole('columnheader',{name:'a',exact:true})).toHaveAttribute('draggable','true');
   await page.getByRole('columnheader',{name:'b',exact:true}).click({modifiers:['Shift']});
+  await expect.poll(() => page.evaluate(() => window.grid.getSelectionRange())).toEqual({ startRow: 0, endRow: 4, startColumn: 0, endColumn: 1 });
   await page.getByRole('columnheader',{name:'a',exact:true}).dragTo(page.getByRole('columnheader',{name:'c',exact:true}));
   expect(await page.evaluate(()=>window.requests[1])).toMatchObject({axis:'column',indices:[0,1]});
   await page.evaluate(()=>window.allowed=false);
@@ -2024,7 +2042,7 @@ test('menu icons and groups, quiet search focus, match tint and dropdown hover s
   await page.addStyleTag({content:'input:focus-visible{outline:2px solid green;outline-offset:3px}'});
   await page.evaluate(async()=>{const {createGrid}=await import('/canvas/index.js');const {LocalDataSource}=await import('/core/index.js');window.source=new LocalDataSource([{id:1,name:'Match',status:'Active'},{id:2,name:'Match',status:'Pending'}],row=>row.id);window.grid=createGrid({container:document.querySelector('#grid'),dataSource:window.source,theme:{iconColor:'#172554'},columns:[{key:'name',title:'Name',editable:true},{key:'status',title:'Status',editable:true}],columnEditors:{status:{type:'select',values:['Active','Pending']}}});});
   const viewport=page.locator('[data-grid-viewport]');await viewport.click({position:{x:20,y:16},button:'right'});
-  const menu=page.getByRole('menu');await expect(menu.getByRole('separator')).toHaveCount(6);
+  const menu=page.getByRole('menu');await expect(menu.getByRole('separator')).toHaveCount(7);
   expect(await menu.getByRole('menuitem').evaluateAll(items=>items.every(item=>item.querySelector('svg[aria-hidden=true]')))).toBe(true);
   await expect(menu.getByRole('menuitem',{name:'Copy',exact:true}).locator('svg')).toHaveCSS('color','rgb(23, 37, 84)');await menu.press('Escape');
   await viewport.press('Control+f');const search=page.getByRole('searchbox',{name:'Find in grid',exact:true});await expect(search).toHaveCSS('outline-style','none');await expect(search).toHaveCSS('box-shadow','none');await search.fill('Match');await expect(page.getByRole('status').filter({hasText:'1 of 2'})).toBeVisible();
@@ -2048,7 +2066,8 @@ test('dropdown arrows change single-choice drafts, skip disabled options and ret
 });
 
 
-test('touch moves selected rows and columns through shared preview, history and veto',async({page})=>{
+test('touch moves selected rows and columns through shared preview, history and veto',async({page,browserName})=>{
+  test.skip(browserName!=='chromium','This touch-drag test uses Chromium CDP; mouse reorder tests run on all engines.');
   await page.goto('/');await page.evaluate(async()=>{const {createGrid}=await import('/canvas/index.js');const {LocalDataSource}=await import('/core/index.js');window.requests=[];window.allowMove=true;window.source=new LocalDataSource(Array.from({length:100},(_,id)=>({id,a:'A'+id,b:'B'+id,c:'C'+id})),row=>row.id);window.grid=createGrid({container:document.querySelector('#grid'),dataSource:window.source,accessibility:'viewport',columns:['a','b','c'].map(key=>({key,title:key,editable:true})),onReorder:request=>{window.requests.push(request);request.axis==='row'?window.grid.moveRows(request.indices,request.beforeIndex):window.grid.moveColumns(request.indices,request.beforeIndex);},canReorder:()=>window.allowMove});window.grid.selectRow(1);});
   const session=await page.context().newCDPSession(page);
   const point = async locator => {

@@ -1,6 +1,21 @@
 # Changelog
 
+## Unreleased — MCP application workflow
+
+- Optional host-managed dataset revisions detect stale reads, pagination and writes while retaining per-cell expected-value checks.
+- Runnable application-owned task session over stdio, read-only by default, with bounded JSON input and controlled in-memory status writes.
+- End-to-end SDK checks and a separate real-model evaluation protocol; no browser bridge or model-quality claim.
+
 ## Unreleased
+
+- Change original Acheron source and future package distributions from MIT to Apache-2.0; ship LICENSE/NOTICE in every package. Preserve third-party notices and the license of already published 0.1.0 artifacts.
+
+- Add atomic paste special (values/formats/transpose/skip-empty), undoable hidden axes, numeric display formats and complete English/Vietnamese Canvas message packs with host overrides.
+- Add a bounded optimistic remote snapshot source with validated JSON writes, durable-server-idempotency contract, exact uncertain retry, explicit reconnect/resync and conflict adoption. Existing async paging remains read-only.
+
+- Preserve native checkbox drafts and context-menu keyboard focus in WebKit; read the current reduced-motion preference before layout animation. Extend browser CI beyond smoke coverage, keeping Chromium-only clipboard permission and CDP touch checks explicit. Add browser command task-delay benchmark evidence.
+
+- Complete the headless API behavior/export/type catalog and prevent undocumented new engine members during documentation sync. Clarify source/view coordinates, capability probes and disposal ownership; add regression checks for source write support and permission-sensitive replay.
 
 - Add verified npm develop/stable release workflows, aligned workspace version tooling, registry consumer checks, and trusted publishing setup instructions.
 

@@ -75,6 +75,33 @@ test('local batch writes validate all cells before committing, last duplicate wi
   assert.equal(rows[0].name, 'Ada');
 });
 
+test('row drafts preserve frozen snapshots and atomic failures including special own keys', () => {
+  const nested = { shared: true };
+  const source = new LocalDataSource([
+    Object.fromEntries([['id', 0], ['a', 1], ['__proto__', nested], ['constructor', 'original']]),
+    { id: 1, a: 2 },
+  ], row => row.id);
+  source.addColumns(['added']);
+  const before = [source.getRow(0).values, source.getRow(1).values];
+  const staged = [{ rowIndex: 0, columnKey: 'a', value: 3 }, { rowIndex: 0, columnKey: 'added', value: 4 }, { rowIndex: 1, columnKey: 'a', value: 5 }];
+  for (const invalid of [{ rowIndex: 1, columnKey: 'unknown', value: 0 }, { rowIndex: 2, columnKey: 'a', value: 0 }]) {
+    assert.throws(() => source.setValues([...staged, invalid]));
+    assert.equal(source.getRow(0).values, before[0]);assert.equal(source.getRow(1).values, before[1]);
+  }
+  assert.throws(() => source.setValues([...staged, { rowIndex: 0, columnKey: 'a', get value() {
+    assert.equal(source.getValue(0, 'a'), 1);assert.equal(source.getValue(1, 'a'), 2);
+    throw new Error('Draft failure');
+  } }]), /Draft failure/);
+  assert.equal(source.getRow(0).values, before[0]);assert.equal(source.getRow(1).values, before[1]);
+  source.setValues([...staged, { rowIndex: 0, columnKey: 'a', value: 9 }, { rowIndex: 0, columnKey: '__proto__', value: 'own value' }, { rowIndex: 0, columnKey: 'constructor', value: 'own constructor' }]);
+  assert.equal(source.getValue(0, 'a'), 9);assert.equal(source.getValue(1, 'a'), 5);assert.equal(source.getValue(0, 'added'), 4);
+  const after = source.getRow(0).values;
+  assert.equal(Object.getPrototypeOf(after), Object.prototype);assert.equal(Object.hasOwn(after, '__proto__'), true);
+  assert.equal(after.__proto__, 'own value');assert.equal(after.constructor, 'own constructor');assert.equal(source.getRowId(0), 0);
+  assert.equal(Object.isFrozen(after), true);assert.equal(Object.isFrozen(source.getRow(1).values), true);
+  assert.equal(before[0].a, 1);assert.equal(before[0].__proto__, nested);assert.equal(before[1].a, 2);
+});
+
 test('TSV round-trips quoted tabs, multiline values, quotes and empty fields', () => {
   const rows = [['Ada\tLovelace', 'a\r\nb', '"quote"', ''], ['雪', '', 'plain', '\n']];
   assert.deepEqual(decodeTsv(encodeTsv(rows)), rows);

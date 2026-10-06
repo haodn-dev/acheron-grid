@@ -1,0 +1,414 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-06",
+  "workload": "Same-runner local projection before/after",
+  "limitations": "Three trials per size in separate sequential processes; no isolated scaling experiment, warmup, p95, timing threshold, browser responsiveness or peak-memory claim. Baseline docs edits do not change runtime. Runtime and runner hashes identify measured content.",
+  "sourceHashes": {
+    "packages/core/src/data-source.ts": {
+      "before": "9e75d70e1f2ed778eeb5402c6c4b10ad21f85a0ce64f1d14b0ff507951c27771",
+      "after": "cc489b4469610110888f11736513700324f875377ee8754115dcecba18042f85"
+    },
+    "packages/core/src/engine.ts": {
+      "before": "4504f574b67d4ba5ad6611f26726e7c3a2b8e2d54168799cb729eabe392f421a",
+      "after": "4504f574b67d4ba5ad6611f26726e7c3a2b8e2d54168799cb729eabe392f421a"
+    },
+    "tests/benchmark-core.mjs": {
+      "before": "dc18ed098ef86d8fa2633db47e488d70c125ad5eb36c695ab5970a746411efb7",
+      "after": "dc18ed098ef86d8fa2633db47e488d70c125ad5eb36c695ab5970a746411efb7"
+    }
+  },
+  "summary": [
+    {
+      "rows": 10000,
+      "operations": {
+        "sort": {
+          "beforeMedianMs": 7.314300000000003,
+          "afterMedianMs": 4.072399999999959
+        },
+        "multiSort": {
+          "beforeMedianMs": 16.341799999999978,
+          "afterMedianMs": 11.065600000000018
+        },
+        "filter": {
+          "beforeMedianMs": 1.5534999999999854,
+          "afterMedianMs": 1.63190000000003
+        },
+        "paste100000": {
+          "beforeMedianMs": null,
+          "afterMedianMs": null
+        },
+        "undoPaste100000": {
+          "beforeMedianMs": null,
+          "afterMedianMs": null
+        }
+      }
+    },
+    {
+      "rows": 100000,
+      "operations": {
+        "sort": {
+          "beforeMedianMs": 81.34329999999994,
+          "afterMedianMs": 33.79950000000002
+        },
+        "multiSort": {
+          "beforeMedianMs": 276.92229999999995,
+          "afterMedianMs": 141.57010000000002
+        },
+        "filter": {
+          "beforeMedianMs": 19.242899999999963,
+          "afterMedianMs": 11.186199999999985
+        },
+        "paste100000": {
+          "beforeMedianMs": 166.82110000000011,
+          "afterMedianMs": 157.96460000000002
+        },
+        "undoPaste100000": {
+          "beforeMedianMs": 51.57699999999977,
+          "afterMedianMs": 59.52699999999959
+        }
+      }
+    }
+  ],
+  "before": {
+    "schemaVersion": 1,
+    "workload": "allocated local data and controlled commands",
+    "revision": "fcab797ccbed31e033c2356e87b2da181c28108b",
+    "node": "v24.13.0",
+    "platform": "win32",
+    "arch": "x64",
+    "cpu": "12th Gen Intel(R) Core(TM) i5-12400F",
+    "logicalProcessors": 12,
+    "totalMemoryBytes": 34196869120,
+    "gcEnabled": true,
+    "memoryNote": "Retained heap delta includes live fixture, source, views and oracle after optional GC; not peak memory or a leak measurement.",
+    "runs": [
+      {
+        "rowCount": 10000,
+        "repeat": 0,
+        "timings": {
+          "constructSource": 1.595799999999997,
+          "sort": 15.761600000000001,
+          "multiSort": 17.876500000000007,
+          "filter": 1.8045000000000186,
+          "constructEngine": 0.6899000000000228,
+          "captureRowIdentity": 0.4759999999999991,
+          "batch1000": 3.8911999999999978,
+          "undo1000": 2.232399999999984,
+          "redo1000": 1.1225000000000023,
+          "batch10000": 20.24109999999999,
+          "undo10000": 7.687099999999987,
+          "redo10000": 8.660699999999991,
+          "paste10000": 29.292699999999996,
+          "undoPaste10000": 4.616800000000012,
+          "veto10000": 4.111199999999997,
+          "refreshValues": 0.8708999999999776,
+          "exportState": 0.594399999999979,
+          "restoreState": 3.681299999999993
+        },
+        "retainedHeapDeltaBytes": 2075208
+      },
+      {
+        "rowCount": 10000,
+        "repeat": 1,
+        "timings": {
+          "constructSource": 1.2157000000000266,
+          "sort": 6.505299999999977,
+          "multiSort": 16.341799999999978,
+          "filter": 1.3651000000000408,
+          "constructEngine": 0.12150000000002592,
+          "captureRowIdentity": 0.7004999999999768,
+          "batch1000": 1.691599999999994,
+          "undo1000": 1.073500000000024,
+          "redo1000": 0.9560999999999922,
+          "batch10000": 16.88130000000001,
+          "undo10000": 7.695099999999968,
+          "redo10000": 8.755100000000027,
+          "paste10000": 18.43289999999996,
+          "undoPaste10000": 4.064300000000003,
+          "veto10000": 2.720899999999972,
+          "refreshValues": 0.46109999999998763,
+          "exportState": 0.43590000000000373,
+          "restoreState": 2.110299999999995
+        },
+        "retainedHeapDeltaBytes": -523104
+      },
+      {
+        "rowCount": 10000,
+        "repeat": 2,
+        "timings": {
+          "constructSource": 1.7043999999999642,
+          "sort": 7.314300000000003,
+          "multiSort": 16.224499999999978,
+          "filter": 1.5534999999999854,
+          "constructEngine": 0.165300000000002,
+          "captureRowIdentity": 0.5251999999999839,
+          "batch1000": 1.1551000000000045,
+          "undo1000": 0.7977000000000203,
+          "redo1000": 0.8639999999999759,
+          "batch10000": 15.586400000000026,
+          "undo10000": 7.188500000000033,
+          "redo10000": 5.475999999999999,
+          "paste10000": 18.938600000000008,
+          "undoPaste10000": 8.059799999999996,
+          "veto10000": 3.5670000000000073,
+          "refreshValues": 0.4634999999999536,
+          "exportState": 0.5052000000000021,
+          "restoreState": 2.412499999999966
+        },
+        "retainedHeapDeltaBytes": -762568
+      },
+      {
+        "rowCount": 100000,
+        "repeat": 0,
+        "timings": {
+          "constructSource": 10.444900000000018,
+          "sort": 81.34329999999994,
+          "multiSort": 288.8917,
+          "filter": 17.342300000000023,
+          "constructEngine": 0.13750000000004547,
+          "captureRowIdentity": 3.5249000000000024,
+          "batch1000": 1.792100000000005,
+          "undo1000": 0.8650000000000091,
+          "redo1000": 0.7572000000000116,
+          "batch10000": 11.850900000000024,
+          "undo10000": 7.201399999999921,
+          "redo10000": 7.241999999999962,
+          "paste10000": 24.47469999999987,
+          "undoPaste10000": 4.68730000000005,
+          "paste100000": 166.82110000000011,
+          "undoPaste100000": 49.70159999999987,
+          "veto10000": 6.5896000000000186,
+          "refreshValues": 7.667700000000195,
+          "exportState": 4.776399999999967,
+          "restoreState": 16.894900000000007
+        },
+        "retainedHeapDeltaBytes": 9298640
+      },
+      {
+        "rowCount": 100000,
+        "repeat": 1,
+        "timings": {
+          "constructSource": 11.112899999999854,
+          "sort": 80.9031,
+          "multiSort": 276.92229999999995,
+          "filter": 19.242899999999963,
+          "constructEngine": 0.13799999999991996,
+          "captureRowIdentity": 4.386899999999969,
+          "batch1000": 1.2443000000000666,
+          "undo1000": 0.8093999999998687,
+          "redo1000": 0.7281000000000404,
+          "batch10000": 16.09999999999991,
+          "undo10000": 10.423800000000028,
+          "redo10000": 11.219900000000052,
+          "paste10000": 17.255100000000084,
+          "undoPaste10000": 5.348799999999983,
+          "paste100000": 163.0084999999999,
+          "undoPaste100000": 58.14850000000001,
+          "veto10000": 2.7445000000002437,
+          "refreshValues": 4.85129999999981,
+          "exportState": 5.797399999999925,
+          "restoreState": 16.291000000000167
+        },
+        "retainedHeapDeltaBytes": -8701768
+      },
+      {
+        "rowCount": 100000,
+        "repeat": 2,
+        "timings": {
+          "constructSource": 10.233500000000276,
+          "sort": 86.54390000000012,
+          "multiSort": 267.02970000000005,
+          "filter": 19.84019999999964,
+          "constructEngine": 0.04959999999982756,
+          "captureRowIdentity": 3.630999999999858,
+          "batch1000": 0.9661999999998443,
+          "undo1000": 0.5317999999997483,
+          "redo1000": 0.5169000000000779,
+          "batch10000": 8.785100000000057,
+          "undo10000": 4.467599999999948,
+          "redo10000": 4.051200000000335,
+          "paste10000": 16.0616,
+          "undoPaste10000": 5.940200000000004,
+          "paste100000": 184.04570000000012,
+          "undoPaste100000": 51.57699999999977,
+          "veto10000": 3.470600000000104,
+          "refreshValues": 4.506000000000313,
+          "exportState": 4.883499999999913,
+          "restoreState": 16.897100000000137
+        },
+        "retainedHeapDeltaBytes": -8813608
+      }
+    ]
+  },
+  "after": {
+    "schemaVersion": 1,
+    "workload": "allocated local data and controlled commands",
+    "revision": "53835be519f94a5c972bac9d9014328d7f751755",
+    "node": "v24.13.0",
+    "platform": "win32",
+    "arch": "x64",
+    "cpu": "12th Gen Intel(R) Core(TM) i5-12400F",
+    "logicalProcessors": 12,
+    "totalMemoryBytes": 34196869120,
+    "gcEnabled": true,
+    "memoryNote": "Retained heap delta includes live fixture, source, views and oracle after optional GC; not peak memory or a leak measurement.",
+    "runs": [
+      {
+        "rowCount": 10000,
+        "repeat": 0,
+        "timings": {
+          "constructSource": 1.4954999999999927,
+          "sort": 11.2864,
+          "multiSort": 12.982100000000003,
+          "filter": 1.891399999999976,
+          "constructEngine": 0.7102000000000146,
+          "captureRowIdentity": 0.4947999999999979,
+          "batch1000": 3.968500000000006,
+          "undo1000": 2.42319999999998,
+          "redo1000": 0.8769999999999811,
+          "batch10000": 22.255899999999997,
+          "undo10000": 8.292100000000005,
+          "redo10000": 7.358200000000011,
+          "paste10000": 29.6935,
+          "undoPaste10000": 5.295000000000016,
+          "veto10000": 4.6351999999999975,
+          "refreshValues": 0.9547000000000025,
+          "exportState": 0.5882000000000005,
+          "restoreState": 4.020899999999983
+        },
+        "retainedHeapDeltaBytes": 2089088
+      },
+      {
+        "rowCount": 10000,
+        "repeat": 1,
+        "timings": {
+          "constructSource": 1.2069999999999936,
+          "sort": 3.5670000000000073,
+          "multiSort": 11.060099999999977,
+          "filter": 1.3451000000000022,
+          "constructEngine": 0.11679999999995516,
+          "captureRowIdentity": 0.39910000000003265,
+          "batch1000": 1.3987000000000194,
+          "undo1000": 0.9031999999999698,
+          "redo1000": 0.9010999999999854,
+          "batch10000": 12.266500000000008,
+          "undo10000": 7.663100000000043,
+          "redo10000": 7.0020000000000095,
+          "paste10000": 15.606400000000008,
+          "undoPaste10000": 5.467000000000041,
+          "veto10000": 2.971400000000017,
+          "refreshValues": 0.4782999999999902,
+          "exportState": 0.4479000000000042,
+          "restoreState": 2.0378000000000043
+        },
+        "retainedHeapDeltaBytes": -756584
+      },
+      {
+        "rowCount": 10000,
+        "repeat": 2,
+        "timings": {
+          "constructSource": 1.6720000000000255,
+          "sort": 4.072399999999959,
+          "multiSort": 11.065600000000018,
+          "filter": 1.63190000000003,
+          "constructEngine": 0.1630999999999858,
+          "captureRowIdentity": 0.8192999999999984,
+          "batch1000": 1.2169000000000096,
+          "undo1000": 0.7804999999999609,
+          "redo1000": 0.7324999999999591,
+          "batch10000": 12.218099999999993,
+          "undo10000": 11.896599999999978,
+          "redo10000": 8.8596,
+          "paste10000": 23.199599999999975,
+          "undoPaste10000": 6.792200000000037,
+          "veto10000": 2.9937999999999647,
+          "refreshValues": 0.7937999999999761,
+          "exportState": 0.46399999999999864,
+          "restoreState": 2.7655999999999494
+        },
+        "retainedHeapDeltaBytes": -821248
+      },
+      {
+        "rowCount": 100000,
+        "repeat": 0,
+        "timings": {
+          "constructSource": 9.761500000000012,
+          "sort": 33.79950000000002,
+          "multiSort": 141.57010000000002,
+          "filter": 11.186199999999985,
+          "constructEngine": 0.14170000000001437,
+          "captureRowIdentity": 3.7620000000000573,
+          "batch1000": 0.8211999999999762,
+          "undo1000": 0.5592000000000326,
+          "redo1000": 6.654599999999959,
+          "batch10000": 8.160300000000007,
+          "undo10000": 6.241899999999987,
+          "redo10000": 7.133299999999963,
+          "paste10000": 19.235200000000077,
+          "undoPaste10000": 4.23479999999995,
+          "paste100000": 164.8052,
+          "undoPaste100000": 81.5462,
+          "veto10000": 3.5358000000001084,
+          "refreshValues": 4.339199999999892,
+          "exportState": 4.712600000000066,
+          "restoreState": 16.55359999999996
+        },
+        "retainedHeapDeltaBytes": 9004704
+      },
+      {
+        "rowCount": 100000,
+        "repeat": 1,
+        "timings": {
+          "constructSource": 11.007500000000164,
+          "sort": 35.54520000000002,
+          "multiSort": 145.2727,
+          "filter": 11.968399999999974,
+          "constructEngine": 0.15679999999997563,
+          "captureRowIdentity": 3.6422999999999774,
+          "batch1000": 1.2097999999998592,
+          "undo1000": 1.014699999999948,
+          "redo1000": 0.5307999999999993,
+          "batch10000": 13.730000000000018,
+          "undo10000": 5.7771999999999935,
+          "redo10000": 10.596900000000005,
+          "paste10000": 13.819000000000187,
+          "undoPaste10000": 4.189100000000053,
+          "paste100000": 157.96460000000002,
+          "undoPaste100000": 49.36000000000013,
+          "veto10000": 6.804399999999987,
+          "refreshValues": 4.120499999999993,
+          "exportState": 3.6240999999999985,
+          "restoreState": 16.879899999999907
+        },
+        "retainedHeapDeltaBytes": -8711688
+      },
+      {
+        "rowCount": 100000,
+        "repeat": 2,
+        "timings": {
+          "constructSource": 9.846300000000156,
+          "sort": 33.02819999999997,
+          "multiSort": 138.66969999999992,
+          "filter": 10.661799999999857,
+          "constructEngine": 0.04359999999996944,
+          "captureRowIdentity": 3.438899999999876,
+          "batch1000": 1.1436999999998534,
+          "undo1000": 0.7636999999999716,
+          "redo1000": 0.7066000000002077,
+          "batch10000": 11.334100000000035,
+          "undo10000": 11.747299999999996,
+          "redo10000": 7.608699999999999,
+          "paste10000": 22.30639999999994,
+          "undoPaste10000": 8.461499999999887,
+          "paste100000": 156.8127999999997,
+          "undoPaste100000": 59.52699999999959,
+          "veto10000": 2.857300000000123,
+          "refreshValues": 4.146199999999681,
+          "exportState": 3.8440999999997985,
+          "restoreState": 15.953100000000177
+        },
+        "retainedHeapDeltaBytes": -8787416
+      }
+    ]
+  }
+}

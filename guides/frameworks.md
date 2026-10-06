@@ -4,7 +4,7 @@ Lifecycle adapters are separate packages; core remains framework-independent. Ve
 
 ## React
 
-React lifecycle adapter for the Acheron Grid Canvas renderer. MIT licensed. Version 0.1.0 is available on npm as an experimental development preview.
+React lifecycle adapter for the Acheron Grid Canvas renderer. Current source is Apache-2.0 licensed; published npm 0.1.0 retains MIT. Version 0.1.0 is available on npm as an experimental development preview.
 
 ### Usage
 
@@ -42,7 +42,7 @@ Tested with React/React DOM 19.1.0 and React 18-compatible type declarations; th
 
 ## Vue
 
-Vue 3 lifecycle adapter for the Acheron Grid Canvas renderer. MIT licensed. Version 0.1.0 is available on npm as an experimental development preview.
+Vue 3 lifecycle adapter for the Acheron Grid Canvas renderer. Current source is Apache-2.0 licensed; published npm 0.1.0 retains MIT. Version 0.1.0 is available on npm as an experimental development preview.
 
 ### Usage
 

@@ -1,6 +1,6 @@
 # @acheron-grid/export
 
-Optional, free MIT-licensed CSV and XLSX selection export. Unreleased source preview; this package is not yet on npm. It uses public core APIs and requires no browser globals. The host owns saving/downloading the returned text or bytes.
+Optional, free Apache-2.0-licensed CSV and XLSX selection export. Unreleased source preview; this package is not yet on npm. It uses public core APIs and requires no browser globals. The host owns saving/downloading the returned text or bytes.
 
 ## Installation and complete example
 

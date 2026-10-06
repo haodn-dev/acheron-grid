@@ -9,6 +9,8 @@ export interface GridState {
   readonly rowIds: readonly RowId[];
   readonly rowHeights: readonly (readonly [number,number])[];
   readonly manualRows: readonly number[];
+  readonly hiddenRows?: readonly number[];
+  readonly hiddenColumns?: readonly number[];
   readonly ranges: readonly SelectionRange[];
   readonly selection: Readonly<CellSelection> | null;
   readonly anchor: Readonly<CellSelection> | null;

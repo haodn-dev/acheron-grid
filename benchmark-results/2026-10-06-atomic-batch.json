@@ -1,0 +1,277 @@
+{
+  "revision": "929b6ad",
+  "baseline": "9095449",
+  "limitations": "Three trials per shape; 100k cells, different row counts; no warmup, p95, FPS or peak memory claim.",
+  "before": {
+    "stats": {
+      "startTime": "2026-10-06T07:09:51.522Z",
+      "duration": 8055.242,
+      "expected": 1,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "raw": [
+      {
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+        "devicePixelRatio": 1,
+        "runs": [
+          {
+            "rowCount": 100000,
+            "columnCount": 1,
+            "cells": 100000,
+            "trial": 0,
+            "timings": {
+              "setValues": 16.5,
+              "updateCells": 101.79999999701977,
+              "undoBatch": 54.399999998509884,
+              "paste": 156.60000000149012,
+              "undoPaste": 54.29999999701977
+            }
+          },
+          {
+            "rowCount": 100000,
+            "columnCount": 1,
+            "cells": 100000,
+            "trial": 1,
+            "timings": {
+              "setValues": 18.5,
+              "updateCells": 81.5,
+              "undoBatch": 54.79999999701977,
+              "paste": 133.60000000149012,
+              "undoPaste": 50.19999999925494
+            }
+          },
+          {
+            "rowCount": 100000,
+            "columnCount": 1,
+            "cells": 100000,
+            "trial": 2,
+            "timings": {
+              "setValues": 9,
+              "updateCells": 78.89999999850988,
+              "undoBatch": 55,
+              "paste": 191.19999999925494,
+              "undoPaste": 56.399999998509884
+            }
+          },
+          {
+            "rowCount": 10000,
+            "columnCount": 10,
+            "cells": 100000,
+            "trial": 0,
+            "timings": {
+              "setValues": 8.800000000745058,
+              "updateCells": 83.69999999925494,
+              "undoBatch": 54,
+              "paste": 141.60000000149012,
+              "undoPaste": 48.5
+            }
+          },
+          {
+            "rowCount": 10000,
+            "columnCount": 10,
+            "cells": 100000,
+            "trial": 1,
+            "timings": {
+              "setValues": 8.399999998509884,
+              "updateCells": 78.20000000298023,
+              "undoBatch": 53,
+              "paste": 142.80000000074506,
+              "undoPaste": 47.899999998509884
+            }
+          },
+          {
+            "rowCount": 10000,
+            "columnCount": 10,
+            "cells": 100000,
+            "trial": 2,
+            "timings": {
+              "setValues": 8.5,
+              "updateCells": 77,
+              "undoBatch": 49.100000001490116,
+              "paste": 152.5,
+              "undoPaste": 52.19999999925494
+            }
+          },
+          {
+            "rowCount": 1000,
+            "columnCount": 100,
+            "cells": 100000,
+            "trial": 0,
+            "timings": {
+              "setValues": 24.300000000745058,
+              "updateCells": 99.30000000074506,
+              "undoBatch": 65.69999999925494,
+              "paste": 165.59999999776483,
+              "undoPaste": 77.30000000074506
+            }
+          },
+          {
+            "rowCount": 1000,
+            "columnCount": 100,
+            "cells": 100000,
+            "trial": 1,
+            "timings": {
+              "setValues": 23.100000001490116,
+              "updateCells": 94.80000000074506,
+              "undoBatch": 61.399999998509884,
+              "paste": 159.69999999925494,
+              "undoPaste": 67.40000000223517
+            }
+          },
+          {
+            "rowCount": 1000,
+            "columnCount": 100,
+            "cells": 100000,
+            "trial": 2,
+            "timings": {
+              "setValues": 24.300000000745058,
+              "updateCells": 92,
+              "undoBatch": 58.599999997764826,
+              "paste": 146.89999999850988,
+              "undoPaste": 62.099999997764826
+            }
+          }
+        ],
+        "limitations": "Three sequential trials per shape, 100k cells; headless CPU wall time, no warmup, timing threshold, frame cadence or peak-memory claim. Shapes differ in row count and cannot isolate width scaling."
+      }
+    ]
+  },
+  "after": {
+    "stats": {
+      "startTime": "2026-10-06T07:13:39.469Z",
+      "duration": 7159.388999999999,
+      "expected": 1,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "raw": [
+      {
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+        "devicePixelRatio": 1,
+        "runs": [
+          {
+            "rowCount": 100000,
+            "columnCount": 1,
+            "cells": 100000,
+            "trial": 0,
+            "timings": {
+              "setValues": 17.699999999254942,
+              "updateCells": 101.19999999925494,
+              "undoBatch": 59.30000000074506,
+              "paste": 148.5,
+              "undoPaste": 54.399999998509884
+            }
+          },
+          {
+            "rowCount": 100000,
+            "columnCount": 1,
+            "cells": 100000,
+            "trial": 1,
+            "timings": {
+              "setValues": 15.300000000745058,
+              "updateCells": 83.70000000298023,
+              "undoBatch": 50.100000001490116,
+              "paste": 148.10000000149012,
+              "undoPaste": 52.600000001490116
+            }
+          },
+          {
+            "rowCount": 100000,
+            "columnCount": 1,
+            "cells": 100000,
+            "trial": 2,
+            "timings": {
+              "setValues": 10.300000000745058,
+              "updateCells": 64.90000000223517,
+              "undoBatch": 48.20000000298023,
+              "paste": 150.69999999925494,
+              "undoPaste": 58.19999999925494
+            }
+          },
+          {
+            "rowCount": 10000,
+            "columnCount": 10,
+            "cells": 100000,
+            "trial": 0,
+            "timings": {
+              "setValues": 11.5,
+              "updateCells": 78.89999999850988,
+              "undoBatch": 47.399999998509884,
+              "paste": 130.69999999925494,
+              "undoPaste": 46.899999998509884
+            }
+          },
+          {
+            "rowCount": 10000,
+            "columnCount": 10,
+            "cells": 100000,
+            "trial": 1,
+            "timings": {
+              "setValues": 7.5,
+              "updateCells": 72.30000000074506,
+              "undoBatch": 45.19999999925494,
+              "paste": 148.70000000298023,
+              "undoPaste": 44.099999997764826
+            }
+          },
+          {
+            "rowCount": 10000,
+            "columnCount": 10,
+            "cells": 100000,
+            "trial": 2,
+            "timings": {
+              "setValues": 8.099999997764826,
+              "updateCells": 64,
+              "undoBatch": 46.100000001490116,
+              "paste": 114,
+              "undoPaste": 43.5
+            }
+          },
+          {
+            "rowCount": 1000,
+            "columnCount": 100,
+            "cells": 100000,
+            "trial": 0,
+            "timings": {
+              "setValues": 9.5,
+              "updateCells": 92.69999999925494,
+              "undoBatch": 50.69999999925494,
+              "paste": 120.5,
+              "undoPaste": 61.899999998509884
+            }
+          },
+          {
+            "rowCount": 1000,
+            "columnCount": 100,
+            "cells": 100000,
+            "trial": 1,
+            "timings": {
+              "setValues": 10.200000002980232,
+              "updateCells": 76.5,
+              "undoBatch": 62.599999997764826,
+              "paste": 136.80000000074506,
+              "undoPaste": 52.599999997764826
+            }
+          },
+          {
+            "rowCount": 1000,
+            "columnCount": 100,
+            "cells": 100000,
+            "trial": 2,
+            "timings": {
+              "setValues": 10.099999997764826,
+              "updateCells": 76,
+              "undoBatch": 51.5,
+              "paste": 123.59999999776483,
+              "undoPaste": 47.899999998509884
+            }
+          }
+        ],
+        "limitations": "Three sequential trials per shape, 100k cells; headless CPU wall time, no warmup, timing threshold, frame cadence or peak-memory claim. Shapes differ in row count and cannot isolate width scaling."
+      }
+    ]
+  }
+}

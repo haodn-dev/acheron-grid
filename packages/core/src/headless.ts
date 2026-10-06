@@ -3,10 +3,12 @@ export type { GridEngine, GridEngineOptions, GridInvalidation } from './engine.j
 export { LocalDataSource, LocalDataView } from './data-source.js';
 export { createAsyncDataSource } from './async-data-source.js';
 export { createLiveDataSource } from './live-data-source.js';
+export { createRemoteDataSource } from './remote-data-source.js';
+export type { RemoteDataSourceOptions, RemoteSnapshot, RemoteChange, RemoteMutation, RemoteWriteResult, RemoteStatus } from './remote-data-source.js';
 export type { LiveUpdate, LiveSnapshot } from './live-data-source.js';
 export type { AsyncDataSourceOptions, PageState } from './async-data-source.js';
 export type { DataSource, CellUpdate, RowId, LocalViewOptions, DataRow, RowSplice } from './data-source.js';
-export type { Column, CellSelection, SelectionRange, CellLockTarget, CellFormatTarget, CellFormat, CellFormatPatch } from './types.js';
+export type { Column, CellSelection, SelectionRange, CellLockTarget, CellFormatTarget, CellFormat, CellFormatPatch, NumberFormat, PasteOptions } from './types.js';
 export type { CellPermission, CellPermissionPolicy, CellPermissionResolver } from './permissions.js';
 export type { GridEvent, GridChangeSource } from './events.js';
 export type { ViewportOptions, ViewportLayout, ViewportRegion, ViewportRect } from './panes.js';

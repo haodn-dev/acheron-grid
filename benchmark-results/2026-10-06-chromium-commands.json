@@ -1,0 +1,105 @@
+{
+  "revision": "72e4dee51bf561e0832bcaeda1a7549f483fea73",
+  "browserName": "chromium",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+  "devicePixelRatio": 1,
+  "rows": 100000,
+  "trials": 3,
+  "supportsLongTasks": true,
+  "samples": [
+    {
+      "name": "multiSort100k",
+      "start": 95.30000000074506,
+      "end": 351.5,
+      "ms": 256.19999999925494,
+      "timerDelayMs": 256.6000000014901
+    },
+    {
+      "name": "paste100k",
+      "start": 486.1000000014901,
+      "end": 650.6999999992549,
+      "ms": 164.59999999776483,
+      "timerDelayMs": 164.59999999776483
+    },
+    {
+      "name": "undoPaste100k",
+      "start": 652.6000000014901,
+      "end": 746,
+      "ms": 93.39999999850988,
+      "timerDelayMs": 93.69999999925494
+    },
+    {
+      "name": "multiSort100k",
+      "start": 770.3000000007451,
+      "end": 1012.1000000014901,
+      "ms": 241.80000000074506,
+      "timerDelayMs": 241.89999999850988
+    },
+    {
+      "name": "paste100k",
+      "start": 1148.699999999255,
+      "end": 1287.1000000014901,
+      "ms": 138.40000000223517,
+      "timerDelayMs": 138.5
+    },
+    {
+      "name": "undoPaste100k",
+      "start": 1293.199999999255,
+      "end": 1338.300000000745,
+      "ms": 45.100000001490116,
+      "timerDelayMs": 45.100000001490116
+    },
+    {
+      "name": "multiSort100k",
+      "start": 1359.9000000022352,
+      "end": 1604.699999999255,
+      "ms": 244.79999999701977,
+      "timerDelayMs": 245
+    },
+    {
+      "name": "paste100k",
+      "start": 1748.9000000022352,
+      "end": 1872.1000000014901,
+      "ms": 123.19999999925494,
+      "timerDelayMs": 123.39999999850988
+    },
+    {
+      "name": "undoPaste100k",
+      "start": 1878.699999999255,
+      "end": 1928.300000000745,
+      "ms": 49.600000001490116,
+      "timerDelayMs": 49.70000000298023
+    }
+  ],
+  "operationLongTasks": [
+    {
+      "start": 95.19999999925494,
+      "ms": 256
+    },
+    {
+      "start": 486.1000000014901,
+      "ms": 164
+    },
+    {
+      "start": 652.6000000014901,
+      "ms": 93
+    },
+    {
+      "start": 770.3000000007451,
+      "ms": 241
+    },
+    {
+      "start": 1148.6000000014901,
+      "ms": 138
+    },
+    {
+      "start": 1359.9000000022352,
+      "ms": 244
+    },
+    {
+      "start": 1748.9000000022352,
+      "ms": 123
+    }
+  ],
+  "limitations": "Headless CPU wall time and zero-delay timer latency, including scheduling overhead. Long-task entries may include work outside an operation. No Canvas, FPS, GPU or peak memory; no warmup or timing threshold."
+}

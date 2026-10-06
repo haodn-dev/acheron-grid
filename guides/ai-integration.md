@@ -2,6 +2,8 @@
 
 ## Read first
 
+Unreleased source now includes a runnable [application-owned MCP task session](../examples/mcp/README.md) and optional host-managed dataset revisions. The session defaults to read-only, loads bounded JSON, and supports authorized status writes with read-back and stale-revision rejection. It does not connect to browser data or provide durable persistence. Its executable checks test protocol behavior; real-model evaluation remains separate and no model-quality score is claimed.
+
 Read [getting-started.md](getting-started.md), then the package README files and exported TypeScript types in the version being integrated. Acheron Grid is an experimental preview; all six packages have version 0.1.0 on npm; APIs remain experimental. Read-only async paging is implemented; do not infer async writes or server-wide local queries. React and Vue adapters are implemented; read their package references for the exact contract.
 
 ## Architecture
@@ -43,4 +45,7 @@ Capture row identities before source structure changes and call `refreshData(pre
 
 Remote choices use `loadOptions`; external editor UI uses `onEditorMount` with cleanup. Metadata uses host-owned `linkPreview.load`; `allowMetadata: false` disables requests. Canvas projection is not a general HTML sanitizer. Blob images require host uploads for durable use.
 
-MCP provides host-authorized schema/reads and optional scalar writes, not an automatic browser bridge or complete agent dataset API. Formulas, pivots, workbooks, realtime collaboration and async writes remain outside scope. Optional charts/export, multi-column sorting, live sources, query snapshots and find/replace are implemented in Source preview, outside npm 0.1.0. Select the matching documentation channel before using them. Chromium automation does not prove complete browser, accessibility, physical touch, frame-rate or peak-memory support.
+MCP provides host-authorized schema/reads and optional scalar writes, not an automatic browser bridge or complete agent dataset API. Formulas, pivots, workbooks, realtime collaboration remain outside scope. Optional charts/export, multi-column sorting, live sources, query snapshots, find/replace, paste special, hidden axes, number formats, Canvas localization and bounded remote snapshot writes are implemented in Source preview, outside npm 0.1.0. Select the matching documentation channel before using them. Chromium automation does not prove complete browser, accessibility, physical touch, frame-rate or peak-memory support.
+
+
+For source-only optimistic remote writes, reconnect/resync and explicit conflicts, follow the [editing and remote contract](editing-and-remote.md). Async page sources remain read-only; the host server must implement atomic revision checks, authorization and durable mutation deduplication.

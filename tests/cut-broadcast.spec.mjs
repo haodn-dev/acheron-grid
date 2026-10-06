@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './browser-fixtures.mjs';
 async function setup(page) {
  await page.goto('/');await page.evaluate(async()=>{
   const {createGrid}=await import('/canvas/index.js');const {LocalDataSource}=await import('/core/index.js');
@@ -32,7 +32,8 @@ test('Escape cancels pending cut and blocked paste never deletes the source',asy
  expect(await page.evaluate(()=>window.source.getValue(0,'a'))).toBe('First');
 });
 
-test('Ctrl+X and Ctrl+V move through the browser clipboard',async({page,context})=>{
+test('Ctrl+X and Ctrl+V move through the browser clipboard',async({page,context,browserName})=>{
+ test.skip(browserName!=='chromium','Playwright clipboard permission grants are Chromium-only; synthetic clipboard tests run on all engines.');
  await context.grantPermissions(['clipboard-read','clipboard-write']);await setup(page);const viewport=page.getByRole('grid');
  await viewport.press('Control+x');await expect.poll(()=>page.evaluate(()=>navigator.clipboard.readText())).toBe('First');
  await viewport.click({position:{x:170,y:45}});await viewport.press('Control+v');
