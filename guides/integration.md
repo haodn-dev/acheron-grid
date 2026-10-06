@@ -227,6 +227,8 @@ Use grid commands for edits that belong in history. After external value changes
 
 `createAsyncDataSource` is a synchronous cache with explicit `loadPage(offset)` and inclusive `loadRange(first,last)`. Load the first page to discover total before mounting; the host coordinates visible rows, loading/errors/retry and refresh. `maxPages` bounds successful pages and recent error states separately, not concurrent requests.
 
+Source preview additionally bounds unresolved loaders with `maxConcurrentLoads` (default 4) and queued/running pages with `maxPendingLoads` (default 100). Changing totals invalidate older cached positional pages. The host must keep page responses consistent within a dataset revision and reset the query after identity/order changes, even when total is unchanged. See the [core contracts and limits](/reference/core#core-contracts-and-practical-limits).
+
 Unloaded values are `undefined`; default IDs are positions within one query. Reset the source and refresh without old identity state after a new server query. Local views see cached values, not all server rows. There is no async setter, optimistic save queue or persistent undo. Destroy the source separately from the grid. See the [core recipe](/reference/core#async-pages-and-cancellation).
 
 ## Remote choices and external editors

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Core accepts atomic batch-only sources for editing, discards collapsed groups moved across frozen boundaries during identity refresh, and bounds projected selection/clipboard fragmentation. Collapsed frozen-row counts are cached between state changes.
+- Async page totals invalidate older positional caches; empty pages beyond a shrinking total update the count and remain reloadable, with range capacity checked before admission. Host dataset revision consistency remains required.
+- Consumer documentation now includes the complete core contract/limit matrix, an executable lifecycle example and independent source/release document revisions on the website.
+
 - Harden CSV controls/full-width formula prefixes and anonymous image loading in details/previews. Document host security boundaries and update the build dependency fixing its Windows development-server advisory.
 
 - React/Vue dispose newly created grids when initialization fails. Media uploads report progress/cancel, bound concurrent jobs per paste and guard every broadcast destination against asynchronous overwrite.
@@ -11,8 +15,6 @@
 
 - Read-only live cache supports stable-ID snapshots, consecutive sequences, bounded cell coalescing, atomic flush and stale/resync handling. Host owns transport and scheduling.
 - Optional free inline charts module renders line, column and horizontal bar series with gaps, signed baselines and a bounded point budget. Source preview, not yet published.
-
-- Host-owned remote save example covers local drafts, revision/idempotency receipts, validation/conflict preservation, explicit rollback and late-response guards without changing synchronous DataSource writes.
 
 - Host-owned remote save example covers local drafts, revision/idempotency receipts, validation/conflict preservation, explicit rollback and late-response guards without changing synchronous DataSource writes.
 

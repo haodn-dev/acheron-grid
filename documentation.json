@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "9cff1ab87353f39cdbf2bedb0b5de3219ef60e92",
+  "sourceRevision": "ae8c47390f94b12abf6c40af76b90101248845da",
   "release": {
     "version": "0.1.0",
     "tag": "v0.1.0",
@@ -23,9 +23,9 @@
     {
       "id": "integration",
       "path": "guides/integration.md",
-      "revision": 2,
-      "updated": "2026-10-05",
-      "sha256": "c75c34f1b88926cb32b7439104a295d3c32e14a790b961d7e3056ca0b5ec8c78",
+      "revision": 3,
+      "updated": "2026-10-06",
+      "sha256": "d27b09c55c0148b4d3503266458bec5f7d3eda1b0fdb1e1b8065c59ce3215459",
       "history": [
         {
           "revision": 1,
@@ -34,6 +34,10 @@
         {
           "revision": 2,
           "summary": "Clarify typed values, parsing, coordinates, lifecycle and permissions."
+        },
+        {
+          "revision": 3,
+          "summary": "Clarify async request limits, positional page invalidation and dataset revision ownership."
         }
       ]
     },
@@ -105,9 +109,9 @@
     {
       "id": "core",
       "path": "packages/core/README.md",
-      "revision": 2,
-      "updated": "2026-10-05",
-      "sha256": "a7799b0a418b696ec538423ea88b636b5b673f8c41418d2506e5481f65957ac0",
+      "revision": 3,
+      "updated": "2026-10-06",
+      "sha256": "966fe0815804406fa5aef1c74073119621133e3fef4996535559e6d4e7718931",
       "history": [
         {
           "revision": 1,
@@ -116,6 +120,10 @@
         {
           "revision": 2,
           "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 3,
+          "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
         }
       ]
     },

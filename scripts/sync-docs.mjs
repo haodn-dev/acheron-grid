@@ -1,8 +1,11 @@
 import ts from 'typescript';
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 
 const root=new URL('../',import.meta.url);
+const previous=JSON.parse(await readFile(new URL('documentation.json',root),'utf8'));
 const program=ts.createProgram(['packages/core/src/engine.ts','packages/canvas/src/grid.ts'],{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext,strict:true,skipLibCheck:true});
 const checker=program.getTypeChecker();
 const groups={
@@ -37,22 +40,26 @@ for(const [name,file,typeName,optionsName] of [['core','packages/core/src/engine
 }
 const entries=[
  ['getting-started','guides/getting-started.md',1,'Complete pinned-install browser example and troubleshooting.'],
- ['integration','guides/integration.md',2,'Clarify typed values, parsing, coordinates, lifecycle and permissions.'],
+ ['integration','guides/integration.md',2,'Clarify async request limits, positional page invalidation and dataset revision ownership.'],
  ['frameworks','guides/frameworks.md',1,'Canonical React/Vue lifecycle guide.'],
  ['ai','guides/ai-integration.md',1,'Canonical public integration and host boundaries.'],
  ['versions','guides/versions.md',1,'Separate package releases, source previews and per-document revisions.'],
  ['core-api','guides/core-api.md',1,'Generated source API signatures and construction options.'],
  ['canvas-api','guides/canvas-api.md',1,'Generated source API signatures and construction options.'],
- ...['core','canvas','react','vue','markdown','mcp','export','charts'].map(name=>[name,`packages/${name}/README.md`,2,'Align publication status, installation and current source contracts.']),
+ ...['core','canvas','react','vue','markdown','mcp','export','charts'].map(name=>[name,`packages/${name}/README.md`,2,name==='core'?'Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts.':'Align publication status, installation and current source contracts.']),
  ['security','SECURITY.md',1,'Host authorization and untrusted-data boundaries.'],
  ['support','SUPPORT.md',1,'Verified environments and practical limits.'],
 ];
 const documents=[];
 for(const [id,path,revision,summary] of entries){
  const text=(await readFile(new URL(path,root),'utf8')).replaceAll('\r\n','\n');
- documents.push({id,path,revision,updated:'2026-10-05',sha256:createHash('sha256').update(text).digest('hex'),history:[...(revision>1?[{revision:1,summary:'Previous public reference; see source revision 9cff1ab.'}]:[]),{revision,summary}]});
+ const sha256=createHash('sha256').update(text).digest('hex'), prior=previous.documents.find(doc=>doc.id===id);
+ if(prior?.sha256===sha256){documents.push(prior);continue;}
+ const nextRevision=prior?prior.revision+1:revision;
+ documents.push({id,path,revision:nextRevision,updated:new Date().toISOString().slice(0,10),sha256,history:[...(prior?.history??[]),{revision:nextRevision,summary}]});
 }
-await writeFile(new URL('documentation.json',root),JSON.stringify({schema:1,sourceRevision:'9cff1ab87353f39cdbf2bedb0b5de3219ef60e92',release:{version:'0.1.0',tag:'v0.1.0',revision:'f34e22765456d644bcae08ebb52241ae6a71238b'},documents},null,2)+'\n');
+const sourceRevision=execFileSync('git',['rev-parse','HEAD'],{cwd:fileURLToPath(root),encoding:'utf8'}).trim();
+await writeFile(new URL('documentation.json',root),JSON.stringify({...previous,sourceRevision,documents},null,2)+'\n');
 await mkdir(new URL('packages/mcp/docs/',root),{recursive:true});
 for(const name of ['core','canvas','react','vue','markdown','export','charts']){
   const text=(await readFile(new URL(`packages/${name}/README.md`,root),'utf8')).replaceAll('../../guides/','../../../guides/').replaceAll('../../examples/','../../../examples/');

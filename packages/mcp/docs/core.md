@@ -1,9 +1,9 @@
 # @acheron-grid/core
 
-Documentation revision 2 · npm 0.1.0 + explicitly marked source additions. See [documentation versions](../../../guides/versions.md).
+Documentation revision 3 · npm 0.1.0 + explicitly marked source additions. See [documentation versions](../../../guides/versions.md).
 
 
-An experimental headless TypeScript data-grid engine. Core owns data, selection, layout, editing, TSV clipboard operations and delta history. It has no runtime dependencies or browser/framework types.
+An experimental headless TypeScript data-grid engine. Core owns data access and controlled mutations, selection, layout, editing, TSV clipboard operations and history. The host owns source storage and transport. Core has no runtime dependencies or browser/framework types.
 
 Use core for a custom renderer or headless data workflow. For a ready-made interactive grid, start with the [Canvas guide](https://acheron-grid.haoduong.dev/reference/canvas); React and Vue adapters are separate packages.
 
@@ -15,6 +15,7 @@ Use core for a custom renderer or headless data workflow. For a ready-made inter
 - [Permissions and events](#permissions-and-events)
 - [Layout and local views](#layout-and-local-views)
 - [Persistence](#persistence)
+- [Core contracts and practical limits](#core-contracts-and-practical-limits)
 - [Browser import migration](#browser-import-migration)
 - [License](#license)
 
@@ -99,7 +100,7 @@ source.setValue(0, 'name', 'Grace');
 engine.refreshData('values'); // Same row IDs, order and count.
 
 const previousIds = engine.captureRowIdentity();
-source.spliceRows([{ index: 0, deleteCount: 0, rows: [{ id: 'r2', name: 'Lin' }] }]);
+source.spliceRows([{ index: 0, deleteCount: 0, rows: [{ id: 'r2', values: { name: 'Lin' } }] }]);
 engine.refreshData(previousIds); // Remap sparse state by stable IDs.
 
 unsubscribe();
@@ -107,6 +108,8 @@ engine.destroy();
 ```
 
 Capture IDs **before** a structural source change. This explicit operation scans all rows; engine construction does not. Reconciliation preserves valid selection, sizes, locks and formatting by ID, and drops groups/merges that cannot remain contiguous. With no previous IDs, `refreshData()` safely drops row-dependent state. All refresh modes clear undo/redo and pending cut state because external writes are outside history. `refreshData('values')` is a host guarantee that IDs, order and count did not change; use the identity snapshot for structural changes.
+
+Source preview also drops a collapsed group when identity reconciliation moves it across the frozen boundary. Single-cell editing accepts sources exposing either `setValue` or atomic `setValues`; permissions, parsing, validation and history still apply.
 
 Subscribers are independent and can unsubscribe during dispatch. Events observe committed state. Observer errors do not turn a successful mutation into a failed operation; `onObserverError` reports them and `takeObserverErrors()` drains the last ten recorded errors. Parser, permission and setter failures still fail the actual command. Notification callbacks can query state but cannot issue nested mutations.
 
@@ -159,6 +162,8 @@ The source is **read-only**. Writes still require synchronous atomic setters on 
 The async source reads own row properties only. It retains at most `maxPages` successful pages and, separately, `maxPages` recent error states. `maxConcurrentLoads` (default 4) bounds unresolved loader calls; `maxPendingLoads` (default 100) bounds requested pages, including queued work. Both must be positive safe integers. Queued requests share the `loading` state and start in request order. Repeated requests for the same page share one promise, including while queued. Capacity overflow throws before admitting the new request; `loadRange` checks the entire range before starting any pages. Evicted error states return `null` from `getPageState`; calling `loadPage` can retry them.
 
 Cancel/reset settles queued work without calling the loader and aborts running requests. Stale responses cannot populate the cache. Running requests keep their concurrency slots until the loader settles, even across reset; a loader that ignores abort and never settles can block later work. Host loaders should implement cancellation and a timeout. Async writes and backend query execution remain host-managed.
+
+In Source preview, a successful response that changes `total` clears previously cached positional pages and their ready statuses. An offset beyond a shrinking total must return an empty `rows` array; it updates the count and can be requested again to discover growth. Refresh the engine after loading. Responses completing later in the same query generation can still report a different total: the host must supply a consistent dataset revision across pages or reset the query when the dataset changes. Equal totals do not prove stable row identity/order. Cache recency updates on page admission and cached `loadPage` calls; synchronous cell reads do not update recency.
 
 ### Server query snapshots (unreleased)
 
@@ -221,7 +226,7 @@ Canvas accepts the same criteria through `view`/`setView`; headers describe all 
 
 `copySelection()` packs ranges in reading order: ranges sharing their top row and height concatenate horizontally; others stack vertically and pad to the widest range. `paste(text)` broadcasts the TSV matrix at each target range start. `copySelectionBlocks()` / `pasteSelectionBlocks(text)` preserve relative offsets and gaps for one target, or pair equal counts of source/target ranges. Conflicting overlap, malformed payloads, bounds, limits, permissions and parsing failures are rejected before one atomic write/history command. Editing and history operate on the active cell/data, preserving the range list. Clear/destroy discard all ranges. Selectable permission still checks only target endpoints.
 
-Structured clipboard blocks can carry optional per-cell `formats` (`background`, `textColor`, `contentFormat`). The content hint is `plain`, `html` or `markdown`; core stores this sparse metadata without parsing markup. Formatted paste checks paste/writable/formatting permissions and commits values and formatting in one history entry. `format:change` events include the `paste` source for that operation. Plain TSV remains value-only. Clipboard helpers `encodeBlocks`, `decodeBlocks` and `blocksToTsv` are exported for renderer integration.
+Structured clipboard blocks can carry optional per-cell `formats` (`background`, `textColor`, `contentFormat`, `fontWeight`, `fontStyle`). The content hint is `plain`, `html` or `markdown`; core stores this sparse metadata without parsing markup. Formatted paste checks paste/writable/formatting permissions and commits values and formatting in one history entry. `format:change` events include the `paste` source for that operation. Plain TSV remains value-only. Clipboard helpers `encodeBlocks`, `decodeBlocks` and `blocksToTsv` are exported for renderer integration.
 
 ### Cut and single-cell paste
 
@@ -332,7 +337,7 @@ Live local views use O(rows) index memory/filter work and O(matches log matches)
 
 The last applied property wins across intersecting targets. Updating only background preserves the previous priority of text color. Multiple targets are one atomic command. Colors are sparse overlays, not per-cell arrays; static permissions need only column checks, while a dynamic resolver must validate every targeted cell. Each formatted cell lookup scans O(formatted areas), intended for modest local formatting sets. Formatting reads/writes no source values and does not reorder rows.
 
-`formatting` defaults to true and has the same false veto as other capabilities, independently of writable and value locks. Formatting and value edits share the 100-command undo/redo history, with current formatting permissions checked on style replay. `format:change` carries source api/undo/redo and frozen changes containing target/previous/value patches, after layout invalidation. Styles are local and cleared on destroy/remount; persistence, arbitrary CSS, fonts, borders and conditional formatting are not implemented.
+`formatting` defaults to true and has the same false veto as other capabilities, independently of writable and value locks. Formatting and value edits share the 100-command undo/redo history, with current formatting permissions checked on style replay. `format:change` carries source api/undo/redo and frozen changes containing target/previous/value patches, after layout invalidation. Styles are local and cleared on destroy/remount unless the host restores exportState(). Source preview also supports fontWeight (normal/bold) and fontStyle (normal/italic), with null resetting either property. Arbitrary CSS, font families/sizes, borders and conditional formatting are not implemented.
 
 ## Persistence
 
@@ -369,6 +374,29 @@ Data values, undo/redo, editor drafts and pending clipboard operations are not p
 Unlock the table before restoring state. Restore also checks permissions when removing merges, groups or formatting, and preserves the active projected selection for subsequent Shift navigation. Older version-1 snapshots without active-selection metadata remain accepted with a single active part.
 
 Restoring a different column order checks structural permissions before committing, including the table lock and projected-view restrictions. The host structural callback receives the complete target `order` and `columns`; denied restores preserve state and history.
+
+## Core contracts and practical limits
+
+This describes the current source, including unreleased fixes. Select the npm 0.1.0 documentation channel when integrating that package version. All modules remain open source and free to use.
+
+| Component | Contract | Cost or boundary |
+| --- | --- | --- |
+| Entry points and types (`index`, `headless`, `types`) | ESM, strict ES2022 TypeScript; no DOM, framework or runtime dependencies | Canvas depends on public core; core does not own browser interaction |
+| Local sources (`data-source`) | Unique stable IDs, shallow immutable row snapshots, atomic batches and sequential splices | Nested objects remain host-owned; structural splices copy arrays |
+| Async source (`async-data-source`) | Read-only explicit pages, query generations, deduplication, cancellation, bounded requests/cache/errors | Host supplies consistent server revisions, authorization and timeout; unloaded differs from null/empty |
+| Live source (`live-data-source`) | Bounded snapshots and consecutive messages, coalesced atomic flush | Gaps/overflow require a fresh snapshot; transport and flush scheduling belong to the host |
+| Commands and permissions (`engine`, `permissions`) | Preflight validation and independent false-veto capabilities; one synchronous write path | Custom setters must guarantee atomicity; client permissions do not authorize server requests |
+| History and events (`engine`, `events`) | Latest 100 commands; conflict and current-permission checks; isolated observers | Value references are shallow; structural history retains O(rows + columns + metadata) per command |
+| Selection and local views (`engine`, `data-source`) | Visible API indices map to source state; source-coordinate identity survives view changes | At most 128 source selection rectangles; projected selections exceeding that fail before changing selection. Clipboard accepts at most 128 visible fragments |
+| Geometry (`axis`, `panes`, `viewport`) | Sparse size overrides, numeric frozen panes, end-exclusive viewport ranges | Resize rebuilds sparse prefixes; collapsed frozen-row counts are cached between state changes |
+| Structure and outline (`structure`, `engine`) | Atomic insert/delete/move; nested or disjoint groups; intact merges move together | Clear projected views before structure; at most 1,024 groups and 1,024 merges; collapse builds an O(rows) projection |
+| Clipboard (`clipboard`, `tsv`) | Version-1 string blocks, optional formats, strict TSV parsing, staged same-engine cut | 100,000 cells / 10M UTF-16 units; no typed arbitrary-object codec, cross-engine cut or paste special |
+| Formatting (`types`, `engine`) | Sparse property precedence, formatting permissions and shared history | Lookup scans formatted areas; dynamic permissions scan targeted cells; no conditional rules |
+| Persistence (`configuration`, `state`, `engine`) | Validate unknown state and application schema/policies before commit | Full state captures O(rows) identities; no data/transport/callback/history storage; restore clears history |
+
+Local filter evaluation and projections cost O(source rows), with O(matches log matches) sorting. Value commands in an active view reapply criteria. Identity capture, full export and refresh also scan row IDs or mappings. These operations are separate from viewport rendering; a million-row viewport check does not establish million-row sort, structural history or export performance.
+
+Integration checks should cover permission/validation rejection without partial writes, identity and value conflicts during replay, query cancellation and changing totals, selection fragmentation, frozen group reconciliation, state round trips and independent source cleanup. See [support and release evidence](../../SUPPORT.md) for browser and device limits. Async writes, formulas, collaboration and dataset revision negotiation remain separate host or future module work.
 
 ## Browser import migration
 
