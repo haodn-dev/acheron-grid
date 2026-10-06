@@ -1,3 +1,4 @@
+import { createFormatting } from './internal/formatting.js';
 import { createPermissions } from './internal/permissions.js';
 import { createStructure } from './internal/structure.js';
 import { mappedIntervals, mappedRanges, inverseMap, rowBlocks } from './internal/structure-mapping.js';
@@ -1533,196 +1534,6 @@ export function createGridEngine(options: GridEngineOptions) {
     );
   }
 
-  function formatBounds(target: CellFormatTarget): SelectionRange {
-    if (target.scope !== 'range') {
-      validateLockTarget(target);
-      return {
-        startRow: target.scope === 'row' || target.scope === 'cell' ? target.rowIndex : 0,
-        endRow: target.scope === 'row' || target.scope === 'cell' ? target.rowIndex : rowCount - 1,
-        startColumn: target.scope === 'column' || target.scope === 'cell' ? target.columnIndex : 0,
-        endColumn: target.scope === 'column' || target.scope === 'cell' ? target.columnIndex : columns.length - 1,
-      };
-    }
-    const range = target.range;
-    if (
-      !range ||
-      ![range.startRow, range.endRow, range.startColumn, range.endColumn].every(Number.isSafeInteger) ||
-      range.startRow < 0 ||
-      range.endRow < range.startRow ||
-      range.endRow >= rowCount ||
-      range.startColumn < 0 ||
-      range.endColumn < range.startColumn ||
-      range.endColumn >= columns.length
-    )
-      throw new RangeError('Invalid formatting range.');
-    return {
-      startRow: range.startRow,
-      endRow: range.endRow,
-      startColumn: range.startColumn,
-      endColumn: range.endColumn,
-    };
-  }
-
-  function requireFormatPermission(bounds: SelectionRange): void {
-    if (permissions?.formatting === false) throw new Error('Cell does not permit formatting.');
-    if (!resolver) {
-      for (let col = bounds.startColumn; col <= bounds.endColumn; col++)
-        if (!resolvePermissions(columns[col]!.editable ?? false, permissions, columns[col]!.permissions).formatting)
-          throw new Error('Cell does not permit formatting.');
-    } else
-      for (let row = bounds.startRow; row <= bounds.endRow; row++)
-        for (let col = bounds.startColumn; col <= bounds.endColumn; col++) requirePermission(row, col, 'formatting');
-  }
-
-  function canFormat(targets: readonly CellFormatTarget[]): boolean {
-    if (destroyed) return false;
-    const bounds = targets.map(formatBounds);
-    try {
-      for (const range of bounds) requireFormatPermission(range);
-      return bounds.length > 0;
-    } catch {
-      return false;
-    }
-  }
-
-  function getFormat(rowIndex: number, columnIndex: number): Readonly<CellFormat> {
-    assertAlive();
-    validateLockTarget({ scope: 'cell', rowIndex, columnIndex });
-    if (!orderedFormats.length) return emptyFormat;
-    const result: Record<string, string> = {};
-    const orders = { background: 0, textColor: 0, contentFormat: 0, fontWeight: 0, fontStyle: 0, numberFormat: 0 };
-    // Scan sparse overlays; index regions if large formatting sets become costly.
-    for (const entry of orderedFormats) {
-      const range = entry.bounds;
-      if (
-        rowIndex < range.startRow ||
-        rowIndex > range.endRow ||
-        columnIndex < range.startColumn ||
-        columnIndex > range.endColumn
-      )
-        continue;
-      for (const key of [
-        'background',
-        'textColor',
-        'contentFormat',
-        'fontWeight',
-        'fontStyle',
-        'numberFormat',
-      ] as const) {
-        if ((entry.orders[key] ?? 0) <= orders[key]) continue;
-        orders[key] = entry.orders[key]!;
-        const value = entry.patch[key];
-        if (value === null) delete result[key];
-        else if (value !== undefined) result[key] = value;
-      }
-    }
-    return Object.freeze(result);
-  }
-
-  function writeFormats(changes: readonly FormatChange[]): void {
-    for (const change of changes) {
-      if (change.value) formats.set(change.key, change.value);
-      else formats.delete(change.key);
-    }
-    orderedFormats = [...formats.values()].sort((a, b) => a.order - b.order);
-  }
-
-  function notifyFormats(changes: readonly FormatChange[], source: 'api' | 'paste' | 'undo' | 'redo'): void {
-    notify(
-      { type: 'layout' },
-      Object.freeze({
-        type: 'format:change',
-        source,
-        changes: Object.freeze(
-          changes.map((change) =>
-            Object.freeze({
-              target: (change.value ?? change.previous)!.target,
-              previous: change.previous?.patch ?? null,
-              value: change.value?.patch ?? null,
-            }),
-          ),
-        ),
-      }),
-    );
-  }
-
-  function format(targets: readonly CellFormatTarget[], patch: CellFormatPatch | null): void {
-    assertAlive();
-    if (patch !== null) {
-      if (!patch || typeof patch !== 'object') throw new TypeError('Invalid formatting patch.');
-      patch = Object.freeze({ ...patch });
-      for (const [key, value] of Object.entries(patch))
-        if (
-          !['contentFormat', 'background', 'textColor', 'fontWeight', 'fontStyle', 'numberFormat'].includes(key) ||
-          (value !== null &&
-            (key === 'numberFormat'
-              ? !['decimal', 'integer', 'percent', 'currency'].includes(value)
-              : key === 'fontWeight'
-                ? !['normal', 'bold'].includes(value)
-                : key === 'fontStyle'
-                  ? !['normal', 'italic'].includes(value)
-                  : key === 'contentFormat'
-                    ? !['plain', 'html', 'markdown'].includes(value)
-                    : typeof value !== 'string' || !/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(value)))
-        )
-          throw new TypeError('Invalid cell format.');
-      if (!Object.keys(patch).length) return;
-    }
-    const unique = new Map<string, { target: CellFormatTarget; bounds: SelectionRange }>();
-    for (const target of targets) {
-      const bounds = formatBounds(target);
-      if (bounds.endRow < bounds.startRow || bounds.endColumn < bounds.startColumn) continue;
-      const snapshot = Object.freeze(
-        target.scope === 'range' ? { scope: 'range' as const, range: Object.freeze({ ...bounds }) } : { ...target },
-      );
-      unique.set(JSON.stringify([target.scope, bounds.startRow, bounds.endRow, bounds.startColumn, bounds.endColumn]), {
-        target: snapshot,
-        bounds,
-      });
-    }
-    for (const entry of unique.values()) requireFormatPermission(entry.bounds);
-    const changes: FormatChange[] = [];
-    for (const [key, entry] of unique) {
-      const previous = formats.get(key);
-      const nextPatch = patch === null ? undefined : Object.freeze({ ...previous?.patch, ...patch });
-      if (
-        (!previous && !nextPatch) ||
-        (previous && previous === orderedFormats.at(-1) && JSON.stringify(previous.patch) === JSON.stringify(nextPatch))
-      )
-        continue;
-      const orders = { ...previous?.orders };
-      if (patch)
-        for (const key of [
-          'background',
-          'textColor',
-          'contentFormat',
-          'fontWeight',
-          'fontStyle',
-          'numberFormat',
-        ] as const)
-          if (patch[key] !== undefined) orders[key] = ++formatOrder;
-      changes.push({
-        key,
-        previous,
-        value: nextPatch
-          ? {
-              ...entry,
-              bounds: Object.freeze(entry.bounds),
-              patch: nextPatch,
-              orders: Object.freeze(orders),
-              order: formatOrder,
-            }
-          : undefined,
-      });
-    }
-    if (!changes.length) return;
-    writeFormats(changes);
-    past.push({ kind: 'format', changes });
-    if (past.length > 100) past.shift();
-    future.length = 0;
-    notifyFormats(changes, 'api');
-  }
-
   function setFrozen(rows: number, columnCount: number): void {
     assertAlive();
     if (
@@ -2242,6 +2053,22 @@ export function createGridEngine(options: GridEngineOptions) {
       return notify;
     },
   });
+
+  const { formatBounds, requireFormatPermission, canFormat, getFormat, writeFormats, notifyFormats, format } =
+    createFormatting(context, {
+      get validateLockTarget() {
+        return validateLockTarget;
+      },
+      get requirePermission() {
+        return requirePermission;
+      },
+      get assertAlive() {
+        return assertAlive;
+      },
+      get notify() {
+        return notify;
+      },
+    });
   if (options.view) {
     view = snapshotView(options.view);
     installProjection(buildProjection(view));
