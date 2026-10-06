@@ -6,8 +6,11 @@ import { GridAxis } from '../dist/axis.js';
 import { decodeTsv, encodeTsv, clipboardCellLimit, clipboardTextLimit } from '../dist/tsv.js';
 
 test('local rows preserve identity and snapshot top-level values', () => {
-  const rows = [{ id: 'a', amount: 12 }, { id: 'b', amount: 24 }];
-  const source = new LocalDataSource(rows, row => row.id);
+  const rows = [
+    { id: 'a', amount: 12 },
+    { id: 'b', amount: 24 },
+  ];
+  const source = new LocalDataSource(rows, (row) => row.id);
   rows[0].amount = 99;
   rows.push({ id: 'c', amount: 36 });
   assert.equal(source.getRowCount(), 2);
@@ -17,13 +20,13 @@ test('local rows preserve identity and snapshot top-level values', () => {
 });
 
 test('rejects duplicate and invalid row identities', () => {
-  assert.throws(() => new LocalDataSource([{ id: 1 }, { id: 1 }], row => row.id), /Duplicate/);
+  assert.throws(() => new LocalDataSource([{ id: 1 }, { id: 1 }], (row) => row.id), /Duplicate/);
   assert.throws(() => new LocalDataSource([{}], () => NaN), TypeError);
 });
 
 test('cell mutation preserves snapshots and stable row identity, validates boundaries', () => {
   const rows = [{ id: 'a', name: 'Ada', amount: 12 }];
-  const source = new LocalDataSource(rows, row => row.id);
+  const source = new LocalDataSource(rows, (row) => row.id);
   source.setValue(0, 'name', 'Grace');
   source.setValue(0, 'amount', 24);
   source.setValue(0, 'id', 'changed');
@@ -37,7 +40,7 @@ test('cell mutation preserves snapshots and stable row identity, validates bound
 });
 
 test('rejects missing and non-integer row indices, including empty sources', () => {
-  const source = new LocalDataSource([{ id: 1 }], row => row.id);
+  const source = new LocalDataSource([{ id: 1 }], (row) => row.id);
   for (const index of [-1, 1, 0.5, NaN]) assert.throws(() => source.getValue(index, 'id'), RangeError);
   assert.throws(() => new LocalDataSource([], () => 0).getRowId(0), RangeError);
 });
@@ -63,13 +66,25 @@ test('viewport work stays bounded for a million rows', () => {
 });
 
 test('local batch writes validate all cells before committing, last duplicate wins', () => {
-  const rows = [{ id: 1, name: 'Ada', amount: 12 }, { id: 2, name: 'Grace', amount: 24 }];
-  const source = new LocalDataSource(rows, row => row.id);
-  assert.throws(() => source.setValues([{ rowIndex: 0, columnKey: 'name', value: 'Lost' },
-    { rowIndex: 1, columnKey: 'missing', value: 0 }]), /Unknown column/);
+  const rows = [
+    { id: 1, name: 'Ada', amount: 12 },
+    { id: 2, name: 'Grace', amount: 24 },
+  ];
+  const source = new LocalDataSource(rows, (row) => row.id);
+  assert.throws(
+    () =>
+      source.setValues([
+        { rowIndex: 0, columnKey: 'name', value: 'Lost' },
+        { rowIndex: 1, columnKey: 'missing', value: 0 },
+      ]),
+    /Unknown column/,
+  );
   assert.equal(source.getValue(0, 'name'), 'Ada');
-  source.setValues([{ rowIndex: 0, columnKey: 'name', value: 'First' },
-    { rowIndex: 0, columnKey: 'amount', value: 99 }, { rowIndex: 0, columnKey: 'name', value: 'Final' }]);
+  source.setValues([
+    { rowIndex: 0, columnKey: 'name', value: 'First' },
+    { rowIndex: 0, columnKey: 'amount', value: 99 },
+    { rowIndex: 0, columnKey: 'name', value: 'Final' },
+  ]);
   assert.equal(source.getValue(0, 'name'), 'Final');
   assert.equal(source.getValue(0, 'amount'), 99);
   assert.equal(rows[0].name, 'Ada');
@@ -77,36 +92,87 @@ test('local batch writes validate all cells before committing, last duplicate wi
 
 test('row drafts preserve frozen snapshots and atomic failures including special own keys', () => {
   const nested = { shared: true };
-  const source = new LocalDataSource([
-    Object.fromEntries([['id', 0], ['a', 1], ['__proto__', nested], ['constructor', 'original']]),
-    { id: 1, a: 2 },
-  ], row => row.id);
+  const source = new LocalDataSource(
+    [
+      Object.fromEntries([
+        ['id', 0],
+        ['a', 1],
+        ['__proto__', nested],
+        ['constructor', 'original'],
+      ]),
+      { id: 1, a: 2 },
+    ],
+    (row) => row.id,
+  );
   source.addColumns(['added']);
   const before = [source.getRow(0).values, source.getRow(1).values];
-  const staged = [{ rowIndex: 0, columnKey: 'a', value: 3 }, { rowIndex: 0, columnKey: 'added', value: 4 }, { rowIndex: 1, columnKey: 'a', value: 5 }];
-  for (const invalid of [{ rowIndex: 1, columnKey: 'unknown', value: 0 }, { rowIndex: 2, columnKey: 'a', value: 0 }]) {
+  const staged = [
+    { rowIndex: 0, columnKey: 'a', value: 3 },
+    { rowIndex: 0, columnKey: 'added', value: 4 },
+    { rowIndex: 1, columnKey: 'a', value: 5 },
+  ];
+  for (const invalid of [
+    { rowIndex: 1, columnKey: 'unknown', value: 0 },
+    { rowIndex: 2, columnKey: 'a', value: 0 },
+  ]) {
     assert.throws(() => source.setValues([...staged, invalid]));
-    assert.equal(source.getRow(0).values, before[0]);assert.equal(source.getRow(1).values, before[1]);
+    assert.equal(source.getRow(0).values, before[0]);
+    assert.equal(source.getRow(1).values, before[1]);
   }
-  assert.throws(() => source.setValues([...staged, { rowIndex: 0, columnKey: 'a', get value() {
-    assert.equal(source.getValue(0, 'a'), 1);assert.equal(source.getValue(1, 'a'), 2);
-    throw new Error('Draft failure');
-  } }]), /Draft failure/);
-  assert.equal(source.getRow(0).values, before[0]);assert.equal(source.getRow(1).values, before[1]);
-  source.setValues([...staged, { rowIndex: 0, columnKey: 'a', value: 9 }, { rowIndex: 0, columnKey: '__proto__', value: 'own value' }, { rowIndex: 0, columnKey: 'constructor', value: 'own constructor' }]);
-  assert.equal(source.getValue(0, 'a'), 9);assert.equal(source.getValue(1, 'a'), 5);assert.equal(source.getValue(0, 'added'), 4);
+  assert.throws(
+    () =>
+      source.setValues([
+        ...staged,
+        {
+          rowIndex: 0,
+          columnKey: 'a',
+          get value() {
+            assert.equal(source.getValue(0, 'a'), 1);
+            assert.equal(source.getValue(1, 'a'), 2);
+            throw new Error('Draft failure');
+          },
+        },
+      ]),
+    /Draft failure/,
+  );
+  assert.equal(source.getRow(0).values, before[0]);
+  assert.equal(source.getRow(1).values, before[1]);
+  source.setValues([
+    ...staged,
+    { rowIndex: 0, columnKey: 'a', value: 9 },
+    { rowIndex: 0, columnKey: '__proto__', value: 'own value' },
+    { rowIndex: 0, columnKey: 'constructor', value: 'own constructor' },
+  ]);
+  assert.equal(source.getValue(0, 'a'), 9);
+  assert.equal(source.getValue(1, 'a'), 5);
+  assert.equal(source.getValue(0, 'added'), 4);
   const after = source.getRow(0).values;
-  assert.equal(Object.getPrototypeOf(after), Object.prototype);assert.equal(Object.hasOwn(after, '__proto__'), true);
-  assert.equal(after.__proto__, 'own value');assert.equal(after.constructor, 'own constructor');assert.equal(source.getRowId(0), 0);
-  assert.equal(Object.isFrozen(after), true);assert.equal(Object.isFrozen(source.getRow(1).values), true);
-  assert.equal(before[0].a, 1);assert.equal(before[0].__proto__, nested);assert.equal(before[1].a, 2);
+  assert.equal(Object.getPrototypeOf(after), Object.prototype);
+  assert.equal(Object.hasOwn(after, '__proto__'), true);
+  assert.equal(after.__proto__, 'own value');
+  assert.equal(after.constructor, 'own constructor');
+  assert.equal(source.getRowId(0), 0);
+  assert.equal(Object.isFrozen(after), true);
+  assert.equal(Object.isFrozen(source.getRow(1).values), true);
+  assert.equal(before[0].a, 1);
+  assert.equal(before[0].__proto__, nested);
+  assert.equal(before[1].a, 2);
 });
 
 test('TSV round-trips quoted tabs, multiline values, quotes and empty fields', () => {
-  const rows = [['Ada\tLovelace', 'a\r\nb', '"quote"', ''], ['雪', '', 'plain', '\n']];
+  const rows = [
+    ['Ada\tLovelace', 'a\r\nb', '"quote"', ''],
+    ['雪', '', 'plain', '\n'],
+  ];
   assert.deepEqual(decodeTsv(encodeTsv(rows)), rows);
-  assert.deepEqual(decodeTsv('a\tb\r\nc\td\r\n'), [['a', 'b'], ['c', 'd']]);
-  assert.deepEqual(decodeTsv('a\tb\nc\td'), [['a', 'b'], ['c', 'd']]);
+  assert.deepEqual(decodeTsv('a\tb\r\nc\td\r\n'), [
+    ['a', 'b'],
+    ['c', 'd'],
+  ]);
+  assert.deepEqual(decodeTsv('a\tb\nc\td'), [
+    ['a', 'b'],
+    ['c', 'd'],
+  ]);
   assert.deepEqual(decodeTsv(''), [['']]);
   assert.deepEqual(decodeTsv('a\t'), [['a', '']]);
   assert.deepEqual(decodeTsv('""'), [['']]);
@@ -121,7 +187,10 @@ test('sparse axis geometry matches variable-size boundaries and a million rows',
   const axis = new GridAxis(6, 32);
   axis.setSize(0, 64);
   axis.setSize(3, 16);
-  assert.deepEqual(Array.from({ length: 7 }, (_, i) => axis.position(i)), [0, 64, 96, 128, 144, 176, 208]);
+  assert.deepEqual(
+    Array.from({ length: 7 }, (_, i) => axis.position(i)),
+    [0, 64, 96, 128, 144, 176, 208],
+  );
   assert.equal(axis.indexAt(63), 0);
   assert.equal(axis.indexAt(64), 1);
   assert.deepEqual(axis.range(64, 64), { start: 1, end: 3 });
@@ -129,7 +198,15 @@ test('sparse axis geometry matches variable-size boundaries and a million rows',
   assert.deepEqual(axis.range(500, 100), { start: 6, end: 6 });
   axis.setSize(0, 32);
   assert.equal(axis.position(6), 176);
-  for (const [index, size] of [[-1, 32], [6, 32], [0.5, 32], [0, 0], [0, NaN], [0, Infinity]]) assert.throws(() => axis.setSize(index, size), RangeError);
+  for (const [index, size] of [
+    [-1, 32],
+    [6, 32],
+    [0.5, 32],
+    [0, 0],
+    [0, NaN],
+    [0, Infinity],
+  ])
+    assert.throws(() => axis.setSize(index, size), RangeError);
   assert.equal(axis.position(6), 176);
   const large = new GridAxis(1_000_000, 32);
   large.setSize(500_000, 64);

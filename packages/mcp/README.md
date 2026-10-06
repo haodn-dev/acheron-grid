@@ -2,7 +2,6 @@
 
 Documentation revision 2 · npm 0.1.0 + explicitly marked source additions. See [documentation versions](../../guides/versions.md).
 
-
 Optional Model Context Protocol adapter. Core and Canvas do not depend on the MCP SDK. Uses the official MCP TypeScript SDK v1 with resources and tools.
 
 ## Installation

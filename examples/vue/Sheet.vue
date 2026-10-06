@@ -12,6 +12,10 @@ const options = shallowRef({
 </script>
 
 <template>
-  <AcheronGrid ref="grid" :options="options" style="height:400px;width:100%"
-    @event="event => console.log(event.type)" />
+  <AcheronGrid
+    ref="grid"
+    :options="options"
+    style="height:400px;width:100%"
+    @event="event => console.log(event.type)"
+  />
 </template>

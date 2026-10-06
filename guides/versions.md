@@ -4,10 +4,10 @@ Package versions and documentation revisions answer different questions. The pac
 
 ## Reading channels
 
-| Channel | Use it when | Meaning |
-| --- | --- | --- |
-| npm 0.1.0 | Your application installs the published 0.1.0 packages | Frozen API scope from Git tag v0.1.0; later editorial corrections may clarify that scope |
-| Source preview | You build the revision shown by the site | Includes Unreleased APIs and export/charts modules; not a registry release |
+| Channel        | Use it when                                            | Meaning                                                                                  |
+| -------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| npm 0.1.0      | Your application installs the published 0.1.0 packages | Frozen API scope from Git tag v0.1.0; later editorial corrections may clarify that scope |
+| Source preview | You build the revision shown by the site               | Includes Unreleased APIs and export/charts modules; not a registry release               |
 
 The site defaults to npm 0.1.0 for an installable starting point. Switch channels explicitly for a source-only recipe. Internal dependency versions alone do not identify a source preview: also record the Git revision.
 
@@ -22,7 +22,6 @@ The website displays the channel, document revision, updated date and source rev
 Package README files and the guides in this repository are canonical consumer documentation. Refresh MCP copies with `npm run docs:sync`; the site imports the same files and checks their hashes. Do not fix only the site's downloaded Markdown or an MCP snapshot.
 
 When changing an API: update its owning guide/README, record its release availability, update the affected document's revision/history, regenerate signatures and copies, compile the runnable examples, then deploy the site. Keep frozen 0.1.0 docs free of newer APIs. For breaking changes, provide a before/after migration example in release notes; documentation revision numbers are not a substitute for package SemVer.
-
 
 ## License transition
 

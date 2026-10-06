@@ -18,16 +18,16 @@ Every Acheron feature and optional module is intended to remain open source and 
 
 The original six packages are published on npm at 0.1.0 as development previews. APIs may change before 1.0. Changes under Unreleased and the new export/charts modules are source previews; build from source or install packed artifacts to try them. The project is licensed under [Apache 2.0](LICENSE).
 
-| Package | Purpose | Runtime dependencies |
-| --- | --- | --- |
-| [@acheron-grid/core](packages/core/README.md) | Headless engine, synchronous sources and local row views; usable in Node.js | None |
-| [@acheron-grid/canvas](packages/canvas/README.md) | Browser rendering and interactions | @acheron-grid/core |
-| [@acheron-grid/markdown](packages/markdown/README.md) | Optional Markdown parsing adapter | marked |
-| [@acheron-grid/react](packages/react/README.md) | React lifecycle adapter | Canvas; React peer dependency |
-| [@acheron-grid/vue](packages/vue/README.md) | Vue 3 lifecycle adapter | Canvas; Vue peer dependency |
-| [@acheron-grid/mcp](packages/mcp/README.md) | Optional documentation server and host-authorized grid tools | MCP SDK; @acheron-grid/core |
-| [@acheron-grid/export](packages/export/README.md) | Optional CSV/XLSX selection export; unreleased | @acheron-grid/core; fflate |
-| [@acheron-grid/charts](packages/charts/README.md) | Optional inline line/column/bar charts; unreleased | @acheron-grid/canvas |
+| Package                                               | Purpose                                                                     | Runtime dependencies          |
+| ----------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------- |
+| [@acheron-grid/core](packages/core/README.md)         | Headless engine, synchronous sources and local row views; usable in Node.js | None                          |
+| [@acheron-grid/canvas](packages/canvas/README.md)     | Browser rendering and interactions                                          | @acheron-grid/core            |
+| [@acheron-grid/markdown](packages/markdown/README.md) | Optional Markdown parsing adapter                                           | marked                        |
+| [@acheron-grid/react](packages/react/README.md)       | React lifecycle adapter                                                     | Canvas; React peer dependency |
+| [@acheron-grid/vue](packages/vue/README.md)           | Vue 3 lifecycle adapter                                                     | Canvas; Vue peer dependency   |
+| [@acheron-grid/mcp](packages/mcp/README.md)           | Optional documentation server and host-authorized grid tools                | MCP SDK; @acheron-grid/core   |
+| [@acheron-grid/export](packages/export/README.md)     | Optional CSV/XLSX selection export; unreleased                              | @acheron-grid/core; fflate    |
+| [@acheron-grid/charts](packages/charts/README.md)     | Optional inline line/column/bar charts; unreleased                          | @acheron-grid/canvas          |
 
 Core does not import Canvas or framework code. `@acheron-grid/core/headless` remains an alias for the headless API.
 
@@ -148,16 +148,16 @@ Developer integration examples: [headless refresh, state and async paging](packa
 
 Run commands from the repository root after `npm ci`:
 
-| Command | Purpose |
-| --- | --- |
-| `npm run build` | Build core, Canvas, optional Markdown, React and Vue adapters; ESM and TypeScript declarations |
-| `npm run typecheck` | Build dependency declarations, then check all packages and the headless boundary |
-| `npm test` | Build and run Node.js tests |
-| `npm run test:mcp` | Verify MCP documentation, host authorization and grid tools |
-| `npm run test:browser` | Build and run Chromium grid integration tests |
-| `npm run test:playground` | Build and verify the standalone example |
-| `npm run test:package` | Install six packed artifacts in an independent consumer; verify TypeScript, SSR and Canvas lifecycle |
-| `npm run benchmark` | Measure headless Chromium render-callback cost and source reads |
+| Command                   | Purpose                                                                                              |
+| ------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `npm run build`           | Build core, Canvas, optional Markdown, React and Vue adapters; ESM and TypeScript declarations       |
+| `npm run typecheck`       | Build dependency declarations, then check all packages and the headless boundary                     |
+| `npm test`                | Build and run Node.js tests                                                                          |
+| `npm run test:mcp`        | Verify MCP documentation, host authorization and grid tools                                          |
+| `npm run test:browser`    | Build and run Chromium grid integration tests                                                        |
+| `npm run test:playground` | Build and verify the standalone example                                                              |
+| `npm run test:package`    | Install six packed artifacts in an independent consumer; verify TypeScript, SSR and Canvas lifecycle |
+| `npm run benchmark`       | Measure headless Chromium render-callback cost and source reads                                      |
 
 Install the test browser with `npx playwright install chromium` before running browser tests. Benchmarks measure callback CPU time; they do not establish end-to-end FPS, GPU cost or peak memory. Browser tests and benchmarks share port 4179; the playground uses port 4180. Run suites using the same port sequentially and stop a manual playground server before its tests.
 

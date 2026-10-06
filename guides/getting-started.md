@@ -72,13 +72,13 @@ The grid shows two records. Double-click a name or press F2 to edit; numeric tex
 
 ## Understand the data model
 
-| Concept | Rule |
-| --- | --- |
-| Row ID | Unique string or finite number; retain it when the same record changes |
-| Column key | Unique field name; independent of its display title |
-| Coordinates | Zero-based visible row/column indices; the row-index gutter is not a data column |
-| Data source | Synchronous reads; writable sources provide synchronous atomic setters |
-| Ownership | The grid owns its DOM/history; your application owns data transport and source lifetime |
+| Concept     | Rule                                                                                    |
+| ----------- | --------------------------------------------------------------------------------------- |
+| Row ID      | Unique string or finite number; retain it when the same record changes                  |
+| Column key  | Unique field name; independent of its display title                                     |
+| Coordinates | Zero-based visible row/column indices; the row-index gutter is not a data column        |
+| Data source | Synchronous reads; writable sources provide synchronous atomic setters                  |
+| Ownership   | The grid owns its DOM/history; your application owns data transport and source lifetime |
 
 `LocalDataSource` keeps shallow row snapshots. Nested arrays and objects remain application-owned. Use grid commands for tracked writes; direct source writes need an explicit refresh and do not become undo commands.
 
@@ -115,11 +115,11 @@ Create the artifacts directory first. Add export/charts/framework tarballs to th
 
 ## Troubleshooting
 
-| Symptom | Check |
-| --- | --- |
-| Blank grid | Container dimensions, browser console, correct browser entry point |
-| Editing is unavailable | Editable column, writable source, current permissions and locks |
-| Numeric paste fails | Add a parser and validation for the typed column |
+| Symptom                                  | Check                                                                     |
+| ---------------------------------------- | ------------------------------------------------------------------------- |
+| Blank grid                               | Container dimensions, browser console, correct browser entry point        |
+| Editing is unavailable                   | Editable column, writable source, current permissions and locks           |
+| Numeric paste fails                      | Add a parser and validation for the typed column                          |
 | Edits disappear after a React/Vue update | Keep options identity stable; a new options object intentionally remounts |
-| External changes do not appear | Call `refreshData()` with the correct identity mode |
-| API missing from npm | Switch docs to 0.1.0 or install a matching source build |
+| External changes do not appear           | Call `refreshData()` with the correct identity mode                       |
+| API missing from npm                     | Switch docs to 0.1.0 or install a matching source build                   |

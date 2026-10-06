@@ -14,13 +14,13 @@ engine.pasteSelectionBlocks(blocks, { mode: 'formats' });
 
 Canvas exposes the same `paste` and `pasteSelectionBlocks` options and menu actions. Use `selectRow` or pointer/keyboard selection in Canvas; `select` belongs to the headless engine.
 
-| Option | Contract |
-| --- | --- |
-| `mode: 'all'` (default) | Paste values and supported structured formatting |
-| `mode: 'values'` | Ignore source formats; preserve destination formats |
-| `mode: 'formats'` | Apply structured formats; retain destination values; check formatting permission without invoking value parsers/setters |
-| `transpose: true` | Swap block positions, matrix dimensions and format coordinates |
-| `skipEmpty: true` | Skip cells whose clipboard string is exactly empty; whitespace and `0` remain values |
+| Option                  | Contract                                                                                                                |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `mode: 'all'` (default) | Paste values and supported structured formatting                                                                        |
+| `mode: 'values'`        | Ignore source formats; preserve destination formats                                                                     |
+| `mode: 'formats'`       | Apply structured formats; retain destination values; check formatting permission without invoking value parsers/setters |
+| `transpose: true`       | Swap block positions, matrix dimensions and format coordinates                                                          |
+| `skipEmpty: true`       | Skip cells whose clipboard string is exactly empty; whitespace and `0` remain values                                    |
 
 Options combine. Format-only TSV has no format payload and does not change formatting. An empty format object does not clear destination formatting; use `format(targets, patch)` with null fields to clear. Normal paste parses text and checks every destination before any write. One-cell payloads broadcast to the selection; larger matrices do not tile or create rows. Same-engine cut remains a normal move; special paste copies the payload and never silently deletes the cut source. Existing limits remain 100,000 cells and 10 million UTF-16 code units. Structured clipboard is versioned, does not deserialize callbacks and cannot preserve every external application's style.
 
@@ -105,17 +105,17 @@ Mutation shape: `{datasetId, mutationId, expectedRevision, changes:[{rowId,colum
 {datasetId, mutationId, status:'rejected', message:'Validation failed'}
 ```
 
-| State/action | Result |
-| --- | --- |
-| Ready edit | Optimistic atomic cache update; one engine history command |
-| `commit()` | Freeze one mutation; deduplicate concurrent commit calls; block new drafts |
-| Accepted | Adopt canonical snapshot, clear drafts, ready; host refreshes engine/history |
-| Rejected | Keep draft, expose `lastError`, ready for correction or explicit discard |
+| State/action                   | Result                                                                                                                                               |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ready edit                     | Optimistic atomic cache update; one engine history command                                                                                           |
+| `commit()`                     | Freeze one mutation; deduplicate concurrent commit calls; block new drafts                                                                           |
+| Accepted                       | Adopt canonical snapshot, clear drafts, ready; host refreshes engine/history                                                                         |
+| Rejected                       | Keep draft, expose `lastError`, ready for correction or explicit discard                                                                             |
 | Transport failure / disconnect | Retain exact uncertain mutation and draft; block edits; send an unsent draft with `commit()`, or retry an uncertain request with the same payload/ID |
-| Conflict | Keep draft and expose validated `conflict` snapshot; block edits until explicit resolution |
-| `acceptServer()` | Adopt server snapshot, discard draft, clear conflict; host refreshes engine |
-| `resync()` / `reconnect()` | Load fresh snapshot; refuse unsent drafts without `resync(true)`; always refuse uncertain mutations |
-| `destroy()` | Abort/invalidate pending generation and release cache/observers; late results do not restore it |
+| Conflict                       | Keep draft and expose validated `conflict` snapshot; block edits until explicit resolution                                                           |
+| `acceptServer()`               | Adopt server snapshot, discard draft, clear conflict; host refreshes engine                                                                          |
+| `resync()` / `reconnect()`     | Load fresh snapshot; refuse unsent drafts without `resync(true)`; always refuse uncertain mutations                                                  |
+| `destroy()`                    | Abort/invalidate pending generation and release cache/observers; late results do not restore it                                                      |
 
 For conflict review, capture `getPendingChanges()` and engine identity **before** `acceptServer()`, refresh afterward, then reapply chosen changes through engine validation by finding each stable row ID in the new view. Do not blindly replay previous coordinates or overwrite newer server data. Undo during unsent drafts can remove a pending value by restoring its original value. Engine refresh after accepted/server/resync snapshots clears old history and pending cut; saved metadata follows captured IDs. Refresh is application-owned, never automatic from the transport cache.
 

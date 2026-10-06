@@ -71,7 +71,6 @@ Start with NVDA + Firefox/Chromium on Windows, VoiceOver + Safari on macOS, and 
 
 Any failure needs the exact revision, reproduction, expected/observed result and evidence. Keep NOT RUN items open. Timing gates require a stable runner, a host-approved budget and repeated baseline data; the existing CI gates enforce correctness and resource bounds without inventing a hardware-independent latency threshold. Package publication and production deployment remain separate actions.
 
-
 ## Source editing and remote follow-up
 
 At the recorded source revision, verify special paste in a read-only-formatting cell, transpose/skip-empty with protected destinations, and atomic rollback/history. Hide edge/interior/all axes, recover via Shift+F10, restore saved state and confirm retained values/sizes. Check localized search/menu/editor/validation announcements in English, Vietnamese and a host pack, with numeric ARIA/display matching the locale while editor values remain raw. Run desktop and narrow viewport checks.

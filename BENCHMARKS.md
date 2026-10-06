@@ -7,10 +7,10 @@
 [Before/after raw evidence](benchmark-results/2026-10-06-atomic-batch.json) compares runtime `9095449` with `929b6ad` on the same local Windows Chromium setup. Median CPU wall time in ms:
 
 | Shape, 100k cells | setValues before / after | updateCells before / after | Paste before / after | Undo paste before / after |
-| --- | ---: | ---: | ---: | ---: |
-| 100k × 1 | 16.5 / 15.3 | 81.5 / 83.7 | 156.6 / 148.5 | 54.3 / 54.4 |
-| 10k × 10 | 8.5 / 8.1 | 78.2 / 72.3 | 142.8 / 130.7 | 48.5 / 44.1 |
-| 1k × 100 | 24.3 / 10.1 | 94.8 / 76.5 | 159.7 / 123.6 | 67.4 / 52.6 |
+| ----------------- | -----------------------: | -------------------------: | -------------------: | ------------------------: |
+| 100k × 1          |              16.5 / 15.3 |                81.5 / 83.7 |        156.6 / 148.5 |               54.3 / 54.4 |
+| 10k × 10          |                8.5 / 8.1 |                78.2 / 72.3 |        142.8 / 130.7 |               48.5 / 44.1 |
+| 1k × 100          |              24.3 / 10.1 |                94.8 / 76.5 |        159.7 / 123.6 |               67.4 / 52.6 |
 
 LocalDataSource stages one shallow draft per touched row, updates its fields in encounter order and freezes the completed rows only after the entire batch validates. Old snapshots remain frozen and unchanged; duplicate cells retain their last value. Existing own keys such as `__proto__` remain data properties. Batch/paste/cut deduplication uses an integer row prefix and separator followed by the complete column key, avoiding JSON array serialization without conflating keys containing colons or quotes. Permissions, parsing, validation and history continue through the same mutation pipeline.
 
@@ -20,11 +20,11 @@ These are three local samples per shape, without dedicated warmup, fixed system 
 
 [Before/after raw trials](benchmark-results/2026-10-06-local-view-comparison.json) compare the unchanged Node runner at runtime baseline `fcab797` and optimization `53835be`. Both use Node 24.13.0 on the same Windows i5-12400F machine, three trials each at 10k/100k allocated rows, with full identity/value/history assertions. Runtime/runner SHA-256 hashes are included. Documentation changes present during the baseline run do not change the measured runtime.
 
-| Operation | 10k before / after median, ms | 100k before / after median, ms |
-| --- | ---: | ---: |
-| Numeric sort | 7.31 / 4.07 | 81.34 / 33.80 |
-| Multi-sort | 16.34 / 11.07 | 276.92 / 141.57 |
-| Equals filter | 1.55 / 1.63 | 19.24 / 11.19 |
+| Operation     | 10k before / after median, ms | 100k before / after median, ms |
+| ------------- | ----------------------------: | -----------------------------: |
+| Numeric sort  |                   7.31 / 4.07 |                  81.34 / 33.80 |
+| Multi-sort    |                 16.34 / 11.07 |                276.92 / 141.57 |
+| Equals filter |                   1.55 / 1.63 |                  19.24 / 11.19 |
 
 LocalDataView now caches sort keys in dense arrays indexed by matched positions, instead of hashing source indices during every comparison. It skips the filtering pass when no filters are configured and normalizes each filter query once. Nullish-last ordering, stable source-order ties, source read order, immutable projection and mapped writes retain their contracts. Storage scales with matched rows and sort keys, without allocating sort caches for filtered-out rows. Filtering still scans the source and commands remain synchronous; no API or dependency changes were made.
 
@@ -55,9 +55,9 @@ Run `npm run benchmark -- --repeat-each=3 --reporter=json` after installing deve
 The source exposes 1,000,000 logical rows and 1,000 columns lazily, with two sparse size overrides. It does not allocate one billion cells. Each run performs 60 scroll steps and 60 visible-cell updates. Native scroll events can produce extra callbacks.
 
 | Frozen rows/columns | Scroll median range | Scroll p95 range | Maximum reads/callback | Partial median range | Partial p95 range | Partial reads |
-| --- | --- | --- | --- | --- | --- | --- |
-| 0 / 0 | 0.9–1.2 ms | 1.3–2.6 ms | 44 | 0.1–0.2 ms | 0.3–0.9 ms | 1 |
-| 1 / 1 | 1.2–1.6 ms | 1.7–10.0 ms | 55 | 0.1 ms | 0.3–0.4 ms | 1 |
+| ------------------- | ------------------- | ---------------- | ---------------------- | -------------------- | ----------------- | ------------- |
+| 0 / 0               | 0.9–1.2 ms          | 1.3–2.6 ms       | 44                     | 0.1–0.2 ms           | 0.3–0.9 ms        | 1             |
+| 1 / 1               | 1.2–1.6 ms          | 1.7–10.0 ms      | 55                     | 0.1 ms               | 0.3–0.4 ms        | 1             |
 
 Ranges describe three per-run summaries, not pooled percentiles. The 10 ms p95 is retained as measured. Outputs contain per-run summaries, not individual callback samples. This instrumentation measures synchronous animation-frame callbacks that read source cells. It does not measure presented FPS, raster/GPU time, peak memory, all UI callbacks or production application latency. Concurrent machine activity is uncontrolled; these results do not establish a regression against earlier runs.
 
@@ -99,9 +99,9 @@ The opt-in `tests/benchmark-responsiveness.mjs` measures two warmups followed by
 
 [Windows Chromium samples](benchmark-results/2026-10-06-responsiveness.json) record source revision and runner hash. Nearest-rank p95 command/timer latency in ms:
 
-| Allocated rows | Multi-sort | Filter | Paste | Undo | Reference p95 target |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| 10,000 | 17.4 / 17.5 | 1.5 / 5.4 | 12.4 / 12.5 | 6.1 / 6.1 | 50 ms frequent local commands |
-| 100,000 | 176.7 / 176.8 | 13.8 / 13.8 | 158.8 / 158.9 | 70.9 / 71.1 | 250 ms explicit bulk commands |
+| Allocated rows |    Multi-sort |      Filter |         Paste |        Undo |          Reference p95 target |
+| -------------- | ------------: | ----------: | ------------: | ----------: | ----------------------------: |
+| 10,000         |   17.4 / 17.5 |   1.5 / 5.4 |   12.4 / 12.5 |   6.1 / 6.1 | 50 ms frequent local commands |
+| 100,000        | 176.7 / 176.8 | 13.8 / 13.8 | 158.8 / 158.9 | 70.9 / 71.1 | 250 ms explicit bulk commands |
 
 All correctness checks passed. Samples fit these reference targets on this machine; 100k sort/paste do not fit the 50 ms frequent-command target. This is one fixture-specific warmed sequence on an uncontrolled local host, not a stable-runner regression baseline, production SLA or portable responsiveness guarantee. No Canvas/application subscribers/network/real-device workload is included. The [manual protocol](guides/manual-validation.md#local-command-reference-budgets) describes integration choices and host acceptance.

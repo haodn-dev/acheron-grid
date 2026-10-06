@@ -58,17 +58,17 @@ Use `choiceEditor.renderOption` to style dropdown options, `renderCell` to draw 
 
 Click a cell and Shift-click to extend a rectangle. Ctrl/Cmd-click adds another range. Click row indexes, leaf headers or grouped headers to select their complete spans. Selected whole axes can be dragged when the host enables reordering.
 
-| Task | Shortcut |
-| --- | --- |
-| Move / extend | Arrow keys / Shift+Arrow |
-| Select row / column | Shift+Space / Ctrl/Cmd+Space |
-| Select all / add range | Ctrl/Cmd+A / Shift+F8 |
-| Edit / cancel | Enter or F2 / Escape |
-| Copy / paste | Ctrl/Cmd+C / Ctrl/Cmd+V |
-| Undo / redo | Ctrl/Cmd+Z / Ctrl/Cmd+Shift+Z |
-| Bold / italic | Ctrl/Cmd+B / Ctrl/Cmd+I |
-| Find / context menu | Ctrl/Cmd+F / Shift+F10 |
-| Open safe links | Alt+Enter outside an editor |
+| Task                   | Shortcut                      |
+| ---------------------- | ----------------------------- |
+| Move / extend          | Arrow keys / Shift+Arrow      |
+| Select row / column    | Shift+Space / Ctrl/Cmd+Space  |
+| Select all / add range | Ctrl/Cmd+A / Shift+F8         |
+| Edit / cancel          | Enter or F2 / Escape          |
+| Copy / paste           | Ctrl/Cmd+C / Ctrl/Cmd+V       |
+| Undo / redo            | Ctrl/Cmd+Z / Ctrl/Cmd+Shift+Z |
+| Bold / italic          | Ctrl/Cmd+B / Ctrl/Cmd+I       |
+| Find / context menu    | Ctrl/Cmd+F / Shift+F10        |
+| Open safe links        | Alt+Enter outside an editor   |
 
 Type while the context menu is open to filter actions. Native editor inputs keep their own text clipboard and undo behavior. Accessibility mirrors expose viewport content; complete screen-reader behavior remains unverified.
 
@@ -196,18 +196,17 @@ Client permissions and locks are UI/domain controls, not server authorization. K
 
 ## Troubleshooting and boundaries
 
-| Symptom | Check |
-| --- | --- |
-| Empty grid | Container dimensions, source row count, column keys and browser console |
-| Cannot edit/paste | Column editable flag, parser, source setter, resolved permissions and locks |
-| Markdown configuration rejected | Supply a synchronous Markdown adapter callback |
-| Image unavailable | URL scheme, CORS, server response and visible cell size |
-| Move/view change rejected | Active draft, sort/filter, collapsed groups, merges and host policy |
-| Change missing from undo | Direct source mutation or automatic row measurement |
-| Styles differ inside choices | Share option/display palettes and honor format metadata |
+| Symptom                         | Check                                                                       |
+| ------------------------------- | --------------------------------------------------------------------------- |
+| Empty grid                      | Container dimensions, source row count, column keys and browser console     |
+| Cannot edit/paste               | Column editable flag, parser, source setter, resolved permissions and locks |
+| Markdown configuration rejected | Supply a synchronous Markdown adapter callback                              |
+| Image unavailable               | URL scheme, CORS, server response and visible cell size                     |
+| Move/view change rejected       | Active draft, sort/filter, collapsed groups, merges and host policy         |
+| Change missing from undo        | Direct source mutation or automatic row measurement                         |
+| Styles differ inside choices    | Share option/display palettes and honor format metadata                     |
 
 Always call `grid.destroy()` on unmount. Read-only async paging and a separate MCP documentation/host-tools adapter are available. Async writes, collaboration, formulas and an automatic MCP browser bridge are not included. Read package README files and exported contracts for detailed limits; browser security policy can affect clipboard and navigation prompts.
-
 
 ## Search engines and readable content
 
@@ -248,7 +247,6 @@ Link popovers do not need metadata requests. A host `linkPreview.load` can provi
 ## Support boundaries
 
 Portable integration suites pass on Chromium, Firefox and Playwright WebKit; Chromium-only clipboard-permission/CDP-touch checks are excluded from the other engines. Synthetic clipboard fixtures do not establish operating-system clipboard interoperability. Safari, screen-reader and physical touch-device coverage remain unverified; see the current [support evidence](../SUPPORT.md). Native scroll sizes limit extreme dimensions. The 10,000-row demo is a sample, not a frame-rate/memory guarantee. Formula calculation, pivots, multi-sheet workbooks, realtime collaboration and async writes are outside core V1. Optional inline charts and multi-column sorting are source previews, not npm 0.1.0. See the selected documentation channel before using them.
-
 
 ## Source editing and remote writes
 

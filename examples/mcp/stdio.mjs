@@ -4,8 +4,9 @@ import { createTaskApplication, sampleTasks } from './tasks.mjs';
 
 const args = process.argv.slice(2);
 const allowWrites = args.includes('--allow-writes');
-const files = args.filter(arg => arg !== '--allow-writes');
-if (files.length > 1 || files.some(arg => arg.startsWith('--'))) throw new Error('Usage: node examples/mcp/stdio.mjs [tasks.json] [--allow-writes]');
+const files = args.filter((arg) => arg !== '--allow-writes');
+if (files.length > 1 || files.some((arg) => arg.startsWith('--')))
+  throw new Error('Usage: node examples/mcp/stdio.mjs [tasks.json] [--allow-writes]');
 let rows = sampleTasks;
 if (files.length) {
   if ((await stat(files[0])).size > 1_000_000) throw new Error('Task file exceeds 1 MB.');
