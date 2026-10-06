@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add verified npm develop/stable release workflows, aligned workspace version tooling, registry consumer checks, and trusted publishing setup instructions.
+
 - Core accepts atomic batch-only sources for editing, discards collapsed groups moved across frozen boundaries during identity refresh, and bounds projected selection/clipboard fragmentation. Collapsed frozen-row counts are cached between state changes.
 - Async page totals invalidate older positional caches; empty pages beyond a shrinking total update the count and remain reloadable, with range capacity checked before admission. Host dataset revision consistency remains required.
 - Consumer documentation now includes the complete core contract/limit matrix, an executable lifecycle example and independent source/release document revisions on the website.

@@ -1,5 +1,7 @@
 # Contributing
 
+Maintainers: see [package release setup and channels](guides/releasing.md) for GitHub Actions and npm trusted publishing.
+
 All features and optional modules are open source and free. Keep core headless; Canvas depends on public core, and framework/transport/export/chart dependencies belong in optional modules.
 
 Use a small branch and explain the observable problem, resulting behavior and validation. Reuse the controlled mutation/permission/validation/history pipeline. Do not turn synchronous atomic DataSource setters into promises. Define async lifecycle, cancellation, bounded work and stale-response behavior explicitly.

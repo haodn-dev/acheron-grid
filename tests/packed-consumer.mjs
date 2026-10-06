@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { build } from 'esbuild';
 import { chromium } from '@playwright/test';
+import {packageOrder} from '../scripts/release.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const consumer=await mkdtemp(join(tmpdir(),'acheron-consumer-'));
@@ -12,9 +13,11 @@ const npm=process.env.npm_execpath;
 if(!npm)throw new Error('Run through npm run test:package.');
 function run(args,cwd=consumer){const result=spawnSync(process.execPath,args,{cwd,encoding:'utf8'});if(result.status!==0)throw new Error(result.stderr+'\n'+result.stdout);return result.stdout;}
 console.log('Independent packed consumer:',consumer);
-const packed=JSON.parse(run([npm,'pack','--workspaces','--json','--pack-destination',consumer],root));
+const version=process.env.ACHERON_RELEASE_VERSION;
+if(version&&!/^\d+\.\d+\.\d+(?:-dev\.\d+)?$/.test(version))throw new Error('Invalid registry release version.');
+const packed=version?packageOrder.map(name=>({filename:`@acheron-grid/${name}@${version}`})):JSON.parse(run([npm,'pack','--workspaces','--json','--pack-destination',consumer],root));
 await writeFile(join(consumer,'package.json'),JSON.stringify({private:true,type:'module'}));
-run([npm,'install','--ignore-scripts','--prefer-offline','--no-audit','--no-fund',...packed.map(item=>join(consumer,item.filename)),'typescript@5.9.3','react@19.1.0','react-dom@19.1.0','@types/react@18.3.31','vue@3.5.32']);
+run([npm,'install','--ignore-scripts',version?'--prefer-online':'--prefer-offline','--registry=https://registry.npmjs.org','--no-audit','--no-fund',...packed.map(item=>version?item.filename:join(consumer,item.filename)),'typescript@5.9.3','react@19.1.0','react-dom@19.1.0','@types/react@18.3.31','vue@3.5.32']);
 await writeFile(join(consumer,'index.ts'),`
 import {createGridEngine,LocalDataSource,createAsyncDataSource} from '@acheron-grid/core';
 import {createGrid} from '@acheron-grid/canvas';

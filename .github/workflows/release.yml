@@ -1,0 +1,75 @@
+name: npm Release
+
+on:
+  push:
+    branches: [develop]
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ github.ref_type == 'tag' && 'npm-production' || 'npm-develop' }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: npm install --global npm@11.21.0
+      - run: npm ci
+      - name: Prepare release version
+        id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$REF_TYPE" = tag ]; then
+            git merge-base --is-ancestor HEAD origin/main
+            VERSION="${REF_NAME#v}"
+            [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+            npm run release -- check "$VERSION"
+            TAG=latest
+          else
+            test "$GITHUB_SHA" = "$(git ls-remote origin refs/heads/develop | cut -f1)"
+            npm run release -- develop "$GITHUB_RUN_NUMBER"
+            npm install --package-lock-only --ignore-scripts
+            VERSION=$(node -p "require('./packages/core/package.json').version")
+            TAG=develop
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - run: npx playwright install --with-deps chromium
+      - name: Verify release package consumers
+        run: npm run test:package
+      - name: Publish using npm trusted publishing
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          DIST_TAG: ${{ steps.version.outputs.tag }}
+        run: npm run release -- publish "$VERSION" "$DIST_TAG"
+      - name: Verify installed registry packages
+        env:
+          ACHERON_RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: npm run test:package
+      - name: Release summary
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          DIST_TAG: ${{ steps.version.outputs.tag }}
+        run: echo "Published and verified 8 packages at $VERSION (npm tag $DIST_TAG)." >> "$GITHUB_STEP_SUMMARY"

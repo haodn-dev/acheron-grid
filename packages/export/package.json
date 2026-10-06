@@ -28,5 +28,10 @@
   "publishConfig": {
     "access": "public"
   },
-  "homepage": "https://acheron-grid.haoduong.dev/"
+  "homepage": "https://acheron-grid.haoduong.dev/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/haodn-dev/acheron-grid.git",
+    "directory": "packages/export"
+  }
 }

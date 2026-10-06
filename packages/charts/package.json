@@ -6,5 +6,6 @@
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
   "dependencies": { "@acheron-grid/canvas": "0.1.0" },
   "scripts": { "build": "tsc -p tsconfig.json", "typecheck": "tsc -p tsconfig.json --noEmit" },
-  "publishConfig": { "access": "public" }, "homepage": "https://acheron-grid.haoduong.dev/"
+  "publishConfig": { "access": "public" }, "homepage": "https://acheron-grid.haoduong.dev/",
+  "repository": {"type":"git","url":"git+https://github.com/haodn-dev/acheron-grid.git","directory":"packages/charts"}
 }
