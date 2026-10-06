@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add atomic paste special (values/formats/transpose/skip-empty), undoable hidden axes, numeric display formats and complete English/Vietnamese Canvas message packs with host overrides.
+- Add a bounded optimistic remote snapshot source with validated JSON writes, durable-server-idempotency contract, exact uncertain retry, explicit reconnect/resync and conflict adoption. Existing async paging remains read-only.
+
 - Preserve native checkbox drafts and context-menu keyboard focus in WebKit; read the current reduced-motion preference before layout animation. Extend browser CI beyond smoke coverage, keeping Chromium-only clipboard permission and CDP touch checks explicit. Add browser command task-delay benchmark evidence.
 
 - Complete the headless API behavior/export/type catalog and prevent undocumented new engine members during documentation sync. Clarify source/view coordinates, capability probes and disposal ownership; add regression checks for source write support and permission-sensitive replay.

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "5649c0f4a364e4ff5a3e3a01ff8419d62ceda6a4",
+  "sourceRevision": "4e2e8c751aa6fa8816563bcadfb81543ce8f5dda",
   "release": {
     "version": "0.1.0",
     "tag": "v0.1.0",
@@ -23,9 +23,9 @@
     {
       "id": "integration",
       "path": "guides/integration.md",
-      "revision": 4,
+      "revision": 5,
       "updated": "2026-10-06",
-      "sha256": "3a31856ab9d13f17d5bb4a0b6a4ff9cd0ca02384bc81df46345f4e62f595afec",
+      "sha256": "fe432f00f829361721bb9a22ebe34dcb01c068f8a1b3fc8315c2357683041808",
       "history": [
         {
           "revision": 1,
@@ -41,6 +41,10 @@
         },
         {
           "revision": 4,
+          "summary": "Clarify async request limits, positional page invalidation and dataset revision ownership."
+        },
+        {
+          "revision": 5,
           "summary": "Clarify async request limits, positional page invalidation and dataset revision ownership."
         }
       ]
@@ -61,12 +65,16 @@
     {
       "id": "ai",
       "path": "guides/ai-integration.md",
-      "revision": 1,
-      "updated": "2026-10-05",
-      "sha256": "6f61e7863961f9986aa58664949861e2aaa547b1e41a89ba76eefe8f37659b4b",
+      "revision": 2,
+      "updated": "2026-10-06",
+      "sha256": "378a94aed44e0a55927d831166c6d6a1f8a914465c70d5d674b213a5cf4733bf",
       "history": [
         {
           "revision": 1,
+          "summary": "Canonical public integration and host boundaries."
+        },
+        {
+          "revision": 2,
           "summary": "Canonical public integration and host boundaries."
         }
       ]
@@ -87,9 +95,9 @@
     {
       "id": "core-api",
       "path": "guides/core-api.md",
-      "revision": 5,
+      "revision": 6,
       "updated": "2026-10-06",
-      "sha256": "c4816355ba9746211d06e36574f991bd33e2b26aee304df8263d9367488e845f",
+      "sha256": "86869bba8de05ead4795ba066a1e6ce4276007252126661de6554497dc0c39f4",
       "history": [
         {
           "revision": 1,
@@ -110,18 +118,26 @@
         {
           "revision": 5,
           "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
+        },
+        {
+          "revision": 6,
+          "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
         }
       ]
     },
     {
       "id": "canvas-api",
       "path": "guides/canvas-api.md",
-      "revision": 1,
-      "updated": "2026-10-05",
-      "sha256": "b9e7df9dfb8b5353360ae53c754f026d1bacdfcaf5e60d8ce5e27067a88a27f8",
+      "revision": 2,
+      "updated": "2026-10-06",
+      "sha256": "17c4a510cfbabce63c1dabf0c3aab406815caf3a027eb6578ff0d4f3417cba56",
       "history": [
         {
           "revision": 1,
+          "summary": "Generated source API signatures and construction options."
+        },
+        {
+          "revision": 2,
           "summary": "Generated source API signatures and construction options."
         }
       ]
@@ -129,9 +145,9 @@
     {
       "id": "core",
       "path": "packages/core/README.md",
-      "revision": 4,
+      "revision": 5,
       "updated": "2026-10-06",
-      "sha256": "f09a2f88bfbc8d7bfefb91957bbe5aab4fdd296ca5a5c70ba1ffd878c6ad8bf1",
+      "sha256": "d429291021a6edbeebacc3a50e2960f7fc89878f24ad129480006646a18a5fd8",
       "history": [
         {
           "revision": 1,
@@ -148,15 +164,19 @@
         {
           "revision": 4,
           "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
+        },
+        {
+          "revision": 5,
+          "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
         }
       ]
     },
     {
       "id": "canvas",
       "path": "packages/canvas/README.md",
-      "revision": 2,
-      "updated": "2026-10-05",
-      "sha256": "0e852a0a16dda50074e447de034184767822831d577350bafb697b29e627b724",
+      "revision": 3,
+      "updated": "2026-10-06",
+      "sha256": "613d53a69b11b77268791ad0638de06edb17d94af8fa2ea00dced1839ebb0a57",
       "history": [
         {
           "revision": 1,
@@ -164,6 +184,10 @@
         },
         {
           "revision": 2,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 3,
           "summary": "Align publication status, installation and current source contracts."
         }
       ]
@@ -325,11 +349,28 @@
       ]
     },
     {
+      "id": "editing-and-remote",
+      "path": "guides/editing-and-remote.md",
+      "revision": 2,
+      "updated": "2026-10-06",
+      "sha256": "9eefa8b917f79dbeb74f76938865bf11dd51d5ba06d8c44dfe838ce6d5520272",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Paste special, hidden axes, number formats, Canvas localization and bounded remote write lifecycle."
+        },
+        {
+          "revision": 2,
+          "summary": "Paste special, hidden axes, number formats, Canvas localization and bounded remote write lifecycle."
+        }
+      ]
+    },
+    {
       "id": "manual-validation",
       "path": "guides/manual-validation.md",
-      "revision": 3,
+      "revision": 4,
       "updated": "2026-10-06",
-      "sha256": "8008125119f239b0131d580ac5f99820f7b8b91edaa0aba83526947f40e5ee25",
+      "sha256": "321458a13206b0f1b5681d821c5c08edbf0a5122439e943b93ce760bfaddbd41",
       "history": [
         {
           "revision": 1,
@@ -341,6 +382,10 @@
         },
         {
           "revision": 3,
+          "summary": "Manual accessibility, device, clipboard and operational acceptance protocol."
+        },
+        {
+          "revision": 4,
           "summary": "Manual accessibility, device, clipboard and operational acceptance protocol."
         }
       ]

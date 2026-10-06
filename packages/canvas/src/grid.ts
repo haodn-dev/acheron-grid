@@ -1,3 +1,4 @@
+import {createCanvasTranslator} from './locale.js';
 import { installTooltips } from './tooltips.js';
 import { icons } from './icons.js';
 import { choicePanel, choiceValue, positionChoicePanel, disposeChoicePanel } from './choices.js';
@@ -13,7 +14,7 @@ import { safeWebUrl, detectLinks } from './links.js';
 import { readHtml, layoutRichText, richTextHtml, richTextSource } from './rich-text.js';
 import type { RichText, RichTextFormat } from './rich-text.js';
 import { createGridEngine, restoreGridConfiguration, gridClipboardType, decodeBlocks, encodeBlocks, blocksToTsv } from '@acheron-grid/core';
-import type { GridConfiguration, GridState, GridEngine, ClipboardBlock, RowId } from '@acheron-grid/core';
+import type { GridConfiguration, GridState, GridEngine, ClipboardBlock, RowId, PasteOptions, NumberFormat } from '@acheron-grid/core';
 import type { CellUpdate, DataRow, DataSource, Column, CellSelection, SelectionRange, CellPermission, CellLockTarget, CellFormatTarget, CellFormat, CellFormatPatch, LocalViewOptions, GridEngineOptions, ViewportRegion, RowGroup } from '@acheron-grid/core';
 
 let editorId = 0;
@@ -60,10 +61,13 @@ export interface ColumnType {
   readonly label:string;
   readonly create:(input:Readonly<{key:string;title:string;defaultText:string}>)=>{column:Column;editor?:ColumnEditor};
 }
-export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 'resolveCellPermission' | 'onEvent' | 'allowLockChanges' | 'frozenRows' | 'frozenColumns' | 'canChangeStructure' | 'columnWidths'> {
+export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 'resolveCellPermission' | 'onEvent' | 'allowLockChanges' | 'frozenRows' | 'frozenColumns' | 'canChangeStructure' | 'columnWidths' | 'canChangeVisibility'> {
   allowMerging?: boolean;
   allowRowGrouping?: boolean;
   canChangeLayout?: GridEngineOptions['canChangeLayout'];
+  locale?: string;
+  messages?: Readonly<Record<string,string>>;
+  currency?: string;
   view?: LocalViewOptions;
   viewMode?: 'core' | 'host';
   onViewChange?: (view: LocalViewOptions) => void;
@@ -151,6 +155,10 @@ export interface Grid {
   autoFitRow(index: number): void;
   readonly frozenRows: number;
   readonly frozenColumns: number;
+  setRowsHidden: GridEngine['setRowsHidden'];
+  setColumnsHidden: GridEngine['setColumnsHidden'];
+  isRowHidden: GridEngine['isRowHidden'];
+  isColumnHidden: GridEngine['isColumnHidden'];
   setFrozen(rows: number, columns: number): void;
   isLocked(target: CellLockTarget): boolean;
   canManageLocks(): boolean;
@@ -168,9 +176,9 @@ export interface Grid {
   cutSelectionBlocks(): string;
   cancelCut(): void;
   copySelectionBlocks(): string;
-  pasteSelectionBlocks(text: string): void;
+  pasteSelectionBlocks(text: string,options?:PasteOptions): void;
   copySelection(): string;
-  paste(text: string): void;
+  paste(text: string,options?:PasteOptions): void;
   setColumnWidth(index: number, width: number): void;
   setRowHeight(index: number, height: number): void;
   destroy(): void;
@@ -182,6 +190,9 @@ const stateIconSvg = {lock:icons.lock,'arrow-up':icons['arrow-up'],'arrow-down':
 /** Mount a grid. The caller owns the container and its dimensions. */
 export function createGrid(options: GridOptions): Grid {
   const { container, dataSource } = options;
+  const t=createCanvasTranslator(options.locale,options.messages);
+  const numberFormats = new Map<NumberFormat,Intl.NumberFormat>(['decimal','integer','percent','currency'].map(kind=>[kind as NumberFormat,new Intl.NumberFormat(options.locale ?? 'en',kind==='currency'?{style:'currency',currency:options.currency ?? 'USD'}:kind==='percent'?{style:'percent',maximumFractionDigits:2}:{maximumFractionDigits:kind==='integer'?0:2})]));
+  function numberText(value:unknown,format?:NumberFormat):string {return typeof value==='number'&&Number.isFinite(value)&&format?numberFormats.get(format)!.format(value):String(value??'');}
   const motionDuration = typeof options.motion === 'object' ? options.motion.duration ?? 220 : 220;
   if (!Number.isFinite(motionDuration) || motionDuration < 0 || motionDuration > 1000) throw new RangeError('Motion duration must be between 0 and 1000ms.');
 
@@ -203,12 +214,12 @@ export function createGrid(options: GridOptions): Grid {
   function richText(value: unknown, key: string, contentFormat?: CellFormat['contentFormat']): RichText | undefined {
     const format = contentFormat ?? richTextColumns.get(key);
     if (!format || format === 'plain' || typeof value !== 'string') return undefined;
-    if (value.length > 100_000) return { text: 'Rich text is too large to display', runs: [{ text: 'Rich text is too large to display' }], unavailable: true };
+    if (value.length > 100_000) return { text: t("Rich text is too large to display"), runs: [{ text: t("Rich text is too large to display") }], unavailable: true };
     const cacheKey = format + ':' + value;
     let rich = richCache.get(cacheKey);
     if (!rich) {
       try { rich = readHtml(format === 'markdown' ? options.markdownToHtml!(value) : value, doc); }
-      catch { rich = { text: 'Rich text unavailable', runs: [{ text: 'Rich text unavailable' }], unavailable: true }; }
+      catch { rich = { text: t("Rich text unavailable"), runs: [{ text: t("Rich text unavailable") }], unavailable: true }; }
       if (value.length <= 4096) {
         if (richCache.size >= 256) richCache.delete(richCache.keys().next().value!);
         richCache.set(cacheKey, rich);
@@ -216,7 +227,7 @@ export function createGrid(options: GridOptions): Grid {
     }
     return rich;
   }
-  function displayedText(value: unknown, key: string, contentFormat?: CellFormat['contentFormat']): string { return richText(value, key, contentFormat)?.text ?? String(value ?? ''); }
+  function displayedText(value: unknown, key: string, contentFormat?: CellFormat['contentFormat'], numberFormat?:NumberFormat): string { return richText(value, key, contentFormat)?.text ?? numberText(value,numberFormat); }
   const win = doc.defaultView!;
   let theme = Object.freeze({ background: '#ffffff', textColor: '#0f172a', headerBackground: '#edf2f7',
     headerTextColor: '#334155', iconColor: '#475569', searchHighlightColor: '#f59e0b', gridLineColor: '#e2e8f0', selectionColor: '#2563eb',
@@ -245,6 +256,7 @@ export function createGrid(options: GridOptions): Grid {
     ...(options.rowHeight === undefined ? {} : { rowHeight: options.rowHeight }),
     ...(options.columnWidths === undefined ? {} : { columnWidths:options.columnWidths }),
     ...(options.columnWidth === undefined ? {} : { columnWidth: options.columnWidth }),
+    ...(options.canChangeVisibility?{canChangeVisibility:options.canChangeVisibility}:{}),
     canChangeStructure: request => {
       if(options.canChangeStructure?.(request)===false)return false;
       if(request.axis==='column') {
@@ -392,7 +404,7 @@ export function createGrid(options: GridOptions): Grid {
   `;
   root.append(dialogStyles);
   const scroller = doc.createElement('div');
-  const viewportLabel = dataSource.setValue && columns.some(column => column.editable) ? 'Data grid viewport' : 'Read-only data grid viewport';
+  const viewportLabel = dataSource.setValue && columns.some(column => column.editable) ? t("Data grid viewport") : t("Read-only data grid viewport");
   scroller.style.cssText = `position:absolute;inset:${headerHeight}px 0 0 ${indexWidth}px;overflow:auto;overscroll-behavior:contain;outline:none`;
   scroller.dataset.gridViewport = '';
   scroller.tabIndex = 0;
@@ -434,7 +446,7 @@ export function createGrid(options: GridOptions): Grid {
   indexGutter.dataset.gridIndex = '';
   indexGutter.hidden = indexWidth === 0;
   indexGutter.style.cssText = `position:absolute;left:0;top:0;width:${indexWidth}px;overflow:hidden;background:var(--acheron-header-background);color:var(--acheron-header-text-color);font:var(--acheron-font)`;
-  indexGutter.setAttribute('aria-label', 'Row index');
+  indexGutter.setAttribute('aria-label', t("Row index"));
   indexGutter.style.touchAction = 'none';
   root.append(scroller, canvas, headerSurface, indexGutter);
   const copyFeedback = doc.createElement('div');
@@ -518,7 +530,7 @@ export function createGrid(options: GridOptions): Grid {
   let handleAnchor: { row: number; col: number } | null = null;
   let touchSelection = false;
   const selectionHandles = (['start', 'end'] as const).map(endpoint => {
-    const button = doc.createElement('button'); button.type = 'button'; button.hidden = true; button.tabIndex = -1; button.setAttribute('aria-label', `Adjust selection ${endpoint}`);
+    const button = doc.createElement('button'); button.type = 'button'; button.hidden = true; button.tabIndex = -1; button.setAttribute('aria-label', t("Adjust selection {0}",endpoint));
     button.style.cssText = 'position:absolute;width:20px;height:20px;padding:0;margin:0;border:3px solid var(--acheron-background);border-radius:50%;background:var(--acheron-selection-color);z-index:3;touch-action:none;cursor:crosshair';
     button.addEventListener('pointerdown', event => {
       const range = getSelectionRange(); if (event.button !== 0 || !range || !finishEdit(true)) return;
@@ -567,8 +579,8 @@ export function createGrid(options: GridOptions): Grid {
   const lockNotice = doc.createElement('div');
   lockNotice.dataset.gridLockNotice = ''; lockNotice.setAttribute('role', 'status'); lockNotice.hidden = true;
   lockNotice.style.cssText = 'position:absolute;top:48px;left:16px;right:16px;z-index:12;padding:16px;background:var(--acheron-background);color:var(--acheron-text-color);border:1px solid var(--acheron-grid-line-color);box-shadow:0 8px 24px #0002;font:var(--acheron-font);pointer-events:none';
-  const lockTitle = doc.createElement('strong'); lockTitle.style.cssText = 'display:flex;align-items:center;gap:8px'; lockTitle.append(svgIcon('lock'), options.tableLockNotice && options.tableLockNotice.title || 'Table locked');
-  const lockDescription = doc.createElement('div'); lockDescription.style.cssText = 'margin-top:8px;opacity:.8'; lockDescription.textContent = options.tableLockNotice && options.tableLockNotice.description || 'Editing is disabled while the table is locked.';
+  const lockTitle = doc.createElement('strong'); lockTitle.style.cssText = 'display:flex;align-items:center;gap:8px'; lockTitle.append(svgIcon('lock'), options.tableLockNotice && options.tableLockNotice.title || t("Table locked"));
+  const lockDescription = doc.createElement('div'); lockDescription.style.cssText = 'margin-top:8px;opacity:.8'; lockDescription.textContent = options.tableLockNotice && options.tableLockNotice.description || t("Editing is disabled while the table is locked.");
   lockNotice.append(lockTitle, lockDescription); root.append(lockNotice);
   let lockNoticeTimer: number | undefined;
 
@@ -586,11 +598,11 @@ export function createGrid(options: GridOptions): Grid {
   searchBar.hidden = true;
   searchBar.dataset.gridSearch = '';
   searchBar.setAttribute('role', 'search');
-  searchBar.setAttribute('aria-label', 'Find in grid');
+  searchBar.setAttribute('aria-label', t("Find in grid"));
   searchBar.style.cssText = 'position:absolute;top:4px;right:20px;max-width:calc(100% - 24px);z-index:4;padding:6px;border:1px solid var(--acheron-grid-line-color);border-radius:6px;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);box-shadow:0 4px 12px #0f172a26';
   const searchInput = doc.createElement('input');
   searchInput.type = 'search';
-  searchInput.setAttribute('aria-label', 'Find in grid');
+  searchInput.setAttribute('aria-label', t("Find in grid"));
   searchInput.style.cssText = 'width:140px;min-width:80px;max-width:100%;padding:6px;font:inherit;color:inherit;background:var(--acheron-background);border:1px solid var(--acheron-grid-line-color);border-radius:4px;outline:none;box-shadow:none';
   const searchStatus = doc.createElement('span');
   searchStatus.setAttribute('role', 'status');
@@ -598,7 +610,7 @@ export function createGrid(options: GridOptions): Grid {
   const searchPrevious = doc.createElement('button');
   const searchNext = doc.createElement('button');
   const searchClose = doc.createElement('button');
-  for (const [button, label, text] of [[searchPrevious, 'Previous match', '↑'], [searchNext, 'Next match', '↓'], [searchClose, 'Close search', '×']] as const) {
+  for (const [button, label, text] of [[searchPrevious, t("Previous match"), '↑'], [searchNext, t("Next match"), '↓'], [searchClose, t("Close search"), '×']] as const) {
     button.type = 'button'; button.setAttribute('aria-label', label);
     button.append(svgIcon(text==='↑'?'arrow-up':text==='↓'?'arrow-down':'x',14));
     button.style.cssText = 'padding:4px 8px;margin-left:2px;font:inherit;color:inherit;background:var(--acheron-background);border:1px solid var(--acheron-grid-line-color);border-radius:3px';
@@ -612,7 +624,7 @@ export function createGrid(options: GridOptions): Grid {
   function updateSearchStatus(): void {
     let ordinal = 0;
     for (const index of searchMatches) { ordinal++; if (index === searchCurrent) break; }
-    searchStatus.textContent = searchMatches.size ? `${ordinal} of ${searchMatches.size}` : searchInput.value ? 'No matches' : 'Find text';
+    searchStatus.textContent = searchMatches.size ? t('{0} of {1}',ordinal,searchMatches.size) : searchInput.value ? t("No matches") : t("Find text");
     searchPrevious.disabled = searchNext.disabled = !searchMatches.size;
   }
 
@@ -626,7 +638,7 @@ export function createGrid(options: GridOptions): Grid {
       if (query) for (let row = 0; row < rowCount; row++) for (let col = 0; col < columns.length; col++) {
         const span=engine.getMerge(row,col);if(span&&(span.startRow!==row||span.startColumn!==col))continue;
         const value = engine.getValue(row, columns[col]!.key);
-        if (value != null && displayedText(value, columns[col]!.key, engine.getFormat(row, col).contentFormat).toLocaleLowerCase().includes(query) && engine.getCellPermission(row, col).selectable) searchMatches.add(row * columns.length + col);
+        if (value != null && !engine.isRowHidden(row) && !engine.isColumnHidden(col) && displayedText(value, columns[col]!.key, engine.getFormat(row, col).contentFormat,engine.getFormat(row,col).numberFormat).toLocaleLowerCase().includes(query) && engine.getCellPermission(row, col).selectable) searchMatches.add(row * columns.length + col);
       }
       if (!searchMatches.has(searchCurrent)) searchCurrent = searchMatches.values().next().value ?? -1;
       updateSearchStatus();
@@ -634,7 +646,7 @@ export function createGrid(options: GridOptions): Grid {
     } catch (error) {
       searchMatches.clear(); searchCurrent = -1;
       searchPrevious.disabled = searchNext.disabled = true;
-      searchStatus.textContent = error instanceof Error ? error.message : 'Search failed.';
+      searchStatus.textContent = error instanceof Error ? t(error.message) : t("Search failed.");
     }
     render();
   }
@@ -688,7 +700,7 @@ export function createGrid(options: GridOptions): Grid {
 
   function announceSelection(): void {
     const selection = engine.getSelection();
-    selectionStatus.textContent = `${selection ? `Row ${selection.rowIndex + 1}, ${columns[selection.columnIndex]!.title}. ${getSelectionRanges().length} selected range(s).` : 'Selection cleared.'}${addNextSelection ? ' Next click or navigation adds a range.' : ''}`;
+    selectionStatus.textContent = `${selection ? t("Row {0}, {1}. {2} selected range(s).",selection.rowIndex + 1,columns[selection.columnIndex]!.title,getSelectionRanges().length) : t("Selection cleared.")}${addNextSelection ? t(' Next click or navigation adds a range.') : ''}`;
   }
 
   function openSizeDialog(label: string, current: number, apply: (size: number) => void, units: string | null = 'px'): void {
@@ -706,16 +718,16 @@ export function createGrid(options: GridOptions): Grid {
 
     fieldLabel.append(input);
     const save = doc.createElement('button');
-    save.type = 'submit'; save.textContent = 'Apply';
+    save.type = 'submit'; save.textContent = t("Apply");
     const cancel = doc.createElement('button');
-    cancel.type = 'button'; cancel.textContent = 'Cancel';
+    cancel.type = 'button'; cancel.textContent = t("Cancel");
 
     cancel.addEventListener('click', () => dialog.close());
     input.addEventListener('input', () => input.setCustomValidity(''));
     form.addEventListener('submit', event => {
       event.preventDefault();
       try { apply(input.valueAsNumber); dialog.close(); }
-      catch (error) { input.setCustomValidity(error instanceof Error ? error.message : 'Invalid size.'); input.reportValidity(); }
+      catch (error) { input.setCustomValidity(error instanceof Error ? t(error.message) : t("Invalid size.")); input.reportValidity(); }
     });
     const actions = doc.createElement('div'); actions.dataset.dialogActions = ''; actions.append(save, cancel);
     form.append(fieldLabel, actions);
@@ -739,28 +751,32 @@ export function createGrid(options: GridOptions): Grid {
   function openFormatDialog(row: number, col: number): void {
     const ranges = getSelectionRanges();
     const dialog = doc.createElement('dialog'); activeDialog?.remove(); activeDialog = dialog;
-    dialog.setAttribute('aria-label', 'Format cells');
+    dialog.setAttribute('aria-label', t("Format cells"));
     dialog.dataset.gridDialog = '';
     const form = doc.createElement('form');
-    const scopeLabel = doc.createElement('label'); scopeLabel.textContent = 'Apply to ';
+    const scopeLabel = doc.createElement('label'); scopeLabel.textContent = t("Apply to ");
     const scope = doc.createElement('select');
-    for (const [value, label] of [['selection', 'Selected cells'], ['row', 'This row'], ['column', 'This column'], ['table', 'Whole table']]) {
+    for (const [value, label] of [['selection', t("Selected cells")], ['row', t("This row")], ['column', t("This column")], ['table', t("Whole table")]]) {
       const option = doc.createElement('option'); option.value = value!; option.textContent = label!; scope.append(option);
     }
     scopeLabel.append(scope); form.append(scopeLabel);
     function field(label: string, value: string, checked: boolean) {
       const line = doc.createElement('div'); line.style.cssText = 'display:flex;gap:12px;align-items:center;margin:16px 0';
       const apply = doc.createElement('input'); apply.type = 'checkbox'; apply.checked = checked;
-      const applyLabel = doc.createElement('label'); applyLabel.append(apply, ` Change ${label.toLowerCase()}`);
+      const applyLabel = doc.createElement('label'); applyLabel.append(apply, t(" Change {0}",label.toLowerCase()));
       const color = doc.createElement('input'); color.type = 'color'; color.value = value; color.setAttribute('aria-label', label);
       line.append(applyLabel, color); form.append(line); return { apply, color };
     }
-    const background = field('Background color', '#fff4b3', true);
-    const text = field('Text color', '#0f172a', false);
+    const background = field(t("Background color"), '#fff4b3', true);
+    const text = field(t("Text color"), '#0f172a', false);
+    const numberApply=doc.createElement('input');numberApply.type='checkbox';
+    const numberSelect=doc.createElement('select');numberSelect.setAttribute('aria-label',t("Number format"));
+    for(const [value,label] of [['decimal',t("Decimal")],['integer',t("Integer")],['percent',t("Percent")],['currency',t("Currency")]]){const option=doc.createElement('option');option.value=value!;option.textContent=label!;numberSelect.append(option);}
+    const numberLabel=doc.createElement('label');numberLabel.append(numberApply,t(' Change number format '),numberSelect);form.append(numberLabel);
     const error = doc.createElement('div'); error.setAttribute('role', 'alert'); error.style.cssText = 'color:#9f1239;margin-bottom:12px'; error.hidden = true;
-    const save = doc.createElement('button'); save.type = 'submit'; save.textContent = 'Apply';
-    const clear = doc.createElement('button'); clear.type = 'button'; clear.textContent = 'Clear formatting';
-    const cancel = doc.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel';
+    const save = doc.createElement('button'); save.type = 'submit'; save.textContent = t("Apply");
+    const clear = doc.createElement('button'); clear.type = 'button'; clear.textContent = t("Clear formatting");
+    const cancel = doc.createElement('button'); cancel.type = 'button'; cancel.textContent = t("Cancel");
 
     function targets(): CellFormatTarget[] {
       if (scope.value === 'row') return [{ scope: 'row', rowIndex: row }];
@@ -770,19 +786,19 @@ export function createGrid(options: GridOptions): Grid {
     }
     function checkPermission(): void {
       const allowed = engine.canFormat(targets()); save.disabled = clear.disabled = !allowed;
-      error.hidden = allowed; error.textContent = allowed ? '' : 'Formatting is not allowed for this selection.';
+      error.hidden = allowed; error.textContent = allowed ? '' : t("Formatting is not allowed for this selection.");
     }
     function apply(patch: CellFormatPatch): void {
       try { format(targets(), patch); dialog.close(); }
-      catch (failure) { error.textContent = failure instanceof Error ? failure.message : 'Formatting failed.'; error.hidden = false; }
+      catch (failure) { error.textContent = failure instanceof Error ? t(failure.message) : t("Formatting failed."); error.hidden = false; }
     }
     scope.addEventListener('change', checkPermission);
     form.addEventListener('submit', event => {
       event.preventDefault();
-      if (!background.apply.checked && !text.apply.checked) { error.textContent = 'Choose a color to change.'; error.hidden = false; return; }
-      apply({ ...(background.apply.checked ? { background: background.color.value } : {}), ...(text.apply.checked ? { textColor: text.color.value } : {}) });
+      if (!background.apply.checked && !text.apply.checked && !numberApply.checked) { error.textContent = t("Choose a format to change."); error.hidden = false; return; }
+      apply({ ...(numberApply.checked?{numberFormat:numberSelect.value as NumberFormat}:{}), ...(background.apply.checked ? { background: background.color.value } : {}), ...(text.apply.checked ? { textColor: text.color.value } : {}) });
     });
-    clear.addEventListener('click', () => apply({ background: null, textColor: null }));
+    clear.addEventListener('click', () => apply({ background: null, textColor: null, numberFormat:null }));
     cancel.addEventListener('click', () => dialog.close());
     dialog.addEventListener('close', () => { dialog.remove(); if (activeDialog === dialog) activeDialog = null; if (!destroyed && !editor) scroller.focus({ preventScroll: true }); });
     const actions = doc.createElement('div'); actions.dataset.dialogActions = ''; actions.append(save, clear, cancel);
@@ -845,7 +861,7 @@ export function createGrid(options: GridOptions): Grid {
         else {
           const rich = richText(value, column.key, engine.getFormat(row, index).contentFormat);
           if (rich) width = Math.max(width, layoutRichText(ctx, rich, theme.font, Infinity, false).width + 20);
-          else for (const line of String(value ?? '').split('\n')) width = Math.max(width, ctx.measureText(line).width + 20);
+          else for (const line of numberText(value,engine.getFormat(row,index).numberFormat).split('\n')) width = Math.max(width, ctx.measureText(line).width + 20);
           ctx.font = theme.font;
         }
       }
@@ -879,7 +895,7 @@ export function createGrid(options: GridOptions): Grid {
           height = Math.max(height, Math.min(1000, layout.lines * layout.lineHeight + 12)); ctx.font = theme.font; continue;
         }
         let lines = 1; let line = '';
-        if (options.wrapText) for (const character of String(value ?? '')) {
+        if (options.wrapText) for (const character of numberText(value,engine.getFormat(index,col).numberFormat)) {
           if (character === '\n' || (line && ctx.measureText(line + character).width > Math.max(0, columnAxis.size(col) - 20))) {
             lines++; line = ''; if (lines * lineHeight >= 1000) break;
           }
@@ -897,7 +913,7 @@ export function createGrid(options: GridOptions): Grid {
     event.preventDefault(); event.stopPropagation(); endResize(); onPointerEnd();
     if (!finishEdit(true)) return;
     try { if (column !== null) autoFitColumn(column); else autoFitRow(row!); }
-    catch (error) { actionError.textContent = error instanceof Error ? error.message : 'Unable to fit size.'; actionError.style.display = 'block'; }
+    catch (error) { actionError.textContent = error instanceof Error ? t(error.message) : t("Unable to fit size."); actionError.style.display = 'block'; }
   }
 
   function enterSurface(node: HTMLElement): void {
@@ -945,7 +961,7 @@ export function createGrid(options: GridOptions): Grid {
     menu = popup;
     popup.popover = 'auto';
     popup.setAttribute('role', 'menu');
-    popup.setAttribute('aria-label', header ? 'Column actions' : 'Cell actions');
+    popup.setAttribute('aria-label', header ? t("Column actions") : t("Cell actions"));
     popup.className = 'acheron-context-menu';
     popup.style.cssText = 'position:fixed;margin:0;padding:6px;min-width:200px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;border:1px solid var(--acheron-grid-line-color);border-radius:10px;box-shadow:0 12px 32px #0003;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font)';
     const style = doc.createElement('style');
@@ -953,10 +969,10 @@ export function createGrid(options: GridOptions): Grid {
     popup.append(style);
     style.textContent += '.acheron-context-menu:popover-open{display:grid;gap:2px}.acheron-context-menu:not(:popover-open){display:none}';
     popup.addEventListener('toggle', () => { if (!popup.matches(':popover-open') && menu === popup) closeMenu(); });
-    const filter = doc.createElement('input'); filter.type = 'search'; filter.hidden = true; filter.placeholder = 'Filter actions…'; filter.setAttribute('aria-label', 'Filter actions');
+    const filter = doc.createElement('input'); filter.type = 'search'; filter.hidden = true; filter.placeholder = t("Filter actions…"); filter.setAttribute('aria-label', t("Filter actions"));
     filter.style.cssText = 'position:sticky;top:0;width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--acheron-grid-line-color);border-radius:4px;background:var(--acheron-background);color:inherit;font:inherit;outline:none';
     popup.append(filter);
-    const empty = doc.createElement('div'); empty.textContent = 'No matching actions'; empty.hidden = true; empty.setAttribute('role', 'status'); empty.style.padding = '10px';
+    const empty = doc.createElement('div'); empty.textContent = t("No matching actions"); empty.hidden = true; empty.setAttribute('role', 'status'); empty.style.padding = '10px';
     let showAll = !suggestionsEnabled;
     const recommended = (label:string):boolean => /^(Copy|Cut|Paste|Undo|Redo|Open links|Edit cell)/.test(label) || (header ? /^(Sort|Filter|Resize column|Auto-fit column|Move columns|Freeze columns|Lock.*column|Unlock.*column)/.test(label) : axisAnchor?.axis === 'row' ? /^(Group|Ungroup|Collapse|Expand|Move rows|Insert row|Delete.*row|Lock.*row|Unlock.*row)/.test(label) : /^(Merge|Unmerge|Format cells|Lock.*cell|Unlock.*cell)/.test(label));
     function filterActions(): void {
@@ -1001,7 +1017,7 @@ export function createGrid(options: GridOptions): Grid {
       if(previousGroup&&group!==previousGroup){const separator=doc.createElement('div');separator.setAttribute('role','separator');popup.append(separator);}
       previousGroup=group;
       button.dataset.group = group;
-      button.append(svgIcon(name),doc.createTextNode(label));
+      button.append(svgIcon(name),doc.createTextNode(t(label)));
       button.dataset.action = label;
       button.setAttribute('role', 'menuitem');
       button.disabled = !enabled;
@@ -1011,7 +1027,7 @@ export function createGrid(options: GridOptions): Grid {
         try { await action(); }
         catch (error) {
           if (!destroyed) {
-            actionError.textContent = `${error instanceof Error ? error.message : 'Action failed.'}${label === 'Copy' || label === 'Cut' || label === 'Paste' ? ' Use Ctrl/Cmd+C or Ctrl/Cmd+V if the browser blocks menu clipboard access.' : ''}`;
+            actionError.textContent = `${error instanceof Error ? t(error.message) : t("Action failed.")}${label === 'Copy' || label === 'Cut' || label.startsWith('Paste') ? t(' Use Ctrl/Cmd+C or Ctrl/Cmd+V if the browser blocks menu clipboard access.') : ''}`;
             actionError.style.display = 'block';
           }
         }
@@ -1020,7 +1036,7 @@ export function createGrid(options: GridOptions): Grid {
     }
     item('Copy', rowCount > 0 && getSelectionRanges().length > 0 && engine.getCellPermission(selection.rowIndex, selection.columnIndex).copyable && !!win.navigator.clipboard?.writeText, writeClipboard);
     item('Cut', rowCount > 0 && getSelectionRanges().length > 0 && engine.canEdit(selection.rowIndex,selection.columnIndex) && !!win.navigator.clipboard?.writeText, () => writeClipboard(true));
-    item('Paste', !!win.navigator.clipboard?.readText && engine.canPaste(), async () => {
+    const readClipboard=async(pasteOptions?:PasteOptions)=>{
       let text = '', html = '';
       if (win.navigator.clipboard.read) {
         const items = await win.navigator.clipboard.read();
@@ -1030,8 +1046,13 @@ export function createGrid(options: GridOptions): Grid {
         }
       } else text = await win.navigator.clipboard.readText();
       if (destroyed || fingerprint !== JSON.stringify(getSelectionRanges())) throw new Error('Selection changed before paste. Try again.');
-      if (html) pasteSelectionBlocks(encodeBlocks(htmlClipboardBlocks(html))); else paste(text);
-    });
+      if (html) pasteSelectionBlocks(encodeBlocks(htmlClipboardBlocks(html)),pasteOptions); else paste(text,pasteOptions);
+    };
+    item('Paste',!!win.navigator.clipboard?.readText&&engine.canPaste(),()=>readClipboard());
+    item('Paste values only',!!win.navigator.clipboard?.readText&&engine.canPaste(),()=>readClipboard({mode:'values'}));
+    item('Paste formats only',!!win.navigator.clipboard?.readText&&engine.canFormat(getSelectionRanges().map(range=>({scope:'range' as const,range}))),()=>readClipboard({mode:'formats'}));
+    item('Paste transposed',!!win.navigator.clipboard?.readText&&engine.canPaste(),()=>readClipboard({transpose:true}));
+    item('Paste skipping empty cells',!!win.navigator.clipboard?.readText&&engine.canPaste(),()=>readClipboard({skipEmpty:true}));
     if (header) {
       item('Select column', true, () => selectColumn(col));
       item('Sort ascending…', managesView || !!options.onViewChange, () => openViewDialog(col, 'asc'));
@@ -1042,6 +1063,9 @@ export function createGrid(options: GridOptions): Grid {
       item('Select row', rowCount > 0, () => selectRow(row));
       item('Select column', true, () => selectColumn(col));
     }
+    item(header?'Hide selected columns':'Hide selected rows',!engine.isLocked({scope:'table'}),()=>{if(header)engine.setColumnsHidden(selectedAxisIndices('column',col),true);else engine.setRowsHidden(selectedAxisIndices('row',row),true);});
+    item('Show all hidden rows',engine.getHiddenRows().length>0,()=>engine.setRowsHidden(engine.getHiddenRows(),false));
+    item('Show all hidden columns',columns.some((_,i)=>engine.isColumnHidden(i)),()=>engine.setColumnsHidden(engine.getHiddenColumns(),false));
     const indices = selectedAxisIndices(header ? 'column' : 'row', header ? col : row);
     if(!header && rowCount) {
       const selected=getSelectionRanges(),span=selected.length===1?selected[0]:undefined;
@@ -1060,7 +1084,7 @@ export function createGrid(options: GridOptions): Grid {
       const deletion = Object.freeze({ kind: 'delete' as const, indices: Object.freeze(indices) });
       item('Insert row above', options.canRowChange?.(above) !== false, () => changeRows(above));
       item('Insert row below', options.canRowChange?.(below) !== false, () => changeRows(below));
-      item('Insert rows…', options.canRowChange?.(above) !== false, () => openSizeDialog('Number of rows', 1, count => {
+      item('Insert rows…', options.canRowChange?.(above) !== false, () => openSizeDialog(t("Number of rows"), 1, count => {
         if (!Number.isSafeInteger(count) || count < 1 || count > 1000) throw new RangeError('Choose 1–1000 rows.');
         changeRows(Object.freeze({ ...above, count }));
       }, null));
@@ -1070,11 +1094,11 @@ export function createGrid(options: GridOptions): Grid {
       const request={axis:'column' as const,kind:'insert' as const,indices:[],beforeIndex:indices[0]!,count:1};
       item('Insert column left…',engine.canChangeStructure(request),()=>openColumnDialog(indices[0]!));
       item('Insert column right…',engine.canChangeStructure({...request,beforeIndex:indices.at(-1)!+1}),()=>openColumnDialog(indices.at(-1)!+1));
-      item(indices.length>1 ? 'Delete '+indices.length+' selected columns':'Delete column',indices.length<columns.length&&engine.canChangeStructure({axis:'column',kind:'delete',indices,beforeIndex:indices[0]!,count:indices.length}),()=>engine.deleteColumns(indices));
+      item(indices.length>1 ? t('Delete {0} selected columns',indices.length):'Delete column',indices.length<columns.length&&engine.canChangeStructure({axis:'column',kind:'delete',indices,beforeIndex:indices[0]!,count:indices.length}),()=>engine.deleteColumns(indices));
     }
     if (options.onReorder) item(header ? 'Move columns to…' : 'Move rows to…', (header || rowCount > 0) && options.canReorder?.({ axis: header ? 'column' : 'row', indices, beforeIndex: indices[0]! }) !== false, () => {
       const axis = header ? 'column' : 'row'; const count = header ? columns.length : rowCount;
-      openSizeDialog(header ? 'Destination column' : 'Destination row', indices[0]! + 1, destination => {
+      openSizeDialog(header ? t("Destination column") : t("Destination row"), indices[0]! + 1, destination => {
         if (!Number.isSafeInteger(destination) || destination < 1 || destination > count - indices.length + 1) throw new RangeError(`Choose a position from 1 to ${count - indices.length + 1}.`);
         const moved = new Set(indices); const remaining = Array.from({ length: count }, (_, i) => i).filter(i => !moved.has(i));
         const request = Object.freeze({ axis, indices: Object.freeze(indices), beforeIndex: remaining[destination - 1] ?? count });
@@ -1101,7 +1125,7 @@ export function createGrid(options: GridOptions): Grid {
     for (const [label, targets] of lockTargets) {
       if (!targets.length || (!rowCount && (label === 'row' || label.includes('cell')))) continue;
       const locked = label.includes('cell') ? selectedCellsLocked : targets.every(target => engine.isLocked(target));
-      const name = targets.length > 1 && (label === 'row' || label === 'column') ? `${targets.length} selected ${label}s` : label;
+      const name = targets.length > 1 && (label === 'row' || label === 'column') ? t("{0} selected {1}s",targets.length,label) : label;
       item(`${locked ? 'Unlock' : 'Lock'} ${name}`, engine.canManageLocks(), () => {
         if (label.includes('cell')) {
           for (const range of lockRanges) for (let r=range.startRow;r<=range.endRow;r++) for (let c=range.startColumn;c<=range.endColumn;c++) setLocked({scope:'cell',rowIndex:r,columnIndex:c},!locked);
@@ -1119,11 +1143,11 @@ export function createGrid(options: GridOptions): Grid {
     item('Unfreeze table', engine.frozenRows > 0 || engine.frozenColumns > 0, () => setFrozen(0, 0));
     item('Auto-fit column', true, () => autoFitColumn(col));
     item('Auto-fit row', rowCount > 0, () => autoFitRow(row));
-    item('Resize column…', true, () => openSizeDialog('Column width', columnAxis.size(col), size => resizeAxis(columnAxis, col, size)));
-    item('Resize row…', rowCount > 0, () => openSizeDialog('Row height', rowAxis.size(row), size => resizeAxis(rowAxis, row, size)));
-    const mode = doc.createElement('button');mode.type='button';mode.setAttribute('role','menuitemcheckbox');mode.textContent='Suggested actions';mode.setAttribute('aria-checked',String(suggestionsEnabled));mode.setAttribute('aria-label','Suggested actions');mode.textContent='Suggested actions: '+(suggestionsEnabled?'On':'Off');
-    mode.addEventListener('click',()=>{mode.focus();suggestionsEnabled=!suggestionsEnabled;showAll=!suggestionsEnabled;mode.setAttribute('aria-checked',String(suggestionsEnabled));mode.textContent='Suggested actions: '+(suggestionsEnabled?'On':'Off');all.hidden=showAll;filterActions();});
-    const all = doc.createElement('button');all.type='button';all.textContent='Show all actions';all.setAttribute('role','menuitem');
+    item('Resize column…', true, () => openSizeDialog(t("Column width"), columnAxis.size(col), size => resizeAxis(columnAxis, col, size)));
+    item('Resize row…', rowCount > 0, () => openSizeDialog(t("Row height"), rowAxis.size(row), size => resizeAxis(rowAxis, row, size)));
+    const mode = doc.createElement('button');mode.type='button';mode.setAttribute('role','menuitemcheckbox');mode.textContent=t("Suggested actions");mode.setAttribute('aria-checked',String(suggestionsEnabled));mode.setAttribute('aria-label',t("Suggested actions"));mode.textContent=t("Suggested actions: ")+(suggestionsEnabled?'On':'Off');
+    mode.addEventListener('click',()=>{mode.focus();suggestionsEnabled=!suggestionsEnabled;showAll=!suggestionsEnabled;mode.setAttribute('aria-checked',String(suggestionsEnabled));mode.textContent=t("Suggested actions: ")+(suggestionsEnabled?'On':'Off');all.hidden=showAll;filterActions();});
+    const all = doc.createElement('button');all.type='button';all.textContent=t("Show all actions");all.setAttribute('role','menuitem');
     all.addEventListener('click',()=>{showAll=true;filterActions();all.hidden=true;});
     filter.before(mode);popup.append(all,empty);filterActions();all.hidden=showAll;
 
@@ -1180,8 +1204,8 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   const builtinColumnTypes:readonly ColumnType[]=[
-    {key:'text',label:'Text',create:input=>({column:{key:input.key,title:input.title,editable:true,defaultValue:input.defaultText}})},
-    {key:'number',label:'Number',create:input=>{
+    {key:'text',label:t("Text"),create:input=>({column:{key:input.key,title:input.title,editable:true,defaultValue:input.defaultText}})},
+    {key:'number',label:t("Number"),create:input=>{
       const parse=(text:string)=>{if(!text.trim())return null;const value=Number(text);if(!Number.isFinite(value))throw new Error('Enter a finite number.');return value;};
       return {column:{key:input.key,title:input.title,editable:true,parse,defaultValue:parse(input.defaultText)}};
     }},
@@ -1195,16 +1219,16 @@ export function createGrid(options: GridOptions): Grid {
   let createdColumn=0;
   function openColumnDialog(beforeIndex:number):void {
     if(!options.allowColumnChanges||activeDialog?.open)return;
-    const dialog=doc.createElement('dialog');dialog.dataset.gridDialog='';dialog.setAttribute('aria-label','Insert column');activeDialog=dialog;
-    const heading=doc.createElement('p');heading.textContent='Insert column';
+    const dialog=doc.createElement('dialog');dialog.dataset.gridDialog='';dialog.setAttribute('aria-label',t("Insert column"));activeDialog=dialog;
+    const heading=doc.createElement('p');heading.textContent=t("Insert column");
     const key=doc.createElement('input'),title=doc.createElement('input'),type=doc.createElement('select'),initial=doc.createElement('input');
     do{key.value='column_'+(++createdColumn);}while(columns.some(column=>column.key===key.value));
     key.required=title.required=true;
     for(const item of creationTypes){const option=doc.createElement('option');option.value=item.key;option.textContent=item.label;type.append(option);}
     const field=(name:string,input:HTMLElement)=>{const label=doc.createElement('label');label.textContent=name;input.setAttribute('aria-label',name);label.append(input);return label;};
     const status=doc.createElement('p');status.setAttribute('role','alert');
-    const apply=doc.createElement('button');apply.type='button';apply.textContent='Insert column';
-    const cancel=doc.createElement('button');cancel.type='button';cancel.textContent='Cancel';cancel.onclick=()=>dialog.close();
+    const apply=doc.createElement('button');apply.type='button';apply.textContent=t("Insert column");
+    const cancel=doc.createElement('button');cancel.type='button';cancel.textContent=t("Cancel");cancel.onclick=()=>dialog.close();
     apply.onclick=()=>{
       if(!key.reportValidity()||!title.reportValidity())return;
       try {
@@ -1215,10 +1239,10 @@ export function createGrid(options: GridOptions): Grid {
         engine.insertColumns(beforeIndex,[definition.column]);
         if(editorConfig)columnEditors.set(definition.column.key,editorConfig);
         dialog.close();render();
-      } catch(error){status.textContent=error instanceof Error?error.message:'Unable to insert column.';}
+      } catch(error){status.textContent=error instanceof Error?t(error.message):t("Unable to insert column.");}
     };
     const actions=doc.createElement('div');actions.dataset.dialogActions='';actions.append(apply,cancel);
-    dialog.append(heading,field('Column key',key),field('Column title',title),field('Column type',type),field('Default value',initial),status,actions);
+    dialog.append(heading,field(t("Column key"),key),field(t("Column title"),title),field(t("Column type"),type),field(t("Default value"),initial),status,actions);
     root.append(dialog);dialog.addEventListener('close',()=>{dialog.remove();if(activeDialog===dialog)activeDialog=null;if(!destroyed)scroller.focus({preventScroll:true});});
     dialog.showModal();title.focus();
   }
@@ -1226,22 +1250,22 @@ export function createGrid(options: GridOptions): Grid {
   function openViewDialog(col: number, sort?: 'asc' | 'desc' | 'clear'): void {
     if ((!managesView && !options.onViewChange) || activeDialog?.open) return;
     const dialog = doc.createElement('dialog'); activeDialog = dialog;
-    dialog.setAttribute('aria-label', sort ? 'Change row view' : 'Filter column');
+    dialog.setAttribute('aria-label', sort ? t("Change row view") : t("Filter column"));
     dialog.dataset.gridDialog = '';
-    const title = doc.createElement('p'); title.textContent = sort === 'clear' ? 'Show all rows in source order' : `${sort ? `Sort ${sort === 'asc' ? 'ascending' : 'descending'}` : 'Filter'}: ${columns[col]!.title}`;
-    const note = doc.createElement('p'); note.textContent = managesView ? 'Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Clear the view before changing rows or columns.' : 'The host applies this row view. State retention depends on its handler.';
-    const input = doc.createElement('input'); input.type = 'search'; input.setAttribute('aria-label', 'Contains text');
-    input.placeholder = 'Contains text (empty removes this filter)'; input.style.width = '100%'; input.value = currentView?.filters?.find(filter => filter.columnKey === columns[col]!.key)?.query ?? '';
-    const condition = doc.createElement('select'); condition.setAttribute('aria-label', 'Filter condition');
-    for (const [value, label] of [['contains', 'Contains text'], ['equals', 'Equals text'], ['not-empty', 'Has a value'], ['empty', 'Is empty']]) {
+    const title = doc.createElement('p'); title.textContent = sort === 'clear' ? t("Show all rows in source order") : `${sort ? t("Sort {0}",sort === 'asc' ? t('ascending') : t('descending')) : t("Filter")}: ${columns[col]!.title}`;
+    const note = doc.createElement('p'); note.textContent = managesView ? t("Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Clear the view before changing rows or columns.") : t("The host applies this row view. State retention depends on its handler.");
+    const input = doc.createElement('input'); input.type = 'search'; input.setAttribute('aria-label', t("Contains text"));
+    input.placeholder = t("Contains text (empty removes this filter)"); input.style.width = '100%'; input.value = currentView?.filters?.find(filter => filter.columnKey === columns[col]!.key)?.query ?? '';
+    const condition = doc.createElement('select'); condition.setAttribute('aria-label', t("Filter condition"));
+    for (const [value, label] of [['contains', t("Contains text")], ['equals', t("Equals text")], ['not-empty', t("Has a value")], ['empty', t("Is empty")]]) {
       const option = doc.createElement('option'); option.value = value!; option.textContent = label!; condition.append(option);
     }
     condition.value = currentView?.filters?.find(filter => filter.columnKey === columns[col]!.key)?.operator ?? 'contains';
     const updateInput = () => { input.disabled = condition.value === 'empty' || condition.value === 'not-empty'; };
     condition.addEventListener('change', updateInput); updateInput();
     const status = doc.createElement('p'); status.setAttribute('role', 'alert');
-    const apply = doc.createElement('button'); apply.type = 'button'; apply.textContent = 'Apply view';
-    const cancel = doc.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel'; cancel.addEventListener('click', () => dialog.close());
+    const apply = doc.createElement('button'); apply.type = 'button'; apply.textContent = t("Apply view");
+    const cancel = doc.createElement('button'); cancel.type = 'button'; cancel.textContent = t("Cancel"); cancel.addEventListener('click', () => dialog.close());
     const commit = () => {
       const key = columns[col]!.key;
       const filters = (currentView?.filters ?? []).filter(filter => filter.columnKey !== key);
@@ -1252,7 +1276,7 @@ export function createGrid(options: GridOptions): Grid {
       const view: LocalViewOptions = sort === 'clear' ? {} : sort ? { ...(currentView?.filters ? {filters:currentView.filters} : {}), sort: { columnKey: key, direction: sort } }
         : { ...currentView, filters };
       try { if(managesView)engine.setView(view); currentView=view; options.onViewChange?.(view); if (dialog.isConnected) dialog.close(); }
-      catch (error) { status.textContent = error instanceof Error ? error.message : 'Unable to change view.'; }
+      catch (error) { status.textContent = error instanceof Error ? t(error.message) : t("Unable to change view."); }
     };
     apply.addEventListener('click', commit); input.addEventListener('keydown', event => { if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); commit(); } });
     dialog.append(title, note); if (!sort) dialog.append(condition, input); const actions = doc.createElement('div'); actions.dataset.dialogActions = ''; actions.append(apply, cancel); dialog.append(status, actions); root.append(dialog);
@@ -1263,7 +1287,7 @@ export function createGrid(options: GridOptions): Grid {
   function onContextMenu(event: MouseEvent): void {
     if (event.target === editor) return;
     const cell = pointerCell(event);
-    if (!cell) { if (!rowCount && columns.length && options.onRowChange) { event.preventDefault(); if (finishEdit(true)) openMenu(0, 0, event.clientX, event.clientY); } return; }
+    if (!cell) { if (columns.length && ((!rowCount && options.onRowChange)||engine.getHiddenRows().length||engine.getHiddenColumns().length)) { event.preventDefault(); if (finishEdit(true)) openMenu(0, 0, event.clientX, event.clientY); } return; }
     event.preventDefault();
     if (!finishEdit(true)) return;
     openMenu(cell.row, cell.col, event.clientX, event.clientY);
@@ -1384,12 +1408,12 @@ export function createGrid(options: GridOptions): Grid {
     if(next?.row!==hoveredChoice?.row||next?.col!==hoveredChoice?.col){clearChoiceHover();hoveredChoice=next;if(next)invalidate([{rowIndex:next.row,columnKey:columns[next.col]!.key}]);}
     const bounds = root.getBoundingClientRect();
     const headerColumn = columnAxis.indexAt(event.clientX - bounds.left - indexWidth + (event.clientX - bounds.left - indexWidth < viewport().frozenWidth ? 0 : scroller.scrollLeft));
-    root.title = root.style.cursor === 'row-resize' ? 'Drag the row boundary to resize height'
-      : column !== null ? 'Drag the column boundary to resize width'
-      : event.clientY - bounds.top < headerHeight && event.clientX >= bounds.left + indexWidth && headerColumn >= 0 && headerColumn < columns.length ? stateLabels(null, headerColumn).join('; ')
-      : indexRow(event) !== null ? [`Select row ${indexRow(event)! + 1}`, ...rowLabels(indexRow(event)!)].join('; ') : cell ? stateLabels(cell.row, cell.col).join('; ') : '';
+    root.title = root.style.cursor === 'row-resize' ? t("Drag the row boundary to resize height")
+      : column !== null ? t("Drag the column boundary to resize width")
+      : event.clientY - bounds.top < headerHeight && event.clientX >= bounds.left + indexWidth && headerColumn >= 0 && headerColumn < columns.length ? stateLabels(null, headerColumn).map(label=>t(label)).join('; ')
+      : indexRow(event) !== null ? [t("Select row {0}",indexRow(event)! + 1), ...rowLabels(indexRow(event)!)].join('; ') : cell ? stateLabels(cell.row, cell.col).map(label=>t(label)).join('; ') : '';
     if (cell && !resizing) { const message=validationMessage(engine.getValue(cell.row,columns[cell.col]!.key),cell.col);if(message)root.title=message; }
-    if (!resizing && cell && event.altKey && options.allowOpenLinks !== false && cellLinks(cell.row, cell.col).length) { root.style.cursor = 'pointer'; root.title = 'Alt+click to open links'; }
+    if (!resizing && cell && event.altKey && options.allowOpenLinks !== false && cellLinks(cell.row, cell.col).length) { root.style.cursor = 'pointer'; root.title = t("Alt+click to open links"); }
     if(hoveredChoice && cell){const rect=viewport().cellRect(cell.row,cell.col);if(event.clientX-scroller.getBoundingClientRect().left>=rect.x+rect.width-24)root.style.cursor='pointer';}
     if (resizing?.pointerId === event.pointerId) {
       resizing.proposed = Math.max(24, Math.min(1000, resizing.size + (resizing.axis === 'column' ? event.clientX : event.clientY) - resizing.start));
@@ -1412,7 +1436,7 @@ export function createGrid(options: GridOptions): Grid {
     endResize();
     try { resizeAxis(draft.axis === 'column' ? columnAxis : rowAxis, draft.index, draft.proposed); }
     catch (error) {
-      actionError.textContent = error instanceof Error ? error.message : 'Unable to resize.';
+      actionError.textContent = error instanceof Error ? t(error.message) : t("Unable to resize.");
       actionError.style.display = 'block';
     }
   }
@@ -1451,9 +1475,9 @@ export function createGrid(options: GridOptions): Grid {
         engine.editCell(selection.rowIndex, selection.columnIndex, editor instanceof win.HTMLInputElement && editor.type === 'checkbox' ? String(editor.checked) : editor instanceof win.HTMLSelectElement && editor.multiple ? choiceValue(editor) : editor.value);
       } catch (error) {
         editorError.dataset.severity = 'error';
-        editor.setCustomValidity(error instanceof Error ? error.message : 'Unable to save cell.');
+        editor.setCustomValidity(error instanceof Error ? t(error.message) : t("Unable to save cell."));
         editor.setAttribute('aria-invalid', 'true');
-        editorError.textContent = error instanceof Error ? error.message : 'Unable to save cell.';
+        editorError.textContent = error instanceof Error ? t(error.message) : t("Unable to save cell.");
         editorError.style.display = 'block';
         positionEditor();
         (choices?.querySelector<HTMLInputElement>('input') ?? richEditor ?? editor).focus({ preventScroll: true });
@@ -1480,7 +1504,7 @@ export function createGrid(options: GridOptions): Grid {
     const column = columns[selection.columnIndex]!;
     const value = engine.getValue(selection.rowIndex, column.key);
     const preview = richText(value, column.key, engine.getFormat(selection.rowIndex, selection.columnIndex).contentFormat);
-    if (preview?.unavailable) { actionError.textContent = 'Rich text cannot be edited until it can be displayed.'; actionError.style.display = 'block'; return; }
+    if (preview?.unavailable) { actionError.textContent = t("Rich text cannot be edited until it can be displayed."); actionError.style.display = 'block'; return; }
     try {
       const custom = options.createEditor?.(Object.freeze({ ...selection, value }), doc) ?? null;
       if (custom && (custom.ownerDocument !== doc || custom.parentNode || !['INPUT', 'SELECT', 'TEXTAREA'].includes(custom.tagName))) {
@@ -1491,7 +1515,7 @@ export function createGrid(options: GridOptions): Grid {
         const dialog=createMediaEditor(doc,value,avatarColumns.has(column.key),next=>{
           if(destroyed||engine.getRowId(selection.rowIndex)!==selection.rowId||columns[selection.columnIndex]?.key!==column.key||!Object.is(engine.getValue(selection.rowIndex,column.key),value))throw new Error('This cell changed. Cancel and reopen the editor.');
           engine.editCell(selection.rowIndex,selection.columnIndex,JSON.stringify(next));
-        });
+        },t);
         activeDialog=dialog;root.append(dialog);
         dialog.addEventListener('close',()=>{dialog.remove();if(activeDialog===dialog)activeDialog=null;if(!destroyed)scroller.focus({preventScroll:true});});
         dialog.showModal();return;
@@ -1512,12 +1536,12 @@ export function createGrid(options: GridOptions): Grid {
         else editor.value = value == null ? '' : mediaColumn(column.key)&&Array.isArray(value)?JSON.stringify(value):String(value);
       }
     } catch (error) {
-      actionError.textContent = error instanceof Error ? error.message : 'Unable to create cell editor.';
+      actionError.textContent = error instanceof Error ? t(error.message) : t("Unable to create cell editor.");
       actionError.style.display = 'block';
       return;
     }
     actionError.style.display = 'none';
-    editor.setAttribute('aria-label', `Edit row ${engine.getRowSourceIndex(selection.rowIndex) + 1}, ${column.title}`);
+    editor.setAttribute('aria-label', t("Edit row {0}, {1}",engine.getRowSourceIndex(selection.rowIndex) + 1,column.title));
     editor.setAttribute('aria-errormessage', editorError.id);
     editor.style.cssText = 'position:absolute;box-sizing:border-box;pointer-events:auto;outline:none;border:1px solid var(--acheron-selection-color);background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);padding:0 8px';
     const cellFormat = engine.getFormat(selection.rowIndex, selection.columnIndex);
@@ -1546,7 +1570,7 @@ export function createGrid(options: GridOptions): Grid {
             editorError.style.display = 'block';
           }
         } catch (error) {
-          editorError.dataset.severity='error';editor.setAttribute('aria-invalid','true');editorError.textContent = error instanceof Error ? error.message : 'Invalid value.';editorError.style.display = 'block';
+          editorError.dataset.severity='error';editor.setAttribute('aria-invalid','true');editorError.textContent = error instanceof Error ? t(error.message) : t("Invalid value.");editorError.style.display = 'block';
         }
       }
       positionEditor();
@@ -1625,18 +1649,18 @@ export function createGrid(options: GridOptions): Grid {
       editorPane.append(surface);
     }
     if (options.editorOptions?.guardNavigation !== false) win.addEventListener('beforeunload', guardEditNavigation);
-    editorLabel.textContent = `${column.title} · Row ${engine.getRowSourceIndex(selection.rowIndex) + 1} · ${String(engine.getRowId(selection.rowIndex))}`;
+    editorLabel.textContent = t("{0} · Row {1} · {2}",column.title,engine.getRowSourceIndex(selection.rowIndex) + 1,String(engine.getRowId(selection.rowIndex)));
     positionEditor();
     (richEditor ?? editor).focus({ preventScroll: true });
     if (richEditor) { const range = doc.createRange(); range.selectNodeContents(richEditor); const selection = win.getSelection(); selection?.removeAllRanges(); selection?.addRange(range); }
     else if (editor.tagName !== 'SELECT' && 'select' in editor) editor.select();
     const choiceOptions=choiceOptionsFor(column.key);
     if (editor instanceof win.HTMLSelectElement && editor.dataset.gridChoiceEditor !== undefined && choiceOptions) {
-      choices = choicePanel(editor, root, choiceOptions, commit => { const done = finishEdit(commit); if (done) scroller.focus({ preventScroll: true }); return done; }, column.key);
+      choices = choicePanel(editor, root, choiceOptions, commit => { const done = finishEdit(commit); if (done) scroller.focus({ preventScroll: true }); return done; }, column.key,t);
       enterSurface(choices);
       editor.style.opacity = '0'; editor.style.pointerEvents = 'none'; editor.tabIndex = -1; editor.setAttribute('aria-hidden', 'true');
     }
-    try {const cleanup=options.onEditorMount?.(Object.freeze({...selection,value}),editor);editorCleanup=typeof cleanup==='function'?cleanup:undefined;}catch(error){finishEdit(false);actionError.textContent=error instanceof Error?error.message:'Unable to mount custom editor.';actionError.style.display='block';}
+    try {const cleanup=options.onEditorMount?.(Object.freeze({...selection,value}),editor);editorCleanup=typeof cleanup==='function'?cleanup:undefined;}catch(error){finishEdit(false);actionError.textContent=error instanceof Error?t(error.message):t("Unable to mount custom editor.");actionError.style.display='block';}
   }
 
   const getSelection = engine.getSelection;
@@ -1669,10 +1693,11 @@ export function createGrid(options: GridOptions): Grid {
     pendingCutText=encodeBlocks(blocks); showCopyFeedback(getSelectionRanges(), true); return pendingCutText;
   }
   function copySelectionBlocks(): string { cancelCut(); const text = encodeBlocks(clipboardBlocks()); showCopyFeedback(getSelectionRanges()); return text; }
-  function pasteSelectionBlocks(text: string): void {
+  function pasteSelectionBlocks(text: string,pasteOptions?:PasteOptions): void {
+    if(pasteOptions?.transpose||pasteOptions?.mode==='formats'){if(destroyed||editor)throw new Error('Finish editing before pasting cells.');engine.pasteSelectionBlocks(text,pasteOptions);cancelCut();return;}
     if (destroyed || editor) throw new Error('Finish editing before pasting cells.');
     const ranges = getSelectionRanges().sort((a,b) => a.startRow - b.startRow || a.startColumn - b.startColumn);
-    const moving=pendingCutText!==undefined && text===pendingCutText;
+    const moving=!pasteOptions&&pendingCutText!==undefined && text===pendingCutText;
     const original=decodeBlocks(text);
     const scalar=!moving && original.length===1 && original[0]!.values.length===1 && original[0]!.values[0]!.length===1;
     if (scalar && ranges.reduce((total,range)=>total+(range.endRow-range.startRow+1)*(range.endColumn-range.startColumn+1),0)>100_000) throw new RangeError('Paste has too many cells.');
@@ -1698,7 +1723,7 @@ export function createGrid(options: GridOptions): Grid {
       return { ...block, values, ...(formats ? { formats } : {}) };
     });
     if (moving) { engine.pasteCutSelectionBlocks(encodeBlocks(blocks)); pendingCutText=undefined; }
-    else { engine.pasteSelectionBlocks(encodeBlocks(blocks)); if (pendingCutText) cancelCut(); }
+    else { engine.pasteSelectionBlocks(encodeBlocks(blocks),pasteOptions); if (pendingCutText) cancelCut(); }
   }
   function clipboardPlain(blocks: readonly ClipboardBlock[]): string {
     return blocksToTsv(blocks.map(block => ({ ...block, values: block.values.map((line, row) => line.map((value, col) => block.formats?.[row]?.[col]?.contentFormat === 'html' ? readHtml(value, doc).text : value)) })));
@@ -1751,10 +1776,10 @@ export function createGrid(options: GridOptions): Grid {
     return text;
   }
 
-  function paste(text: string): void {
+  function paste(text: string,pasteOptions?:PasteOptions): void {
     if (destroyed) throw new Error('Grid is destroyed.');
     if (editor) throw new Error('Finish editing before pasting cells.');
-    engine.paste(text);
+    engine.paste(text,pasteOptions);
   }
 
   function onCut(event: ClipboardEvent): void {
@@ -1765,7 +1790,7 @@ export function createGrid(options: GridOptions): Grid {
       const blocks=clipboardBlocks();engine.cutSelectionBlocks();
       event.clipboardData.setData('text/plain',clipboardPlain(blocks));event.clipboardData.setData('text/html',clipboardHtml(blocks));
       pendingCutText=encodeBlocks(blocks);event.clipboardData.setData(gridClipboardType,pendingCutText);showCopyFeedback(getSelectionRanges(), true);
-    } catch(error) { pendingCutText=undefined;engine.cancelCut();win.alert(error instanceof Error ? error.message : 'Unable to cut cells.'); }
+    } catch(error) { pendingCutText=undefined;engine.cancelCut();win.alert(error instanceof Error ? t(error.message) : t("Unable to cut cells.")); }
   }
   function onCopy(event: ClipboardEvent): void {
     const selection = engine.getSelection();
@@ -1773,7 +1798,7 @@ export function createGrid(options: GridOptions): Grid {
     event.preventDefault();
     cancelCut();
     try { const blocks=clipboardBlocks(); event.clipboardData.setData('text/plain',clipboardPlain(blocks)); event.clipboardData.setData('text/html',clipboardHtml(blocks));event.clipboardData.setData(gridClipboardType,encodeBlocks(blocks)); showCopyFeedback(getSelectionRanges()); }
-    catch (error) { win.alert(error instanceof Error ? error.message : 'Unable to copy cells.'); }
+    catch (error) { win.alert(error instanceof Error ? t(error.message) : t("Unable to copy cells.")); }
   }
 
   function onPaste(event: ClipboardEvent): void {
@@ -1783,7 +1808,7 @@ export function createGrid(options: GridOptions): Grid {
     if (event.target === editor || !selection || !event.clipboardData || !event.clipboardData.types.some(type => ['text/plain','text/html',gridClipboardType].includes(type))) return;
     event.preventDefault();
     try { if(event.clipboardData.types.includes(gridClipboardType))pasteSelectionBlocks(event.clipboardData.getData(gridClipboardType));else if(event.clipboardData.types.includes('text/html'))pasteSelectionBlocks(encodeBlocks(htmlClipboardBlocks(event.clipboardData.getData('text/html'))));else paste(event.clipboardData.getData('text/plain')); }
-    catch (error) { win.alert(error instanceof Error ? error.message : 'Unable to paste cells.'); }
+    catch (error) { win.alert(error instanceof Error ? t(error.message) : t("Unable to paste cells.")); }
   }
 
   async function pasteImages(files:readonly File[]):Promise<void> {
@@ -1800,10 +1825,10 @@ export function createGrid(options: GridOptions): Grid {
       const concurrency=options.mediaOptions?.maxConcurrentUploads ?? 4;
       if(!Number.isSafeInteger(concurrency)||concurrency<1||concurrency>100)throw new RangeError('Invalid upload concurrency.');
       mediaUpload?.abort();controller=new win.AbortController();mediaUpload=controller;
-      status=doc.createElement('div');status.setAttribute('aria-label','Image upload');status.setAttribute('role','status');status.style.cssText='position:absolute;z-index:40;right:12px;bottom:12px;padding:10px;display:flex;gap:12px;align-items:center;background:var(--acheron-background);color:var(--acheron-text-color);border:1px solid var(--acheron-grid-line-color);font:13px sans-serif';
-      const label=doc.createElement('span'),cancel=doc.createElement('button');cancel.type='button';cancel.textContent='Cancel upload';cancel.addEventListener('click',()=>controller?.abort());status.append(label,cancel);root.append(status);controller.signal.addEventListener('abort',()=>status?.remove(),{once:true});
+      status=doc.createElement('div');status.setAttribute('aria-label',t("Image upload"));status.setAttribute('role','status');status.style.cssText='position:absolute;z-index:40;right:12px;bottom:12px;padding:10px;display:flex;gap:12px;align-items:center;background:var(--acheron-background);color:var(--acheron-text-color);border:1px solid var(--acheron-grid-line-color);font:13px sans-serif';
+      const label=doc.createElement('span'),cancel=doc.createElement('button');cancel.type='button';cancel.textContent=t("Cancel upload");cancel.addEventListener('click',()=>controller?.abort());status.append(label,cancel);root.append(status);controller.signal.addEventListener('abort',()=>status?.remove(),{once:true});
       const progress=new Map<number,number>();let completed=0,nextFile=0;const values:MediaItem[]=[];
-      function reportProgress():void {label.textContent=`Uploading images: ${completed}/${files.length} completed${progress.size?`, ${[...progress.values()].reduce((sum,value)=>sum+value,0)} bytes`:''}`;}
+      function reportProgress():void {label.textContent=t('Uploading images: {0}/{1} completed{2}',completed,files.length,progress.size?t(', {0} bytes',[...progress.values()].reduce((sum,value)=>sum+value,0)):'');}
       reportProgress();
       await Promise.all(Array.from({length:Math.min(concurrency,files.length)},async()=>{
         while(nextFile<files.length) {
@@ -1822,7 +1847,7 @@ export function createGrid(options: GridOptions): Grid {
       pasteSelectionBlocks(encodeBlocks([{row:0,column:0,values:[[JSON.stringify(value)]]}]));
       for(const src of created)ownedImageUrls.add(src);
       if(mediaUpload===controller)mediaUpload=undefined;
-    } catch(error){const current=!controller||mediaUpload===controller&&!controller.signal.aborted;controller?.abort();if(mediaUpload===controller)mediaUpload=undefined;for(const src of created)win.URL.revokeObjectURL(src);if(!destroyed&&current)win.alert(error instanceof Error?error.message:'Unable to paste images.');}
+    } catch(error){const current=!controller||mediaUpload===controller&&!controller.signal.aborted;controller?.abort();if(mediaUpload===controller)mediaUpload=undefined;for(const src of created)win.URL.revokeObjectURL(src);if(!destroyed&&current)win.alert(error instanceof Error?t(error.message):t("Unable to paste images."));}
     finally {status?.remove();}
   }
 
@@ -1893,7 +1918,7 @@ export function createGrid(options: GridOptions): Grid {
     const range = axisRange(axis, anchor, index);
     if (!engine.getCellPermission(range.startRow, range.startColumn).selectable || !engine.getCellPermission(range.endRow, range.endColumn).selectable) return;
     try { selectScope(range, event.shiftKey ? 'extend' : event.ctrlKey || event.metaKey || addNextSelection ? 'add' : 'replace'); }
-    catch (error) { actionError.textContent = error instanceof Error ? error.message : 'Unable to add selection.'; actionError.style.display = 'block'; return; }
+    catch (error) { actionError.textContent = error instanceof Error ? t(error.message) : t("Unable to add selection."); actionError.style.display = 'block'; return; }
     axisAnchor = { axis, index: anchor }; scroller.focus({ preventScroll: true });
     if (event instanceof win.PointerEvent) { axisDrag = axisAnchor; dragPointer = event.pointerId; dragPosition = event; root.setPointerCapture(event.pointerId); }
   }
@@ -1931,7 +1956,7 @@ export function createGrid(options: GridOptions): Grid {
     if (event.clientX - scroller.getBoundingClientRect().left < 10) { selectRow(cell.row); return; }
     try { select(cell.row, cell.col, event.shiftKey, true, !event.shiftKey && (event.ctrlKey || event.metaKey || addNextSelection)); }
     catch (error) {
-      actionError.textContent = error instanceof Error ? error.message : 'Unable to add selection.';
+      actionError.textContent = error instanceof Error ? t(error.message) : t("Unable to add selection.");
       actionError.style.display = 'block';
       return;
     }
@@ -1991,6 +2016,7 @@ export function createGrid(options: GridOptions): Grid {
 
   function onKeyDown(event: KeyboardEvent): void {
     const selection = engine.getSelection();
+    if((event.key==='ContextMenu'||event.key==='F10'&&event.shiftKey)&&!selection&&rowCount&&columns.length&&(engine.getHiddenRows().length||engine.getHiddenColumns().length)){event.preventDefault();const bounds=scroller.getBoundingClientRect();openMenu(0,0,bounds.left+8,bounds.top+8);return;}
     if ((event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) && selection) {
       event.preventDefault();
       const bounds = scroller.getBoundingClientRect();
@@ -2008,7 +2034,7 @@ export function createGrid(options: GridOptions): Grid {
       const current = engine.getFormat(selection.rowIndex, selection.columnIndex);
       const value = current[key] && current[key] !== 'normal' ? 'normal' : key === 'fontWeight' ? 'bold' : 'italic';
       try { format(getSelectionRanges().map(range => ({ scope: 'range', range })), { [key]: value }); }
-      catch (error) { actionError.textContent = error instanceof Error ? error.message : 'Unable to format selection.'; actionError.style.display = 'block'; }
+      catch (error) { actionError.textContent = error instanceof Error ? t(error.message) : t("Unable to format selection."); actionError.style.display = 'block'; }
       return;
     }
     if (control && event.key.toLowerCase() === 'a') { event.preventDefault(); onPointerEnd(); selectAll(); return; }
@@ -2024,7 +2050,7 @@ export function createGrid(options: GridOptions): Grid {
     if (control && (event.key.toLowerCase() === 'z' || (event.key.toLowerCase() === 'y' && !event.shiftKey))) {
       event.preventDefault();
       try { replay(event.shiftKey || event.key.toLowerCase() === 'y'); }
-      catch (error) { win.alert(error instanceof Error ? error.message : 'Unable to replay history.'); }
+      catch (error) { win.alert(error instanceof Error ? t(error.message) : t("Unable to replay history.")); }
       return;
     }
     if (event.shiftKey && !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
@@ -2066,9 +2092,13 @@ export function createGrid(options: GridOptions): Grid {
       if (event.key === 'End') { col = columns.length - 1; if (control) row = rowCount - 1; }
     }
     if (!selection && event.key === 'End') { col = columns.length - 1; if (control) row = rowCount - 1; }
+    row=Math.max(0,Math.min(rowCount-1,row));col=Math.max(0,Math.min(columns.length-1,col));
+    if(rowAxis.size(row)===0)row=rowAxis.indexAt(rowAxis.position(row)+(event.key==='ArrowUp'||event.key==='End'?-.001:0));
+    if(columnAxis.size(col)===0)col=columnAxis.indexAt(columnAxis.position(col)+(event.key==='ArrowLeft'||event.key==='End'?-.001:0));
+    if(row>=rowCount||col>=columns.length||rowAxis.size(row)===0||columnAxis.size(col)===0)return;
     try { select(Math.max(0, Math.min(rowCount - 1, row)), Math.max(0, Math.min(columns.length - 1, col)), event.shiftKey, true, addNextSelection && !event.shiftKey); }
     catch (error) {
-      actionError.textContent = error instanceof Error ? error.message : 'Unable to add selection.';
+      actionError.textContent = error instanceof Error ? t(error.message) : t("Unable to add selection.");
       actionError.style.display = 'block';
     }
   }
@@ -2080,9 +2110,9 @@ export function createGrid(options: GridOptions): Grid {
     if (col < engine.frozenColumns) labels.push('Column frozen');
     if (row === null) {
       const sort = currentView?.sorts?.find(item=>item.columnKey===columns[col]!.key) ?? currentView?.sort;
-      if (sort?.columnKey === columns[col]!.key) labels.push(`Sorted ${sort.direction === 'asc' ? 'ascending' : 'descending'}`);
+      if (sort?.columnKey === columns[col]!.key) labels.push(t('Sorted {0}',t(sort.direction === 'asc' ? 'ascending' : 'descending')));
       const filter = currentView?.filters?.find(filter => filter.columnKey === columns[col]!.key);
-      if (filter) labels.push(`Filtered: ${filter.operator ?? 'contains'} ${filter.query}`.trim());
+      if (filter) labels.push(t('Filtered: {0} {1}',t({'contains':'Contains text','equals':'Equals text','not-empty':'Has a value','empty':'Is empty'}[filter.operator??'contains']),filter.query).trim());
       const policy = columns[col]!.permissions;
       if ([indicatorPolicy, policy].some(scope => scope?.writable === false || scope?.selectable === false || scope?.editable === false)) labels.push('Column disabled by permissions');
     } else {
@@ -2115,11 +2145,11 @@ export function createGrid(options: GridOptions): Grid {
     const links = cellLinks(row, col);
     if (!links.length) return;
     closeMenu();
-    const popup = doc.createElement('div'); menu = popup; popup.popover = 'auto'; popup.setAttribute('role', 'dialog'); popup.setAttribute('aria-label', 'Cell links');
+    const popup = doc.createElement('div'); menu = popup; popup.popover = 'auto'; popup.setAttribute('role', 'dialog'); popup.setAttribute('aria-label', t("Cell links"));
     popup.style.cssText = 'position:fixed;margin:0;padding:12px;max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);overflow:auto;border:1px solid var(--acheron-grid-line-color);border-radius:8px;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);box-shadow:0 12px 32px #0003';
     const metadataAllowed = typeof options.linkPreview === 'object' && options.linkPreview.allowMetadata !== false;
     let previews = metadataAllowed && typeof options.linkPreview === 'object' && options.linkPreview.enabled !== false;
-    const toggle = doc.createElement('button');toggle.type='button';toggle.textContent=previews?'Hide website details':'Show website details';toggle.setAttribute('aria-pressed',String(previews));
+    const toggle = doc.createElement('button');toggle.type='button';toggle.textContent=previews?t("Hide website details"):t("Show website details");toggle.setAttribute('aria-pressed',String(previews));
     toggle.style.cssText='padding:6px 10px;margin:0 0 8px;border:1px solid var(--acheron-grid-line-color);border-radius:6px;background:var(--acheron-header-background);color:inherit;font:inherit';if (metadataAllowed) popup.append(toggle);
     const entries=doc.createElement('div');entries.style.cssText='display:grid;gap:8px;max-width:420px';popup.append(entries);
     function positionLinks():void { if(!popup.isConnected)return;popup.style.left=`${Math.max(8,Math.min(x,win.innerWidth-popup.offsetWidth-8))}px`;popup.style.top=`${Math.max(8,Math.min(y,win.innerHeight-popup.offsetHeight-8))}px`; }
@@ -2134,7 +2164,7 @@ export function createGrid(options: GridOptions): Grid {
         if(!metadataAllowed || !previews || typeof options.linkPreview !== 'object')continue;
         const detail=doc.createElement('div');detail.style.cssText='margin-top:8px';detail.textContent=new URL(link.href).hostname;card.append(detail);
         if(typeof options.linkPreview !== 'object')continue;
-        detail.textContent='Loading preview...';detail.setAttribute('role','status');
+        detail.textContent=t("Loading preview...");detail.setAttribute('role','status');
         const load = options.linkPreview.load;
         void Promise.resolve().then(()=>load(link.href,controller.signal)).then(info=>{
           if(controller.signal.aborted || menu!==popup)return;
@@ -2144,11 +2174,11 @@ export function createGrid(options: GridOptions): Grid {
           const image=info.image && safeWebUrl(info.image);
           if(image){const img=doc.createElement('img');img.crossOrigin='anonymous';img.alt='';img.referrerPolicy='no-referrer';img.src=image;img.style.cssText='width:100%;max-height:140px;object-fit:cover;border-radius:4px;margin-top:8px';img.addEventListener('load',positionLinks,{once:true});detail.append(img);}
           positionLinks();
-        }).catch(()=>{if(!controller.signal.aborted && menu===popup){detail.textContent='Preview unavailable. The link is still available.';positionLinks();}});
+        }).catch(()=>{if(!controller.signal.aborted && menu===popup){detail.textContent=t("Preview unavailable. The link is still available.");positionLinks();}});
       }
     }
-    toggle.addEventListener('click',()=>{previews=!previews;toggle.textContent=previews?'Hide website details':'Show website details';toggle.setAttribute('aria-pressed',String(previews));void drawLinks();positionLinks();});void drawLinks();
-    const close = doc.createElement('button'); close.type = 'button'; close.textContent = 'Close'; close.style.cssText = 'margin:8px;padding:6px 12px;border:1px solid var(--acheron-grid-line-color);border-radius:4px;background:var(--acheron-header-background);color:inherit;font:inherit'; close.addEventListener('click', () => closeMenu(true)); popup.append(close);
+    toggle.addEventListener('click',()=>{previews=!previews;toggle.textContent=previews?t("Hide website details"):t("Show website details");toggle.setAttribute('aria-pressed',String(previews));void drawLinks();positionLinks();});void drawLinks();
+    const close = doc.createElement('button'); close.type = 'button'; close.textContent = t("Close"); close.style.cssText = 'margin:8px;padding:6px 12px;border:1px solid var(--acheron-grid-line-color);border-radius:4px;background:var(--acheron-header-background);color:inherit;font:inherit'; close.addEventListener('click', () => closeMenu(true)); popup.append(close);
     popup.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeMenu(true); } });
     popup.addEventListener('toggle', () => { if (!popup.matches(':popover-open') && menu === popup) closeMenu(); });
     root.append(popup); popup.showPopover();
@@ -2232,7 +2262,7 @@ export function createGrid(options: GridOptions): Grid {
         handled = options.renderCell(ctx, Object.freeze({ value, format: format!, rowIndex, rowId: engine.getRowId(rowIndex),
           columnIndex, columnKey: columns[columnIndex]!.key, x, y, width, height }));
       } catch (error) {
-        win.console.error('Cell renderer failed.', error);
+        win.console.error(t("Cell renderer failed."), error);
       } finally {
         ctx.restore();
         ctx.beginPath();
@@ -2275,7 +2305,7 @@ export function createGrid(options: GridOptions): Grid {
     ctx.fillStyle = header ? theme.headerTextColor : textColor;
     ctx.font = header ? theme.headerFont : cellFont;
     ctx.textBaseline = 'middle';
-    const text = value == null ? '' : String(value);
+    const text = header?String(value??''):numberText(value,format?.numberFormat);
     const links = !header && options.detectLinks !== false ? detectLinks(value) : [];
     const paintText = (line: string, offset: number, top: number, lineHeight = 0) => {
       let left = x + 10; let position = 0;
@@ -2349,7 +2379,7 @@ export function createGrid(options: GridOptions): Grid {
     } else {
       ctx.font = theme.font; ctx.fillStyle = textColor; ctx.textBaseline = 'middle';
       if(shape){ctx.textAlign='center';ctx.fillText(shape==='avatar'?label.trim().split(/\s+/).slice(0,2).map(part=>part[0]).join('').toLocaleUpperCase()||'?':item?.state==='loading'?'…':'—',x+width/2,y+height/2);}
-      else ctx.fillText(item?.state === 'loading' ? 'Loading…' : 'Image unavailable', x + 8, y + height / 2);
+      else ctx.fillText(item?.state === 'loading' ? t('Loading…') : t("Image unavailable"), x + 8, y + height / 2);
     }
     ctx.restore(); ctx.beginPath();
     if(shape){ctx.save();ctx.strokeStyle=theme.background;ctx.lineWidth=2;ctx.roundRect(x+1,y+1,width-2,height-2,shape==='avatar'?width/2:6);ctx.stroke();ctx.restore();ctx.beginPath();}
@@ -2369,20 +2399,20 @@ export function createGrid(options: GridOptions): Grid {
     const key=columns[col]!.key;if(!mediaColumn(key))return false;
     if(activeDialog?.open||!finishEdit(true))return true;
     const items=mediaItems(engine.getValue(row,key)),avatars=avatarColumns.has(key);
-    const dialog=doc.createElement('dialog');dialog.dataset.gridDialog='';dialog.setAttribute('aria-label',avatars?'Cell people':'Cell images');activeDialog=dialog;
+    const dialog=doc.createElement('dialog');dialog.dataset.gridDialog='';dialog.setAttribute('aria-label',avatars?t("Cell people"):t("Cell images"));activeDialog=dialog;
     dialog.style.cssText='width:min(560px,calc(100vw - 48px));max-height:75vh;box-sizing:border-box';
     const title=doc.createElement('h2');title.textContent=columns[col]!.title+' · '+items.length;
     const list=doc.createElement('div');list.style.cssText=avatars?'display:grid;gap:12px':'display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px';
     for(const [i,item] of items.entries()){
       const figure=doc.createElement('figure');figure.style.cssText='margin:0;display:flex;gap:12px;'+(avatars?'align-items:center':'flex-direction:column');
-      const label=item.name ?? item.alt ?? (avatars?'Person ':'Image ')+(i+1);
-      const fallback=doc.createElement('span');fallback.textContent=avatars?label.trim().split(/\s+/).slice(0,2).map(part=>part[0]).join('').toLocaleUpperCase():'Image unavailable';fallback.style.cssText='display:grid;place-items:center;background:var(--acheron-header-background);min-height:48px;padding:8px;border-radius:8px';
+      const label=item.name ?? item.alt ?? (avatars?t("Person "):t("Image "))+(i+1);
+      const fallback=doc.createElement('span');fallback.textContent=avatars?label.trim().split(/\s+/).slice(0,2).map(part=>part[0]).join('').toLocaleUpperCase():t("Image unavailable");fallback.style.cssText='display:grid;place-items:center;background:var(--acheron-header-background);min-height:48px;padding:8px;border-radius:8px';
       figure.append(fallback);
       if(item.src){try{const url=new win.URL(item.src,doc.baseURI);if(url.username||url.password||!['http:','https:','blob:','data:'].includes(url.protocol)||url.protocol==='data:'&&!/^data:image\//i.test(item.src))throw new Error();const image=doc.createElement('img');image.crossOrigin='anonymous';image.alt=label;image.referrerPolicy='no-referrer';image.loading='lazy';image.style.cssText=avatars?'width:44px;height:44px;object-fit:cover;border-radius:50%':'width:100%;height:160px;object-fit:contain;border-radius:8px';image.onload=()=>fallback.remove();image.onerror=()=>image.remove();image.src=url.href;figure.prepend(image);}catch{/* Keep a readable fallback for invalid image URLs. */}}
       const caption=doc.createElement('figcaption');caption.textContent=label;figure.append(caption);list.append(figure);
     }
-    if(!items.length)list.textContent=avatars?'No people':'No images';
-    const close=doc.createElement('button');close.type='button';close.textContent='Close';close.onclick=()=>dialog.close();
+    if(!items.length)list.textContent=avatars?t("No people"):t("No images");
+    const close=doc.createElement('button');close.type='button';close.textContent=t("Close");close.onclick=()=>dialog.close();
     dialog.append(title,list,close);root.append(dialog);dialog.addEventListener('close',()=>{dialog.remove();if(activeDialog===dialog)activeDialog=null;if(!destroyed)scroller.focus({preventScroll:true});});dialog.showModal();close.focus();return true;
   }
 
@@ -2468,8 +2498,8 @@ export function createGrid(options: GridOptions): Grid {
   function accessibleText(row: number, col: number, value: unknown): string {
     const column = columns[col]!; const label = options.getCellLabel?.(row, column.key, value);
     if (label !== undefined) return label;
-    if(mediaColumn(column.key)){const items=mediaItems(value);return `${column.title}: ${items.length} ${avatarColumns.has(column.key)?'people':'images'}${items.length?'; '+items.map((item,i)=>item.name ?? item.alt ?? ((avatarColumns.has(column.key)?'Person ':'Image ')+(i+1))).join(', '):''}. Alt+Enter opens details.`;}
-    return `${column.title}: ${displayedText(value, column.key, engine.getFormat(row, col).contentFormat)}`;
+    if(mediaColumn(column.key)){const items=mediaItems(value);return t("{0}: {1} {2}{3}. Alt+Enter opens details.",column.title,items.length,avatarColumns.has(column.key)?t('people'):t('images'),items.length?'; '+items.map((item,i)=>item.name ?? item.alt ?? ((avatarColumns.has(column.key)?t('Person '):t('Image '))+(i+1))).join(', '):'');}
+    return `${column.title}: ${typeof value==='number'?numberText(value,engine.getFormat(row,col).numberFormat):displayedText(value, column.key, engine.getFormat(row, col).contentFormat)}`;
   }
   function accessibleCell(row: number, col: number, value: unknown): HTMLElement {
     const key = `${row}:${col}`;
@@ -2482,7 +2512,7 @@ export function createGrid(options: GridOptions): Grid {
     const invalid = validationMessage(value,col);node.setAttribute('aria-invalid',String(!!invalid));
     node.setAttribute('aria-readonly', String(!engine.canEdit(row, col)));
     node.setAttribute('aria-selected', String(getSelectionRanges().some(range => row >= range.startRow && row <= range.endRow && col >= range.startColumn && col <= range.endColumn)));
-    node.setAttribute('aria-description', [...stateLabels(row, col), ...(invalid ? [invalid] : []), ...(linksForValue(value, columns[col]!.key, engine.getFormat(row, col).contentFormat).length ? ['Contains links. Alt+Enter opens links.'] : [])].join('; '));
+    node.setAttribute('aria-description', [...stateLabels(row, col).map(label=>t(label)), ...(invalid ? [invalid] : []), ...(linksForValue(value, columns[col]!.key, engine.getFormat(row, col).contentFormat).length ? [t("Contains links. Alt+Enter opens links.")] : [])].join('; '));
     node.textContent = accessibleText(row, col, value);
     return node;
   }
@@ -2538,7 +2568,9 @@ export function createGrid(options: GridOptions): Grid {
       clipRegion(region);
       const painted=new Set<string>();
       for (let row = region.rows.start; row < region.rows.end; row++) {
+        if(rowAxis.size(row)===0){row=rowAxis.indexAt(rowAxis.position(row));if(row>=region.rows.end)break;}
         for (let col = region.columns.start; col < region.columns.end; col++) {
+          if(columnAxis.size(col)===0){col=columnAxis.indexAt(columnAxis.position(col));if(col>=region.columns.end)break;}
           const span=engine.getMerge(row,col),paintRow=span?.startRow??row,paintCol=span?.startColumn??col;
           const key=`${paintRow}:${paintCol}`;if(painted.has(key))continue;painted.add(key);
           const rect=view.cellRect(paintRow,paintCol);
@@ -2562,10 +2594,11 @@ export function createGrid(options: GridOptions): Grid {
       context!.rect(band.x, 0, band.width, headerHeight);
       context!.clip();
       for (let col = band.start; col < band.end; col++) {
+        if(columnAxis.size(col)===0){col=columnAxis.indexAt(columnAxis.position(col));if(col>=band.end)break;}
         const layout = leafHeaders[col]!;
         cell(columns[col]!.title, columnAxis.position(col) + band.offset, layout.level * headerRowHeight, columnAxis.size(col), layout.rowSpan * headerRowHeight, true, 0, col);
         const header = doc.createElement('div'); header.dataset.gridHeaderCell = String(col); header.tabIndex = 0;
-        header.setAttribute('role', viewportAccessibility ? 'columnheader' : 'button'); header.setAttribute('aria-label', viewportAccessibility ? columns[col]!.title : `Select column ${columns[col]!.title}`);
+        header.setAttribute('role', viewportAccessibility ? 'columnheader' : 'button'); header.setAttribute('aria-label', viewportAccessibility ? columns[col]!.title : t("Select column {0}",columns[col]!.title));
         header.addEventListener('keydown', event => {
           if (event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey) { event.preventDefault(); const bounds = header.getBoundingClientRect(); openMenu(0, col, bounds.left, bounds.bottom, true); }
           else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (rowCount && finishEdit(true)) { startAxisSelection('column', col, event); scroller.focus({ preventScroll: true }); } }
@@ -2573,7 +2606,7 @@ export function createGrid(options: GridOptions): Grid {
         header.style.cssText = `position:absolute;left:${Math.max(band.x, columnAxis.position(col) + band.offset)}px;top:${layout.level * headerRowHeight}px;width:${Math.max(0, Math.min(band.x + band.width, columnAxis.position(col + 1) + band.offset) - Math.max(band.x, columnAxis.position(col) + band.offset))}px;height:${layout.rowSpan * headerRowHeight}px`;
         header.dataset.headerLevel = String(layout.level);
         header.setAttribute('aria-rowspan', String(layout.rowSpan));
-        if (viewportAccessibility) { header.setAttribute('role', 'columnheader'); header.setAttribute('aria-colindex', String(col + 1)); header.setAttribute('aria-label', columns[col]!.title); header.setAttribute('aria-description', stateLabels(null, col).join('; ')); const sort = currentView?.sorts?.[0] ?? currentView?.sort; header.setAttribute('aria-sort', sort?.columnKey === columns[col]!.key ? (currentView?.sorts?.length ?? 0)>1 ? 'other' : sort.direction === 'asc' ? 'ascending' : 'descending' : 'none'); }
+        if (viewportAccessibility) { header.setAttribute('role', 'columnheader'); header.setAttribute('aria-colindex', String(col + 1)); header.setAttribute('aria-label', columns[col]!.title); header.setAttribute('aria-description', stateLabels(null, col).map(label=>t(label)).join('; ')); const sort = currentView?.sorts?.[0] ?? currentView?.sort; header.setAttribute('aria-sort', sort?.columnKey === columns[col]!.key ? (currentView?.sorts?.length ?? 0)>1 ? 'other' : sort.direction === 'asc' ? 'ascending' : 'descending' : 'none'); }
         reorderHandle(header, 'column', col);
         headerNodes.push(header);
       }
@@ -2641,9 +2674,9 @@ export function createGrid(options: GridOptions): Grid {
 
   function rowLabels(row: number): string[] {
     const labels: string[] = [];
-    if (engine.isLocked({ scope: 'table' })) labels.push('Table locked');
-    if (rowValueLocked(row)) labels.push('Row locked');
-    if (row < engine.frozenRows) labels.push('Row frozen');
+    if (engine.isLocked({ scope: 'table' })) labels.push(t("Table locked"));
+    if (rowValueLocked(row)) labels.push(t("Row locked"));
+    if (row < engine.frozenRows) labels.push(t("Row frozen"));
     return labels;
   }
 
@@ -2654,7 +2687,7 @@ export function createGrid(options: GridOptions): Grid {
     const levels=outline.reduce((max,group)=>Math.max(max,depths.get(group.id)!+1),0);
     const view = viewport(); const range = getSelectionRange();
     indexGutter.style.height = `${headerHeight + view.height}px`;
-    const corner = doc.createElement('button'); corner.type = 'button'; corner.tabIndex = -1; corner.textContent = '#'; corner.title = 'Select all cells'; corner.setAttribute('aria-label', 'Select all cells'); corner.disabled = !rowCount || !columns.length;
+    const corner = doc.createElement('button'); corner.type = 'button'; corner.tabIndex = -1; corner.textContent = '#'; corner.title = t("Select all cells"); corner.setAttribute('aria-label', t("Select all cells")); corner.disabled = !rowCount || !columns.length;
     corner.setAttribute('aria-pressed', String(!!range && range.startRow === 0 && range.endRow === rowCount - 1 && range.startColumn === 0 && range.endColumn === columns.length - 1));
     corner.addEventListener('click', event => { if (event.detail === 0) { selectAll(); scroller.focus({ preventScroll: true }); } });
     corner.style.cssText = `width:100%;padding:0;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;height:${headerHeight}px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--acheron-grid-line-color);border-right:1px solid var(--acheron-grid-line-color);box-sizing:border-box`;
@@ -2669,12 +2702,13 @@ export function createGrid(options: GridOptions): Grid {
       const pane = doc.createElement('div');
       pane.style.cssText = `position:absolute;left:0;top:${headerHeight + band.y}px;width:100%;height:${band.height}px;overflow:hidden`;
       for (let row = band.start; row < band.end; row++) {
+        if(rowAxis.size(row)===0){row=rowAxis.indexAt(rowAxis.position(row));if(row>=band.end)break;}
         const button = doc.createElement('button'); button.type = 'button'; button.tabIndex = -1;
         const sourceIndex=engine.getRowSourceIndex(row);
-        button.textContent = String(sourceIndex + 1); button.setAttribute('aria-label', `Select row ${sourceIndex + 1}`);
-        const labels = rowLabels(row); const locked = labels.includes('Row locked');
-        button.title = [`Select row ${sourceIndex + 1}`, ...labels].join('; ');
-        button.setAttribute('aria-description', labels.join('; '));
+        button.textContent = String(sourceIndex + 1); button.setAttribute('aria-label', t("Select row {0}",sourceIndex + 1));
+        const labels = rowLabels(row); const locked = labels.includes(t("Row locked"));
+        button.title = [t("Select row {0}",sourceIndex + 1), ...labels].join('; ');
+        button.setAttribute('aria-description', labels.map(label=>t(label)).join('; '));
         if (locked) {
           const icon = rowLockSvg.cloneNode(true) as Element;
           icon.setAttribute('width', '12'); icon.setAttribute('height', '12'); icon.setAttribute('aria-hidden', 'true');
@@ -2703,13 +2737,13 @@ export function createGrid(options: GridOptions): Grid {
         for(const group of outline.filter(group=>group.startRow===sourceIndex).sort((a,b)=>b.endRow-a.endRow)) {
           const depth=depths.get(group.id)!;
           const toggle=doc.createElement('button');toggle.type='button';toggle.dataset.gridRowGroup=group.id;
-          toggle.setAttribute('aria-label',`${group.collapsed?'Expand':'Collapse'} rows ${group.startRow+1}–${group.endRow+1}`);toggle.setAttribute('aria-expanded',String(!group.collapsed));
+          toggle.setAttribute('aria-label',t("{0} rows {1}–{2}",group.collapsed?t('Expand'):t('Collapse'),group.startRow+1,group.endRow+1));toggle.setAttribute('aria-expanded',String(!group.collapsed));
           toggle.disabled=!engine.canChangeLayout({kind:group.collapsed?'expand':'collapse',group});
-          toggle.title=toggle.getAttribute('aria-label')!+' · '+(group.endRow-group.startRow+1)+' rows';const glyph=svgIcon('chevron-down');if(group.collapsed)glyph.setAttribute('style','transform:rotate(-90deg)');glyph.setAttribute('width','12');glyph.setAttribute('height','12');toggle.append(glyph);
+          toggle.title=toggle.getAttribute('aria-label')!+' · '+t('{0} rows',group.endRow-group.startRow+1);const glyph=svgIcon('chevron-down');if(group.collapsed)glyph.setAttribute('style','transform:rotate(-90deg)');glyph.setAttribute('width','12');glyph.setAttribute('height','12');toggle.append(glyph);
           toggle.style.cssText=`position:absolute;left:${depth*24+3}px;top:${rowAxis.position(row)+band.offset-band.y+Math.max(0,(rowAxis.size(row)-20)/2)}px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;padding:2px;border:0;border-radius:6px;background:color-mix(in srgb,var(--acheron-icon-color) 7%,var(--acheron-header-background));color:var(--acheron-header-text-color);cursor:pointer`;
           if (enteringGroups.has(group.id) && motionEnabled()) toggle.animate([{opacity:0,transform:'scale(.8)'},{opacity:1,transform:'scale(1)'}],{duration:180,easing:'cubic-bezier(.22,1,.36,1)'});
           toggle.addEventListener('pointerdown',event=>{event.stopPropagation();});
-          toggle.addEventListener('click',event=>{event.stopPropagation();try{structureAction(()=>engine.setGroupCollapsed(group.id,!group.collapsed), 'row');}catch(error){actionError.textContent=error instanceof Error?error.message:'Unable to toggle row group.';actionError.style.display='block';}});
+          toggle.addEventListener('click',event=>{event.stopPropagation();try{structureAction(()=>engine.setGroupCollapsed(group.id,!group.collapsed), 'row');}catch(error){actionError.textContent=error instanceof Error?t(error.message):t("Unable to toggle row group.");actionError.style.display='block';}});
           pane.append(toggle);
         }
       }
@@ -2754,7 +2788,7 @@ export function createGrid(options: GridOptions): Grid {
       reorderGuide.style.top = axis === 'column' ? '0px' : `${Math.max(0, Math.min(root.clientHeight - 2, edge - 1))}px`;
       reorderGuide.style.width = axis === 'row' ? `${root.clientWidth}px` : '2px';
       reorderGuide.style.height = axis === 'column' ? `${root.clientHeight}px` : '2px';
-      reorderBadge.textContent = allowed ? `Move ${reorderDrag!.indices.length} ${axis}${reorderDrag!.indices.length > 1 ? 's' : ''} · ${after ? 'after' : 'before'} ${last === first ? first + 1 : `${first + 1}–${last + 1}`}` : 'Moving here is disabled';
+      reorderBadge.textContent = allowed ? t("Move {0} {1}{2} · {3} {4}",reorderDrag!.indices.length,axis,reorderDrag!.indices.length > 1 ? 's' : '',after ? t('after') : t('before'),last === first ? first + 1 : `${first + 1}–${last + 1}`) : t("Moving here is disabled");
       reorderBadge.style.left = `${Math.max(4, Math.min(root.clientWidth - reorderBadge.offsetWidth - 4, event.clientX - origin.left + 14))}px`;
       reorderBadge.style.top = `${Math.max(4, Math.min(root.clientHeight - reorderBadge.offsetHeight - 4, event.clientY - origin.top + 14))}px`;
     reorderBadge.style.display='block';return {beforeIndex,allowed};
@@ -2783,7 +2817,7 @@ export function createGrid(options: GridOptions): Grid {
     const request=Object.freeze({axis:reorderDrag.axis,indices:Object.freeze([...reorderDrag.indices]),beforeIndex:touchReorder.beforeIndex}),moved=touchReorder.moved;
     clearReorder();
     if(!moved)return;
-    try{if(options.canReorder?.(request)!==false)options.onReorder?.(request);}catch(error){actionError.textContent=error instanceof Error?error.message:'Unable to move items.';actionError.style.display='block';}
+    try{if(options.canReorder?.(request)!==false)options.onReorder?.(request);}catch(error){actionError.textContent=error instanceof Error?t(error.message):t("Unable to move items.");actionError.style.display='block';}
   }
 
   function reorderHandle(node: HTMLElement, axis: 'row' | 'column', first: number, last = first): void {
@@ -2800,11 +2834,11 @@ export function createGrid(options: GridOptions): Grid {
       if (!selectedAxis || !finishEdit(true)) { event.preventDefault(); return; }
       const indices = first === last ? selectedAxisIndices(axis, first) : Array.from({ length: last - first + 1 }, (_, i) => first + i);
       reorderDrag = { axis, indices };
-      reorderBadge.textContent = `Move ${indices.length} ${axis}${indices.length > 1 ? 's' : ''}`;
+      reorderBadge.textContent = t("Move {0} {1}{2}",indices.length,axis,indices.length > 1 ? 's' : '');
       reorderBadge.style.display = 'block'; reorderBadge.style.left = '8px'; reorderBadge.style.top = '8px';
       root.style.cursor = 'grabbing';
       if (event.dataTransfer) {
-        event.dataTransfer.setData('text/plain', `Move ${axis}`); event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', t("Move {0}",axis)); event.dataTransfer.effectAllowed = 'move';
         event.dataTransfer.setDragImage(reorderBadge, 16, 14);
       }
     });
@@ -2814,7 +2848,7 @@ export function createGrid(options: GridOptions): Grid {
       event.preventDefault(); event.stopPropagation(); if (!finishEdit(true)) return;
       const beforeIndex = event.key === backward ? Math.max(0, first - 1) : Math.min(axis === 'row' ? rowCount : columns.length, last + 2);
       const request = Object.freeze({ axis, indices: Object.freeze(Array.from({ length: last - first + 1 }, (_, i) => first + i)), beforeIndex });
-      try { if (options.canReorder?.(request) !== false) options.onReorder?.(request); } catch (error) { actionError.textContent = error instanceof Error ? error.message : 'Unable to move items.'; actionError.style.display = 'block'; }
+      try { if (options.canReorder?.(request) !== false) options.onReorder?.(request); } catch (error) { actionError.textContent = error instanceof Error ? t(error.message) : t("Unable to move items."); actionError.style.display = 'block'; }
     });
     handle.addEventListener('dragend', clearReorder);
     node.addEventListener('dragover',event=>{
@@ -2831,7 +2865,7 @@ export function createGrid(options: GridOptions): Grid {
       const request = Object.freeze({ axis, indices: Object.freeze([...reorderDrag.indices]), beforeIndex: reorderTarget(event, node, axis, first, last) });
       clearReorder();
       try { if (options.canReorder?.(request) === false) return; options.onReorder?.(request); }
-      catch (error) { actionError.textContent = error instanceof Error ? error.message : 'Unable to move items.'; actionError.style.display = 'block'; }
+      catch (error) { actionError.textContent = error instanceof Error ? t(error.message) : t("Unable to move items."); actionError.style.display = 'block'; }
     });
   }
 
@@ -2906,10 +2940,10 @@ export function createGrid(options: GridOptions): Grid {
     activeCell.setAttribute('aria-colspan',String(span?span.endColumn-span.startColumn+1:1));
     activeCell.setAttribute('aria-readonly', String(!engine.canEdit(selection.rowIndex, selection.columnIndex)));
     const content = accessibleText(selection.rowIndex, selection.columnIndex, value);
-    activeCell.setAttribute('aria-description', [...stateLabels(selection.rowIndex, selection.columnIndex), ...(linksForValue(value, selection.columnKey, engine.getFormat(selection.rowIndex, selection.columnIndex).contentFormat).length ? ['Contains links. Alt+Enter opens links.'] : [])].join('; '));
+    activeCell.setAttribute('aria-description', [...stateLabels(selection.rowIndex, selection.columnIndex).map(label=>t(label)), ...(linksForValue(value, selection.columnKey, engine.getFormat(selection.rowIndex, selection.columnIndex).contentFormat).length ? [t("Contains links. Alt+Enter opens links.")] : [])].join('; '));
     if (activeCell.textContent !== content) activeCell.textContent = content;
     scroller.setAttribute('aria-activedescendant', activeCell.id);
-    scroller.setAttribute('aria-label', `${viewportLabel}: row ${selection.rowIndex + 1}, ${content}`);
+    scroller.setAttribute('aria-label', t("{0}: row {1}, {2}",viewportLabel,selection.rowIndex + 1,content));
     if (viewportAccessibility && accessibleCells.has(`${selection.rowIndex}:${selection.columnIndex}`)) { const node = accessibleCell(selection.rowIndex, selection.columnIndex, value); activeRow.hidden = true; scroller.setAttribute('aria-activedescendant', node.id); }
   }
 
@@ -3110,6 +3144,9 @@ export function createGrid(options: GridOptions): Grid {
     get frozenRows() { return engine.frozenRows; },
     get frozenColumns() { return engine.frozenColumns; },
     setFrozen,
+    setRowsHidden:(indices,hidden)=>{if(finishEdit(true)){cancelCut();engine.setRowsHidden(indices,hidden);}},
+    setColumnsHidden:(indices,hidden)=>{if(finishEdit(true)){cancelCut();engine.setColumnsHidden(indices,hidden);}},
+    isRowHidden:engine.isRowHidden,isColumnHidden:engine.isColumnHidden,
     isLocked: engine.isLocked,
     canManageLocks: engine.canManageLocks,
     setLocked,

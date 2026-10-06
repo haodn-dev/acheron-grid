@@ -14,3 +14,6 @@ export type { ReorderRequest, RowChangeRequest } from './reorder.js';
 export type { ChoiceEditorOptions, ChoiceInfo } from './choices.js';
 export type { ChoiceOption } from './grid.js';
 export type { RichTextFormat } from './rich-text.js';
+
+export {createCanvasTranslator,canvasEnglishMessages,canvasVietnameseMessages} from './locale.js';
+export type {CanvasTranslator} from './locale.js';

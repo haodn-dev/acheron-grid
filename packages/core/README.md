@@ -424,3 +424,8 @@ The createGrid methods and behavior remain the same; see the [Canvas guide](http
 ## License
 
 Licensed under [MIT](LICENSE). Copyright (c) 2026 Hao Duong. Lucide assets belong to the separate Canvas package and are not dependencies of this headless core.
+
+
+## Editing and remote writes (source preview)
+
+Paste special (`PasteOptions`), hidden row/column geometry and `numberFormat` metadata use the shared permission/atomic/history/state pipeline. `createRemoteDataSource` adds bounded optimistic JSON snapshots, explicit commit, exact retry after an uncertain result, resync and explicit conflict adoption. The host owns transport, server authorization, atomic revision checks and durable mutation deduplication. Read-only async paging and live streams retain their existing contracts. See the [complete editing and remote guide](../../guides/editing-and-remote.md) for APIs, examples and limits. These additions are not in npm 0.1.0.

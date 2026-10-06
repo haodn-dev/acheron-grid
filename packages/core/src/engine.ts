@@ -6,6 +6,7 @@ import { LocalDataView, snapshotLocalView as snapshotView } from './data-source.
 import type { LocalViewOptions } from './data-source.js';
 import { blocksToTsv, encodeBlocks, decodeBlocks } from './clipboard.js';
 import type { ClipboardBlock } from './clipboard.js';
+import type { PasteOptions } from './types.js';
 import { reorderedIndices } from './structure.js';
 import type { StructureRequest } from './structure.js';
 import type { CellUpdate, DataSource, RowId, DataRow, RowSplice } from './data-source.js';
@@ -28,6 +29,7 @@ export interface GridEngineOptions {
   onObserverError?: (error: unknown) => void;
   allowMerging?: boolean;
   allowRowGrouping?: boolean;
+  canChangeVisibility?: (request: Readonly<{axis:"row"|"column";indices:readonly number[];hidden:boolean}>) => boolean;
   canChangeLayout?: (request: Readonly<LayoutRequest>) => boolean;
   columns: readonly Column[];
   view?: LocalViewOptions;
@@ -100,16 +102,17 @@ export function createGridEngine(options: GridEngineOptions) {
   let anchor: CellSelection | null = null;
   const retainedRanges: SelectionRange[] = [];
   type Change = CellUpdate & { previous: unknown; rowId: RowId };
-  type FormatEntry = { target: Readonly<CellFormatTarget>; bounds: Readonly<SelectionRange>; patch: Readonly<CellFormatPatch>; orders: Readonly<{ background?: number; textColor?: number; contentFormat?: number; fontWeight?: number; fontStyle?: number }>; order: number };
+  type FormatEntry = { target: Readonly<CellFormatTarget>; bounds: Readonly<SelectionRange>; patch: Readonly<CellFormatPatch>; orders: Readonly<{ background?: number; textColor?: number; contentFormat?: number; fontWeight?: number; fontStyle?: number; numberFormat?: number }>; order: number };
   type FormatChange = { key: string; previous: FormatEntry | undefined; value: FormatEntry | undefined };
   type StructureState = {
     merges: readonly Readonly<SelectionRange>[]; groups: readonly Readonly<RowGroup>[];
     columns: typeof columns; rowCount: number; rowIds: readonly RowId[]; rows: ReturnType<GridAxis['snapshot']>; widths: ReturnType<GridAxis['snapshot']>;
     selection: CellSelection | null; anchor: CellSelection | null; ranges: SelectionRange[];
-    manualRows:number[]; lockedRows: number[]; lockedColumns: number[]; lockedCells: string[]; formats: Map<string, FormatEntry>;
+    manualRows:number[]; hiddenRows:number[]; hiddenColumns:number[]; lockedRows: number[]; lockedColumns: number[]; lockedCells: string[]; formats: Map<string, FormatEntry>;
     frozenRows: number; frozenColumns: number;
   };
   type HistoryCommand = { kind: 'values'; changes: Change[]; formats?: FormatChange[] } | { kind: 'format'; changes: FormatChange[] }
+    | { kind: 'visibility'; axis: 'row' | 'column'; indices: readonly number[]; hidden: boolean }
     | { kind: 'outline'; requests: readonly LayoutRequest[]; beforeMerges: readonly Readonly<SelectionRange>[]; afterMerges: readonly Readonly<SelectionRange>[]; beforeGroups: readonly Readonly<RowGroup>[]; afterGroups: readonly Readonly<RowGroup>[] }
     | { kind: 'resize'; axis: 'row' | 'column'; index: number; previous: number; size: number; previousManual:boolean }
     | { kind: 'freeze'; previousRows: number; previousColumns: number; rows: number; columns: number }
@@ -141,6 +144,7 @@ export function createGridEngine(options: GridEngineOptions) {
       const index = reverseProjection.get(row); return index === undefined ? [] : [[index, size] as const];
     }));
     projectedAxis = axis;
+    axis.replaceHidden(rowAxis.hiddenIndices().flatMap(row=>{const index=reverseProjection.get(row);return index===undefined?[]:[index];}));
   }
   function buildProjection(next: LocalViewOptions, count=rowCount, spans:readonly Readonly<SelectionRange>[]=merges, outlines:readonly Readonly<RowGroup>[]=groups, frozen=frozenRows): number[] | null {
     if (!next.sort && !next.sorts?.length && !next.filters?.length) {
@@ -429,6 +433,10 @@ export function createGridEngine(options: GridEngineOptions) {
     const to = redo ? past : future;
     const entry = from.at(-1);
     if (!entry) return false;
+    if(entry.kind==='visibility') {
+      changeVisibility(entry.axis,entry.indices,redo?entry.hidden:!entry.hidden,false,redo?'redo':'undo');
+      from.pop();to.push(entry);return true;
+    }
     if(entry.kind==='outline') {
       const requests=entry.requests.map(request=>redo?request:'range' in request?{...request,kind:request.kind==='merge'?'unmerge' as const:'merge' as const}:{...request,kind:({group:'ungroup',ungroup:'group',collapse:'expand',expand:'collapse'} as const)[request.kind]});
       if(requests.some(request=>!layoutAllowed(request)))throw new Error('Changing merged cells or row groups is disabled.');
@@ -448,7 +456,7 @@ export function createGridEngine(options: GridEngineOptions) {
     }
     if (entry.kind === 'resize') {
       const axis = entry.axis === 'row' ? rowAxis : columnAxis;
-      if ((entry.axis!=='row'||manualRows.has(entry.index)) && axis.size(entry.index) !== (redo ? entry.previous : entry.size)) throw new Error('Layout history conflicts with external changes.');
+      if ((entry.axis!=='row'||manualRows.has(entry.index)) && axis.storedSize(entry.index) !== (redo ? entry.previous : entry.size)) throw new Error('Layout history conflicts with external changes.');
       axis.setSize(entry.index, redo ? entry.size : entry.previous);
       if(entry.axis==='row'){if(redo||entry.previousManual)manualRows.add(entry.index);else manualRows.delete(entry.index);}
       from.pop(); to.push(entry);
@@ -576,8 +584,12 @@ export function createGridEngine(options: GridEngineOptions) {
     pendingCut={cells:[...cells.values()],columnKeys:columns.map(column=>column.key),blockCount:blocks.length};
     return text;
   }
-  function pasteBlocks(blocks:readonly ClipboardBlock[],structured:boolean,move=false):void {
+  function pasteBlocks(blocks:readonly ClipboardBlock[],structured:boolean,move=false,options:PasteOptions={}):void {
     assertAlive();
+    if(!options||typeof options!=='object'||options.mode!==undefined&&!['all','values','formats'].includes(options.mode)||options.transpose!==undefined&&typeof options.transpose!=='boolean'||options.skipEmpty!==undefined&&typeof options.skipEmpty!=='boolean')throw new TypeError('Invalid paste options.');
+    const mode=options.mode??'all';
+    if(move&&(mode!=='all'||options.transpose||options.skipEmpty))throw new Error('Cut cannot use paste special.');
+    if(options.transpose)blocks=blocks.map(block=>({...block,row:block.column,column:block.row,values:block.values[0]!.map((_,col)=>block.values.map(row=>row[col]!)),...(block.formats?{formats:block.formats[0]!.map((_,col)=>block.formats!.map(row=>row[col]!))}: {})}));
     const ranges=displaySelectionRanges().sort((a,b)=>a.startRow-b.startRow||a.startColumn-b.startColumn);
     if(!ranges.length)return;
     const cut=move ? pendingCut : undefined;
@@ -604,22 +616,23 @@ export function createGridEngine(options: GridEngineOptions) {
       if(place.row+height>visibleRowCount()||place.col+width>columns.length)throw new RangeError('Paste extends beyond grid bounds.');
       for(let row=0;row<height;row++)for(let col=0;col<width;col++){
         const rowIndex=sourceRow(place.row+row),columnIndex=place.col+col,columnKey=columns[columnIndex]!.key,text=place.values[broadcast?0:row]![broadcast?0:col]!,key=`${rowIndex}:${columnKey}`,previous=texts.get(key);
+        if(options.skipEmpty&&text==='')continue;
         const span=mergeAt(rowIndex,columnIndex);
         if(span&&(rowIndex!==span.startRow||columnIndex!==span.startColumn)) {
-          if(text!=='')throw new Error('Paste would overwrite a hidden merged value. Unmerge first.');
+          if(mode!=='formats'&&text!=='')throw new Error('Paste would overwrite a hidden merged value. Unmerge first.');
           continue;
         }
         if(previous&&previous.text!==text)throw new Error('Overlapping paste targets contain conflicting values.');
-        const format = place.formats?.[broadcast?0:row]?.[broadcast?0:col];
+        const format = mode==='values'?undefined:place.formats?.[broadcast?0:row]?.[broadcast?0:col];
         if (previous && JSON.stringify(previous.format) !== JSON.stringify(format)) throw new Error('Overlapping paste targets contain conflicting formats.');
         texts.set(key,{rowIndex,columnKey,columnIndex,text,...(format ? { format } : {})});
       }
     }
     for(const cell of texts.values()) {
-      requirePermission(cell.rowIndex,cell.columnIndex,'pasteable');
+      if(mode!=='formats')requirePermission(cell.rowIndex,cell.columnIndex,'pasteable');
       if (cell.format && Object.keys(cell.format).length) requireFormatPermission({ startRow: cell.rowIndex, endRow: cell.rowIndex, startColumn: cell.columnIndex, endColumn: cell.columnIndex });
     }
-    const updates=[...texts.values()].map(cell=>{
+    const updates=mode==='formats'?[]:[...texts.values()].map(cell=>{
       const column=columns[cell.columnIndex]!,current=dataSource.getValue(cell.rowIndex,column.key);
       if(!column.parse&&current!=null&&typeof current!=='string')throw new Error('Column requires a parser: '+column.key);
       return {rowIndex:cell.rowIndex,columnKey:column.key,value:column.parse?column.parse(cell.text):cell.text};
@@ -641,7 +654,7 @@ export function createGridEngine(options: GridEngineOptions) {
     const targets=placements.map(place=>({startRow:place.row,endRow:place.row+(place.height ?? place.values.length)-1,startColumn:place.col,endColumn:place.col+(place.width ?? place.values[0]!.length)-1}));
     if(targets.length<=128 && targets.every(range=>range.endRow<visibleRowCount())) targets.forEach((range,index)=>!projection && activeParts===1 ? selectRange(range,index===0?'replace':'add') : selectDisplayRange(range,index===0?'replace':'add'));
   }
-  function paste(text:string):void { pasteBlocks([{row:0,column:0,values:decodeTsv(text)}],false); }
+  function paste(text:string,options?:PasteOptions):void { pasteBlocks([{row:0,column:0,values:decodeTsv(text)}],false,false,options); }
 
   function select(rowIndex: number, columnIndex: number, extend = false, add = false): boolean {
     assertAlive();
@@ -736,10 +749,24 @@ export function createGridEngine(options: GridEngineOptions) {
   function resize(axis: GridAxis, index: number, size: number, history = true): void {
     assertAlive();
     if(!history&&manualRows.has(index))return;
-    const previous = axis.size(index), previousManual=axis===rowAxis&&manualRows.has(index);
+    const previous = axis.storedSize(index), previousManual=axis===rowAxis&&manualRows.has(index);
     axis.setSize(index, size);
     if (previous !== size && history) { if(axis===rowAxis)manualRows.add(index); past.push({kind:'resize', axis:axis === rowAxis ? 'row' : 'column', index, previous, size, previousManual}); if (past.length > 100) past.shift(); future.length=0; }
     if (previous !== size) notify({ type: 'layout' }, Object.freeze({ type: axis === rowAxis ? 'row:resize' : 'column:resize', index, previous, size }));
+  }
+
+  function changeVisibility(axis:'row'|'column',indices:readonly number[],hidden:boolean,history=true,source:'api'|'undo'|'redo'='api'):void {
+    assertAlive();
+    const layout=axis==='row'?rowAxis:columnAxis;
+    if(typeof hidden!=='boolean'||!Array.isArray(indices)||new Set(indices).size!==indices.length||indices.some(index=>!Number.isSafeInteger(index)||index<0||index>=layout.count))throw new RangeError('Invalid visibility request.');
+    if(tableLocked||options.canChangeVisibility?.(Object.freeze({axis,indices:Object.freeze([...indices]),hidden}))===false)throw new Error('Changing visibility is disabled.');
+    const before=new Set(layout.hiddenIndices()),changed=indices.filter(index=>before.has(index)!==hidden);
+    if(!changed.length)return;
+    for(const index of changed){if(hidden)before.add(index);else before.delete(index);}
+    layout.replaceHidden([...before]);rebuildViewAxis();
+    clearSelection();pendingCut=undefined;
+    if(history){past.push({kind:'visibility',axis,indices:Object.freeze(changed),hidden});if(past.length>100)past.shift();future.length=0;}
+    notify({type:'layout'},Object.freeze({type:'visibility:change',axis,indices:Object.freeze(changed),hidden,source}));
   }
 
   function formatBounds(target: CellFormatTarget): SelectionRange {
@@ -772,12 +799,12 @@ export function createGridEngine(options: GridEngineOptions) {
     assertAlive(); validateLockTarget({ scope: 'cell', rowIndex, columnIndex });
     if (!orderedFormats.length) return emptyFormat;
     const result: Record<string, string> = {};
-    const orders = { background: 0, textColor: 0, contentFormat: 0, fontWeight: 0, fontStyle: 0 };
+    const orders = { background: 0, textColor: 0, contentFormat: 0, fontWeight: 0, fontStyle: 0, numberFormat: 0 };
     // Scan sparse overlays; index regions if large formatting sets become costly.
     for (const entry of orderedFormats) {
       const range = entry.bounds;
       if (rowIndex < range.startRow || rowIndex > range.endRow || columnIndex < range.startColumn || columnIndex > range.endColumn) continue;
-      for (const key of ['background', 'textColor', 'contentFormat', 'fontWeight', 'fontStyle'] as const) {
+      for (const key of ['background', 'textColor', 'contentFormat', 'fontWeight', 'fontStyle', 'numberFormat'] as const) {
         if ((entry.orders[key] ?? 0) <= orders[key]) continue;
         orders[key] = entry.orders[key]!;
         const value = entry.patch[key];
@@ -801,7 +828,7 @@ export function createGridEngine(options: GridEngineOptions) {
     if (patch !== null) {
       if (!patch || typeof patch !== 'object') throw new TypeError('Invalid formatting patch.');
       patch = Object.freeze({ ...patch });
-      for (const [key, value] of Object.entries(patch)) if (!['contentFormat','background','textColor','fontWeight','fontStyle'].includes(key) || value !== null && (key === 'fontWeight' ? !['normal','bold'].includes(value) : key === 'fontStyle' ? !['normal','italic'].includes(value) : key === 'contentFormat' ? !['plain','html','markdown'].includes(value) : typeof value !== 'string' || !/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(value))) throw new TypeError('Invalid cell format.');
+      for (const [key, value] of Object.entries(patch)) if (!['contentFormat','background','textColor','fontWeight','fontStyle','numberFormat'].includes(key) || value !== null && (key === 'numberFormat' ? !['decimal','integer','percent','currency'].includes(value) : key === 'fontWeight' ? !['normal','bold'].includes(value) : key === 'fontStyle' ? !['normal','italic'].includes(value) : key === 'contentFormat' ? !['plain','html','markdown'].includes(value) : typeof value !== 'string' || !/^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(value))) throw new TypeError('Invalid cell format.');
       if (!Object.keys(patch).length) return;
     }
     const unique = new Map<string, { target: CellFormatTarget; bounds: SelectionRange }>();
@@ -818,7 +845,7 @@ export function createGridEngine(options: GridEngineOptions) {
       const nextPatch = patch === null ? undefined : Object.freeze({ ...previous?.patch, ...patch });
       if ((!previous && !nextPatch) || (previous && previous === orderedFormats.at(-1) && JSON.stringify(previous.patch) === JSON.stringify(nextPatch))) continue;
       const orders = { ...previous?.orders };
-      if (patch) for (const key of ['background', 'textColor', 'contentFormat', 'fontWeight', 'fontStyle'] as const) if (patch[key] !== undefined) orders[key] = ++formatOrder;
+      if (patch) for (const key of ['background', 'textColor', 'contentFormat', 'fontWeight', 'fontStyle', 'numberFormat'] as const) if (patch[key] !== undefined) orders[key] = ++formatOrder;
       changes.push({ key, previous, value: nextPatch ? { ...entry, bounds: Object.freeze(entry.bounds), patch: nextPatch, orders: Object.freeze(orders), order: formatOrder } : undefined });
     }
     if (!changes.length) return;
@@ -867,14 +894,14 @@ export function createGridEngine(options: GridEngineOptions) {
 
   function snapshotStructure(rowIds?: readonly RowId[]): StructureState {
     return {merges,groups,columns, rowCount, rowIds:rowIds ?? Array.from({length:rowCount},(_,i)=>dataSource.getRowId(i)), rows:rowAxis.snapshot(), widths:columnAxis.snapshot(), selection:getSelection(), anchor:anchor ? {...anchor} : null,
-      ranges:retainedRanges.map(range=>({...range})), manualRows:[...manualRows], lockedRows:[...lockedRows], lockedColumns:[...lockedColumns], lockedCells:[...lockedCells],
+      ranges:retainedRanges.map(range=>({...range})), manualRows:[...manualRows], hiddenRows:rowAxis.hiddenIndices(), hiddenColumns:columnAxis.hiddenIndices(), lockedRows:[...lockedRows], lockedColumns:[...lockedColumns], lockedCells:[...lockedCells],
       formats:new Map(formats), frozenRows, frozenColumns};
   }
   function restoreStructure(state: StructureState): void {
     merges=[...state.merges];groups=[...state.groups];
     activeParts=1;displayAnchor=null;cachedRanges=null;
     columns=state.columns; rowCount=state.rowCount; columnIndices.clear(); columns.forEach((column,i)=>columnIndices.set(column.key,i));
-    rowAxis.replace(rowCount,state.rows); columnAxis.replace(columns.length,state.widths);
+    rowAxis.replace(rowCount,state.rows); columnAxis.replace(columns.length,state.widths);rowAxis.replaceHidden(state.hiddenRows);columnAxis.replaceHidden(state.hiddenColumns);
     selection=state.selection ? {...state.selection} : null; anchor=state.anchor ? {...state.anchor} : null;
     retainedRanges.length=0; retainedRanges.push(...state.ranges.map(range=>({...range})));
     manualRows.clear(); for(const index of state.manualRows)manualRows.add(index);
@@ -932,7 +959,7 @@ export function createGridEngine(options: GridEngineOptions) {
           startColumn:target.scope==='column'||target.scope==='cell' ? target.columnIndex:0,endColumn:target.scope==='column'||target.scope==='cell' ? target.columnIndex:nextColumns.length-1};
         const nextKey=JSON.stringify([target.scope,bounds.startRow,bounds.endRow,bounds.startColumn,bounds.endColumn]);
         const existing=nextFormats.get(nextKey),patch={...existing?.patch},orders={...existing?.orders};
-        for(const property of ['background','textColor','contentFormat','fontWeight','fontStyle'] as const)if((entry.orders[property]??0)>(orders[property]??0)){orders[property]=entry.orders[property]!;Object.assign(patch,{[property]:entry.patch[property]!});}
+        for(const property of ['background','textColor','contentFormat','fontWeight','fontStyle','numberFormat'] as const)if((entry.orders[property]??0)>(orders[property]??0)){orders[property]=entry.orders[property]!;Object.assign(patch,{[property]:entry.patch[property]!});}
         nextFormats.set(nextKey,{...entry,target:Object.freeze(target),bounds:Object.freeze(bounds),patch:Object.freeze(patch),orders:Object.freeze(orders),order:Math.max(existing?.order??0,entry.order)});
       }
     }
@@ -947,7 +974,7 @@ export function createGridEngine(options: GridEngineOptions) {
     validateMergeFreeze(nextMerges,Math.min(frozenRows,nextCount),Math.min(frozenColumns,nextColumns.length));
     return {...before,columns:nextColumns,rowCount:nextCount,rowIds:axis==='row' ? order.map(i=>i<0 ? '' : before.rowIds[i]!) : before.rowIds,rows:mapSizes(before.rows,rowMap),widths:mapSizes(before.widths,columnMap),selection:mappedSelection,anchor:mappedAnchor,ranges,
       merges:nextMerges,groups:nextGroups,
-      manualRows:before.manualRows.map(i=>rowMap[i]!).filter(i=>i>=0),lockedRows:before.lockedRows.map(i=>rowMap[i]!).filter(i=>i>=0),lockedColumns:before.lockedColumns.map(i=>columnMap[i]!).filter(i=>i>=0),
+      hiddenRows:before.hiddenRows.map(i=>rowMap[i]!).filter(i=>i>=0),hiddenColumns:before.hiddenColumns.map(i=>columnMap[i]!).filter(i=>i>=0),manualRows:before.manualRows.map(i=>rowMap[i]!).filter(i=>i>=0),lockedRows:before.lockedRows.map(i=>rowMap[i]!).filter(i=>i>=0),lockedColumns:before.lockedColumns.map(i=>columnMap[i]!).filter(i=>i>=0),
       lockedCells:before.lockedCells.flatMap(key=>{const [r,c]=key.split(':').map(Number);const row=rowMap[r!]!,col=columnMap[c!]!;return row>=0&&col>=0 ? [`${row}:${col}`] : [];}),
       formats:nextFormats,frozenRows:Math.min(frozenRows,nextCount),frozenColumns:Math.min(frozenColumns,nextColumns.length)};
   }
@@ -1137,12 +1164,12 @@ export function createGridEngine(options: GridEngineOptions) {
   }
 
   function exportConfiguration():GridConfiguration {
-    assertAlive();return {version:1,columns:columns.map((column,index)=>({key:column.key,width:columnAxis.size(index)})),frozenRows,frozenColumns,view:{...view,...(view.sort?{sort:{...view.sort}}:{}),...(view.sorts?{sorts:view.sorts.map(sort=>({...sort}))}:{}),...(view.filters?{filters:view.filters.map(filter=>({...filter}))}:{})}};
+    assertAlive();return {version:1,columns:columns.map((column,index)=>({key:column.key,width:columnAxis.storedSize(index)})),frozenRows,frozenColumns,view:{...view,...(view.sort?{sort:{...view.sort}}:{}),...(view.sorts?{sorts:view.sorts.map(sort=>({...sort}))}:{}),...(view.filters?{filters:view.filters.map(filter=>({...filter}))}:{})}};
   }
   function exportState():GridState {
     assertAlive();
     const layers=[...formats.values()].flatMap(entry=>Object.entries(entry.orders).map(([property,order])=>({order:order!,target:entry.target,patch:{[property]:entry.patch[property as keyof CellFormatPatch]}}))).sort((a,b)=>a.order-b.order);
-    return {version:1,configuration:exportConfiguration(),rowIds:Array.from({length:rowCount},(_,i)=>dataSource.getRowId(i)),rowHeights:rowAxis.snapshot(),manualRows:[...manualRows],activeParts,displayAnchor:displayAnchor?{...displayAnchor}:null,ranges:getSelectionRanges().map(range=>({...range})),selection:selection?{...selection}:null,anchor:anchor?{...anchor}:null,merges:merges.map(span=>({...span})),groups:groups.map(group=>({...group})),locks:[...(tableLocked?[{scope:'table' as const}]:[]),...[...lockedRows].map(rowIndex=>({scope:'row' as const,rowIndex})),...[...lockedColumns].map(columnIndex=>({scope:'column' as const,columnIndex})),...[...lockedCells].map(key=>{const [rowIndex,columnIndex]=key.split(':').map(Number);return {scope:'cell' as const,rowIndex:rowIndex!,columnIndex:columnIndex!};})],formats:layers.map(({target,patch})=>({target:JSON.parse(JSON.stringify(target)) as CellFormatTarget,patch}))};
+    return {version:1,configuration:exportConfiguration(),rowIds:Array.from({length:rowCount},(_,i)=>dataSource.getRowId(i)),rowHeights:rowAxis.snapshot(),manualRows:[...manualRows],hiddenRows:rowAxis.hiddenIndices(),hiddenColumns:columnAxis.hiddenIndices(),activeParts,displayAnchor:displayAnchor?{...displayAnchor}:null,ranges:getSelectionRanges().map(range=>({...range})),selection:selection?{...selection}:null,anchor:anchor?{...anchor}:null,merges:merges.map(span=>({...span})),groups:groups.map(group=>({...group})),locks:[...(tableLocked?[{scope:'table' as const}]:[]),...[...lockedRows].map(rowIndex=>({scope:'row' as const,rowIndex})),...[...lockedColumns].map(columnIndex=>({scope:'column' as const,columnIndex})),...[...lockedCells].map(key=>{const [rowIndex,columnIndex]=key.split(':').map(Number);return {scope:'cell' as const,rowIndex:rowIndex!,columnIndex:columnIndex!};})],formats:layers.map(({target,patch})=>({target:JSON.parse(JSON.stringify(target)) as CellFormatTarget,patch}))};
   }
   function restoreState(input:unknown):void {
     assertAlive();const saved=readGridState(input);
@@ -1162,6 +1189,7 @@ export function createGridEngine(options: GridEngineOptions) {
       for(const span of saved.merges)staged.mergeCells(span);
       const ids=new Set<string>();
       for(const group of saved.groups){if(!group||typeof group.id!=='string'||!group.id||ids.has(group.id)||typeof group.collapsed!=='boolean')throw new TypeError('Invalid state group.');ids.add(group.id);const stagedGroup=staged.groupRows(group.startRow,group.endRow);if(group.collapsed){staged.setGroupCollapsed(stagedGroup,true);staged.setGroupCollapsed(stagedGroup,false);}}
+      staged.setRowsHidden(saved.hiddenRows??[],true);staged.setColumnsHidden(saved.hiddenColumns??[],true);
       // Restore selection in source coordinates before installing a sorted/filtered projection.
       for(const range of saved.ranges)if(!staged.selectRange(range,'add'))throw new Error('State selection is not selectable.');
       for(const cell of [saved.selection,saved.anchor])if(cell!==null){
@@ -1193,6 +1221,7 @@ export function createGridEngine(options: GridEngineOptions) {
       const old=projection ?? Array.from({length:rowCount},(_,i)=>i), oldColumns=columns;
       columns=Object.freeze([...configuration.columns]);columnIndices.clear();columns.forEach((column,i)=>columnIndices.set(column.key,i));
       columnAxis.replace(columns.length,configuration.columns.map((column,i)=>[i,configuration.columnWidths[column.key]!] as const));rowAxis.replace(rowCount,valid.rowHeights);
+      rowAxis.replaceHidden(valid.hiddenRows??[]);columnAxis.replaceHidden(valid.hiddenColumns??[]);
       manualRows.clear();for(const row of manual)manualRows.add(row);
       merges=valid.merges.map(span=>Object.freeze({...span}));groups=valid.groups.map((group,i)=>Object.freeze({...group,id:saved.groups[i]!.id,collapsed:saved.groups[i]!.collapsed}));groupId=0;
       lockedRows.clear();lockedColumns.clear();lockedCells.clear();tableLocked=false;
@@ -1283,8 +1312,8 @@ export function createGridEngine(options: GridEngineOptions) {
     cancelCut:()=>command(()=>{pendingCut=undefined;}),
     pasteCutSelectionBlocks:(text:string)=>command(()=>pasteBlocks(decodeBlocks(text),true,true)),
     copySelectionBlocks:()=>query(()=>encodeBlocks(clipboardBlocks())),
-    pasteSelectionBlocks:(text:string)=>command(()=>pasteBlocks(decodeBlocks(text),true)),
-    copySelection: () => query(copySelection), paste: (text: string) => command(() => paste(text)),
+    pasteSelectionBlocks:(text:string,options?:PasteOptions)=>command(()=>pasteBlocks(decodeBlocks(text),true,false,options)),
+    copySelection: () => query(copySelection), paste: (text: string,options?:PasteOptions) => command(() => paste(text,options)),
     undo: () => command(() => replay(false)), redo: () => command(() => replay(true)),
     canUndo: () => !destroyed && past.length > 0,
     canRedo: () => !destroyed && future.length > 0,
@@ -1293,6 +1322,12 @@ export function createGridEngine(options: GridEngineOptions) {
     isLocked:(target:CellLockTarget)=>isLocked(sourceTarget(target)), canManageLocks: () => !destroyed && allowLockChanges,
     setLocked: (target: CellLockTarget, locked: boolean) => command(() => setLocked(sourceTarget(target), locked)),
     setFrozen: (rows: number, columns: number) => command(() => {if(!Number.isSafeInteger(rows)||rows<0||rows>visibleRowCount())throw new RangeError('Invalid frozen row count.');setFrozen(projection&&groups.some(group=>group.collapsed)&&rows>0?sourceRow(rows-1)+1:rows, columns);}),
+    setRowsHidden:(indices:readonly number[],hidden:boolean)=>command(()=>changeVisibility('row',indices.map(sourceRow),hidden)),
+    setColumnsHidden:(indices:readonly number[],hidden:boolean)=>command(()=>changeVisibility('column',indices,hidden)),
+    getHiddenRows:()=>Object.freeze(rowAxis.hiddenIndices().map(displayRow).filter(index=>index>=0).sort((a,b)=>a-b)),
+    getHiddenColumns:()=>Object.freeze(columnAxis.hiddenIndices()),
+    isRowHidden:(index:number)=>rowAxis.isHidden(sourceRow(index)),
+    isColumnHidden:(index:number)=>columnAxis.isHidden(index),
     setColumnWidth: (index: number, size: number) => command(() => resize(columnAxis, index, size)),
     setRowHeight: (index: number, size: number) => command(() => resize(rowAxis, sourceRow(index), size)),
     destroy: () => command(() => {

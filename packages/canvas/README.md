@@ -725,3 +725,8 @@ Use a same-origin backend endpoint. Next.js route handlers work for this; a stat
 Canvas forwards the headless refresh, state and subscription APIs. See the core integration recipes for complete paging/refresh contracts. `destroy()` releases grid-owned UI and listeners; it does not destroy a host-owned source, subscriptions outside the grid or a metadata backend.
 
 React/Vue adapters expose the grid instance through their documented ref/getGrid API. Keep construction options stable and call runtime methods on that instance; replacing factory options is not a reactive configuration update. Mount external components through `onEditorMount` and return their unmount function. Use the same hooks in vanilla, React and Vue; no framework dependency is added to core.
+
+
+## Paste special, visibility, numbers and localization (source preview)
+
+Canvas exposes values-only/formats-only/transposed/skip-empty paste, hide/show rows and columns, and decimal/integer/percent/currency formats. Hidden axes retain data and positive stored sizes while painting, navigation and viewport ARIA skip them. Number display uses `Intl.NumberFormat`; editing and callbacks retain raw values. Set `locale`, `currency` and `messages` at construction; complete English/Vietnamese message inventories are exported for host language packs. Menus, dialogs, choice/media editors and accessibility share these messages. See the [complete editing and remote guide](../../guides/editing-and-remote.md). These additions are not in npm 0.1.0.

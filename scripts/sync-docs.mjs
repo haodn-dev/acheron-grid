@@ -49,7 +49,7 @@ for(const [name,file,typeName,optionsName] of [['core','packages/core/src/engine
       if(runtime&&!coreExportContracts[symbol.name])throw new Error('Missing exported core contract: '+symbol.name);
       markdown+=`| ${symbol.name} | ${runtime?'Runtime':'Type'} | ${declaration?.getSourceFile().fileName.split(/[\\/]/).at(-1)??'inferred'} | ${runtime?coreExportContracts[symbol.name]:'Compile-time contract; see the exported type definitions below or engine construction/member signatures.'} |\n`;
     }
-    for(const symbol of symbols.filter(symbol=>['LocalDataSource','LocalDataView','createAsyncDataSource','createLiveDataSource'].includes(symbol.name))){
+    for(const symbol of symbols.filter(symbol=>['LocalDataSource','LocalDataView','createAsyncDataSource','createLiveDataSource','createRemoteDataSource'].includes(symbol.name))){
       const target=checker.getAliasedSymbol(symbol),declaration=target.valueDeclaration??target.declarations[0];
       const value=checker.getTypeOfSymbolAtLocation(target,declaration);
       const instance=value.getConstructSignatures()[0]?.getReturnType()??value.getCallSignatures()[0]?.getReturnType();
@@ -88,6 +88,7 @@ const entries=[
  ...['core','canvas','react','vue','markdown','mcp','export','charts'].map(name=>[name,`packages/${name}/README.md`,2,name==='core'?'Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts.':'Align publication status, installation and current source contracts.']),
  ['security','SECURITY.md',1,'Host authorization and untrusted-data boundaries.'],
  ['support','SUPPORT.md',1,'Verified environments and practical limits.'],
+ ['editing-and-remote','guides/editing-and-remote.md',1,'Paste special, hidden axes, number formats, Canvas localization and bounded remote write lifecycle.'],
  ['manual-validation','guides/manual-validation.md',1,'Manual accessibility, device, clipboard and operational acceptance protocol.'],
 ];
 const documents=[];

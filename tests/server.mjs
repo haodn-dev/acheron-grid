@@ -2,8 +2,8 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
-const coreFiles = new Set(['index.js', 'viewport.js', 'data-source.js', 'async-data-source.js', 'live-data-source.js', 'state.js', 'tsv.js', 'axis.js', 'engine.js', 'types.js', 'headless.js', 'permissions.js', 'events.js', 'panes.js', 'structure.js', 'clipboard.js', 'configuration.js']);
-const canvasFiles = new Set(['index.js', 'grid.js', 'media.js', 'media-editor.js', 'links.js', 'headers.js', 'reorder.js', 'choices.js', 'icons.js', 'rich-text.js', 'tooltips.js']);
+const coreFiles = new Set(['index.js', 'viewport.js', 'data-source.js', 'async-data-source.js', 'live-data-source.js', 'remote-data-source.js', 'state.js', 'tsv.js', 'axis.js', 'engine.js', 'types.js', 'headless.js', 'permissions.js', 'events.js', 'panes.js', 'structure.js', 'clipboard.js', 'configuration.js']);
+const canvasFiles = new Set(['index.js', 'grid.js', 'media.js', 'media-editor.js', 'links.js', 'headers.js', 'reorder.js', 'choices.js', 'icons.js', 'rich-text.js', 'tooltips.js', 'locale.js']);
 createServer(async (request, response) => {
   if (request.url === '/adapters.js') {
     try {

@@ -195,10 +195,10 @@ Return versioned structured clipboard text including supported formatting throug
 ### pasteSelectionBlocks
 
 ```ts
-pasteSelectionBlocks: (text: string) => void
+pasteSelectionBlocks: (text: string, options?: PasteOptions) => void
 ```
 
-Decode and validate structured clipboard text, then preflight values/formats and commit atomically. Does not execute HTML or deserialize application callbacks.
+Decode structured clipboard text and atomically preflight values/formats. PasteOptions supports all/values/formats, transpose and skipEmpty; format-only bypasses parsers/value writes and checks format permission. Clipboard strings never execute callbacks.
 
 ### copySelection
 
@@ -211,10 +211,10 @@ Return packed TSV through copy permissions. Core does not access the operating-s
 ### paste
 
 ```ts
-paste: (text: string) => void
+paste: (text: string, options?: PasteOptions) => void
 ```
 
-Parse TSV/editor text, resolve selected destinations and preflight parsing, permissions and validation before one atomic write.
+Parse TSV/editor text and atomically preflight destinations, parsing, permissions and validation. PasteOptions supports all/values/formats, transpose and skipEmpty; TSV carries no formats. Empty means an empty clipboard string, not whitespace.
 
 ## History
 
@@ -586,6 +586,54 @@ setFrozen: (rows: number, columns: number) => void
 
 Set the requested visible leading row/column counts after validation/layout policy; collapsed groups map the row prefix to source coordinates. Participates in layout history; collapsed groups cannot cross a frozen boundary.
 
+### setRowsHidden
+
+```ts
+setRowsHidden: (indices: readonly number[], hidden: boolean) => void
+```
+
+Hide/show specified visible rows under table lock and canChangeVisibility policy. Retain underlying data, stored size and identity; clear selection/cut and record one undo command.
+
+### setColumnsHidden
+
+```ts
+setColumnsHidden: (indices: readonly number[], hidden: boolean) => void
+```
+
+Hide/show current column indices under table lock and visibility policy; retain fields, widths and metadata. History replay rechecks the policy.
+
+### getHiddenRows
+
+```ts
+getHiddenRows: () => readonly number[]
+```
+
+Return hidden rows mapped into the current projection. Rows excluded by filters or collapsed groups are omitted; saved state retains source hidden indices.
+
+### getHiddenColumns
+
+```ts
+getHiddenColumns: () => readonly number[]
+```
+
+Return sorted hidden column indices in current display order.
+
+### isRowHidden
+
+```ts
+isRowHidden: (index: number) => boolean
+```
+
+Check the hidden flag at a visible row; invalid indices reject. Hidden is separate from filter/group projection.
+
+### isColumnHidden
+
+```ts
+isColumnHidden: (index: number) => boolean
+```
+
+Check the hidden flag at a current column; invalid indices reject. Hiding is layout, not data authorization.
+
 ### setColumnWidth
 
 ```ts
@@ -611,6 +659,7 @@ Call createGridEngine with GridEngineOptions. Required fields are marked; option
 | onObserverError | No | `((error: unknown) => void) \| undefined` |
 | allowMerging | No | `boolean \| undefined` |
 | allowRowGrouping | No | `boolean \| undefined` |
+| canChangeVisibility | No | `((request: Readonly<{ axis: "row" \| "column"; indices: readonly number[]; hidden: boolean; }>) => boolean) \| undefined` |
 | canChangeLayout | No | `((request: Readonly<LayoutRequest>) => boolean) \| undefined` |
 | columns | Yes | `readonly Column[]` |
 | view | No | `LocalViewOptions \| undefined` |
@@ -641,6 +690,13 @@ The root and headless alias expose the same API. Source interfaces use their own
 | LocalDataView | Runtime | data-source.ts | A fixed local projection using stable ties and nullish-last sorting. Delegated writes map view indices to underlying source indices; reconstruct the view to reapply criteria. |
 | createAsyncDataSource | Runtime | async-data-source.ts | Read-only synchronous cache with explicit asynchronous page/range loading. The host owns load scheduling, AbortController creation, engine refresh and dataset revision consistency. |
 | createLiveDataSource | Runtime | live-data-source.ts | Read-only bounded local cache of a host stream. Start with a matching snapshot; receive consecutive sequences, coalesce pending cells and flush explicitly. Gaps/disconnect require resync. |
+| createRemoteDataSource | Runtime | remote-data-source.ts | Bounded optimistic JSON snapshot cache with synchronous atomic drafts and explicit async commit/resync. Host server must provide atomic revision checks and mutation ID deduplication. Lost ACK retains an immutable retry; conflict requires explicit resolution. |
+| RemoteDataSourceOptions | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| RemoteSnapshot | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| RemoteChange | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| RemoteMutation | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| RemoteWriteResult | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| RemoteStatus | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | LiveUpdate | Type | live-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | LiveSnapshot | Type | live-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | AsyncDataSourceOptions | Type | async-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
@@ -658,6 +714,8 @@ The root and headless alias expose the same API. Source interfaces use their own
 | CellFormatTarget | Type | types.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | CellFormat | Type | types.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | CellFormatPatch | Type | types.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| NumberFormat | Type | types.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| PasteOptions | Type | types.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | CellPermission | Type | permissions.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | CellPermissionPolicy | Type | permissions.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | CellPermissionResolver | Type | permissions.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
@@ -700,8 +758,8 @@ spliceRows: (splices: readonly RowSplice[]) => void
 | getRowCount | Synchronous row count of this source/view. Engine projection is a separate layer. |
 | getRowId | Read the ID using this source/view index. Async positional identity belongs to one query; the host must manage dataset revisions. |
 | getValue | Read a raw shallow value using this source/view index and key. Missing fields return undefined; async unloaded rows also return undefined, so inspect page state separately. |
-| setValue | Local atomic single-value replacement, or an optional delegated view setter when the underlying source supports it. No engine permissions/history are applied by direct source writes. |
-| setValues | Local atomic batch, or an optional mapped view batch when the underlying source supports it. Direct source changes require engine refresh and remain outside engine history. |
+| setValue | Remote: stage one optimistic value only while ready. Local atomic single-value replacement, or an optional delegated view setter when the underlying source supports it. No engine permissions/history are applied by direct source writes. |
+| setValues | Remote: bounded atomic optimistic JSON-safe staging only while ready. Local atomic batch, or an optional mapped view batch when the underlying source supports it. Direct source changes require engine refresh and remain outside engine history. |
 | addColumns | Validate new keys and initialize missing fields atomically while preserving existing fields/defaults. Direct use is outside engine history. |
 | getRow | Return a shallow row snapshot including hidden fields; nested values are caller-owned. |
 | spliceRows | Apply sequential row splices atomically with unique valid IDs and shallow snapshots. Capture engine IDs before external structure changes. |
@@ -721,8 +779,8 @@ getValue: (index: number, columnKey: string) => unknown
 
 | Source member | Behavior |
 | --- | --- |
-| setValue | Local atomic single-value replacement, or an optional delegated view setter when the underlying source supports it. No engine permissions/history are applied by direct source writes. |
-| setValues | Local atomic batch, or an optional mapped view batch when the underlying source supports it. Direct source changes require engine refresh and remain outside engine history. |
+| setValue | Remote: stage one optimistic value only while ready. Local atomic single-value replacement, or an optional delegated view setter when the underlying source supports it. No engine permissions/history are applied by direct source writes. |
+| setValues | Remote: bounded atomic optimistic JSON-safe staging only while ready. Local atomic batch, or an optional mapped view batch when the underlying source supports it. Direct source changes require engine refresh and remain outside engine history. |
 | getSourceIndex | Map a fixed LocalDataView index to the underlying source index. Rebuild the view after changes requiring new sorting/filtering. |
 | getRowCount | Synchronous row count of this source/view. Engine projection is a separate layer. |
 | getRowId | Read the ID using this source/view index. Async positional identity belongs to one query; the host must manage dataset revisions. |
@@ -812,7 +870,7 @@ setValues?: ((updates: readonly CellUpdate[]) => void) | undefined
 | stale | Whether a fresh snapshot is required. Read-only retained values can still exist while stale; do not treat them as current. |
 | pendingCellCount | Number of unique buffered destination cells after bounded coalescing; not the count of received messages. |
 | reset | Async: clear cache/statuses and cancel generation, retaining query with the supplied count. Live: change stream, clear pending changes and mark stale; retain old data until a matching snapshot. |
-| disconnect | Mark the live source stale and discard buffered updates; does not itself reconnect transport or remove retained rows. |
+| disconnect | Remote: abort/invalidate the active generation but retain drafts and uncertain mutation for exact retry. Live: mark the live source stale and discard buffered updates; does not itself reconnect transport or remove retained rows. |
 | replaceSnapshot | Validate a matching-stream snapshot with bounded rows, unique IDs and configured fields, then atomically replace the local cache. Reject older/wrong-stream snapshots without installing them. |
 | receive | Accept only matching-stream consecutive sequences when not stale; coalesce cells without writing them yet. Gaps, invalid destinations or capacity overflow mark stale and clear pending changes. |
 | flush | Apply buffered live changes atomically and return the number of unique updated cells. Returns zero while stale; the host refreshes the engine after flushing. |
@@ -826,6 +884,54 @@ setValues?: ((updates: readonly CellUpdate[]) => void) | undefined
 | setValue | Optional DataSource compatibility slot; not implemented by this read-only factory and undefined at runtime. |
 | setValues | Optional DataSource compatibility slot; not implemented by this read-only factory and undefined at runtime. |
 
+### createRemoteDataSource source members
+
+Use source indices here; engine selection/value APIs use visible indices.
+
+```ts
+getRowCount: () => number
+getRowId: (row: number) => RowId
+getValue: (row: number, key: string) => unknown
+setValues: (updates: readonly CellUpdate[]) => void
+setValue: (rowIndex: number, columnKey: string, value: unknown) => void
+status: RemoteStatus
+revision: string | null
+pendingCellCount: number
+lastError: unknown
+getPendingChanges: () => readonly RemoteChange[]
+conflict: RemoteSnapshot | null
+commit: () => Promise<void>
+resync: (discardPending?: boolean) => Promise<void>
+reconnect: () => Promise<void>
+disconnect: () => void
+acceptServer: () => void
+subscribe: (listener: (status: RemoteStatus) => void) => () => void
+takeObserverErrors: () => unknown[]
+destroy: () => void
+```
+
+| Source member | Behavior |
+| --- | --- |
+| getRowCount | Synchronous row count of this source/view. Engine projection is a separate layer. |
+| getRowId | Read the ID using this source/view index. Async positional identity belongs to one query; the host must manage dataset revisions. |
+| getValue | Read a raw shallow value using this source/view index and key. Missing fields return undefined; async unloaded rows also return undefined, so inspect page state separately. |
+| setValues | Remote: bounded atomic optimistic JSON-safe staging only while ready. Local atomic batch, or an optional mapped view batch when the underlying source supports it. Direct source changes require engine refresh and remain outside engine history. |
+| setValue | Remote: stage one optimistic value only while ready. Local atomic single-value replacement, or an optional delegated view setter when the underlying source supports it. No engine permissions/history are applied by direct source writes. |
+| status | Remote lifecycle: disconnected/loading/ready/committing/conflict/destroyed. Only ready permits drafts; pending uncertain writes block new edits. |
+| revision | Remote authoritative snapshot revision; optimistic drafts do not advance it. |
+| pendingCellCount | Number of unique buffered destination cells after bounded coalescing; not the count of received messages. |
+| lastError | Most recent remote load/transport/validation rejection; a valid installed snapshot clears it. |
+| getPendingChanges | Return frozen remote draft entries keyed by stable row ID and column key. Preserve these before explicitly accepting a conflicting server snapshot. |
+| conflict | Validated remote server snapshot on conflict, or null. Draft values remain in the cache until explicit adoption. |
+| commit | Commit one immutable mutation against expectedRevision. Concurrent commit calls share the promise; lost responses retain the exact request for retry. Accepted snapshots clear drafts, rejection retains correctable drafts, conflict blocks editing. |
+| resync | Load a fresh bounded remote snapshot. Unsent drafts require explicit discardPending=true; an uncertain mutation cannot be discarded. Capture engine identity first and refresh afterward. |
+| reconnect | Remote resync without discarding drafts; retry an uncertain commit first. Transport reconnection itself belongs to the host. |
+| disconnect | Remote: abort/invalidate the active generation but retain drafts and uncertain mutation for exact retry. Live: mark the live source stale and discard buffered updates; does not itself reconnect transport or remove retained rows. |
+| acceptServer | Explicitly adopt a validated conflicting remote snapshot and discard its drafts. Host refreshes engine and may reapply selected saved drafts through validation. |
+| subscribe | Observe page state changes; returns unsubscribe. Observer exceptions are isolated in a bounded queue; engine refresh is host-owned. |
+| takeObserverErrors | Drain up to the last ten isolated page observer errors. This does not retry failed loads. |
+| destroy | Idempotent disposal of owned cache/queues/observers. Data access and active loads require a live source; cleanup/status probes follow their specific contract. The host owns external transport resources. |
+
 ## Exported type definitions
 
 These declaration excerpts describe compile-time contracts, not executable examples or runtime validators. GridEngine members and GridEngineOptions are catalogued above. Unknown persisted/clipboard input still requires its validation API; never trust a TypeScript assertion as validation.
@@ -838,6 +944,53 @@ export type GridInvalidation =
   | { readonly type: 'selection'; readonly changed: boolean; readonly rangeChanged: boolean }
   | { readonly type: 'layout' }
   | { readonly type: 'structure'; readonly rowMap: readonly number[]; readonly columnMap: readonly number[] };
+```
+
+### Type RemoteDataSourceOptions
+
+```ts
+export interface RemoteDataSourceOptions<S> {
+ readonly datasetId:string;
+ readonly columnKeys:readonly string[];
+ readonly maxRows?:number;
+ readonly maxPendingCells?:number;
+ readonly createAbortController:()=>{readonly signal:S;abort():void};
+ /** Unique for the lifetime of the server's idempotency records. */
+ readonly createMutationId:()=>string;
+ readonly load:(signal:S)=>Promise<RemoteSnapshot>;
+ /** Server must check the revision and apply the complete batch atomically, deduplicated by mutationId. */
+ readonly write:(mutation:RemoteMutation,signal:S)=>Promise<RemoteWriteResult>;
+}
+```
+
+### Type RemoteSnapshot
+
+```ts
+export interface RemoteSnapshot { readonly datasetId:string; readonly revision:string; readonly rows:readonly DataRow[]; }
+```
+
+### Type RemoteChange
+
+```ts
+export interface RemoteChange { readonly rowId:RowId; readonly columnKey:string; readonly previous:unknown; readonly value:unknown; }
+```
+
+### Type RemoteMutation
+
+```ts
+export interface RemoteMutation { readonly datasetId:string; readonly mutationId:string; readonly expectedRevision:string; readonly changes:readonly RemoteChange[]; }
+```
+
+### Type RemoteWriteResult
+
+```ts
+export type RemoteWriteResult = {readonly mutationId:string;readonly status:'accepted'|'conflict';readonly snapshot:RemoteSnapshot} | {readonly datasetId:string;readonly mutationId:string;readonly status:'rejected';readonly message:string};
+```
+
+### Type RemoteStatus
+
+```ts
+export type RemoteStatus = 'disconnected'|'loading'|'ready'|'committing'|'conflict'|'destroyed';
 ```
 
 ### Type LiveUpdate
@@ -969,13 +1122,25 @@ export type CellFormatTarget = CellLockTarget | { readonly scope: 'range'; reado
 ### Type CellFormat
 
 ```ts
-export interface CellFormat { readonly background?: string; readonly textColor?: string; readonly contentFormat?: 'plain' | 'html' | 'markdown'; readonly fontWeight?: 'normal' | 'bold'; readonly fontStyle?: 'normal' | 'italic'; }
+export interface CellFormat { readonly background?: string; readonly textColor?: string; readonly contentFormat?: 'plain' | 'html' | 'markdown'; readonly fontWeight?: 'normal' | 'bold'; readonly fontStyle?: 'normal' | 'italic'; readonly numberFormat?: NumberFormat; }
 ```
 
 ### Type CellFormatPatch
 
 ```ts
-export interface CellFormatPatch { readonly background?: string | null; readonly textColor?: string | null; readonly contentFormat?: 'plain' | 'html' | 'markdown' | null; readonly fontWeight?: 'normal' | 'bold' | null; readonly fontStyle?: 'normal' | 'italic' | null; }
+export interface CellFormatPatch { readonly background?: string | null; readonly textColor?: string | null; readonly contentFormat?: 'plain' | 'html' | 'markdown' | null; readonly fontWeight?: 'normal' | 'bold' | null; readonly fontStyle?: 'normal' | 'italic' | null; readonly numberFormat?: NumberFormat | null; }
+```
+
+### Type NumberFormat
+
+```ts
+export type NumberFormat = 'decimal' | 'integer' | 'percent' | 'currency';
+```
+
+### Type PasteOptions
+
+```ts
+export interface PasteOptions { readonly mode?: 'all' | 'values' | 'formats'; readonly transpose?: boolean; readonly skipEmpty?: boolean; }
 ```
 
 ### Type CellPermission
@@ -1007,6 +1172,7 @@ export type CellPermissionResolver = (cell: Readonly<CellSelection>) => CellPerm
 
 ```ts
 export type GridEvent =
+  | { readonly type: 'visibility:change'; readonly axis: 'row' | 'column'; readonly indices: readonly number[]; readonly hidden: boolean; readonly source: 'api' | 'undo' | 'redo' }
   | { readonly type: 'data:refresh'; readonly previousRowCount: number; readonly rowCount: number; readonly identitiesReconciled: boolean }
   | { readonly type: 'state:restore' }
   | { readonly type: 'merge:change' | 'group:change'; readonly source: 'api' | 'undo' | 'redo' }
@@ -1111,6 +1277,8 @@ export interface GridState {
   readonly rowIds: readonly RowId[];
   readonly rowHeights: readonly (readonly [number,number])[];
   readonly manualRows: readonly number[];
+  readonly hiddenRows?: readonly number[];
+  readonly hiddenColumns?: readonly number[];
   readonly ranges: readonly SelectionRange[];
   readonly selection: Readonly<CellSelection> | null;
   readonly anchor: Readonly<CellSelection> | null;
