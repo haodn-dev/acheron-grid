@@ -1,20 +1,19 @@
-import type { Column, DataSource, GridEngine } from '@acheron-grid/core';
+import type { DataSource, GridEngine } from '@acheron-grid/core';
 import type { GridOptions } from '../grid.js';
+import type { GridContext } from './grid-context.js';
 
-interface MotionContext {
+interface MotionContext
+  extends
+    Pick<GridContext['env'], 'win' | 'doc'>,
+    Pick<GridContext, 'engine'>,
+    Readonly<Pick<GridContext['layout'], 'columns' | 'headerHeight' | 'indexWidth'>>,
+    Readonly<Pick<GridContext['runtime'], 'destroyed'>>,
+    Pick<GridContext['runtime'], 'frame'> {
   readonly options: Pick<GridOptions, 'motion'>;
   readonly motionDuration: number;
-  readonly win: Window & typeof globalThis;
   readonly root: HTMLElement;
   readonly canvas: HTMLCanvasElement;
-  readonly doc: Document;
-  readonly engine: GridEngine;
   readonly dataSource: DataSource;
-  readonly columns: readonly Column[];
-  readonly headerHeight: number;
-  readonly indexWidth: number;
-  readonly destroyed: boolean;
-  frame: number | undefined;
   readonly draw: () => void;
   readonly viewport: () => ReturnType<GridEngine['getViewport']>;
 }

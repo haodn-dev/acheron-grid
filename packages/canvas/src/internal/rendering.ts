@@ -1,28 +1,35 @@
 import type {
   CellFormat,
   CellUpdate,
-  Column,
   GridEngine,
-  LocalViewOptions,
   NumberFormat,
   SelectionRange,
   ViewportRegion,
 } from '@acheron-grid/core';
-import type { ColumnEditor, GridOptions, GridTheme } from '../grid.js';
-import type { HeaderCell } from '../headers.js';
-import { headerLayout } from '../headers.js';
+import type { ColumnEditor } from '../grid.js';
 import { icons } from '../icons.js';
 import { detectLinks } from '../links.js';
-import type { CanvasTranslator } from '../locale.js';
 import { mediaItems } from '../media.js';
 import type { RichText } from '../rich-text.js';
 import { layoutRichText } from '../rich-text.js';
 import { createAccessibility } from './accessibility.js';
 import { createEditors } from './editors.js';
+import type { GridContext } from './grid-context.js';
 import { createInteraction } from './interaction.js';
 import { createMediaController } from './media-controller.js';
 
-interface RenderingContext {
+interface RenderingContext
+  extends
+    Readonly<
+      Pick<
+        GridContext['layout'],
+        'columns' | 'currentView' | 'headerHeight' | 'headers' | 'indexWidth' | 'leafHeaders' | 'rowCount'
+      >
+    >,
+    Readonly<Pick<GridContext['runtime'], 'destroyed'>>,
+    Pick<GridContext['env'], 'doc' | 't' | 'win'>,
+    Pick<GridContext, 'engine' | 'options'>,
+    Readonly<Pick<GridContext['appearance'], 'theme'>> {
   readonly accessibility: ReturnType<typeof createAccessibility>;
   readonly accessibleBody: HTMLDivElement;
   readonly accessibleCell: (row: number, col: number, value: unknown) => HTMLElement;
@@ -35,30 +42,21 @@ interface RenderingContext {
   readonly closeMenu: (focus?: boolean) => void;
   readonly columnAxis: GridEngine['columnsLayout'];
   readonly columnEditors: Map<string, ColumnEditor>;
-  readonly columns: readonly Column[];
   readonly context: CanvasRenderingContext2D | null;
-  readonly currentView: LocalViewOptions | undefined;
-  readonly destroyed: boolean;
-  readonly doc: Document;
   readonly editors: ReturnType<typeof createEditors>;
   readonly endResize: () => void;
-  readonly engine: GridEngine;
   readonly enteringGroups: Set<string>;
   readonly finishEdit: (commit: boolean) => boolean;
   readonly freezeHorizontal: HTMLDivElement;
   readonly freezeVertical: HTMLDivElement;
   readonly getSelectionRange: () => SelectionRange | null;
   readonly getSelectionRanges: () => SelectionRange[];
-  readonly headerHeight: number;
   readonly headerRowHeight: number;
   readonly headerSurface: HTMLDivElement;
   readonly headerTintOpacity: number;
-  readonly headers: ReturnType<typeof headerLayout>;
   readonly highlightSearch: (x: number, y: number, width: number, height: number, row: number, col: number) => void;
   readonly indexGutter: HTMLDivElement;
-  readonly indexWidth: number;
   readonly interaction: ReturnType<typeof createInteraction>;
-  readonly leafHeaders: HeaderCell[];
   readonly measureRowHeight: (index: number, allColumns?: boolean) => number;
   readonly mediaColumn: (key: string) => boolean;
   readonly mediaController: ReturnType<typeof createMediaController>;
@@ -67,7 +65,6 @@ interface RenderingContext {
   readonly motionEnabled: () => boolean;
   readonly numberText: (value: unknown, format?: NumberFormat) => string;
   readonly openMenu: (row: number, col: number, x: number, y: number, header?: boolean) => void;
-  readonly options: GridOptions;
   readonly positionEditor: () => void;
   readonly rangeBorderWidth: number;
   readonly rangeTintOpacity: number;
@@ -76,7 +73,6 @@ interface RenderingContext {
   readonly richText: (value: unknown, key: string, contentFormat?: CellFormat['contentFormat']) => RichText | undefined;
   readonly root: HTMLDivElement;
   readonly rowAxis: GridEngine['rows'];
-  readonly rowCount: number;
   readonly rowLabels: (row: number) => string[];
   readonly rowLockSvg: HTMLElement;
   readonly scroller: HTMLDivElement;
@@ -90,11 +86,8 @@ interface RenderingContext {
   readonly stateLabels: (row: number | null, col: number) => string[];
   readonly structureAction: <T>(run: () => T, axis?: 'row' | 'column') => T;
   readonly syncAccessibleCell: () => void;
-  readonly t: CanvasTranslator;
-  readonly theme: GridTheme;
   readonly viewportAccessibility: boolean;
   readonly visibleIndices: (axis: 'row' | 'column') => Set<number>;
-  readonly win: Window & typeof globalThis;
 }
 
 export function createRendering(context: RenderingContext) {

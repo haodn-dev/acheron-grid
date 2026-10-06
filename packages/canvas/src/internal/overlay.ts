@@ -1,19 +1,17 @@
-import type { GridEngine } from '@acheron-grid/core';
 import type { GridOptions } from '../grid.js';
-import type { CanvasTranslator } from '../locale.js';
-import { safeWebUrl } from '../links.js';
-import type { detectLinks } from '../links.js';
 import type { icons } from '../icons.js';
+import type { detectLinks } from '../links.js';
+import { safeWebUrl } from '../links.js';
+import type { GridContext } from './grid-context.js';
 
-interface OverlayContext {
-  readonly win: Window & typeof globalThis;
-  readonly doc: Document;
+interface OverlayContext
+  extends
+    Pick<GridContext['env'], 'win' | 'doc' | 't'>,
+    Pick<GridContext, 'engine'>,
+    Readonly<Pick<GridContext['runtime'], 'destroyed'>> {
   readonly root: HTMLElement;
-  readonly engine: GridEngine;
   readonly options: Pick<GridOptions, 'allowOpenLinks' | 'linkPreview'>;
-  readonly t: CanvasTranslator;
   readonly scroller: HTMLElement;
-  readonly destroyed: boolean;
   readonly cellLinks: (row: number, col: number) => ReturnType<typeof detectLinks>;
   readonly svgIcon: (name: keyof typeof icons, size?: number) => Element;
   readonly exitSurface: (node: HTMLElement) => void;

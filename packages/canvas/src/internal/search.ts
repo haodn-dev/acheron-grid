@@ -1,12 +1,14 @@
-import type { Column, GridEngine } from '@acheron-grid/core';
-import type { GridTheme } from '../grid.js';
-import type { CanvasTranslator } from '../locale.js';
 import type { createRichDisplay } from './display.js';
+import type { GridContext } from './grid-context.js';
 import type { createOverlay } from './overlay.js';
 
-interface SearchContext {
-  readonly win: Window & typeof globalThis;
-  readonly destroyed: boolean;
+interface SearchContext
+  extends
+    Pick<GridContext['env'], 'win' | 't'>,
+    Readonly<Pick<GridContext['runtime'], 'destroyed'>>,
+    Pick<GridContext, 'engine'>,
+    Readonly<Pick<GridContext['layout'], 'rowCount' | 'columns'>>,
+    Readonly<Pick<GridContext['appearance'], 'theme'>> {
   readonly overlay: ReturnType<typeof createOverlay>;
   readonly searchBar: HTMLDivElement;
   readonly searchInput: HTMLInputElement;
@@ -15,17 +17,12 @@ interface SearchContext {
   readonly searchNext: HTMLButtonElement;
   readonly searchClose: HTMLButtonElement;
   readonly scroller: HTMLDivElement;
-  readonly t: CanvasTranslator;
-  readonly engine: GridEngine;
-  readonly rowCount: number;
-  readonly columns: readonly Column[];
   readonly displayedText: ReturnType<typeof createRichDisplay>['displayedText'];
   readonly select: (row: number, col: number) => void;
   readonly render: () => void;
   readonly finishEdit: (commit: boolean) => boolean;
   readonly closeMenu: () => void;
   readonly endResize: () => void;
-  readonly theme: GridTheme;
   readonly context: CanvasRenderingContext2D | null;
 }
 

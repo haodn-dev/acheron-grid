@@ -3,22 +3,26 @@ import type {
   CellFormatPatch,
   CellFormatTarget,
   CellSelection,
-  Column,
   GridEngine,
   NumberFormat,
   SelectionRange,
 } from '@acheron-grid/core';
-import type { ColumnEditor, GridOptions, GridTheme } from '../grid.js';
-import type { HeaderCell } from '../headers.js';
+import type { ColumnEditor } from '../grid.js';
 import type { CellLink } from '../links.js';
-import type { CanvasTranslator } from '../locale.js';
 import type { RichText } from '../rich-text.js';
 import { layoutRichText } from '../rich-text.js';
 import { createEditors } from './editors.js';
+import type { GridContext } from './grid-context.js';
 import { createOverlay } from './overlay.js';
 import { reorderInsertionIndex } from './reorder-geometry.js';
 
-interface InteractionContext {
+interface InteractionContext
+  extends
+    Readonly<Pick<GridContext['layout'], 'columns' | 'headerHeight' | 'indexWidth' | 'leafHeaders' | 'rowCount'>>,
+    Readonly<Pick<GridContext['runtime'], 'destroyed'>>,
+    Pick<GridContext, 'engine' | 'options'>,
+    Pick<GridContext['env'], 't' | 'win'>,
+    Readonly<Pick<GridContext['appearance'], 'theme'>> {
   readonly actionError: HTMLDivElement;
   readonly announceSelection: () => void;
   readonly beginEdit: () => void;
@@ -29,23 +33,17 @@ interface InteractionContext {
   readonly closeMenu: (focus?: boolean) => void;
   readonly columnAxis: GridEngine['columnsLayout'];
   readonly columnEditors: Map<string, ColumnEditor>;
-  readonly columns: readonly Column[];
   readonly context: CanvasRenderingContext2D | null;
-  readonly destroyed: boolean;
   readonly editors: ReturnType<typeof createEditors>;
-  readonly engine: GridEngine;
   readonly finishEdit: (commit: boolean) => boolean;
   readonly format: (targets: readonly CellFormatTarget[], patch: CellFormatPatch | null) => void;
   readonly getSelection: () => CellSelection | null;
   readonly getSelectionRange: () => SelectionRange | null;
   readonly getSelectionRanges: () => SelectionRange[];
-  readonly headerHeight: number;
   readonly headerRowHeight: number;
   readonly headerSurface: HTMLDivElement;
   readonly indexGutter: HTMLDivElement;
-  readonly indexWidth: number;
   readonly invalidate: (changes: readonly { rowIndex: number; columnKey: string }[]) => void;
-  readonly leafHeaders: HeaderCell[];
   readonly measuredRows: Set<number>;
   readonly mediaColumn: (key: string) => boolean;
   readonly mediaSize: number;
@@ -53,7 +51,6 @@ interface InteractionContext {
   readonly openLinks: (row: number, col: number, x: number, y: number, focus?: boolean) => void;
   readonly openMedia: (row: number, col: number) => boolean;
   readonly openMenu: (row: number, col: number, x: number, y: number, header?: boolean) => void;
-  readonly options: GridOptions;
   readonly overlay: ReturnType<typeof createOverlay>;
   readonly reorderBadge: HTMLDivElement;
   readonly reorderGuide: HTMLDivElement;
@@ -62,16 +59,12 @@ interface InteractionContext {
   readonly richText: (value: unknown, key: string, contentFormat?: CellFormat['contentFormat']) => RichText | undefined;
   readonly root: HTMLDivElement;
   readonly rowAxis: GridEngine['rows'];
-  readonly rowCount: number;
   readonly rowValueLocked: (row: number) => boolean;
   readonly scroller: HTMLDivElement;
   readonly stateLabels: (row: number | null, col: number) => string[];
-  readonly t: CanvasTranslator;
-  readonly theme: GridTheme;
   readonly validationMessage: (value: unknown, columnIndex: number) => string | undefined;
   readonly viewport: () => ReturnType<GridEngine['getViewport']>;
   readonly viewportLabel: string;
-  readonly win: Window & typeof globalThis;
 }
 
 export function createInteraction(context: InteractionContext) {

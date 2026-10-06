@@ -3,7 +3,6 @@ import type {
   CellFormatTarget,
   CellLockTarget,
   ClipboardBlock,
-  Column,
   GridEngine,
   LocalViewOptions,
   NumberFormat,
@@ -11,17 +10,23 @@ import type {
   SelectionRange,
 } from '@acheron-grid/core';
 import { encodeBlocks } from '@acheron-grid/core';
-import type { ColumnEditor, ColumnType, GridOptions } from '../grid.js';
+import type { ColumnEditor, ColumnType } from '../grid.js';
 import { icons } from '../icons.js';
 import type { CellLink } from '../links.js';
-import type { CanvasTranslator } from '../locale.js';
 import type { RowChangeRequest } from '../reorder.js';
 import { validateColumnEditor } from './editor-config.js';
 import { createEditors } from './editors.js';
+import type { GridContext } from './grid-context.js';
 import { createInteraction } from './interaction.js';
 import { createOverlay } from './overlay.js';
 
-interface MenusContext {
+interface MenusContext
+  extends
+    Readonly<Pick<GridContext['layout'], 'columns' | 'headerHeight' | 'indexWidth' | 'rowCount'>>,
+    Pick<GridContext['layout'], 'currentView'>,
+    Readonly<Pick<GridContext['runtime'], 'destroyed'>>,
+    Pick<GridContext['env'], 'doc' | 't' | 'win'>,
+    Pick<GridContext, 'engine' | 'options'> {
   readonly actionError: HTMLDivElement;
   readonly animateLayout: <T>(run: () => T, axis: 'row' | 'column') => T;
   readonly autoFitColumn: (index: number) => void;
@@ -31,13 +36,8 @@ interface MenusContext {
   readonly closeMenu: (focus?: boolean) => void;
   readonly columnAxis: GridEngine['columnsLayout'];
   readonly columnEditors: Map<string, ColumnEditor>;
-  readonly columns: readonly Column[];
   readonly creationTypes: readonly ColumnType[];
-  currentView: LocalViewOptions | undefined;
-  readonly destroyed: boolean;
-  readonly doc: Document;
   readonly editors: ReturnType<typeof createEditors>;
-  readonly engine: GridEngine;
   readonly enterSurface: (node: HTMLElement) => void;
   readonly finishEdit: (commit: boolean) => boolean;
   readonly freezeHorizontal: HTMLDivElement;
@@ -46,10 +46,8 @@ interface MenusContext {
   readonly getSelectionRanges: () => SelectionRange[];
   readonly groupRows: (start: number, end: number) => string;
   readonly headerColumn: (event: MouseEvent) => number | null;
-  readonly headerHeight: number;
   readonly htmlClipboardBlocks: (html: string) => ClipboardBlock[];
   readonly indexRow: (event: MouseEvent) => number | null;
-  readonly indexWidth: number;
   readonly interaction: ReturnType<typeof createInteraction>;
   readonly lockNotice: HTMLDivElement;
   lockNoticeTimer: number | undefined;
@@ -57,7 +55,6 @@ interface MenusContext {
   readonly motionDuration: number;
   readonly motionEnabled: () => boolean;
   readonly openLinks: (row: number, col: number, x: number, y: number, focus?: boolean) => void;
-  readonly options: GridOptions;
   readonly overlay: ReturnType<typeof createOverlay>;
   readonly paste: (text: string, pasteOptions?: PasteOptions) => void;
   readonly pasteSelectionBlocks: (text: string, pasteOptions?: PasteOptions) => void;
@@ -79,7 +76,6 @@ interface MenusContext {
   ) => void;
   readonly root: HTMLDivElement;
   readonly rowAxis: GridEngine['rows'];
-  readonly rowCount: number;
   readonly rowLockCache: Map<number, boolean>;
   readonly scroller: HTMLDivElement;
   readonly select: (rowIndex: number, columnIndex: number, extend?: boolean, reveal?: boolean, add?: boolean) => void;
@@ -88,8 +84,6 @@ interface MenusContext {
   readonly selectedAxisIndices: (axis: 'row' | 'column', index: number) => number[];
   readonly structureAction: <T>(run: () => T, axis?: 'row' | 'column') => T;
   readonly svgIcon: (name: keyof typeof icons, size?: number) => Element;
-  readonly t: CanvasTranslator;
-  readonly win: Window & typeof globalThis;
   readonly writeClipboard: (cut?: boolean) => Promise<void>;
 }
 

@@ -1,43 +1,38 @@
-import type { CellFormat, Column, GridEngine } from '@acheron-grid/core';
+import type { CellFormat, GridEngine } from '@acheron-grid/core';
 import type { ChoiceEditorOptions } from '../choices.js';
 import { choicePanel, choiceValue, disposeChoicePanel, positionChoicePanel } from '../choices.js';
-import type { CellEditor, ColumnEditor, GridOptions, GridTheme } from '../grid.js';
-import type { CanvasTranslator } from '../locale.js';
+import type { CellEditor, ColumnEditor } from '../grid.js';
 import { createMediaEditor } from '../media-editor.js';
 import type { RichText, RichTextFormat } from '../rich-text.js';
 import { readHtml, richTextHtml, richTextSource } from '../rich-text.js';
+import type { GridContext } from './grid-context.js';
 import { createOverlay } from './overlay.js';
 
-interface EditorsContext {
+interface EditorsContext
+  extends
+    Readonly<Pick<GridContext['layout'], 'columns' | 'headerHeight' | 'indexWidth' | 'rowCount'>>,
+    Readonly<Pick<GridContext['runtime'], 'destroyed'>>,
+    Pick<GridContext['env'], 'doc' | 't' | 'win'>,
+    Pick<GridContext, 'engine' | 'options'>,
+    Readonly<Pick<GridContext['appearance'], 'theme'>> {
   readonly actionError: HTMLDivElement;
   readonly avatarColumns: ReadonlySet<string>;
   readonly columnEditors: Map<string, ColumnEditor>;
-  readonly columns: readonly Column[];
   readonly context: CanvasRenderingContext2D | null;
-  readonly destroyed: boolean;
-  readonly doc: Document;
   readonly editorError: HTMLDivElement;
   readonly editorLabel: HTMLDivElement;
   readonly editorPane: HTMLDivElement;
-  readonly engine: GridEngine;
   readonly enterSurface: (node: HTMLElement) => void;
   readonly exitSurface: (node: HTMLElement) => void;
-  readonly headerHeight: number;
-  readonly indexWidth: number;
   readonly invalidate: (changes: readonly { rowIndex: number; columnKey: string }[]) => void;
   readonly mediaColumn: (key: string) => boolean;
-  readonly options: GridOptions;
   readonly overlay: ReturnType<typeof createOverlay>;
   readonly richText: (value: unknown, key: string, contentFormat?: CellFormat['contentFormat']) => RichText | undefined;
   readonly richTextColumns: Map<string, RichTextFormat>;
   readonly root: HTMLDivElement;
-  readonly rowCount: number;
   readonly scroller: HTMLDivElement;
   readonly select: (rowIndex: number, columnIndex: number, extend?: boolean, reveal?: boolean, add?: boolean) => void;
-  readonly t: CanvasTranslator;
-  readonly theme: GridTheme;
   readonly viewport: () => ReturnType<GridEngine['getViewport']>;
-  readonly win: Window & typeof globalThis;
 }
 
 export function createEditors(context: EditorsContext) {

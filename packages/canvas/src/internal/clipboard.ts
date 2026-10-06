@@ -1,52 +1,29 @@
-import type { CellFormat, ClipboardBlock, Column, GridEngine, PasteOptions, SelectionRange } from '@acheron-grid/core';
+import type { CellFormat, ClipboardBlock, GridEngine, PasteOptions, SelectionRange } from '@acheron-grid/core';
 import { blocksToTsv, decodeBlocks, encodeBlocks, gridClipboardType } from '@acheron-grid/core';
 import type { CellEditor, ColumnEditor } from '../grid.js';
-import type { CanvasTranslator } from '../locale.js';
 import { validateMediaValue } from '../media.js';
 import type { RichText } from '../rich-text.js';
 import { readHtml, richTextHtml } from '../rich-text.js';
+import type { GridContext } from './grid-context.js';
 
-interface ClipboardContext {
+interface ClipboardContext
+  extends
+    Readonly<Pick<GridContext['layout'], 'columns' | 'headerHeight' | 'indexWidth' | 'rowCount'>>,
+    Readonly<Pick<GridContext['runtime'], 'destroyed'>>,
+    Pick<GridContext['env'], 'doc' | 't' | 'win'>,
+    Pick<GridContext, 'engine'> {
   readonly columnAxis: GridEngine['columnsLayout'];
   readonly columnEditors: Map<string, ColumnEditor>;
-  columns: readonly Column[];
   readonly copyFeedback: HTMLDivElement;
-  destroyed: boolean;
-  readonly doc: Document;
-  editor: CellEditor | null;
-  readonly engine: GridEngine;
+  readonly editor: CellEditor | null;
   readonly getSelectionRanges: () => SelectionRange[];
-  headerHeight: number;
-  indexWidth: number;
   readonly mediaColumn: (key: string) => boolean;
   readonly motionDuration: number;
   readonly motionEnabled: () => boolean;
   readonly pasteImages: (files: readonly File[]) => Promise<void>;
   readonly richText: (value: unknown, key: string, contentFormat?: CellFormat['contentFormat']) => RichText | undefined;
   readonly rowAxis: GridEngine['rows'];
-  rowCount: number;
-  readonly t: CanvasTranslator;
-  readonly viewport: () => Readonly<{
-    hitTest(x: number, y: number): { row: number; col: number } | null;
-    cellRect(
-      row: number,
-      col: number,
-    ): Readonly<{
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      clip: Readonly<{ x: number; y: number; width: number; height: number }>;
-    }>;
-    width: number;
-    height: number;
-    scrollLeft: number;
-    scrollTop: number;
-    frozenWidth: number;
-    frozenHeight: number;
-    regions: readonly import('@acheron-grid/core').ViewportRegion[];
-  }>;
-  readonly win: Window & typeof globalThis;
+  readonly viewport: () => ReturnType<GridEngine['getViewport']>;
 }
 
 export function createClipboard(context: ClipboardContext) {

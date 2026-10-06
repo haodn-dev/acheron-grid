@@ -1,27 +1,24 @@
-import type { Column, GridEngine, PasteOptions, SelectionRange } from '@acheron-grid/core';
+import type { PasteOptions, SelectionRange } from '@acheron-grid/core';
 import { encodeBlocks } from '@acheron-grid/core';
-import type { GridOptions } from '../grid.js';
-import type { CanvasTranslator } from '../locale.js';
 import type { MediaItem } from '../media.js';
 import { mediaItems, validateMediaValue } from '../media.js';
+import type { GridContext } from './grid-context.js';
 import { createOverlay } from './overlay.js';
 
-interface MediaControllerContext {
+interface MediaControllerContext
+  extends
+    Readonly<Pick<GridContext['layout'], 'columns'>>,
+    Readonly<Pick<GridContext['runtime'], 'destroyed'>>,
+    Pick<GridContext['env'], 'doc' | 't' | 'win'>,
+    Pick<GridContext, 'engine' | 'options'> {
   readonly avatarColumns: ReadonlySet<string>;
-  readonly columns: readonly Column[];
-  readonly destroyed: boolean;
-  readonly doc: Document;
-  readonly engine: GridEngine;
   readonly finishEdit: (commit: boolean) => boolean;
   readonly getSelectionRanges: () => SelectionRange[];
   readonly mediaColumn: (key: string) => boolean;
-  readonly options: GridOptions;
   readonly overlay: ReturnType<typeof createOverlay>;
   readonly pasteSelectionBlocks: (text: string, pasteOptions?: PasteOptions) => void;
   readonly root: HTMLDivElement;
   readonly scroller: HTMLDivElement;
-  readonly t: CanvasTranslator;
-  readonly win: Window & typeof globalThis;
 }
 
 export function createMediaController(context: MediaControllerContext) {

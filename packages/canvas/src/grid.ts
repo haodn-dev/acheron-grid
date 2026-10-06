@@ -1,3 +1,4 @@
+import type { GridContext } from './internal/grid-context.js';
 import { createRendering } from './internal/rendering.js';
 import { createMenus } from './internal/menus.js';
 import { createAccessibility } from './internal/accessibility.js';
@@ -305,16 +306,102 @@ const stateIconSvg = {
 export function createGrid(options: GridOptions): Grid {
   const { container, dataSource } = options;
   const t = createCanvasTranslator(options.locale, options.messages);
-  const numberText = createNumberDisplay(options);
-  const motionDuration = typeof options.motion === 'object' ? (options.motion.duration ?? 220) : 220;
+  const gridContext: GridContext = {
+    options,
+    get engine() {
+      return engine;
+    },
+    env: {
+      get doc() {
+        return doc;
+      },
+      get win() {
+        return win;
+      },
+      get t() {
+        return t;
+      },
+    },
+    layout: {
+      get columns() {
+        return columns;
+      },
+      set columns(value) {
+        columns = value;
+      },
+      get rowCount() {
+        return rowCount;
+      },
+      set rowCount(value) {
+        rowCount = value;
+      },
+      get headers() {
+        return headers;
+      },
+      set headers(value) {
+        headers = value;
+      },
+      get leafHeaders() {
+        return leafHeaders;
+      },
+      set leafHeaders(value) {
+        leafHeaders = value;
+      },
+      get currentView() {
+        return currentView;
+      },
+      set currentView(value) {
+        currentView = value;
+      },
+      get headerHeight() {
+        return headerHeight;
+      },
+      set headerHeight(value) {
+        headerHeight = value;
+      },
+      get indexWidth() {
+        return indexWidth;
+      },
+      set indexWidth(value) {
+        indexWidth = value;
+      },
+    },
+    appearance: {
+      get theme() {
+        return theme;
+      },
+      set theme(value) {
+        theme = value;
+      },
+    },
+    runtime: {
+      get destroyed() {
+        return destroyed;
+      },
+      set destroyed(value) {
+        destroyed = value;
+      },
+      get frame() {
+        return rendering.frame;
+      },
+      set frame(value) {
+        rendering.frame = value;
+      },
+    },
+  };
+  const numberText = createNumberDisplay(gridContext.options);
+  const motionDuration =
+    typeof gridContext.options.motion === 'object' ? (gridContext.options.motion.duration ?? 220) : 220;
   if (!Number.isFinite(motionDuration) || motionDuration < 0 || motionDuration > 1000)
     throw new RangeError('Motion duration must be between 0 and 1000ms.');
 
-  const managesView = options.viewMode === 'core' || (options.viewMode !== 'host' && !options.onViewChange);
-  let currentView = options.view;
-  const activeBorderWidth = options.selectionStyle?.activeBorderWidth ?? 1;
-  const rangeBorderWidth = options.selectionStyle?.rangeBorderWidth ?? 1;
-  const rangeTintOpacity = options.selectionStyle?.rangeTintOpacity ?? 0.06;
+  const managesView =
+    gridContext.options.viewMode === 'core' ||
+    (gridContext.options.viewMode !== 'host' && !gridContext.options.onViewChange);
+  let currentView = gridContext.options.view;
+  const activeBorderWidth = gridContext.options.selectionStyle?.activeBorderWidth ?? 1;
+  const rangeBorderWidth = gridContext.options.selectionStyle?.rangeBorderWidth ?? 1;
+  const rangeTintOpacity = gridContext.options.selectionStyle?.rangeTintOpacity ?? 0.06;
   if (
     !Number.isFinite(rangeBorderWidth) ||
     rangeBorderWidth < 1 ||
@@ -324,7 +411,7 @@ export function createGrid(options: GridOptions): Grid {
     rangeTintOpacity > 1
   )
     throw new RangeError('Invalid range selection style.');
-  const headerTintOpacity = options.selectionStyle?.headerTintOpacity ?? 0.12;
+  const headerTintOpacity = gridContext.options.selectionStyle?.headerTintOpacity ?? 0.12;
   if (
     !Number.isFinite(activeBorderWidth) ||
     activeBorderWidth < 1 ||
@@ -336,12 +423,12 @@ export function createGrid(options: GridOptions): Grid {
     throw new RangeError('Invalid selection style.');
   const doc = container.ownerDocument;
   const { richTextColumns, richText, displayedText, clearDisplayCache } = createRichDisplay({
-    options,
-    doc,
-    t,
+    options: gridContext.options,
+    doc: gridContext.env.doc,
+    t: gridContext.env.t,
     numberText,
   });
-  const win = doc.defaultView!;
+  const win = gridContext.env.doc.defaultView!;
   let theme = Object.freeze({
     background: '#ffffff',
     textColor: '#0f172a',
@@ -356,7 +443,7 @@ export function createGrid(options: GridOptions): Grid {
     linkColor: '#2563eb',
     font: '400 13px system-ui, sans-serif',
     headerFont: '600 13px system-ui, sans-serif',
-    ...options.theme,
+    ...gridContext.options.theme,
   });
   function validateTheme(candidate: GridTheme): void {
     for (const [key, value] of Object.entries(candidate)) {
@@ -364,13 +451,13 @@ export function createGrid(options: GridOptions): Grid {
       if (
         typeof value !== 'string' ||
         /var\(|currentcolor|^(inherit|initial|unset|revert)/i.test(value.trim()) ||
-        !win.CSS.supports(property, value)
+        !gridContext.env.win.CSS.supports(property, value)
       ) {
         throw new TypeError(`Invalid grid theme ${key}. Use a concrete CSS ${property} value.`);
       }
     }
   }
-  validateTheme(theme);
+  validateTheme(gridContext.appearance.theme);
   const rendering = createRendering({
     get accessibility() {
       return accessibility;
@@ -409,19 +496,19 @@ export function createGrid(options: GridOptions): Grid {
       return columnEditors;
     },
     get columns() {
-      return columns;
+      return gridContext.layout.columns;
     },
     get context() {
       return context;
     },
     get currentView() {
-      return currentView;
+      return gridContext.layout.currentView;
     },
     get destroyed() {
-      return destroyed;
+      return gridContext.runtime.destroyed;
     },
     get doc() {
-      return doc;
+      return gridContext.env.doc;
     },
     get editors() {
       return editors;
@@ -430,7 +517,7 @@ export function createGrid(options: GridOptions): Grid {
       return endResize;
     },
     get engine() {
-      return engine;
+      return gridContext.engine;
     },
     get enteringGroups() {
       return enteringGroups;
@@ -451,7 +538,7 @@ export function createGrid(options: GridOptions): Grid {
       return getSelectionRanges;
     },
     get headerHeight() {
-      return headerHeight;
+      return gridContext.layout.headerHeight;
     },
     get headerRowHeight() {
       return headerRowHeight;
@@ -463,7 +550,7 @@ export function createGrid(options: GridOptions): Grid {
       return headerTintOpacity;
     },
     get headers() {
-      return headers;
+      return gridContext.layout.headers;
     },
     get highlightSearch() {
       return highlightSearch;
@@ -472,13 +559,13 @@ export function createGrid(options: GridOptions): Grid {
       return indexGutter;
     },
     get indexWidth() {
-      return indexWidth;
+      return gridContext.layout.indexWidth;
     },
     get interaction() {
       return interaction;
     },
     get leafHeaders() {
-      return leafHeaders;
+      return gridContext.layout.leafHeaders;
     },
     get measureRowHeight() {
       return measureRowHeight;
@@ -505,7 +592,7 @@ export function createGrid(options: GridOptions): Grid {
       return openMenu;
     },
     get options() {
-      return options;
+      return gridContext.options;
     },
     get positionEditor() {
       return positionEditor;
@@ -532,7 +619,7 @@ export function createGrid(options: GridOptions): Grid {
       return rowAxis;
     },
     get rowCount() {
-      return rowCount;
+      return gridContext.layout.rowCount;
     },
     get rowLabels() {
       return rowLabels;
@@ -574,10 +661,10 @@ export function createGrid(options: GridOptions): Grid {
       return syncAccessibleCell;
     },
     get t() {
-      return t;
+      return gridContext.env.t;
     },
     get theme() {
-      return theme;
+      return gridContext.appearance.theme;
     },
     get viewportAccessibility() {
       return viewportAccessibility;
@@ -586,7 +673,7 @@ export function createGrid(options: GridOptions): Grid {
       return visibleIndices;
     },
     get win() {
-      return win;
+      return gridContext.env.win;
     },
   });
   const {
@@ -603,59 +690,74 @@ export function createGrid(options: GridOptions): Grid {
     render,
     schedule,
   } = rendering;
-  const indicatorPolicy = Object.freeze({ ...options.permissions });
-  let headers = headerLayout(options.columns, options.headerGroups);
-  const headerRowHeight = options.headerHeight ?? 36;
-  let headerHeight = headerRowHeight * headers.levels;
-  let leafHeaders = headers.cells.filter((cell) => cell.leaf).sort((a, b) => a.start - b.start);
-  if (!Number.isFinite(headerHeight) || headerHeight <= 0)
+  const indicatorPolicy = Object.freeze({ ...gridContext.options.permissions });
+  let headers = headerLayout(gridContext.options.columns, gridContext.options.headerGroups);
+  const headerRowHeight = gridContext.options.headerHeight ?? 36;
+  let headerHeight = headerRowHeight * gridContext.layout.headers.levels;
+  let leafHeaders = gridContext.layout.headers.cells.filter((cell) => cell.leaf).sort((a, b) => a.start - b.start);
+  if (!Number.isFinite(gridContext.layout.headerHeight) || gridContext.layout.headerHeight <= 0)
     throw new RangeError('Grid sizes must be positive finite numbers.');
   const engine = createGridEngine({
-    columns: options.columns.map((column) =>
-      (options.imageColumns?.includes(column.key) || options.avatarColumns?.includes(column.key)) && !column.parse
+    columns: gridContext.options.columns.map((column) =>
+      (gridContext.options.imageColumns?.includes(column.key) ||
+        gridContext.options.avatarColumns?.includes(column.key)) &&
+      !column.parse
         ? { ...column, parse: parseMediaValue }
         : column,
     ),
     dataSource,
-    ...(options.allowMerging === undefined ? {} : { allowMerging: options.allowMerging }),
-    ...(options.allowRowGrouping === undefined ? {} : { allowRowGrouping: options.allowRowGrouping }),
-    ...(options.canChangeLayout === undefined ? {} : { canChangeLayout: options.canChangeLayout }),
-    ...(managesView && options.view ? { view: options.view } : {}),
-    ...(options.rowHeight === undefined ? {} : { rowHeight: options.rowHeight }),
-    ...(options.columnWidths === undefined ? {} : { columnWidths: options.columnWidths }),
-    ...(options.columnWidth === undefined ? {} : { columnWidth: options.columnWidth }),
-    ...(options.canChangeVisibility ? { canChangeVisibility: options.canChangeVisibility } : {}),
+    ...(gridContext.options.allowMerging === undefined ? {} : { allowMerging: gridContext.options.allowMerging }),
+    ...(gridContext.options.allowRowGrouping === undefined
+      ? {}
+      : { allowRowGrouping: gridContext.options.allowRowGrouping }),
+    ...(gridContext.options.canChangeLayout === undefined
+      ? {}
+      : { canChangeLayout: gridContext.options.canChangeLayout }),
+    ...(managesView && gridContext.options.view ? { view: gridContext.options.view } : {}),
+    ...(gridContext.options.rowHeight === undefined ? {} : { rowHeight: gridContext.options.rowHeight }),
+    ...(gridContext.options.columnWidths === undefined ? {} : { columnWidths: gridContext.options.columnWidths }),
+    ...(gridContext.options.columnWidth === undefined ? {} : { columnWidth: gridContext.options.columnWidth }),
+    ...(gridContext.options.canChangeVisibility
+      ? { canChangeVisibility: gridContext.options.canChangeVisibility }
+      : {}),
     canChangeStructure: (request) => {
-      if (options.canChangeStructure?.(request) === false) return false;
+      if (gridContext.options.canChangeStructure?.(request) === false) return false;
       if (request.axis === 'column') {
         if (request.kind === 'insert' && !request.columns) return true;
         try {
           const next =
             request.columns ??
             (request.kind === 'delete'
-              ? engine.columns.filter((_, i) => !request.indices.includes(i))
-              : (request.order ?? reorderedIndices(engine.columns.length, request.indices, request.beforeIndex)).map(
-                  (i) => engine.columns[i]!,
-                ));
-          reorderedHeaderGroups(next, options.headerGroups);
+              ? gridContext.engine.columns.filter((_, i) => !request.indices.includes(i))
+              : (
+                  request.order ??
+                  reorderedIndices(gridContext.engine.columns.length, request.indices, request.beforeIndex)
+                ).map((i) => gridContext.engine.columns[i]!));
+          reorderedHeaderGroups(next, gridContext.options.headerGroups);
         } catch {
           return false;
         }
       }
       return true;
     },
-    ...(options.permissions === undefined ? {} : { permissions: options.permissions }),
-    ...(options.resolveCellPermission === undefined ? {} : { resolveCellPermission: options.resolveCellPermission }),
-    ...(options.onEvent === undefined ? {} : { onEvent: options.onEvent }),
-    ...(options.onObserverError === undefined ? {} : { onObserverError: options.onObserverError }),
-    ...(options.allowLockChanges === undefined ? {} : { allowLockChanges: options.allowLockChanges }),
-    ...(options.frozenRows === undefined ? {} : { frozenRows: options.frozenRows }),
-    ...(options.frozenColumns === undefined ? {} : { frozenColumns: options.frozenColumns }),
+    ...(gridContext.options.permissions === undefined ? {} : { permissions: gridContext.options.permissions }),
+    ...(gridContext.options.resolveCellPermission === undefined
+      ? {}
+      : { resolveCellPermission: gridContext.options.resolveCellPermission }),
+    ...(gridContext.options.onEvent === undefined ? {} : { onEvent: gridContext.options.onEvent }),
+    ...(gridContext.options.onObserverError === undefined
+      ? {}
+      : { onObserverError: gridContext.options.onObserverError }),
+    ...(gridContext.options.allowLockChanges === undefined
+      ? {}
+      : { allowLockChanges: gridContext.options.allowLockChanges }),
+    ...(gridContext.options.frozenRows === undefined ? {} : { frozenRows: gridContext.options.frozenRows }),
+    ...(gridContext.options.frozenColumns === undefined ? {} : { frozenColumns: gridContext.options.frozenColumns }),
     onInvalidate(change) {
       if (change.type !== 'selection') clearCopyFeedback();
       if (change.type === 'cells') {
-        if (engine.getMergedCells().length) rendering.fullDraw = true;
-        if (options.autoRowHeight) {
+        if (gridContext.engine.getMergedCells().length) rendering.fullDraw = true;
+        if (gridContext.options.autoRowHeight) {
           change.cells.forEach((cell) => rendering.measuredRows.delete(cell.rowIndex));
           rendering.fullDraw = true;
         }
@@ -664,7 +766,7 @@ export function createGrid(options: GridOptions): Grid {
       } else if (change.type === 'layout' || change.type === 'structure') {
         if (change.type === 'structure') {
           editors.hoveredChoice = null;
-          if (managesView) currentView = engine.view;
+          if (managesView) gridContext.layout.currentView = gridContext.engine.view;
           if (interaction.axisAnchor) {
             const map = interaction.axisAnchor.axis === 'row' ? change.rowMap : change.columnMap,
               next = map[interaction.axisAnchor.index];
@@ -672,9 +774,9 @@ export function createGrid(options: GridOptions): Grid {
               next !== undefined && next >= 0 ? { ...interaction.axisAnchor, index: next } : null;
           }
           onPointerEnd();
-          columns = engine.columns;
-          rowCount = engine.rowCount;
-          const outline = engine.getRowGroups();
+          gridContext.layout.columns = gridContext.engine.columns;
+          gridContext.layout.rowCount = gridContext.engine.rowCount;
+          const outline = gridContext.engine.getRowGroups();
           const levels = outline.reduce(
             (max, group) =>
               Math.max(
@@ -683,25 +785,33 @@ export function createGrid(options: GridOptions): Grid {
               ),
             0,
           );
-          indexWidth =
-            options.indexColumn === false
+          gridContext.layout.indexWidth =
+            gridContext.options.indexColumn === false
               ? 0
-              : Math.max(48, String(engine.sourceRowCount).length * 8 + 16) + levels * 24;
+              : Math.max(48, String(gridContext.engine.sourceRowCount).length * 8 + 16) + levels * 24;
           scroller.style.left =
             headerSurface.style.left =
             canvas.style.left =
             indexGutter.style.width =
-              String(indexWidth) + 'px';
-          headers = headerLayout(columns, reorderedHeaderGroups(columns, options.headerGroups));
-          headerHeight = headerRowHeight * headers.levels;
-          headerSurface.style.height = scroller.style.top = `${headerHeight}px`;
+              String(gridContext.layout.indexWidth) + 'px';
+          gridContext.layout.headers = headerLayout(
+            gridContext.layout.columns,
+            reorderedHeaderGroups(gridContext.layout.columns, gridContext.options.headerGroups),
+          );
+          gridContext.layout.headerHeight = headerRowHeight * gridContext.layout.headers.levels;
+          headerSurface.style.height = scroller.style.top = `${gridContext.layout.headerHeight}px`;
           if (viewportAccessibility) {
-            headerSurface.setAttribute('role', headers.levels > 1 ? 'rowgroup' : 'row');
-            if (headers.levels === 1) headerSurface.setAttribute('aria-rowindex', '1');
+            headerSurface.setAttribute('role', gridContext.layout.headers.levels > 1 ? 'rowgroup' : 'row');
+            if (gridContext.layout.headers.levels === 1) headerSurface.setAttribute('aria-rowindex', '1');
             else headerSurface.removeAttribute('aria-rowindex');
           }
-          leafHeaders = headers.cells.filter((cell) => cell.leaf).sort((a, b) => a.start - b.start);
-          if (headerSurface.contains(doc.activeElement) || indexGutter.contains(doc.activeElement))
+          gridContext.layout.leafHeaders = gridContext.layout.headers.cells
+            .filter((cell) => cell.leaf)
+            .sort((a, b) => a.start - b.start);
+          if (
+            headerSurface.contains(gridContext.env.doc.activeElement) ||
+            indexGutter.contains(gridContext.env.doc.activeElement)
+          )
             scroller.focus({ preventScroll: true });
           headerSurface.replaceChildren();
           indexGutter.replaceChildren();
@@ -709,35 +819,39 @@ export function createGrid(options: GridOptions): Grid {
           rendering.measuredRows.clear();
           accessibility.accessibleCells.clear();
           accessibleBody.replaceChildren();
-          scroller.setAttribute('aria-rowcount', String(rowCount + (viewportAccessibility ? headers.levels : 0)));
-          scroller.setAttribute('aria-colcount', String(columns.length));
+          scroller.setAttribute(
+            'aria-rowcount',
+            String(gridContext.layout.rowCount + (viewportAccessibility ? gridContext.layout.headers.levels : 0)),
+          );
+          scroller.setAttribute('aria-colcount', String(gridContext.layout.columns.length));
           if (!searchBar.hidden) refreshSearch();
           syncAccessibleCell();
-          options.onSelectionChange?.(engine.getSelection());
-          options.onSelectionRangesChange?.(engine.getSelectionRanges());
-          options.onSelectionRangeChange?.(engine.getSelectionRange());
+          gridContext.options.onSelectionChange?.(gridContext.engine.getSelection());
+          gridContext.options.onSelectionRangesChange?.(gridContext.engine.getSelectionRanges());
+          gridContext.options.onSelectionRangeChange?.(gridContext.engine.getSelectionRange());
         }
-        spacer.style.width = String(columnAxis.position(columns.length)) + 'px';
-        spacer.style.height = String(rowAxis.position(rowCount)) + 'px';
+        spacer.style.width = String(columnAxis.position(gridContext.layout.columns.length)) + 'px';
+        spacer.style.height = String(rowAxis.position(gridContext.layout.rowCount)) + 'px';
         render();
       } else render();
     },
   });
-  let columns = engine.columns,
-    rowCount = engine.rowCount;
-  const { rows: rowAxis, columnsLayout: columnAxis } = engine;
-  let indexWidth = options.indexColumn === false ? 0 : Math.max(48, String(rowCount).length * 8 + 16);
-  if (options.imageColumns !== undefined && !Array.isArray(options.imageColumns))
+  let columns = gridContext.engine.columns,
+    rowCount = gridContext.engine.rowCount;
+  const { rows: rowAxis, columnsLayout: columnAxis } = gridContext.engine;
+  let indexWidth =
+    gridContext.options.indexColumn === false ? 0 : Math.max(48, String(gridContext.layout.rowCount).length * 8 + 16);
+  if (gridContext.options.imageColumns !== undefined && !Array.isArray(gridContext.options.imageColumns))
     throw new TypeError('Image columns must be column keys.');
-  const imageColumns = new Set(options.imageColumns ?? []);
-  if (options.avatarColumns !== undefined && !Array.isArray(options.avatarColumns))
+  const imageColumns = new Set(gridContext.options.imageColumns ?? []);
+  if (gridContext.options.avatarColumns !== undefined && !Array.isArray(gridContext.options.avatarColumns))
     throw new TypeError('Avatar columns must be column keys.');
-  const avatarColumns = new Set(options.avatarColumns ?? []);
+  const avatarColumns = new Set(gridContext.options.avatarColumns ?? []);
   for (const key of avatarColumns)
-    if (!columns.some((column) => column.key === key) || imageColumns.has(key))
+    if (!gridContext.layout.columns.some((column) => column.key === key) || imageColumns.has(key))
       throw new TypeError('Unknown or conflicting avatar column.');
-  const mediaSize = options.mediaOptions?.size ?? 32,
-    mediaLimit = options.mediaOptions?.maxVisible ?? 4;
+  const mediaSize = gridContext.options.mediaOptions?.size ?? 32,
+    mediaLimit = gridContext.options.mediaOptions?.maxVisible ?? 4;
   if (
     !Number.isFinite(mediaSize) ||
     mediaSize < 20 ||
@@ -753,16 +867,16 @@ export function createGrid(options: GridOptions): Grid {
       return avatarColumns;
     },
     get columns() {
-      return columns;
+      return gridContext.layout.columns;
     },
     get destroyed() {
-      return destroyed;
+      return gridContext.runtime.destroyed;
     },
     get doc() {
-      return doc;
+      return gridContext.env.doc;
     },
     get engine() {
-      return engine;
+      return gridContext.engine;
     },
     get finishEdit() {
       return finishEdit;
@@ -774,7 +888,7 @@ export function createGrid(options: GridOptions): Grid {
       return mediaColumn;
     },
     get options() {
-      return options;
+      return gridContext.options;
     },
     get overlay() {
       return overlay;
@@ -789,33 +903,36 @@ export function createGrid(options: GridOptions): Grid {
       return scroller;
     },
     get t() {
-      return t;
+      return gridContext.env.t;
     },
     get win() {
-      return win;
+      return gridContext.env.win;
     },
   });
   const { pasteImages, openMedia, releaseUnusedImages } = mediaController;
 
   for (const key of imageColumns)
-    if (!columns.some((column) => column.key === key)) throw new TypeError('Unknown image column.');
+    if (!gridContext.layout.columns.some((column) => column.key === key)) throw new TypeError('Unknown image column.');
 
   const columnEditors = new Map<string, ColumnEditor>();
 
-  for (const [key, config] of Object.entries(options.columnEditors ?? {})) {
-    const column = columns.find((column) => column.key === key);
+  for (const [key, config] of Object.entries(gridContext.options.columnEditors ?? {})) {
+    const column = gridContext.layout.columns.find((column) => column.key === key);
     if (!column) throw new TypeError('Unknown editor column.');
     columnEditors.set(key, validateColumnEditor(column, config));
   }
 
-  const viewportAccessibility = options.accessibility === 'viewport';
-  if (options.accessibility !== undefined && !['active', 'viewport'].includes(options.accessibility))
+  const viewportAccessibility = gridContext.options.accessibility === 'viewport';
+  if (
+    gridContext.options.accessibility !== undefined &&
+    !['active', 'viewport'].includes(gridContext.options.accessibility)
+  )
     throw new TypeError('Invalid accessibility mode.');
-  const root = doc.createElement('div');
+  const root = gridContext.env.doc.createElement('div');
   root.style.cssText = 'position:relative;width:100%;height:100%;overflow:hidden;background:var(--acheron-background)';
-  for (const [key, value] of Object.entries(theme))
+  for (const [key, value] of Object.entries(gridContext.appearance.theme))
     root.style.setProperty('--acheron-' + key.replace(/[A-Z]/g, (letter) => '-' + letter.toLowerCase()), value);
-  const dialogStyles = doc.createElement('style');
+  const dialogStyles = gridContext.env.doc.createElement('style');
   dialogStyles.textContent = `
     dialog[data-grid-dialog] { position:fixed;inset:0;margin:auto;width:min(420px,calc(100% - 32px));max-width:none;max-height:calc(100% - 32px);overflow:auto;box-sizing:border-box;padding:24px;border:1px solid var(--acheron-grid-line-color);border-radius:12px;box-shadow:0 16px 48px #0f172a33;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);line-height:1.5 }
     dialog[data-grid-dialog][open], dialog[data-grid-dialog] form { display:flex;flex-direction:column;gap:14px }
@@ -865,32 +982,35 @@ export function createGrid(options: GridOptions): Grid {
     }
   `;
   root.append(dialogStyles);
-  const scroller = doc.createElement('div');
+  const scroller = gridContext.env.doc.createElement('div');
   const viewportLabel =
-    dataSource.setValue && columns.some((column) => column.editable)
-      ? t('Data grid viewport')
-      : t('Read-only data grid viewport');
-  scroller.style.cssText = `position:absolute;inset:${headerHeight}px 0 0 ${indexWidth}px;overflow:auto;overscroll-behavior:contain;outline:none`;
+    dataSource.setValue && gridContext.layout.columns.some((column) => column.editable)
+      ? gridContext.env.t('Data grid viewport')
+      : gridContext.env.t('Read-only data grid viewport');
+  scroller.style.cssText = `position:absolute;inset:${gridContext.layout.headerHeight}px 0 0 ${gridContext.layout.indexWidth}px;overflow:auto;overscroll-behavior:contain;outline:none`;
   scroller.dataset.gridViewport = '';
   scroller.tabIndex = 0;
   scroller.setAttribute('aria-label', viewportLabel);
   scroller.setAttribute('aria-keyshortcuts', 'Shift+F8 Control+f Meta+f Control+a Meta+a Alt+Enter');
   scroller.setAttribute('role', 'grid');
-  scroller.setAttribute('aria-rowcount', String(rowCount + (viewportAccessibility ? headers.levels : 0)));
-  scroller.setAttribute('aria-colcount', String(columns.length));
+  scroller.setAttribute(
+    'aria-rowcount',
+    String(gridContext.layout.rowCount + (viewportAccessibility ? gridContext.layout.headers.levels : 0)),
+  );
+  scroller.setAttribute('aria-colcount', String(gridContext.layout.columns.length));
   scroller.setAttribute('aria-multiselectable', 'true');
-  const activeRow = doc.createElement('div');
+  const activeRow = gridContext.env.doc.createElement('div');
   activeRow.setAttribute('role', 'row');
   activeRow.style.cssText =
     'position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);pointer-events:none';
   activeRow.hidden = true;
-  const activeCell = doc.createElement('div');
+  const activeCell = gridContext.env.doc.createElement('div');
   const instanceId = ++gridId;
   activeCell.id = `acheron-active-cell-${instanceId}`;
   activeCell.setAttribute('role', 'gridcell');
   activeCell.setAttribute('aria-selected', 'true');
   activeRow.append(activeCell);
-  const accessibleBody = doc.createElement('div');
+  const accessibleBody = gridContext.env.doc.createElement('div');
   accessibleBody.style.cssText = activeRow.style.cssText;
   const accessibility = createAccessibility({
     get activeCell() {
@@ -903,25 +1023,25 @@ export function createGrid(options: GridOptions): Grid {
       return avatarColumns;
     },
     get columns() {
-      return columns;
+      return gridContext.layout.columns;
     },
     get currentView() {
-      return currentView;
+      return gridContext.layout.currentView;
     },
     get displayedText() {
       return displayedText;
     },
     get doc() {
-      return doc;
+      return gridContext.env.doc;
     },
     get engine() {
-      return engine;
+      return gridContext.engine;
     },
     get getSelectionRanges() {
       return getSelectionRanges;
     },
     get headers() {
-      return headers;
+      return gridContext.layout.headers;
     },
     get indicatorPolicy() {
       return indicatorPolicy;
@@ -942,7 +1062,7 @@ export function createGrid(options: GridOptions): Grid {
       return numberText;
     },
     get options() {
-      return options;
+      return gridContext.options;
     },
     get rowValueLocked() {
       return rowValueLocked;
@@ -954,7 +1074,7 @@ export function createGrid(options: GridOptions): Grid {
       return selectionStatus;
     },
     get t() {
-      return t;
+      return gridContext.env.t;
     },
     get validationMessage() {
       return validationMessage;
@@ -967,37 +1087,37 @@ export function createGrid(options: GridOptions): Grid {
     },
   });
   const { announceSelection, stateLabels, accessibleCell, syncAccessibleCell } = accessibility;
-  const headerSurface = doc.createElement('div');
-  headerSurface.style.cssText = `position:absolute;top:0;left:${indexWidth}px;right:0;height:${headerHeight}px;overflow:hidden;touch-action:none`;
+  const headerSurface = gridContext.env.doc.createElement('div');
+  headerSurface.style.cssText = `position:absolute;top:0;left:${gridContext.layout.indexWidth}px;right:0;height:${gridContext.layout.headerHeight}px;overflow:hidden;touch-action:none`;
   if (viewportAccessibility) {
     headerSurface.id = `acheron-header-${instanceId}`;
-    headerSurface.setAttribute('role', headers.levels > 1 ? 'rowgroup' : 'row');
-    if (headers.levels === 1) headerSurface.setAttribute('aria-rowindex', '1');
+    headerSurface.setAttribute('role', gridContext.layout.headers.levels > 1 ? 'rowgroup' : 'row');
+    if (gridContext.layout.headers.levels === 1) headerSurface.setAttribute('aria-rowindex', '1');
     accessibleBody.id = `acheron-body-${instanceId}`;
     accessibleBody.setAttribute('role', 'rowgroup');
     activeRow.id = `acheron-active-row-${instanceId}`;
     scroller.setAttribute('aria-owns', `${headerSurface.id} ${accessibleBody.id} ${activeRow.id}`);
   }
-  const spacer = doc.createElement('div');
+  const spacer = gridContext.env.doc.createElement('div');
   spacer.setAttribute('aria-hidden', 'true');
-  spacer.style.width = `${columnAxis.position(columns.length)}px`;
+  spacer.style.width = `${columnAxis.position(gridContext.layout.columns.length)}px`;
   spacer.style.position = 'relative';
-  spacer.style.height = `${rowAxis.position(rowCount)}px`;
+  spacer.style.height = `${rowAxis.position(gridContext.layout.rowCount)}px`;
   scroller.append(spacer, accessibleBody, activeRow);
-  const canvas = doc.createElement('canvas');
+  const canvas = gridContext.env.doc.createElement('canvas');
   canvas.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none';
-  canvas.style.left = `${indexWidth}px`;
+  canvas.style.left = `${gridContext.layout.indexWidth}px`;
   canvas.setAttribute('aria-hidden', 'true');
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Canvas 2D is unavailable.');
-  const indexGutter = doc.createElement('div');
+  const indexGutter = gridContext.env.doc.createElement('div');
   indexGutter.dataset.gridIndex = '';
-  indexGutter.hidden = indexWidth === 0;
-  indexGutter.style.cssText = `position:absolute;left:0;top:0;width:${indexWidth}px;overflow:hidden;background:var(--acheron-header-background);color:var(--acheron-header-text-color);font:var(--acheron-font)`;
-  indexGutter.setAttribute('aria-label', t('Row index'));
+  indexGutter.hidden = gridContext.layout.indexWidth === 0;
+  indexGutter.style.cssText = `position:absolute;left:0;top:0;width:${gridContext.layout.indexWidth}px;overflow:hidden;background:var(--acheron-header-background);color:var(--acheron-header-text-color);font:var(--acheron-font)`;
+  indexGutter.setAttribute('aria-label', gridContext.env.t('Row index'));
   indexGutter.style.touchAction = 'none';
   root.append(scroller, canvas, headerSurface, indexGutter);
-  const copyFeedback = doc.createElement('div');
+  const copyFeedback = gridContext.env.doc.createElement('div');
   copyFeedback.dataset.gridCopyFeedback = '';
   copyFeedback.setAttribute('aria-hidden', 'true');
   copyFeedback.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:3';
@@ -1010,22 +1130,22 @@ export function createGrid(options: GridOptions): Grid {
       return columnEditors;
     },
     get columns() {
-      return columns;
+      return gridContext.layout.columns;
     },
     set columns(value) {
-      columns = value;
+      gridContext.layout.columns = value;
     },
     get copyFeedback() {
       return copyFeedback;
     },
     get destroyed() {
-      return destroyed;
+      return gridContext.runtime.destroyed;
     },
     set destroyed(value) {
-      destroyed = value;
+      gridContext.runtime.destroyed = value;
     },
     get doc() {
-      return doc;
+      return gridContext.env.doc;
     },
     get editor() {
       return editors.editor;
@@ -1034,22 +1154,22 @@ export function createGrid(options: GridOptions): Grid {
       editors.editor = value;
     },
     get engine() {
-      return engine;
+      return gridContext.engine;
     },
     get getSelectionRanges() {
       return getSelectionRanges;
     },
     get headerHeight() {
-      return headerHeight;
+      return gridContext.layout.headerHeight;
     },
     set headerHeight(value) {
-      headerHeight = value;
+      gridContext.layout.headerHeight = value;
     },
     get indexWidth() {
-      return indexWidth;
+      return gridContext.layout.indexWidth;
     },
     set indexWidth(value) {
-      indexWidth = value;
+      gridContext.layout.indexWidth = value;
     },
     get mediaColumn() {
       return mediaColumn;
@@ -1070,19 +1190,19 @@ export function createGrid(options: GridOptions): Grid {
       return rowAxis;
     },
     get rowCount() {
-      return rowCount;
+      return gridContext.layout.rowCount;
     },
     set rowCount(value) {
-      rowCount = value;
+      gridContext.layout.rowCount = value;
     },
     get t() {
-      return t;
+      return gridContext.env.t;
     },
     get viewport() {
       return viewport;
     },
     get win() {
-      return win;
+      return gridContext.env.win;
     },
   });
   const {
@@ -1110,20 +1230,26 @@ export function createGrid(options: GridOptions): Grid {
   let destroyed = false;
   const stateIcons = Object.fromEntries(
     Object.entries(stateIconSvg).map(([name, svg]) => {
-      const image = doc.createElement('img');
+      const image = gridContext.env.doc.createElement('img');
       image.onload = () => {
-        if (!destroyed) {
+        if (!gridContext.runtime.destroyed) {
           rendering.fullDraw = true;
           schedule();
         }
       };
-      const color = theme.iconColor.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+      const color = gridContext.appearance.theme.iconColor
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;');
       image.src = `data:image/svg+xml,${encodeURIComponent(svg.replace('currentColor', color))}`;
       return [name, image];
     }),
   );
 
-  const rowLockSvg = new win.DOMParser().parseFromString(stateIconSvg.lock, 'image/svg+xml').documentElement;
+  const rowLockSvg = new gridContext.env.win.DOMParser().parseFromString(
+    stateIconSvg.lock,
+    'image/svg+xml',
+  ).documentElement;
 
   const editors = createEditors({
     get actionError() {
@@ -1136,16 +1262,16 @@ export function createGrid(options: GridOptions): Grid {
       return columnEditors;
     },
     get columns() {
-      return columns;
+      return gridContext.layout.columns;
     },
     get context() {
       return context;
     },
     get destroyed() {
-      return destroyed;
+      return gridContext.runtime.destroyed;
     },
     get doc() {
-      return doc;
+      return gridContext.env.doc;
     },
     get editorError() {
       return editorError;
@@ -1157,7 +1283,7 @@ export function createGrid(options: GridOptions): Grid {
       return editorPane;
     },
     get engine() {
-      return engine;
+      return gridContext.engine;
     },
     get enterSurface() {
       return enterSurface;
@@ -1166,10 +1292,10 @@ export function createGrid(options: GridOptions): Grid {
       return exitSurface;
     },
     get headerHeight() {
-      return headerHeight;
+      return gridContext.layout.headerHeight;
     },
     get indexWidth() {
-      return indexWidth;
+      return gridContext.layout.indexWidth;
     },
     get invalidate() {
       return invalidate;
@@ -1178,7 +1304,7 @@ export function createGrid(options: GridOptions): Grid {
       return mediaColumn;
     },
     get options() {
-      return options;
+      return gridContext.options;
     },
     get overlay() {
       return overlay;
@@ -1193,7 +1319,7 @@ export function createGrid(options: GridOptions): Grid {
       return root;
     },
     get rowCount() {
-      return rowCount;
+      return gridContext.layout.rowCount;
     },
     get scroller() {
       return scroller;
@@ -1202,16 +1328,16 @@ export function createGrid(options: GridOptions): Grid {
       return select;
     },
     get t() {
-      return t;
+      return gridContext.env.t;
     },
     get theme() {
-      return theme;
+      return gridContext.appearance.theme;
     },
     get viewport() {
       return viewport;
     },
     get win() {
-      return win;
+      return gridContext.env.win;
     },
   });
   const { clearChoiceHover, disposeEditorIntegration, guardEditNavigation, finishEdit, beginEdit, positionEditor } =
@@ -1249,19 +1375,19 @@ export function createGrid(options: GridOptions): Grid {
       return columnEditors;
     },
     get columns() {
-      return columns;
+      return gridContext.layout.columns;
     },
     get context() {
       return context;
     },
     get destroyed() {
-      return destroyed;
+      return gridContext.runtime.destroyed;
     },
     get editors() {
       return editors;
     },
     get engine() {
-      return engine;
+      return gridContext.engine;
     },
     get finishEdit() {
       return finishEdit;
@@ -1279,7 +1405,7 @@ export function createGrid(options: GridOptions): Grid {
       return getSelectionRanges;
     },
     get headerHeight() {
-      return headerHeight;
+      return gridContext.layout.headerHeight;
     },
     get headerRowHeight() {
       return headerRowHeight;
@@ -1291,13 +1417,13 @@ export function createGrid(options: GridOptions): Grid {
       return indexGutter;
     },
     get indexWidth() {
-      return indexWidth;
+      return gridContext.layout.indexWidth;
     },
     get invalidate() {
       return invalidate;
     },
     get leafHeaders() {
-      return leafHeaders;
+      return gridContext.layout.leafHeaders;
     },
     get measuredRows() {
       return rendering.measuredRows;
@@ -1321,7 +1447,7 @@ export function createGrid(options: GridOptions): Grid {
       return openMenu;
     },
     get options() {
-      return options;
+      return gridContext.options;
     },
     get overlay() {
       return overlay;
@@ -1348,7 +1474,7 @@ export function createGrid(options: GridOptions): Grid {
       return rowAxis;
     },
     get rowCount() {
-      return rowCount;
+      return gridContext.layout.rowCount;
     },
     get rowValueLocked() {
       return rowValueLocked;
@@ -1360,10 +1486,10 @@ export function createGrid(options: GridOptions): Grid {
       return stateLabels;
     },
     get t() {
-      return t;
+      return gridContext.env.t;
     },
     get theme() {
-      return theme;
+      return gridContext.appearance.theme;
     },
     get validationMessage() {
       return validationMessage;
@@ -1375,7 +1501,7 @@ export function createGrid(options: GridOptions): Grid {
       return viewportLabel;
     },
     get win() {
-      return win;
+      return gridContext.env.win;
     },
   });
   const {
@@ -1413,11 +1539,11 @@ export function createGrid(options: GridOptions): Grid {
   } = interaction;
 
   const selectionHandles = (['start', 'end'] as const).map((endpoint) => {
-    const button = doc.createElement('button');
+    const button = gridContext.env.doc.createElement('button');
     button.type = 'button';
     button.hidden = true;
     button.tabIndex = -1;
-    button.setAttribute('aria-label', t('Adjust selection {0}', endpoint));
+    button.setAttribute('aria-label', gridContext.env.t('Adjust selection {0}', endpoint));
     button.style.cssText =
       'position:absolute;width:20px;height:20px;padding:0;margin:0;border:3px solid var(--acheron-background);border-radius:50%;background:var(--acheron-selection-color);z-index:3;touch-action:none;cursor:crosshair';
     button.addEventListener('pointerdown', (event) => {
@@ -1438,10 +1564,10 @@ export function createGrid(options: GridOptions): Grid {
     return button;
   });
 
-  const editorPane = doc.createElement('div');
+  const editorPane = gridContext.env.doc.createElement('div');
   editorPane.style.cssText = 'position:absolute;overflow:hidden;pointer-events:none;z-index:1';
   root.append(editorPane);
-  const editorLabel = doc.createElement('div');
+  const editorLabel = gridContext.env.doc.createElement('div');
   editorLabel.dataset.gridEditorLabel = '';
   editorLabel.hidden = true;
   editorLabel.style.cssText =
@@ -1449,15 +1575,15 @@ export function createGrid(options: GridOptions): Grid {
   editorPane.append(editorLabel);
 
   const overlay = createOverlay({
-    win,
-    doc,
+    win: gridContext.env.win,
+    doc: gridContext.env.doc,
     root,
-    engine,
-    options,
-    t,
+    engine: gridContext.engine,
+    options: gridContext.options,
+    t: gridContext.env.t,
     scroller,
     get destroyed() {
-      return destroyed;
+      return gridContext.runtime.destroyed;
     },
     cellLinks: (row, col) => cellLinks(row, col),
     svgIcon,
@@ -1494,28 +1620,28 @@ export function createGrid(options: GridOptions): Grid {
       return columnEditors;
     },
     get columns() {
-      return columns;
+      return gridContext.layout.columns;
     },
     get creationTypes() {
       return creationTypes;
     },
     get currentView() {
-      return currentView;
+      return gridContext.layout.currentView;
     },
     set currentView(value) {
-      currentView = value;
+      gridContext.layout.currentView = value;
     },
     get destroyed() {
-      return destroyed;
+      return gridContext.runtime.destroyed;
     },
     get doc() {
-      return doc;
+      return gridContext.env.doc;
     },
     get editors() {
       return editors;
     },
     get engine() {
-      return engine;
+      return gridContext.engine;
     },
     get enterSurface() {
       return enterSurface;
@@ -1542,7 +1668,7 @@ export function createGrid(options: GridOptions): Grid {
       return headerColumn;
     },
     get headerHeight() {
-      return headerHeight;
+      return gridContext.layout.headerHeight;
     },
     get htmlClipboardBlocks() {
       return htmlClipboardBlocks;
@@ -1551,7 +1677,7 @@ export function createGrid(options: GridOptions): Grid {
       return indexRow;
     },
     get indexWidth() {
-      return indexWidth;
+      return gridContext.layout.indexWidth;
     },
     get interaction() {
       return interaction;
@@ -1578,7 +1704,7 @@ export function createGrid(options: GridOptions): Grid {
       return openLinks;
     },
     get options() {
-      return options;
+      return gridContext.options;
     },
     get overlay() {
       return overlay;
@@ -1608,7 +1734,7 @@ export function createGrid(options: GridOptions): Grid {
       return rowAxis;
     },
     get rowCount() {
-      return rowCount;
+      return gridContext.layout.rowCount;
     },
     get rowLockCache() {
       return rendering.rowLockCache;
@@ -1635,10 +1761,10 @@ export function createGrid(options: GridOptions): Grid {
       return svgIcon;
     },
     get t() {
-      return t;
+      return gridContext.env.t;
     },
     get win() {
-      return win;
+      return gridContext.env.win;
     },
     get writeClipboard() {
       return writeClipboard;
@@ -1646,14 +1772,14 @@ export function createGrid(options: GridOptions): Grid {
   });
   const { format, setFrozen, setLocked, openMenu, onHeaderContextMenu, onContextMenu } = menus;
 
-  const resizeGuide = doc.createElement('div');
+  const resizeGuide = gridContext.env.doc.createElement('div');
   resizeGuide.setAttribute('aria-hidden', 'true');
   resizeGuide.setAttribute('data-grid-resize-guide', '');
   resizeGuide.style.cssText =
     'display:none;position:absolute;pointer-events:none;z-index:3;background:var(--acheron-selection-color)';
   root.append(resizeGuide);
-  const freezeVertical = doc.createElement('div');
-  const freezeHorizontal = doc.createElement('div');
+  const freezeVertical = gridContext.env.doc.createElement('div');
+  const freezeHorizontal = gridContext.env.doc.createElement('div');
   for (const line of [freezeVertical, freezeHorizontal]) {
     line.setAttribute('aria-hidden', 'true');
     line.style.cssText = 'position:absolute;pointer-events:none;z-index:2;background:var(--acheron-freeze-color)';
@@ -1661,63 +1787,67 @@ export function createGrid(options: GridOptions): Grid {
   }
   freezeVertical.dataset.gridFreezeLine = 'column';
   freezeHorizontal.dataset.gridFreezeLine = 'row';
-  const actionError = doc.createElement('div');
+  const actionError = gridContext.env.doc.createElement('div');
   actionError.setAttribute('role', 'alert');
   actionError.style.cssText =
     'display:none;position:absolute;bottom:20px;left:12px;right:24px;z-index:2;padding:10px;background:color-mix(in srgb,#ef4444 12%,var(--acheron-background));color:var(--acheron-text-color);border:1px solid color-mix(in srgb,#ef4444 50%,var(--acheron-grid-line-color));border-radius:6px;font:13px system-ui';
   root.append(actionError);
-  const lockNotice = doc.createElement('div');
+  const lockNotice = gridContext.env.doc.createElement('div');
   lockNotice.dataset.gridLockNotice = '';
   lockNotice.setAttribute('role', 'status');
   lockNotice.hidden = true;
   lockNotice.style.cssText =
     'position:absolute;top:48px;left:16px;right:16px;z-index:12;padding:16px;background:var(--acheron-background);color:var(--acheron-text-color);border:1px solid var(--acheron-grid-line-color);box-shadow:0 8px 24px #0002;font:var(--acheron-font);pointer-events:none';
-  const lockTitle = doc.createElement('strong');
+  const lockTitle = gridContext.env.doc.createElement('strong');
   lockTitle.style.cssText = 'display:flex;align-items:center;gap:8px';
-  lockTitle.append(svgIcon('lock'), (options.tableLockNotice && options.tableLockNotice.title) || t('Table locked'));
-  const lockDescription = doc.createElement('div');
+  lockTitle.append(
+    svgIcon('lock'),
+    (gridContext.options.tableLockNotice && gridContext.options.tableLockNotice.title) ||
+      gridContext.env.t('Table locked'),
+  );
+  const lockDescription = gridContext.env.doc.createElement('div');
   lockDescription.style.cssText = 'margin-top:8px;opacity:.8';
   lockDescription.textContent =
-    (options.tableLockNotice && options.tableLockNotice.description) ||
-    t('Editing is disabled while the table is locked.');
+    (gridContext.options.tableLockNotice && gridContext.options.tableLockNotice.description) ||
+    gridContext.env.t('Editing is disabled while the table is locked.');
   lockNotice.append(lockTitle, lockDescription);
   root.append(lockNotice);
   let lockNoticeTimer: number | undefined;
 
-  const editorError = doc.createElement('div');
+  const editorError = gridContext.env.doc.createElement('div');
   editorError.id = `acheron-editor-error-${++editorId}`;
   editorError.setAttribute('role', 'alert');
   editorError.style.cssText =
     'display:none;position:absolute;pointer-events:none;z-index:3;padding:8px;border:1px solid color-mix(in srgb,#ef4444 50%,var(--acheron-grid-line-color));border-radius:6px;background:color-mix(in srgb,#ef4444 12%,var(--acheron-background));color:var(--acheron-text-color);font:13px system-ui';
   root.append(editorError);
-  const selectionStatus = doc.createElement('div');
+  const selectionStatus = gridContext.env.doc.createElement('div');
   selectionStatus.setAttribute('role', 'status');
   selectionStatus.style.cssText =
     'position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap';
   root.append(selectionStatus);
 
-  const searchBar = doc.createElement('div');
+  const searchBar = gridContext.env.doc.createElement('div');
   searchBar.hidden = true;
   searchBar.dataset.gridSearch = '';
   searchBar.setAttribute('role', 'search');
-  searchBar.setAttribute('aria-label', t('Find in grid'));
+  searchBar.setAttribute('aria-label', gridContext.env.t('Find in grid'));
   searchBar.style.cssText =
     'position:absolute;top:4px;right:20px;max-width:calc(100% - 24px);z-index:4;padding:6px;border:1px solid var(--acheron-grid-line-color);border-radius:6px;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);box-shadow:0 4px 12px #0f172a26';
-  const searchInput = doc.createElement('input');
+  const searchInput = gridContext.env.doc.createElement('input');
   searchInput.type = 'search';
-  searchInput.setAttribute('aria-label', t('Find in grid'));
+  searchInput.setAttribute('aria-label', gridContext.env.t('Find in grid'));
   searchInput.style.cssText =
     'width:140px;min-width:80px;max-width:100%;padding:6px;font:inherit;color:inherit;background:var(--acheron-background);border:1px solid var(--acheron-grid-line-color);border-radius:4px;outline:none;box-shadow:none';
-  const searchStatus = doc.createElement('span');
+  const searchStatus = gridContext.env.doc.createElement('span');
   searchStatus.setAttribute('role', 'status');
   searchStatus.style.cssText = 'display:inline-block;padding:0 8px';
-  const searchPrevious = doc.createElement('button');
-  const searchNext = doc.createElement('button');
-  const searchClose = doc.createElement('button');
+  const searchPrevious = gridContext.env.doc.createElement('button');
+  const searchNext = gridContext.env.doc.createElement('button');
+  const searchClose = gridContext.env.doc.createElement('button');
   for (const [button, label, text] of [
-    [searchPrevious, t('Previous match'), '↑'],
-    [searchNext, t('Next match'), '↓'],
-    [searchClose, t('Close search'), '×'],
+    [searchPrevious, gridContext.env.t('Previous match'), '↑'],
+    [searchNext, gridContext.env.t('Next match'), '↓'],
+    [searchClose, gridContext.env.t('Close search'), '×'],
   ] as const) {
     button.type = 'button';
     button.setAttribute('aria-label', label);
@@ -1728,15 +1858,15 @@ export function createGrid(options: GridOptions): Grid {
   searchBar.append(searchInput, searchStatus, searchPrevious, searchNext, searchClose);
   root.append(searchBar);
   const { refreshSearch, openSearch, searchShortcut, highlightSearch, disposeSearch } = createSearch({
-    win,
+    win: gridContext.env.win,
     searchBar,
     searchInput,
     searchStatus,
     searchPrevious,
     searchNext,
     searchClose,
-    t,
-    engine,
+    t: gridContext.env.t,
+    engine: gridContext.engine,
     displayedText,
     scroller,
     context,
@@ -1747,30 +1877,30 @@ export function createGrid(options: GridOptions): Grid {
     closeMenu: () => closeMenu(),
     endResize: () => endResize(),
     get destroyed() {
-      return destroyed;
+      return gridContext.runtime.destroyed;
     },
     get rowCount() {
-      return rowCount;
+      return gridContext.layout.rowCount;
     },
     get columns() {
-      return columns;
+      return gridContext.layout.columns;
     },
     get theme() {
-      return theme;
+      return gridContext.appearance.theme;
     },
   });
 
   const builtinColumnTypes: readonly ColumnType[] = [
     {
       key: 'text',
-      label: t('Text'),
+      label: gridContext.env.t('Text'),
       create: (input) => ({
         column: { key: input.key, title: input.title, editable: true, defaultValue: input.defaultText },
       }),
     },
     {
       key: 'number',
-      label: t('Number'),
+      label: gridContext.env.t('Number'),
       create: (input) => {
         const parse = (text: string) => {
           if (!text.trim()) return null;
@@ -1799,7 +1929,7 @@ export function createGrid(options: GridOptions): Grid {
       },
     },
   ];
-  const creationTypes = options.columnTypes ?? builtinColumnTypes;
+  const creationTypes = gridContext.options.columnTypes ?? builtinColumnTypes;
   if (
     !creationTypes.length ||
     new Set(creationTypes.map((type) => type.key)).size !== creationTypes.length ||
@@ -1807,16 +1937,16 @@ export function createGrid(options: GridOptions): Grid {
   )
     throw new TypeError('Invalid column types.');
 
-  const getSelection = engine.getSelection;
-  const getSelectionRange = engine.getSelectionRange;
-  const getSelectionRanges = engine.getSelectionRanges;
+  const getSelection = gridContext.engine.getSelection;
+  const getSelectionRange = gridContext.engine.getSelectionRange;
+  const getSelectionRanges = gridContext.engine.getSelectionRanges;
 
-  const reorderGuide = doc.createElement('div');
+  const reorderGuide = gridContext.env.doc.createElement('div');
   reorderGuide.dataset.gridReorderGuide = '';
   reorderGuide.setAttribute('aria-hidden', 'true');
   reorderGuide.style.cssText =
     'display:none;position:absolute;pointer-events:none;z-index:8;background:var(--acheron-selection-color);box-shadow:0 0 0 1px var(--acheron-background)';
-  const reorderBadge = doc.createElement('div');
+  const reorderBadge = gridContext.env.doc.createElement('div');
   reorderBadge.dataset.gridReorderBadge = '';
   reorderBadge.setAttribute('aria-hidden', 'true');
   reorderBadge.style.cssText =
@@ -1865,42 +1995,42 @@ export function createGrid(options: GridOptions): Grid {
   scroller.addEventListener('paste', onPaste);
   scroller.addEventListener('keydown', onKeyDown);
   scroller.addEventListener('dblclick', onDoubleClick);
-  win.addEventListener('blur', onPointerEnd);
-  win.addEventListener('resize', render);
-  win.addEventListener('scroll', positionEditor, { capture: true, passive: true });
+  gridContext.env.win.addEventListener('blur', onPointerEnd);
+  gridContext.env.win.addEventListener('resize', render);
+  gridContext.env.win.addEventListener('scroll', positionEditor, { capture: true, passive: true });
   render();
 
   function clearLayoutMotion(): void {
     motion.clearLayoutMotion();
   }
   const motion = createMotion({
-    options,
+    options: gridContext.options,
     motionDuration,
-    win,
+    win: gridContext.env.win,
     root,
     canvas,
-    doc,
-    engine,
+    doc: gridContext.env.doc,
+    engine: gridContext.engine,
     dataSource,
     draw,
     viewport,
     get destroyed() {
-      return destroyed;
+      return gridContext.runtime.destroyed;
     },
     get columns() {
-      return columns;
+      return gridContext.layout.columns;
     },
     get headerHeight() {
-      return headerHeight;
+      return gridContext.layout.headerHeight;
     },
     get indexWidth() {
-      return indexWidth;
+      return gridContext.layout.indexWidth;
     },
     get frame() {
-      return rendering.frame;
+      return gridContext.runtime.frame;
     },
     set frame(value) {
-      rendering.frame = value;
+      gridContext.runtime.frame = value;
     },
   });
 
@@ -1908,46 +2038,51 @@ export function createGrid(options: GridOptions): Grid {
   const enteringGroups = new Set<string>();
   function groupRows(start: number, end: number): string {
     return structureAction(() => {
-      const id = engine.groupRows(start, end);
+      const id = gridContext.engine.groupRows(start, end);
       enteringGroups.add(id);
       return id;
     });
   }
   function structureAction<T>(run: () => T, axis?: 'row' | 'column'): T {
-    if (editors.editor || destroyed) throw new Error('Save or cancel the editor before changing structure.');
+    if (editors.editor || gridContext.runtime.destroyed)
+      throw new Error('Save or cancel the editor before changing structure.');
     return axis ? animateLayout(run, axis) : run();
   }
   return {
-    subscribe: engine.subscribe,
-    getValue: engine.getValue,
+    subscribe: gridContext.engine.subscribe,
+    getValue: gridContext.engine.getValue,
     replaceText: (search: string, replacement: string, options?: Parameters<GridEngine['replaceText']>[2]) => {
       finishEdit(false);
       clearCopyFeedback();
-      return engine.replaceText(search, replacement, options);
+      return gridContext.engine.replaceText(search, replacement, options);
     },
-    takeObserverErrors: engine.takeObserverErrors,
-    captureRowIdentity: engine.captureRowIdentity,
+    takeObserverErrors: gridContext.engine.takeObserverErrors,
+    captureRowIdentity: gridContext.engine.captureRowIdentity,
     refreshData: (ids?: readonly RowId[] | 'values') => {
       finishEdit(false);
       clearCopyFeedback();
       clipboard.pendingCutText = undefined;
-      engine.refreshData(ids);
+      gridContext.engine.refreshData(ids);
     },
-    exportState: engine.exportState,
+    exportState: gridContext.engine.exportState,
     restoreState: (state: unknown) => {
       if (editors.editor) throw new Error('Finish editing before restoring state.');
       if (!state || typeof state !== 'object' || !('configuration' in state))
         throw new TypeError('Invalid grid state.');
-      const restored = restoreGridConfiguration(state.configuration, columns, engine.sourceRowCount);
-      reorderedHeaderGroups(restored.columns, options.headerGroups);
-      engine.restoreState(state);
+      const restored = restoreGridConfiguration(
+        state.configuration,
+        gridContext.layout.columns,
+        gridContext.engine.sourceRowCount,
+      );
+      reorderedHeaderGroups(restored.columns, gridContext.options.headerGroups);
+      gridContext.engine.restoreState(state);
     },
     setColumnEditor: (key: string, config: ColumnEditor | null) => {
-      if (destroyed) throw new Error('Grid is destroyed.');
-      const column = columns.find((column) => column.key === key);
+      if (gridContext.runtime.destroyed) throw new Error('Grid is destroyed.');
+      const column = gridContext.layout.columns.find((column) => column.key === key);
       if (!column) throw new Error('Unknown editor column.');
       const valid = config === null ? null : validateColumnEditor(column, config);
-      if (editors.editor && engine.getSelection()?.columnKey === key) finishEdit(false);
+      if (editors.editor && gridContext.engine.getSelection()?.columnKey === key) finishEdit(false);
       if (valid) columnEditors.set(key, valid);
       else columnEditors.delete(key);
       clearChoiceHover();
@@ -1956,57 +2091,61 @@ export function createGrid(options: GridOptions): Grid {
     exportConfiguration: () => {
       if (!managesView)
         throw new Error('Export configuration requires core-managed view; persist host view separately.');
-      return engine.exportConfiguration();
+      return gridContext.engine.exportConfiguration();
     },
-    getMerge: engine.getMerge,
-    getMergedCells: engine.getMergedCells,
-    canMerge: engine.canMerge,
-    mergeCells: (range: SelectionRange) => structureAction(() => engine.mergeCells(range)),
-    unmergeCells: (range: SelectionRange) => structureAction(() => engine.unmergeCells(range)),
-    getRowGroups: engine.getRowGroups,
+    getMerge: gridContext.engine.getMerge,
+    getMergedCells: gridContext.engine.getMergedCells,
+    canMerge: gridContext.engine.canMerge,
+    mergeCells: (range: SelectionRange) => structureAction(() => gridContext.engine.mergeCells(range)),
+    unmergeCells: (range: SelectionRange) => structureAction(() => gridContext.engine.unmergeCells(range)),
+    getRowGroups: gridContext.engine.getRowGroups,
     groupRows,
-    ungroupRows: (id: string) => structureAction(() => engine.ungroupRows(id)),
+    ungroupRows: (id: string) => structureAction(() => gridContext.engine.ungroupRows(id)),
     setGroupCollapsed: (id: string, collapsed: boolean) =>
-      structureAction(() => engine.setGroupCollapsed(id, collapsed), 'row'),
+      structureAction(() => gridContext.engine.setGroupCollapsed(id, collapsed), 'row'),
     setView: (view: LocalViewOptions) =>
       structureAction(() => {
-        engine.setView(view);
-        currentView = engine.view;
+        gridContext.engine.setView(view);
+        gridContext.layout.currentView = gridContext.engine.view;
       }),
     get view() {
-      return managesView ? engine.view : (currentView ?? {});
+      return managesView ? gridContext.engine.view : (gridContext.layout.currentView ?? {});
     },
     cutSelectionBlocks,
     cancelCut,
     copySelectionBlocks,
     pasteSelectionBlocks,
     get rowCount() {
-      return rowCount;
+      return gridContext.layout.rowCount;
     },
     get columns() {
-      return columns;
+      return gridContext.layout.columns;
     },
     insertColumns: (index: number, added: readonly Column[]) =>
-      structureAction(() => engine.insertColumns(index, added)),
-    deleteColumns: (indices: readonly number[]) => structureAction(() => engine.deleteColumns(indices)),
-    insertRows: (index: number, rows: readonly DataRow[]) => structureAction(() => engine.insertRows(index, rows)),
-    deleteRows: (indices: readonly number[]) => structureAction(() => engine.deleteRows(indices)),
+      structureAction(() => gridContext.engine.insertColumns(index, added)),
+    deleteColumns: (indices: readonly number[]) => structureAction(() => gridContext.engine.deleteColumns(indices)),
+    insertRows: (index: number, rows: readonly DataRow[]) =>
+      structureAction(() => gridContext.engine.insertRows(index, rows)),
+    deleteRows: (indices: readonly number[]) => structureAction(() => gridContext.engine.deleteRows(indices)),
     moveRows: (indices: readonly number[], beforeIndex: number) =>
-      structureAction(() => engine.moveRows(indices, beforeIndex), 'row'),
+      structureAction(() => gridContext.engine.moveRows(indices, beforeIndex), 'row'),
     moveColumns: (indices: readonly number[], beforeIndex: number) =>
-      structureAction(() => engine.moveColumns(indices, beforeIndex), 'column'),
+      structureAction(() => gridContext.engine.moveColumns(indices, beforeIndex), 'column'),
     setTheme(patch) {
-      if (destroyed) throw new Error('Grid is destroyed.');
-      const next = Object.freeze({ ...theme, ...patch });
+      if (gridContext.runtime.destroyed) throw new Error('Grid is destroyed.');
+      const next = Object.freeze({ ...gridContext.appearance.theme, ...patch });
       validateTheme(next);
       clearLayoutMotion();
       clearCopyFeedback();
-      theme = next;
+      gridContext.appearance.theme = next;
       rendering.measuredRows.clear();
-      for (const [key, value] of Object.entries(theme))
+      for (const [key, value] of Object.entries(gridContext.appearance.theme))
         root.style.setProperty('--acheron-' + key.replace(/[A-Z]/g, (letter) => '-' + letter.toLowerCase()), value);
       for (const [name, image] of Object.entries(stateIcons)) {
-        const color = theme.iconColor.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        const color = gridContext.appearance.theme.iconColor
+          .replace(/&/g, '&amp;')
+          .replace(/"/g, '&quot;')
+          .replace(/</g, '&lt;');
         image.src = `data:image/svg+xml,${encodeURIComponent(stateIconSvg[name as keyof typeof stateIconSvg].replace('currentColor', color))}`;
       }
       render();
@@ -2022,38 +2161,38 @@ export function createGrid(options: GridOptions): Grid {
     autoFitColumn,
     autoFitRow,
     get frozenRows() {
-      return engine.frozenRows;
+      return gridContext.engine.frozenRows;
     },
     get frozenColumns() {
-      return engine.frozenColumns;
+      return gridContext.engine.frozenColumns;
     },
     setFrozen,
     setRowsHidden: (indices, hidden) => {
       if (finishEdit(true)) {
         cancelCut();
-        engine.setRowsHidden(indices, hidden);
+        gridContext.engine.setRowsHidden(indices, hidden);
       }
     },
     setColumnsHidden: (indices, hidden) => {
       if (finishEdit(true)) {
         cancelCut();
-        engine.setColumnsHidden(indices, hidden);
+        gridContext.engine.setColumnsHidden(indices, hidden);
       }
     },
-    getHiddenRows: engine.getHiddenRows,
-    getHiddenColumns: engine.getHiddenColumns,
-    isRowHidden: engine.isRowHidden,
-    isColumnHidden: engine.isColumnHidden,
-    isLocked: engine.isLocked,
-    canManageLocks: engine.canManageLocks,
+    getHiddenRows: gridContext.engine.getHiddenRows,
+    getHiddenColumns: gridContext.engine.getHiddenColumns,
+    isRowHidden: gridContext.engine.isRowHidden,
+    isColumnHidden: gridContext.engine.isColumnHidden,
+    isLocked: gridContext.engine.isLocked,
+    canManageLocks: gridContext.engine.canManageLocks,
     setLocked,
-    getFormat: engine.getFormat,
-    canFormat: engine.canFormat,
+    getFormat: gridContext.engine.getFormat,
+    canFormat: gridContext.engine.canFormat,
     format,
     updateCells,
     undo: () => replay(false),
     redo: () => replay(true),
-    getCellPermission: engine.getCellPermission,
+    getCellPermission: gridContext.engine.getCellPermission,
     getSelection,
     getSelectionRange,
     getSelectionRanges,
@@ -2062,12 +2201,12 @@ export function createGrid(options: GridOptions): Grid {
     setColumnWidth: (index, width) => resizeAxis(columnAxis, index, width),
     setRowHeight: (index, height) => resizeAxis(rowAxis, index, height),
     destroy() {
-      if (destroyed) return;
+      if (gridContext.runtime.destroyed) return;
       cancelLinkPreviewHover();
       root.removeEventListener('pointerleave', cancelLinkPreviewHover);
       clipboard.pendingCutText = undefined;
       clipboard.cutRevision++;
-      win.clearTimeout(lockNoticeTimer);
+      gridContext.env.win.clearTimeout(lockNoticeTimer);
       clearCopyFeedback();
       clearLayoutMotion();
       removeMotionListener();
@@ -2077,10 +2216,10 @@ export function createGrid(options: GridOptions): Grid {
       }
       editors.choices = null;
       disposeEditorIntegration();
-      win.removeEventListener('beforeunload', guardEditNavigation);
+      gridContext.env.win.removeEventListener('beforeunload', guardEditNavigation);
       clearReorder();
-      engine.destroy();
-      destroyed = true;
+      gridContext.engine.destroy();
+      gridContext.runtime.destroyed = true;
       for (const image of Object.values(stateIcons)) image.onload = null;
       closeMenu();
       disposeSearch();
@@ -2092,7 +2231,7 @@ export function createGrid(options: GridOptions): Grid {
       overlay.activeDialog?.remove();
       overlay.activeDialog = null;
       mediaController.mediaUpload?.abort();
-      for (const src of mediaController.ownedImageUrls) win.URL.revokeObjectURL(src);
+      for (const src of mediaController.ownedImageUrls) gridContext.env.win.URL.revokeObjectURL(src);
       mediaController.ownedImageUrls.clear();
       endResize();
       root.removeEventListener('dblclick', onAxisDoubleClick, true);
@@ -2123,16 +2262,16 @@ export function createGrid(options: GridOptions): Grid {
       scroller.removeEventListener('pointerdown', onPointerDown);
       scroller.removeEventListener('click', onLinkClick);
       scroller.removeEventListener('keydown', onKeyDown);
-      if (rendering.frame !== undefined) win.cancelAnimationFrame(rendering.frame);
+      if (gridContext.runtime.frame !== undefined) gridContext.env.win.cancelAnimationFrame(gridContext.runtime.frame);
       observer.disconnect();
       scroller.removeEventListener('scroll', renderCopyFeedback);
       scroller.removeEventListener('scroll', clearLayoutMotion);
       scroller.removeEventListener('scroll', render);
       scroller.removeEventListener('scroll', clearChoiceHover);
       root.removeEventListener('pointerleave', clearChoiceHover);
-      win.removeEventListener('blur', onPointerEnd);
-      win.removeEventListener('resize', render);
-      win.removeEventListener('scroll', positionEditor, true);
+      gridContext.env.win.removeEventListener('blur', onPointerEnd);
+      gridContext.env.win.removeEventListener('resize', render);
+      gridContext.env.win.removeEventListener('scroll', positionEditor, true);
       root.remove();
     },
   };

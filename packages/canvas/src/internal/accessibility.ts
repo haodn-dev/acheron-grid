@@ -1,34 +1,24 @@
-import type {
-  CellFormat,
-  Column,
-  GridEngine,
-  LocalViewOptions,
-  NumberFormat,
-  SelectionRange,
-} from '@acheron-grid/core';
-import type { GridOptions } from '../grid.js';
-import { headerLayout } from '../headers.js';
+import type { CellFormat, NumberFormat, SelectionRange } from '@acheron-grid/core';
 import type { CellLink } from '../links.js';
-import type { CanvasTranslator } from '../locale.js';
 import { mediaItems } from '../media.js';
+import type { GridContext } from './grid-context.js';
 import { createInteraction } from './interaction.js';
 
-interface AccessibilityContext {
+interface AccessibilityContext
+  extends
+    Readonly<Pick<GridContext['layout'], 'columns' | 'currentView' | 'headers'>>,
+    Pick<GridContext['env'], 'doc' | 't'>,
+    Pick<GridContext, 'engine' | 'options'> {
   readonly activeCell: HTMLDivElement;
   readonly activeRow: HTMLDivElement;
   readonly avatarColumns: ReadonlySet<string>;
-  readonly columns: readonly Column[];
-  readonly currentView: LocalViewOptions | undefined;
   readonly displayedText: (
     value: unknown,
     key: string,
     contentFormat?: CellFormat['contentFormat'],
     numberFormat?: NumberFormat,
   ) => string;
-  readonly doc: Document;
-  readonly engine: GridEngine;
   readonly getSelectionRanges: () => SelectionRange[];
-  readonly headers: ReturnType<typeof headerLayout>;
   readonly indicatorPolicy: Readonly<{
     editable?: boolean;
     selectable?: boolean;
@@ -42,11 +32,9 @@ interface AccessibilityContext {
   readonly linksForValue: (value: unknown, key: string, contentFormat?: CellFormat['contentFormat']) => CellLink[];
   readonly mediaColumn: (key: string) => boolean;
   readonly numberText: (value: unknown, format?: NumberFormat) => string;
-  readonly options: GridOptions;
   readonly rowValueLocked: (row: number) => boolean;
   readonly scroller: HTMLDivElement;
   readonly selectionStatus: HTMLDivElement;
-  readonly t: CanvasTranslator;
   readonly validationMessage: (value: unknown, columnIndex: number) => string | undefined;
   readonly viewportAccessibility: boolean;
   readonly viewportLabel: string;

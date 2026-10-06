@@ -1,8 +1,8 @@
 import type { CellFormat, NumberFormat } from '@acheron-grid/core';
 import type { GridOptions } from '../grid.js';
 import type { CanvasTranslator } from '../locale.js';
-import { readHtml } from '../rich-text.js';
 import type { RichText } from '../rich-text.js';
+import { readHtml } from '../rich-text.js';
 
 export function createNumberDisplay(options: Pick<GridOptions, 'locale' | 'currency'>) {
   const numberFormats = new Map<NumberFormat, Intl.NumberFormat>(
