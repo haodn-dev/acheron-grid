@@ -1,3 +1,4 @@
+import { createLayout } from './internal/layout.js';
 import { createValues } from './internal/values.js';
 import { createFormatting } from './internal/formatting.js';
 import { createPermissions } from './internal/permissions.js';
@@ -862,32 +863,6 @@ export function createGridEngine(options: GridEngineOptions) {
       groups.map((other) => (other === group ? Object.freeze({ ...group, collapsed }) : other)),
     );
   }
-  function mergedViewport(options: ViewportOptions) {
-    const axis = viewAxis(),
-      viewport = createViewport(axis, columnAxis, visibleFrozenRows(), frozenColumns, options);
-    return Object.freeze({
-      ...viewport,
-      hitTest(x: number, y: number) {
-        const hit = viewport.hitTest(x, y);
-        if (!hit) return null;
-        const span = mergeAt(sourceRow(hit.row), hit.col);
-        return span ? { row: displayRow(span.startRow), col: span.startColumn } : hit;
-      },
-      cellRect(row: number, col: number) {
-        const base = viewport.cellRect(row, col),
-          span = mergeAt(sourceRow(row), col);
-        if (!span) return base;
-        const first = displayRow(span.startRow),
-          last = displayRow(span.endRow),
-          rect = viewport.cellRect(first, span.startColumn);
-        return Object.freeze({
-          ...rect,
-          width: columnAxis.position(span.endColumn + 1) - columnAxis.position(span.startColumn),
-          height: axis.position(last + 1) - axis.position(first),
-        });
-      },
-    });
-  }
 
   const emptyFormat: Readonly<CellFormat> = Object.freeze({});
 
@@ -1372,108 +1347,6 @@ export function createGridEngine(options: GridEngineOptions) {
       !!(dataSource.setValue || dataSource.setValues) &&
       getCellPermission(range.startRow, range.startColumn).pasteable
     );
-  }
-
-  function resize(axis: GridAxis, index: number, size: number, history = true): void {
-    assertAlive();
-    if (!history && manualRows.has(index)) return;
-    const previous = axis.storedSize(index),
-      previousManual = axis === rowAxis && manualRows.has(index);
-    axis.setSize(index, size);
-    if (previous !== size && history) {
-      if (axis === rowAxis) manualRows.add(index);
-      past.push({ kind: 'resize', axis: axis === rowAxis ? 'row' : 'column', index, previous, size, previousManual });
-      if (past.length > 100) past.shift();
-      future.length = 0;
-    }
-    if (previous !== size)
-      notify(
-        { type: 'layout' },
-        Object.freeze({ type: axis === rowAxis ? 'row:resize' : 'column:resize', index, previous, size }),
-      );
-  }
-
-  function requireVisibilityPolicy(axis: 'row' | 'column', indices: readonly number[], hidden: boolean): void {
-    if (
-      tableLocked ||
-      options.canChangeVisibility?.(Object.freeze({ axis, indices: Object.freeze([...indices]), hidden })) === false
-    )
-      throw new Error('Changing visibility is disabled.');
-  }
-  function changeVisibility(
-    axis: 'row' | 'column',
-    indices: readonly number[],
-    hidden: boolean,
-    history = true,
-    source: 'api' | 'undo' | 'redo' = 'api',
-  ): void {
-    assertAlive();
-    const layout = axis === 'row' ? rowAxis : columnAxis;
-    if (
-      typeof hidden !== 'boolean' ||
-      !Array.isArray(indices) ||
-      new Set(indices).size !== indices.length ||
-      indices.some((index) => !Number.isSafeInteger(index) || index < 0 || index >= layout.count)
-    )
-      throw new RangeError('Invalid visibility request.');
-    requireVisibilityPolicy(axis, indices, hidden);
-    const before = new Set(layout.hiddenIndices()),
-      changed = indices.filter((index) => before.has(index) !== hidden);
-    if (!changed.length) return;
-    for (const index of changed) {
-      if (hidden) before.add(index);
-      else before.delete(index);
-    }
-    layout.replaceHidden([...before]);
-    rebuildViewAxis();
-    clearSelection();
-    pendingCut = undefined;
-    if (history) {
-      past.push({ kind: 'visibility', axis, indices: Object.freeze(changed), hidden });
-      if (past.length > 100) past.shift();
-      future.length = 0;
-    }
-    notify(
-      { type: 'layout' },
-      Object.freeze({ type: 'visibility:change', axis, indices: Object.freeze(changed), hidden, source }),
-    );
-  }
-
-  function setFrozen(rows: number, columnCount: number): void {
-    assertAlive();
-    if (
-      !Number.isSafeInteger(rows) ||
-      rows < 0 ||
-      rows > rowCount ||
-      !Number.isSafeInteger(columnCount) ||
-      columnCount < 0 ||
-      columnCount > columns.length
-    )
-      throw new RangeError('Invalid frozen row or column count.');
-    if (rows === frozenRows && columnCount === frozenColumns) return;
-    validateMergeFreeze(merges, rows, columnCount);
-    if (groups.some((group) => group.collapsed && group.startRow < rows && group.endRow >= rows))
-      throw new Error('A collapsed group cannot cross a frozen boundary.');
-    const previousRows = frozenRows;
-    const previousColumns = frozenColumns;
-    frozenRows = rows;
-    frozenColumns = columnCount;
-    past.push({ kind: 'freeze', previousRows, previousColumns, rows, columns: columnCount });
-    if (past.length > 100) past.shift();
-    future.length = 0;
-    notify(
-      { type: 'layout' },
-      Object.freeze({ type: 'freeze:change', previousRows, previousColumns, rows, columns: columnCount }),
-    );
-  }
-
-  function axisView(axis: GridAxis) {
-    return Object.freeze({
-      size: (index: number) => axis.size(index),
-      position: (index: number) => axis.position(index),
-      indexAt: (offset: number) => axis.indexAt(offset),
-      range: (offset: number, extent: number) => axis.range(offset, extent),
-    });
   }
 
   function refreshData(previousRowIds?: readonly RowId[] | 'values'): void {
@@ -2007,6 +1880,42 @@ export function createGridEngine(options: GridEngineOptions) {
       return sourceRow;
     },
   });
+
+  const { mergedViewport, resize, requireVisibilityPolicy, changeVisibility, setFrozen, axisView } = createLayout(
+    context,
+    {
+      get viewAxis() {
+        return viewAxis;
+      },
+      get visibleFrozenRows() {
+        return visibleFrozenRows;
+      },
+      get mergeAt() {
+        return mergeAt;
+      },
+      get sourceRow() {
+        return sourceRow;
+      },
+      get displayRow() {
+        return displayRow;
+      },
+      get assertAlive() {
+        return assertAlive;
+      },
+      get notify() {
+        return notify;
+      },
+      get rebuildViewAxis() {
+        return rebuildViewAxis;
+      },
+      get clearSelection() {
+        return clearSelection;
+      },
+      get validateMergeFreeze() {
+        return validateMergeFreeze;
+      },
+    },
+  );
   if (options.view) {
     view = snapshotView(options.view);
     installProjection(buildProjection(view));
