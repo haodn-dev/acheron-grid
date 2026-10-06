@@ -1,3 +1,4 @@
+import { createValues } from './internal/values.js';
 import { createFormatting } from './internal/formatting.js';
 import { createPermissions } from './internal/permissions.js';
 import { createStructure } from './internal/structure.js';
@@ -941,62 +942,6 @@ export function createGridEngine(options: GridEngineOptions) {
     }
   }
 
-  function notifyCells(changes: readonly Change[], source: GridChangeSource): void {
-    notify(
-      { type: 'cells', cells: changes.map(({ rowIndex, columnKey }) => ({ rowIndex, columnKey })) },
-      Object.freeze({
-        type: 'cell:change',
-        source,
-        changes: Object.freeze(changes.map((change) => Object.freeze({ ...change }))),
-      }),
-    );
-  }
-
-  function write(changes: readonly CellUpdate[]): void {
-    if (changes.length === 1 && dataSource.setValue) {
-      const change = changes[0]!;
-      dataSource.setValue(change.rowIndex, change.columnKey, change.value);
-    } else if (dataSource.setValues) dataSource.setValues(changes);
-    else throw new Error('An atomic setValues method is required for batch writes.');
-  }
-
-  function applyUpdates(
-    updates: readonly CellUpdate[],
-    source: GridChangeSource = 'api',
-    formatChanges: FormatChange[] = [],
-  ): void {
-    assertAlive();
-    const unique = new Map<string, CellUpdate>();
-    for (const update of updates) {
-      if (!Number.isSafeInteger(update.rowIndex) || update.rowIndex < 0 || update.rowIndex >= rowCount)
-        throw new RangeError('Invalid row index.');
-      if (!columnIndices.has(update.columnKey)) throw new Error(`Unknown column: ${update.columnKey}`);
-      unique.set(`${update.rowIndex}:${update.columnKey}`, { ...update });
-    }
-    const changes: Change[] = [...unique.values()]
-      .map((update) => ({
-        ...update,
-        previous: dataSource.getValue(update.rowIndex, update.columnKey),
-        rowId: dataSource.getRowId(update.rowIndex),
-      }))
-      .filter((change) => !Object.is(change.previous, change.value));
-    if (!changes.length && !formatChanges.length) return;
-    for (const change of changes) requirePermission(change.rowIndex, columnIndices.get(change.columnKey)!, 'writable');
-    for (const change of changes) {
-      const column = columns[columnIndices.get(change.columnKey)!]!;
-      const message = column.validate?.(change.value);
-      if (message && column.invalidInput !== 'allow') throw new Error(message);
-    }
-    if (changes.length) write(changes);
-    writeFormats(formatChanges);
-    past.push({ kind: 'values', changes, formats: formatChanges });
-    // keep the latest 100 commands; large values remain shallow caller-owned references.
-    if (past.length > 100) past.shift();
-    future.length = 0;
-    if (changes.length) notifyCells(changes, source);
-    if (formatChanges.length) notifyFormats(formatChanges, source === 'paste' ? 'paste' : 'api');
-  }
-
   function getSelection(): CellSelection | null {
     return selection ? { ...selection } : null;
   }
@@ -1419,31 +1364,6 @@ export function createGridEngine(options: GridEngineOptions) {
     notifySelection(true, true);
   }
 
-  function canEdit(rowIndex: number, columnIndex: number): boolean {
-    const span = mergeAt(rowIndex, columnIndex);
-    if (span) {
-      rowIndex = span.startRow;
-      columnIndex = span.startColumn;
-      for (let row = span.startRow; row <= span.endRow; row++)
-        for (let col = span.startColumn; col <= span.endColumn; col++)
-          if (!getCellPermission(row, col).writable) return false;
-    }
-    const column = columns[columnIndex];
-    if (
-      destroyed ||
-      !Number.isSafeInteger(rowIndex) ||
-      !Number.isSafeInteger(columnIndex) ||
-      !(dataSource.setValue || dataSource.setValues) ||
-      !column ||
-      rowIndex < 0 ||
-      rowIndex >= rowCount
-    )
-      return false;
-    if (!getCellPermission(rowIndex, columnIndex).editable) return false;
-    const value = dataSource.getValue(rowIndex, column.key);
-    return column.parse !== undefined || value == null || typeof value === 'string';
-  }
-
   function canPaste(): boolean {
     const range = getSelectionRange();
     return (
@@ -1452,21 +1372,6 @@ export function createGridEngine(options: GridEngineOptions) {
       !!(dataSource.setValue || dataSource.setValues) &&
       getCellPermission(range.startRow, range.startColumn).pasteable
     );
-  }
-
-  function editCell(rowIndex: number, columnIndex: number, text: string): void {
-    assertAlive();
-    const span = mergeAt(rowIndex, columnIndex);
-    if (span) {
-      rowIndex = span.startRow;
-      columnIndex = span.startColumn;
-    }
-    if (!canEdit(rowIndex, columnIndex)) throw new Error('Cell cannot be edited.');
-    const column = columns[columnIndex]!;
-    const previous = dataSource.getValue(rowIndex, column.key);
-    if (text !== (previous == null ? '' : String(previous))) {
-      applyUpdates([{ rowIndex, columnKey: column.key, value: column.parse ? column.parse(text) : text }], 'edit');
-    }
   }
 
   function resize(axis: GridAxis, index: number, size: number, history = true): void {
@@ -2069,6 +1974,39 @@ export function createGridEngine(options: GridEngineOptions) {
         return notify;
       },
     });
+
+  const { notifyCells, write, applyUpdates, canEdit, editCell, replaceText } = createValues(context, {
+    get notify() {
+      return notify;
+    },
+    get assertAlive() {
+      return assertAlive;
+    },
+    get requirePermission() {
+      return requirePermission;
+    },
+    get writeFormats() {
+      return writeFormats;
+    },
+    get notifyFormats() {
+      return notifyFormats;
+    },
+    get mergeAt() {
+      return mergeAt;
+    },
+    get getCellPermission() {
+      return getCellPermission;
+    },
+    get displaySelectionRanges() {
+      return displaySelectionRanges;
+    },
+    get visibleRowCount() {
+      return visibleRowCount;
+    },
+    get sourceRow() {
+      return sourceRow;
+    },
+  });
   if (options.view) {
     view = snapshotView(options.view);
     installProjection(buildProjection(view));
@@ -2175,72 +2113,7 @@ export function createGridEngine(options: GridEngineOptions) {
       search: string,
       replacement: string,
       options: { readonly scope?: 'view' | 'selection'; readonly caseSensitive?: boolean } = {},
-    ) =>
-      command(() => {
-        if (
-          typeof search !== 'string' ||
-          !search ||
-          search.length > 1000 ||
-          typeof replacement !== 'string' ||
-          replacement.length > 10000 ||
-          (options.scope !== undefined && !['view', 'selection'].includes(options.scope)) ||
-          (options.caseSensitive !== undefined && typeof options.caseSensitive !== 'boolean')
-        )
-          throw new TypeError('Invalid replace options.');
-        const ranges =
-          options.scope === 'selection'
-            ? displaySelectionRanges()
-            : visibleRowCount() && columns.length
-              ? [{ startRow: 0, endRow: visibleRowCount() - 1, startColumn: 0, endColumn: columns.length - 1 }]
-              : [];
-        if (options.scope === 'selection' && !ranges.length) throw new Error('Select cells before replacing text.');
-        if (
-          ranges.reduce(
-            (count, range) => count + (range.endRow - range.startRow + 1) * (range.endColumn - range.startColumn + 1),
-            0,
-          ) > clipboardCellLimit
-        )
-          throw new RangeError('Replace cell limit reached.');
-        const pattern = new RegExp(
-          search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
-          options.caseSensitive === false ? 'gi' : 'g',
-        );
-        const seen = new Set<string>(),
-          updates: CellUpdate[] = [];
-        let matches = 0,
-          characters = 0,
-          outputCharacters = 0;
-        for (const range of ranges)
-          for (let row = range.startRow; row <= range.endRow; row++)
-            for (let col = range.startColumn; col <= range.endColumn; col++) {
-              const canonical = sourceRow(row),
-                column = columns[col]!,
-                key = JSON.stringify([canonical, column.key]);
-              if (seen.has(key)) continue;
-              seen.add(key);
-              const previous = dataSource.getValue(canonical, column.key);
-              if (typeof previous !== 'string') continue;
-              characters += previous.length;
-              if (characters > clipboardTextLimit) throw new RangeError('Replace text limit reached.');
-              let occurrences = 0;
-              while (pattern.exec(previous)) {
-                occurrences++;
-                if (previous.length + occurrences * (replacement.length - search.length) > clipboardTextLimit)
-                  throw new RangeError('Replace text limit reached.');
-              }
-              matches += occurrences;
-              if (!occurrences) continue;
-              outputCharacters += previous.length + occurrences * (replacement.length - search.length);
-              if (outputCharacters > clipboardTextLimit) throw new RangeError('Replace text limit reached.');
-              const value = previous.replace(pattern, () => replacement);
-              if (value === previous) continue;
-              if (value.length > clipboardTextLimit) throw new RangeError('Replace text limit reached.');
-              requirePermission(canonical, col, 'editable');
-              updates.push({ rowIndex: canonical, columnKey: column.key, value });
-            }
-        applyUpdates(updates);
-        return Object.freeze({ changedCells: updates.length, matches });
-      }),
+    ) => command(() => replaceText(search, replacement, options)),
     cutSelectionBlocks: () => command(cutSelectionBlocks),
     cancelCut: () =>
       command(() => {
