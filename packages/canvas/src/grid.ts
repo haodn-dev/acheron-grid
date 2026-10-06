@@ -1,3 +1,4 @@
+import { reorderInsertionIndex } from './internal/reorder-geometry.js';
 import { validateColumnEditor } from './internal/editor-config.js';
 import { createCanvasTranslator } from './locale.js';
 import { installTooltips } from './tooltips.js';
@@ -5394,11 +5395,7 @@ export function createGrid(options: GridOptions): Grid {
     last: number,
   ): number {
     const bounds = node.getBoundingClientRect();
-    return (
-      axis === 'row' ? event.clientY > bounds.top + bounds.height / 2 : event.clientX > bounds.left + bounds.width / 2
-    )
-      ? last + 1
-      : first;
+    return reorderInsertionIndex(event, bounds, axis, first, last);
   }
 
   function previewReorder(
@@ -5408,11 +5405,7 @@ export function createGrid(options: GridOptions): Grid {
     last: number,
     bounds: DOMRect,
   ): { beforeIndex: number; allowed: boolean } {
-    const beforeIndex = (
-      axis === 'row' ? event.clientY > bounds.top + bounds.height / 2 : event.clientX > bounds.left + bounds.width / 2
-    )
-      ? last + 1
-      : first;
+    const beforeIndex = reorderInsertionIndex(event, bounds, axis, first, last);
     reorderBadge.style.display = 'block';
     const request = Object.freeze({ axis, indices: Object.freeze([...reorderDrag!.indices]), beforeIndex });
     let allowed = false;
