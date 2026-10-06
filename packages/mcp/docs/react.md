@@ -2,7 +2,6 @@
 
 Documentation revision 2 · npm 0.1.0 + explicitly marked source additions. See [documentation versions](../../../guides/versions.md).
 
-
 React lifecycle adapter for the Acheron Grid Canvas renderer. Current source is Apache-2.0 licensed; published npm 0.1.0 retains MIT. Version 0.1.0 is available on npm as a development preview. Newer changes require a matching source build.
 
 ## Installation

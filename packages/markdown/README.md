@@ -2,7 +2,6 @@
 
 Documentation revision 2 · npm 0.1.0 + explicitly marked source additions. See [documentation versions](../../guides/versions.md).
 
-
 Optional Markdown adapter for Acheron Grid. This experimental package depends on `marked`; core and Canvas do not. It does not require a DOM or import either grid package at runtime.
 
 For source development, build the repository and install matching artifacts. A local file dependency may be used when your package manager resolves the complete workspace:
@@ -31,6 +30,7 @@ The adapter uses a private Marked instance with GFM disabled and raw HTML tokens
 Applications may provide their own synchronous `markdownToHtml` callback instead. Canvas still applies its restricted text projection and URL validation. The standalone default playground does not import this adapter; direct browser users need an import map for the adapter and its `marked` dependency.
 
 Licensed under Apache 2.0. Marked retains its own MIT license.
+
 ## Installation
 
 ```sh

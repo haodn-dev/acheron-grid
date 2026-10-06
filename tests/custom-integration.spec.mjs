@@ -1,20 +1,145 @@
-import {test,expect} from '@playwright/test';
-async function setup(page,options={}) {
- await page.goto('/');await page.evaluate(async(options)=>{const {createGrid}=await import('/canvas/index.js');const {LocalDataSource}=await import('/core/index.js');window.source=new LocalDataSource([{id:1,tags:'b, a'},{id:2,tags:'a'}],row=>row.id);window.grid=createGrid({container:document.querySelector('#grid'),dataSource:window.source,columns:[{key:'tags',title:'Tags',editable:true}],...options});},options);
+import { test, expect } from '@playwright/test';
+async function setup(page, options = {}) {
+  await page.goto('/');
+  await page.evaluate(async (options) => {
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
+    window.source = new LocalDataSource(
+      [
+        { id: 1, tags: 'b, a' },
+        { id: 2, tags: 'a' },
+      ],
+      (row) => row.id,
+    );
+    window.grid = createGrid({
+      container: document.querySelector('#grid'),
+      dataSource: window.source,
+      columns: [{ key: 'tags', title: 'Tags', editable: true }],
+      ...options,
+    });
+  }, options);
 }
-test('per-column labels, disabled options and custom matching store values and allow dynamic updates',async({page})=>{
- await setup(page);await page.evaluate(async()=>{window.grid.destroy();const {createGrid}=await import('/canvas/index.js');window.grid=createGrid({container:document.querySelector('#grid'),dataSource:window.source,columns:[{key:'tags',title:'Tags',editable:true}],columnEditors:{tags:{type:'multiselect',values:[{value:'a',label:'Alpha'},{value:'b',label:'Beta'},{value:'c',label:'Blocked',disabled:true}],choiceEditor:{placeholder:'Look up',matches:(query,option)=>!query||option.value===query,selectedLabel:count=>count+' picked',noMatchLabel:'Nothing found'}}}});});
- const viewport=page.getByRole('grid');await viewport.press('Control+Home');await viewport.press('Enter');const query=page.getByRole('searchbox',{name:'Search options'});await expect(page.getByRole('checkbox',{name:'Blocked'})).toBeDisabled();await query.fill('b');await expect(page.getByRole('checkbox',{name:'Beta'})).toBeVisible();await expect(page.getByRole('checkbox',{name:'Alpha'})).toHaveCount(0);await page.getByRole('button',{name:'Apply',exact:true}).click();expect(await page.evaluate(()=>window.source.getValue(0,'tags'))).toBe('b, a');
- await page.evaluate(()=>window.grid.setColumnEditor('tags',{type:'multiselect',values:[{value:'a',label:'New Alpha'},'b'],choiceEditor:{searchable:false}}));await viewport.press('Enter');await expect(page.getByRole('searchbox',{name:'Search options'})).toBeHidden();await expect(page.getByRole('checkbox',{name:'New Alpha'})).toBeVisible();await page.keyboard.press('Escape');
+test('per-column labels, disabled options and custom matching store values and allow dynamic updates', async ({
+  page,
+}) => {
+  await setup(page);
+  await page.evaluate(async () => {
+    window.grid.destroy();
+    const { createGrid } = await import('/canvas/index.js');
+    window.grid = createGrid({
+      container: document.querySelector('#grid'),
+      dataSource: window.source,
+      columns: [{ key: 'tags', title: 'Tags', editable: true }],
+      columnEditors: {
+        tags: {
+          type: 'multiselect',
+          values: [
+            { value: 'a', label: 'Alpha' },
+            { value: 'b', label: 'Beta' },
+            { value: 'c', label: 'Blocked', disabled: true },
+          ],
+          choiceEditor: {
+            placeholder: 'Look up',
+            matches: (query, option) => !query || option.value === query,
+            selectedLabel: (count) => count + ' picked',
+            noMatchLabel: 'Nothing found',
+          },
+        },
+      },
+    });
+  });
+  const viewport = page.getByRole('grid');
+  await viewport.press('Control+Home');
+  await viewport.press('Enter');
+  const query = page.getByRole('searchbox', { name: 'Search options' });
+  await expect(page.getByRole('checkbox', { name: 'Blocked' })).toBeDisabled();
+  await query.fill('b');
+  await expect(page.getByRole('checkbox', { name: 'Beta' })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Alpha' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  expect(await page.evaluate(() => window.source.getValue(0, 'tags'))).toBe('b, a');
+  await page.evaluate(() =>
+    window.grid.setColumnEditor('tags', {
+      type: 'multiselect',
+      values: [{ value: 'a', label: 'New Alpha' }, 'b'],
+      choiceEditor: { searchable: false },
+    }),
+  );
+  await viewport.press('Enter');
+  await expect(page.getByRole('searchbox', { name: 'Search options' })).toBeHidden();
+  await expect(page.getByRole('checkbox', { name: 'New Alpha' })).toBeVisible();
+  await page.keyboard.press('Escape');
 });
-test('remote option loaders cancel old requests, keep selected values and abort on editor disposal',async({page})=>{
- await setup(page);await page.evaluate(()=>{window.calls=[];window.grid.setColumnEditor('tags',{type:'multiselect',values:['a','b'],choiceEditor:{searchDelay:0,loadOptions:(query,{signal,columnKey})=>new Promise(resolve=>{window.calls.push({query,signal,resolve,columnKey});})}});});
- const viewport=page.getByRole('grid');await viewport.press('Control+Home');await viewport.press('Enter');await expect.poll(()=>page.evaluate(()=>window.calls.length)).toBe(1);const query=page.getByRole('searchbox',{name:'Search options'});await query.fill('new');await expect.poll(()=>page.evaluate(()=>window.calls.length)).toBe(2);expect(await page.evaluate(()=>window.calls[0].signal.aborted)).toBe(true);
- await page.evaluate(()=>{window.calls[1].resolve([{value:'c',label:'New choice'}]);window.calls[0].resolve([{value:'stale',label:'Stale'}]);});await expect(page.getByRole('checkbox',{name:'New choice'})).toBeVisible();await expect(page.getByRole('checkbox',{name:'Stale'})).toHaveCount(0);await page.getByRole('checkbox',{name:'New choice'}).check();await page.getByRole('button',{name:'Apply',exact:true}).click();expect(await page.evaluate(()=>window.source.getValue(0,'tags'))).toBe('b, a, c');expect(await page.evaluate(()=>window.calls[1].signal.aborted)).toBe(true);
+test('remote option loaders cancel old requests, keep selected values and abort on editor disposal', async ({
+  page,
+}) => {
+  await setup(page);
+  await page.evaluate(() => {
+    window.calls = [];
+    window.grid.setColumnEditor('tags', {
+      type: 'multiselect',
+      values: ['a', 'b'],
+      choiceEditor: {
+        searchDelay: 0,
+        loadOptions: (query, { signal, columnKey }) =>
+          new Promise((resolve) => {
+            window.calls.push({ query, signal, resolve, columnKey });
+          }),
+      },
+    });
+  });
+  const viewport = page.getByRole('grid');
+  await viewport.press('Control+Home');
+  await viewport.press('Enter');
+  await expect.poll(() => page.evaluate(() => window.calls.length)).toBe(1);
+  const query = page.getByRole('searchbox', { name: 'Search options' });
+  await query.fill('new');
+  await expect.poll(() => page.evaluate(() => window.calls.length)).toBe(2);
+  expect(await page.evaluate(() => window.calls[0].signal.aborted)).toBe(true);
+  await page.evaluate(() => {
+    window.calls[1].resolve([{ value: 'c', label: 'New choice' }]);
+    window.calls[0].resolve([{ value: 'stale', label: 'Stale' }]);
+  });
+  await expect(page.getByRole('checkbox', { name: 'New choice' })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Stale' })).toHaveCount(0);
+  await page.getByRole('checkbox', { name: 'New choice' }).check();
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  expect(await page.evaluate(() => window.source.getValue(0, 'tags'))).toBe('b, a, c');
+  expect(await page.evaluate(() => window.calls[1].signal.aborted)).toBe(true);
 });
-test('custom editor integration cleans up, external refresh and state restore update Canvas',async({page})=>{
- await setup(page);await page.evaluate(async()=>{window.grid.destroy();const {createGrid}=await import('/canvas/index.js');window.mounts=0;window.cleanups=0;window.events=[];window.grid=createGrid({container:document.querySelector('#grid'),dataSource:window.source,columns:[{key:'tags',title:'Tags',editable:true}],onEditorMount:()=>{window.mounts++;return()=>window.cleanups++;}});window.grid.subscribe({onEvent:event=>window.events.push(event.type)});});
- const viewport=page.getByRole('grid');await viewport.press('Control+Home');await viewport.press('Enter');await page.keyboard.press('Escape');expect(await page.evaluate(()=>[window.mounts,window.cleanups])).toEqual([1,1]);
- await page.evaluate(()=>{window.saved=window.grid.exportState();window.source.setValue(0,'tags','External');window.grid.refreshData('values');});await expect(page.locator('[role=gridcell]')).toContainText('External');await page.evaluate(()=>window.grid.restoreState(window.saved));expect(await page.evaluate(()=>window.events)).toContain('state:restore');
- await viewport.press('Enter');await page.evaluate(()=>window.grid.destroy());expect(await page.evaluate(()=>window.cleanups)).toBe(2);
+test('custom editor integration cleans up, external refresh and state restore update Canvas', async ({ page }) => {
+  await setup(page);
+  await page.evaluate(async () => {
+    window.grid.destroy();
+    const { createGrid } = await import('/canvas/index.js');
+    window.mounts = 0;
+    window.cleanups = 0;
+    window.events = [];
+    window.grid = createGrid({
+      container: document.querySelector('#grid'),
+      dataSource: window.source,
+      columns: [{ key: 'tags', title: 'Tags', editable: true }],
+      onEditorMount: () => {
+        window.mounts++;
+        return () => window.cleanups++;
+      },
+    });
+    window.grid.subscribe({ onEvent: (event) => window.events.push(event.type) });
+  });
+  const viewport = page.getByRole('grid');
+  await viewport.press('Control+Home');
+  await viewport.press('Enter');
+  await page.keyboard.press('Escape');
+  expect(await page.evaluate(() => [window.mounts, window.cleanups])).toEqual([1, 1]);
+  await page.evaluate(() => {
+    window.saved = window.grid.exportState();
+    window.source.setValue(0, 'tags', 'External');
+    window.grid.refreshData('values');
+  });
+  await expect(page.locator('[role=gridcell]')).toContainText('External');
+  await page.evaluate(() => window.grid.restoreState(window.saved));
+  expect(await page.evaluate(() => window.events)).toContain('state:restore');
+  await viewport.press('Enter');
+  await page.evaluate(() => window.grid.destroy());
+  expect(await page.evaluate(() => window.cleanups)).toBe(2);
 });

@@ -3,7 +3,9 @@ export const clipboardCellLimit = 100_000;
 export const clipboardTextLimit = 10_000_000;
 
 export function encodeTsv(rows: readonly (readonly string[])[]): string {
-  return rows.map(row => row.map(value => /[\t\r\n"]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value).join('\t')).join('\r\n');
+  return rows
+    .map((row) => row.map((value) => (/[\t\r\n"]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value)).join('\t'))
+    .join('\r\n');
 }
 
 export function decodeTsv(text: string): string[][] {
@@ -24,8 +26,13 @@ export function decodeTsv(text: string): string[][] {
     const char = text[i]!;
     if (quoted) {
       if (char !== '"') value += char;
-      else if (text[i + 1] === '"') { value += '"'; i++; }
-      else { quoted = false; closed = true; }
+      else if (text[i + 1] === '"') {
+        value += '"';
+        i++;
+      } else {
+        quoted = false;
+        closed = true;
+      }
     } else if (char === '\t') field();
     else if (char === '\n' || char === '\r') {
       field();
@@ -43,6 +50,6 @@ export function decodeTsv(text: string): string[][] {
     rows.push(row);
   }
   const width = rows[0]!.length;
-  if (rows.some(row => row.length !== width)) throw new Error('Clipboard rows must have equal widths.');
+  if (rows.some((row) => row.length !== width)) throw new Error('Clipboard rows must have equal widths.');
   return rows;
 }

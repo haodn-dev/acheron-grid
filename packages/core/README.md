@@ -2,7 +2,6 @@
 
 Documentation revision 4 · npm 0.1.0 + explicitly marked source additions. See [documentation versions](../../guides/versions.md).
 
-
 An experimental headless TypeScript data-grid engine. Core owns data access and controlled mutations, selection, layout, editing, TSV clipboard operations and history. The host owns source storage and transport. Core has no runtime dependencies or browser/framework types.
 
 Use core for a custom renderer or headless data workflow. For a ready-made interactive grid, start with the [Canvas guide](https://acheron-grid.haoduong.dev/reference/canvas); React and Vue adapters are separate packages.
@@ -338,7 +337,6 @@ Changes emit structure:change with source api/undo/redo, rowCount and columnKeys
 
 Structural history retains row identity arrays, coordinate maps, sparse metadata snapshots and affected shallow rows. This uses O(rows + columns + metadata) memory per command, plus range/format fragmentation. Local sequential splices copy row arrays per contiguous block. This is intended for local datasets, not remote transactions or an unbounded million-row structural history. External identity/count changes or changed rows a replay would replace cause an error and leave history available for retry. Nested values remain caller-owned.
 
-
 Live local views use O(rows) index memory/filter work and O(matches log matches) sorting per value command. Sparse geometry is rebuilt from resized rows. Large source selections can split into many visible fragments when sorted/filtered. External source writes require setView(engine.view) to refresh membership/order; these local views do not execute asynchronous server filters.
 
 ### Sparse cell formatting
@@ -389,20 +387,20 @@ Restoring a different column order checks structural permissions before committi
 
 This describes the current source, including unreleased fixes. Select the npm 0.1.0 documentation channel when integrating that package version. All modules remain open source and free to use.
 
-| Component | Contract | Cost or boundary |
-| --- | --- | --- |
-| Entry points and types (`index`, `headless`, `types`) | ESM, strict ES2022 TypeScript; no DOM, framework or runtime dependencies | Canvas depends on public core; core does not own browser interaction |
-| Local sources (`data-source`) | Unique stable IDs, shallow immutable row snapshots, atomic batches and sequential splices | Nested objects remain host-owned; structural splices copy arrays |
-| Async source (`async-data-source`) | Read-only explicit pages, query generations, deduplication, cancellation, bounded requests/cache/errors | Host supplies consistent server revisions, authorization and timeout; unloaded differs from null/empty |
-| Live source (`live-data-source`) | Bounded snapshots and consecutive messages, coalesced atomic flush | Gaps/overflow require a fresh snapshot; transport and flush scheduling belong to the host |
-| Commands and permissions (`engine`, `permissions`) | Preflight validation and independent false-veto capabilities; one synchronous write path | Custom setters must guarantee atomicity; client permissions do not authorize server requests |
-| History and events (`engine`, `events`) | Latest 100 commands; conflict and current-permission checks; isolated observers | Value references are shallow; structural history retains O(rows + columns + metadata) per command |
-| Selection and local views (`engine`, `data-source`) | Visible API indices map to source state; source-coordinate identity survives view changes | At most 128 source selection rectangles; projected selections exceeding that fail before changing selection. Clipboard accepts at most 128 visible fragments |
-| Geometry (`axis`, `panes`, `viewport`) | Sparse size overrides, numeric frozen panes, end-exclusive viewport ranges | Resize rebuilds sparse prefixes; collapsed frozen-row counts are cached between state changes |
-| Structure and outline (`structure`, `engine`) | Atomic insert/delete/move; nested or disjoint groups; intact merges move together | Clear projected views before structure; at most 1,024 groups and 1,024 merges; collapse builds an O(rows) projection |
-| Clipboard (`clipboard`, `tsv`) | Version-1 string blocks, optional formats, strict TSV parsing, staged same-engine cut | 100,000 cells / 10M UTF-16 units; no typed arbitrary-object codec, cross-engine cut or paste special |
-| Formatting (`types`, `engine`) | Sparse property precedence, formatting permissions and shared history | Lookup scans formatted areas; dynamic permissions scan targeted cells; no conditional rules |
-| Persistence (`configuration`, `state`, `engine`) | Validate unknown state and application schema/policies before commit | Full state captures O(rows) identities; no data/transport/callback/history storage; restore clears history |
+| Component                                             | Contract                                                                                                | Cost or boundary                                                                                                                                             |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Entry points and types (`index`, `headless`, `types`) | ESM, strict ES2022 TypeScript; no DOM, framework or runtime dependencies                                | Canvas depends on public core; core does not own browser interaction                                                                                         |
+| Local sources (`data-source`)                         | Unique stable IDs, shallow immutable row snapshots, atomic batches and sequential splices               | Nested objects remain host-owned; structural splices copy arrays                                                                                             |
+| Async source (`async-data-source`)                    | Read-only explicit pages, query generations, deduplication, cancellation, bounded requests/cache/errors | Host supplies consistent server revisions, authorization and timeout; unloaded differs from null/empty                                                       |
+| Live source (`live-data-source`)                      | Bounded snapshots and consecutive messages, coalesced atomic flush                                      | Gaps/overflow require a fresh snapshot; transport and flush scheduling belong to the host                                                                    |
+| Commands and permissions (`engine`, `permissions`)    | Preflight validation and independent false-veto capabilities; one synchronous write path                | Custom setters must guarantee atomicity; client permissions do not authorize server requests                                                                 |
+| History and events (`engine`, `events`)               | Latest 100 commands; conflict and current-permission checks; isolated observers                         | Value references are shallow; structural history retains O(rows + columns + metadata) per command                                                            |
+| Selection and local views (`engine`, `data-source`)   | Visible API indices map to source state; source-coordinate identity survives view changes               | At most 128 source selection rectangles; projected selections exceeding that fail before changing selection. Clipboard accepts at most 128 visible fragments |
+| Geometry (`axis`, `panes`, `viewport`)                | Sparse size overrides, numeric frozen panes, end-exclusive viewport ranges                              | Resize rebuilds sparse prefixes; collapsed frozen-row counts are cached between state changes                                                                |
+| Structure and outline (`structure`, `engine`)         | Atomic insert/delete/move; nested or disjoint groups; intact merges move together                       | Clear projected views before structure; at most 1,024 groups and 1,024 merges; collapse builds an O(rows) projection                                         |
+| Clipboard (`clipboard`, `tsv`)                        | Version-1 string blocks, optional formats, strict TSV parsing, staged same-engine cut                   | 100,000 cells / 10M UTF-16 units; no typed arbitrary-object codec, cross-engine cut or paste special                                                         |
+| Formatting (`types`, `engine`)                        | Sparse property precedence, formatting permissions and shared history                                   | Lookup scans formatted areas; dynamic permissions scan targeted cells; no conditional rules                                                                  |
+| Persistence (`configuration`, `state`, `engine`)      | Validate unknown state and application schema/policies before commit                                    | Full state captures O(rows) identities; no data/transport/callback/history storage; restore clears history                                                   |
 
 Local filter evaluation and projections cost O(source rows), with O(matches log matches) sorting. Value commands in an active view reapply criteria. Identity capture, full export and refresh also scan row IDs or mappings. These operations are separate from viewport rendering; a million-row viewport check does not establish million-row sort, structural history or export performance.
 
@@ -424,7 +422,6 @@ The createGrid methods and behavior remain the same; see the [Canvas guide](http
 ## License
 
 Licensed under [Apache 2.0](LICENSE). Copyright (c) 2026 Hao Duong. Lucide assets belong to the separate Canvas package and are not dependencies of this headless core.
-
 
 ## Editing and remote writes (source preview)
 

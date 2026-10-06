@@ -47,5 +47,4 @@ Remote choices use `loadOptions`; external editor UI uses `onEditorMount` with c
 
 MCP provides host-authorized schema/reads and optional scalar writes, not an automatic browser bridge or complete agent dataset API. Formulas, pivots, workbooks, realtime collaboration remain outside scope. Optional charts/export, multi-column sorting, live sources, query snapshots, find/replace, paste special, hidden axes, number formats, Canvas localization and bounded remote snapshot writes are implemented in Source preview, outside npm 0.1.0. Select the matching documentation channel before using them. Chromium automation does not prove complete browser, accessibility, physical touch, frame-rate or peak-memory support.
 
-
 For source-only optimistic remote writes, reconnect/resync and explicit conflicts, follow the [editing and remote contract](editing-and-remote.md). Async page sources remain read-only; the host server must implement atomic revision checks, authorization and durable mutation deduplication.
