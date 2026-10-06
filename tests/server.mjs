@@ -23,6 +23,7 @@ const coreFiles = new Set([
   'configuration.js',
 ]);
 const canvasFiles = new Set([
+  'internal/editor-config.js',
   'index.js',
   'grid.js',
   'media.js',
@@ -84,7 +85,8 @@ createServer(async (request, response) => {
     }
     return;
   }
-  const [, pkg, file] = request.url.split('/');
+  const [, pkg, ...segments] = request.url.split('/');
+  const file = segments.join('/');
   if (
     request.url !== '/' + pkg + '/' + file ||
     !(pkg === 'core' ? coreFiles : pkg === 'canvas' ? canvasFiles : new Set()).has(file)
