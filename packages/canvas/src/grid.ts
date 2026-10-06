@@ -1,3 +1,4 @@
+import { createOverlay } from './internal/overlay.js';
 import { createMotion } from './internal/motion.js';
 import { createNumberDisplay, createRichDisplay } from './internal/display.js';
 import { reorderInsertionIndex } from './internal/reorder-geometry.js';
@@ -814,10 +815,25 @@ export function createGrid(options: GridOptions): Grid {
 
   let fullDraw = true;
   const dirty = new Map<string, { rowIndex: number; columnKey: string }>();
-  let menu: HTMLDivElement | null = null;
-  let previewAbort: AbortController | undefined;
+  const overlay = createOverlay({
+    win,
+    doc,
+    root,
+    engine,
+    options,
+    t,
+    scroller,
+    get destroyed() {
+      return destroyed;
+    },
+    cellLinks: (row, col) => cellLinks(row, col),
+    svgIcon,
+    exitSurface: (node) => exitSurface(node),
+  });
+  const { closeMenu, cancelLinkPreviewHover, openLinks } = overlay;
+
   let suggestionsEnabled = options.contextMenuSuggestions ?? false;
-  let activeDialog: HTMLDialogElement | null = null;
+
   let resizing: {
     pointerId: number;
     axis: 'column' | 'row';
@@ -988,7 +1004,7 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function openSearch(): void {
-    if (destroyed || activeDialog?.open || !finishEdit(true)) return;
+    if (destroyed || overlay.activeDialog?.open || !finishEdit(true)) return;
     closeMenu();
     endResize();
     searchBar.hidden = false;
@@ -1047,8 +1063,8 @@ export function createGrid(options: GridOptions): Grid {
     units: string | null = 'px',
   ): void {
     const dialog = doc.createElement('dialog');
-    activeDialog?.remove();
-    activeDialog = dialog;
+    overlay.activeDialog?.remove();
+    overlay.activeDialog = dialog;
     dialog.setAttribute('aria-label', label);
     dialog.dataset.gridDialog = '';
     const form = doc.createElement('form');
@@ -1088,7 +1104,7 @@ export function createGrid(options: GridOptions): Grid {
     dialog.append(form);
     dialog.addEventListener('close', () => {
       dialog.remove();
-      if (activeDialog === dialog) activeDialog = null;
+      if (overlay.activeDialog === dialog) overlay.activeDialog = null;
       if (!destroyed && !editor) scroller.focus({ preventScroll: true });
     });
     root.append(dialog);
@@ -1106,8 +1122,8 @@ export function createGrid(options: GridOptions): Grid {
   function openFormatDialog(row: number, col: number): void {
     const ranges = getSelectionRanges();
     const dialog = doc.createElement('dialog');
-    activeDialog?.remove();
-    activeDialog = dialog;
+    overlay.activeDialog?.remove();
+    overlay.activeDialog = dialog;
     dialog.setAttribute('aria-label', t('Format cells'));
     dialog.dataset.gridDialog = '';
     const form = doc.createElement('form');
@@ -1216,7 +1232,7 @@ export function createGrid(options: GridOptions): Grid {
     cancel.addEventListener('click', () => dialog.close());
     dialog.addEventListener('close', () => {
       dialog.remove();
-      if (activeDialog === dialog) activeDialog = null;
+      if (overlay.activeDialog === dialog) overlay.activeDialog = null;
       if (!destroyed && !editor) scroller.focus({ preventScroll: true });
     });
     const actions = doc.createElement('div');
@@ -1425,14 +1441,6 @@ export function createGrid(options: GridOptions): Grid {
     }
   }
 
-  function closeMenu(focus = false): void {
-    previewAbort?.abort();
-    previewAbort = undefined;
-    if (menu) exitSurface(menu);
-    menu = null;
-    if (focus && !destroyed) scroller.focus({ preventScroll: true });
-  }
-
   function selectedAxisIndices(axis: 'row' | 'column', index: number): number[] {
     const ranges = getSelectionRanges().filter((range) =>
       axis === 'row'
@@ -1486,7 +1494,7 @@ export function createGrid(options: GridOptions): Grid {
         : null);
     if (!selection) return;
     const popup = doc.createElement('div');
-    menu = popup;
+    overlay.menu = popup;
     popup.popover = 'auto';
     popup.setAttribute('role', 'menu');
     popup.setAttribute('aria-label', header ? t('Column actions') : t('Cell actions'));
@@ -1500,7 +1508,7 @@ export function createGrid(options: GridOptions): Grid {
     style.textContent +=
       '.acheron-context-menu:popover-open{display:grid;gap:2px}.acheron-context-menu:not(:popover-open){display:none}';
     popup.addEventListener('toggle', () => {
-      if (!popup.matches(':popover-open') && menu === popup) closeMenu();
+      if (!popup.matches(':popover-open') && overlay.menu === popup) closeMenu();
     });
     const filter = doc.createElement('input');
     filter.type = 'search';
@@ -1994,7 +2002,7 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function onHeaderContextMenu(event: MouseEvent): void {
-    if (event.target instanceof win.Node && menu?.contains(event.target)) {
+    if (event.target instanceof win.Node && overlay.menu?.contains(event.target)) {
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -2088,11 +2096,11 @@ export function createGrid(options: GridOptions): Grid {
     throw new TypeError('Invalid column types.');
   let createdColumn = 0;
   function openColumnDialog(beforeIndex: number): void {
-    if (!options.allowColumnChanges || activeDialog?.open) return;
+    if (!options.allowColumnChanges || overlay.activeDialog?.open) return;
     const dialog = doc.createElement('dialog');
     dialog.dataset.gridDialog = '';
     dialog.setAttribute('aria-label', t('Insert column'));
-    activeDialog = dialog;
+    overlay.activeDialog = dialog;
     const heading = doc.createElement('p');
     heading.textContent = t('Insert column');
     const key = doc.createElement('input'),
@@ -2157,7 +2165,7 @@ export function createGrid(options: GridOptions): Grid {
     root.append(dialog);
     dialog.addEventListener('close', () => {
       dialog.remove();
-      if (activeDialog === dialog) activeDialog = null;
+      if (overlay.activeDialog === dialog) overlay.activeDialog = null;
       if (!destroyed) scroller.focus({ preventScroll: true });
     });
     dialog.showModal();
@@ -2165,9 +2173,9 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function openViewDialog(col: number, sort?: 'asc' | 'desc' | 'clear'): void {
-    if ((!managesView && !options.onViewChange) || activeDialog?.open) return;
+    if ((!managesView && !options.onViewChange) || overlay.activeDialog?.open) return;
     const dialog = doc.createElement('dialog');
-    activeDialog = dialog;
+    overlay.activeDialog = dialog;
     dialog.setAttribute('aria-label', sort ? t('Change row view') : t('Filter column'));
     dialog.dataset.gridDialog = '';
     const title = doc.createElement('p');
@@ -2257,7 +2265,7 @@ export function createGrid(options: GridOptions): Grid {
     root.append(dialog);
     dialog.addEventListener('close', () => {
       dialog.remove();
-      if (activeDialog === dialog) activeDialog = null;
+      if (overlay.activeDialog === dialog) overlay.activeDialog = null;
       if (!destroyed && !editor) scroller.focus({ preventScroll: true });
     });
     dialog.showModal();
@@ -2443,12 +2451,6 @@ export function createGrid(options: GridOptions): Grid {
     showResizeGuide();
   }
 
-  let linkHoverTimer = 0;
-  let linkHoverKey = '';
-  function cancelLinkPreviewHover(): void {
-    win.clearTimeout(linkHoverTimer);
-    linkHoverKey = '';
-  }
   function onHeaderPointerMove(event: PointerEvent): void {
     if (touchReorder) return;
     root.style.cursor = resizing
@@ -2467,21 +2469,21 @@ export function createGrid(options: GridOptions): Grid {
       !event.buttons &&
       !resizing &&
       !editor &&
-      !menu &&
+      !overlay.menu &&
       options.allowOpenLinks !== false &&
       cellLinks(cell.row, cell.col).length
         ? `${cell.row}:${cell.col}`
         : '';
-    if (key !== linkHoverKey) {
+    if (key !== overlay.linkHoverKey) {
       cancelLinkPreviewHover();
-      linkHoverKey = key;
+      overlay.linkHoverKey = key;
       if (key && cell) {
         const row = cell.row,
           col = cell.col,
           x = event.clientX,
           y = event.clientY + 12;
-        linkHoverTimer = win.setTimeout(() => {
-          if (!destroyed && !editor && !menu) openLinks(row, col, x, y, false);
+        overlay.linkHoverTimer = win.setTimeout(() => {
+          if (!destroyed && !editor && !overlay.menu) openLinks(row, col, x, y, false);
         }, 450);
       }
     }
@@ -2675,7 +2677,7 @@ export function createGrid(options: GridOptions): Grid {
         throw new Error('Cell editor must be a detached input, select or textarea from the grid document.');
       }
       if (!custom && mediaColumn(column.key)) {
-        if (activeDialog?.open) return;
+        if (overlay.activeDialog?.open) return;
         const dialog = createMediaEditor(
           doc,
           value,
@@ -2692,11 +2694,11 @@ export function createGrid(options: GridOptions): Grid {
           },
           t,
         );
-        activeDialog = dialog;
+        overlay.activeDialog = dialog;
         root.append(dialog);
         dialog.addEventListener('close', () => {
           dialog.remove();
-          if (activeDialog === dialog) activeDialog = null;
+          if (overlay.activeDialog === dialog) overlay.activeDialog = null;
           if (!destroyed) scroller.focus({ preventScroll: true });
         });
         dialog.showModal();
@@ -3890,141 +3892,6 @@ export function createGrid(options: GridOptions): Grid {
       (link, index) => links.findIndex((other) => other.href === link.href && other.start === link.start) === index,
     );
   }
-  function openLinks(row: number, col: number, x: number, y: number, focus = true): void {
-    if (options.allowOpenLinks === false || !engine.getCellPermission(row, col).selectable) return;
-    const links = cellLinks(row, col);
-    if (!links.length) return;
-    closeMenu();
-    const popup = doc.createElement('div');
-    menu = popup;
-    popup.popover = 'auto';
-    popup.setAttribute('role', 'dialog');
-    popup.setAttribute('aria-label', t('Cell links'));
-    popup.style.cssText =
-      'position:fixed;margin:0;padding:12px;max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);overflow:auto;border:1px solid var(--acheron-grid-line-color);border-radius:8px;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);box-shadow:0 12px 32px #0003';
-    const metadataAllowed = typeof options.linkPreview === 'object' && options.linkPreview.allowMetadata !== false;
-    let previews = metadataAllowed && typeof options.linkPreview === 'object' && options.linkPreview.enabled !== false;
-    const toggle = doc.createElement('button');
-    toggle.type = 'button';
-    toggle.textContent = previews ? t('Hide website details') : t('Show website details');
-    toggle.setAttribute('aria-pressed', String(previews));
-    toggle.style.cssText =
-      'padding:6px 10px;margin:0 0 8px;border:1px solid var(--acheron-grid-line-color);border-radius:6px;background:var(--acheron-header-background);color:inherit;font:inherit';
-    if (metadataAllowed) popup.append(toggle);
-    const entries = doc.createElement('div');
-    entries.style.cssText = 'display:grid;gap:8px;max-width:420px';
-    popup.append(entries);
-    function positionLinks(): void {
-      if (!popup.isConnected) return;
-      popup.style.left = `${Math.max(8, Math.min(x, win.innerWidth - popup.offsetWidth - 8))}px`;
-      popup.style.top = `${Math.max(8, Math.min(y, win.innerHeight - popup.offsetHeight - 8))}px`;
-    }
-    async function drawLinks(): Promise<void> {
-      previewAbort?.abort();
-      const controller = new win.AbortController();
-      previewAbort = controller;
-      entries.replaceChildren();
-      for (const link of links) {
-        const card = doc.createElement('div');
-        card.style.cssText =
-          'padding:10px;border:1px solid var(--acheron-grid-line-color);border-radius:6px;overflow-wrap:anywhere';
-        const anchor = doc.createElement('a');
-        anchor.textContent = link.text === link.href ? new URL(link.href).hostname : link.text;
-        anchor.href = link.href;
-        anchor.target = '_blank';
-        anchor.rel = 'noopener noreferrer';
-        anchor.referrerPolicy = 'no-referrer';
-        anchor.setAttribute('aria-label', link.text);
-        anchor.style.cssText =
-          'display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--acheron-link-color);text-decoration:underline;text-underline-offset:3px';
-        const icon = svgIcon('external-link');
-        icon.setAttribute('width', '16');
-        icon.setAttribute('height', '16');
-        icon.setAttribute('aria-hidden', 'true');
-        icon.setAttribute('style', 'flex-shrink:0');
-        anchor.append(icon);
-        card.append(anchor);
-        const address = doc.createElement('div');
-        address.textContent = link.href;
-        address.style.cssText = 'margin-top:5px;font-size:12px;color:var(--acheron-header-text-color)';
-        card.append(address);
-        entries.append(card);
-        if (!metadataAllowed || !previews || typeof options.linkPreview !== 'object') continue;
-        const detail = doc.createElement('div');
-        detail.style.cssText = 'margin-top:8px';
-        detail.textContent = new URL(link.href).hostname;
-        card.append(detail);
-        if (typeof options.linkPreview !== 'object') continue;
-        detail.textContent = t('Loading preview...');
-        detail.setAttribute('role', 'status');
-        const load = options.linkPreview.load;
-        void Promise.resolve()
-          .then(() => load(link.href, controller.signal))
-          .then((info) => {
-            if (controller.signal.aborted || menu !== popup) return;
-            detail.replaceChildren();
-            const title = doc.createElement('strong');
-            title.textContent = (info.title ?? new URL(link.href).hostname).slice(0, 160);
-            detail.append(title);
-            if (info.description) {
-              const description = doc.createElement('p');
-              description.textContent = info.description.slice(0, 320);
-              description.style.margin = '6px 0 0';
-              detail.append(description);
-            }
-            const image = info.image && safeWebUrl(info.image);
-            if (image) {
-              const img = doc.createElement('img');
-              img.crossOrigin = 'anonymous';
-              img.alt = '';
-              img.referrerPolicy = 'no-referrer';
-              img.src = image;
-              img.style.cssText = 'width:100%;max-height:140px;object-fit:cover;border-radius:4px;margin-top:8px';
-              img.addEventListener('load', positionLinks, { once: true });
-              detail.append(img);
-            }
-            positionLinks();
-          })
-          .catch(() => {
-            if (!controller.signal.aborted && menu === popup) {
-              detail.textContent = t('Preview unavailable. The link is still available.');
-              positionLinks();
-            }
-          });
-      }
-    }
-    toggle.addEventListener('click', () => {
-      previews = !previews;
-      toggle.textContent = previews ? t('Hide website details') : t('Show website details');
-      toggle.setAttribute('aria-pressed', String(previews));
-      void drawLinks();
-      positionLinks();
-    });
-    void drawLinks();
-    const close = doc.createElement('button');
-    close.type = 'button';
-    close.textContent = t('Close');
-    close.style.cssText =
-      'margin:8px;padding:6px 12px;border:1px solid var(--acheron-grid-line-color);border-radius:4px;background:var(--acheron-header-background);color:inherit;font:inherit';
-    close.addEventListener('click', () => closeMenu(true));
-    popup.append(close);
-    popup.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        closeMenu(true);
-      }
-    });
-    popup.addEventListener('toggle', () => {
-      if (!popup.matches(':popover-open') && menu === popup) closeMenu();
-    });
-    root.append(popup);
-    popup.showPopover();
-    const bounds = popup.getBoundingClientRect();
-    popup.style.left = `${Math.max(8, Math.min(x, win.innerWidth - bounds.width - 8))}px`;
-    popup.style.top = `${Math.max(8, Math.min(y, win.innerHeight - bounds.height - 8))}px`;
-    if (focus) popup.querySelector('a')?.focus();
-  }
 
   function validationMessage(value: unknown, columnIndex: number): string | undefined {
     return columns[columnIndex]?.validate?.(value);
@@ -4515,13 +4382,13 @@ export function createGrid(options: GridOptions): Grid {
   function openMedia(row: number, col: number): boolean {
     const key = columns[col]!.key;
     if (!mediaColumn(key)) return false;
-    if (activeDialog?.open || !finishEdit(true)) return true;
+    if (overlay.activeDialog?.open || !finishEdit(true)) return true;
     const items = mediaItems(engine.getValue(row, key)),
       avatars = avatarColumns.has(key);
     const dialog = doc.createElement('dialog');
     dialog.dataset.gridDialog = '';
     dialog.setAttribute('aria-label', avatars ? t('Cell people') : t('Cell images'));
-    activeDialog = dialog;
+    overlay.activeDialog = dialog;
     dialog.style.cssText = 'width:min(560px,calc(100vw - 48px));max-height:75vh;box-sizing:border-box';
     const title = doc.createElement('h2');
     title.textContent = columns[col]!.title + ' · ' + items.length;
@@ -4587,7 +4454,7 @@ export function createGrid(options: GridOptions): Grid {
     root.append(dialog);
     dialog.addEventListener('close', () => {
       dialog.remove();
-      if (activeDialog === dialog) activeDialog = null;
+      if (overlay.activeDialog === dialog) overlay.activeDialog = null;
       if (!destroyed) scroller.focus({ preventScroll: true });
     });
     dialog.showModal();
@@ -6041,8 +5908,8 @@ export function createGrid(options: GridOptions): Grid {
       releaseUnusedImages();
       root.removeEventListener('contextmenu', onHeaderContextMenu);
       root.removeEventListener('keydown', searchShortcut, true);
-      activeDialog?.remove();
-      activeDialog = null;
+      overlay.activeDialog?.remove();
+      overlay.activeDialog = null;
       mediaUpload?.abort();
       for (const src of ownedImageUrls) win.URL.revokeObjectURL(src);
       ownedImageUrls.clear();
