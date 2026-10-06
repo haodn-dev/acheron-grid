@@ -137,28 +137,34 @@ export class LocalDataView implements DataSource {
     const criteria = snapshotLocalView(options);
     const filters = criteria.filters ?? [];
     const sorts = criteria.sorts ?? (criteria.sort ? [criteria.sort] : []);
-    this.indices = Array.from({ length: count }, (_, index) => index).filter(index => filters.every(filter => {
+    const queries = filters.map(filter => filter.query.toLocaleLowerCase());
+    const indices = Array.from({ length: count }, (_, index) => index);
+    this.indices = filters.length ? indices.filter(index => filters.every((filter, filterIndex) => {
       const value = source.getValue(index, filter.columnKey);
       const empty = value == null || value === '';
       if (filter.operator === 'empty') return empty;
       if (filter.operator === 'not-empty') return !empty;
       if (filter.query === '') return true;
       if (empty) return false;
-      const text = String(value).toLocaleLowerCase(); const query = filter.query.toLocaleLowerCase();
+      const text = String(value).toLocaleLowerCase(); const query = queries[filterIndex]!;
       return filter.operator === 'equals' ? text === query : text.includes(query);
-    }));
+    })) : indices;
     if (sorts.length) {
-      const values = sorts.map(sort => new Map(this.indices.map(index => [index, source.getValue(index, sort.columnKey)])));
+      const matched = this.indices;
+      const values = sorts.map(sort => matched.map(index => source.getValue(index, sort.columnKey)));
+      // Dense match positions avoid hashing in comparisons without allocating for filtered-out rows.
+      const positions = matched.map((_, index) => index);
       const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-      this.indices.sort((a, b) => {
+      positions.sort((a, b) => {
         for (let i = 0; i < sorts.length; i++) {
-          const left = values[i]!.get(a), right = values[i]!.get(b);
+          const left = values[i]![a], right = values[i]![b];
           if (left == null || right == null) { if (left == null && right == null) continue; return left == null ? 1 : -1; }
           const order = typeof left === 'number' && typeof right === 'number' ? left - right : collator.compare(String(left), String(right));
           if (order) return sorts[i]!.direction === 'asc' ? order : -order;
         }
-        return a - b;
+        return matched[a]! - matched[b]!;
       });
+      this.indices = positions.map(index => matched[index]!);
     }
     if (source.setValue) this.setValue = (index, key, value) => source.setValue!(this.sourceIndex(index), key, value);
     if (source.setValues) this.setValues = updates => source.setValues!(updates.map(update => ({ ...update, rowIndex: this.sourceIndex(update.rowIndex) })));
