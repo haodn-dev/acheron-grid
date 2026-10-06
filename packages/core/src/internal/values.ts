@@ -46,12 +46,16 @@ export function createValues(
     formatChanges: FormatChange[] = [],
   ): void {
     dependencies.assertAlive();
-    const unique = new Map<string, CellUpdate>();
+    const unique = new Map<string | number, CellUpdate>();
     for (const update of updates) {
       if (!Number.isSafeInteger(update.rowIndex) || update.rowIndex < 0 || update.rowIndex >= context.rowCount)
         throw new RangeError('Invalid row index.');
       if (!context.columnIndices.has(update.columnKey)) throw new Error(`Unknown column: ${update.columnKey}`);
-      unique.set(`${update.rowIndex}:${update.columnKey}`, { ...update });
+      const rowIndex = update.rowIndex,
+        columnKey = update.columnKey;
+      const coordinate = rowIndex * context.columns.length + context.columnIndices.get(columnKey)!;
+      // Numeric coordinates avoid string allocations; oversized layouts retain collision-free string keys.
+      unique.set(Number.isSafeInteger(coordinate) ? coordinate : `${rowIndex}:${columnKey}`, { ...update });
     }
     const changes: Change[] = [...unique.values()]
       .map((update) => ({
