@@ -1,3 +1,4 @@
+import { createSearch } from './internal/search.js';
 import { createOverlay } from './internal/overlay.js';
 import { createMotion } from './internal/motion.js';
 import { createNumberDisplay, createRichDisplay } from './internal/display.js';
@@ -924,132 +925,38 @@ export function createGrid(options: GridOptions): Grid {
   }
   searchBar.append(searchInput, searchStatus, searchPrevious, searchNext, searchClose);
   root.append(searchBar);
-  const searchMatches = new Set<number>();
-  let searchCurrent = -1;
-  let searchTimer: number | undefined;
-
-  function updateSearchStatus(): void {
-    let ordinal = 0;
-    for (const index of searchMatches) {
-      ordinal++;
-      if (index === searchCurrent) break;
-    }
-    searchStatus.textContent = searchMatches.size
-      ? t('{0} of {1}', ordinal, searchMatches.size)
-      : searchInput.value
-        ? t('No matches')
-        : t('Find text');
-    searchPrevious.disabled = searchNext.disabled = !searchMatches.size;
-  }
-
-  function refreshSearch(navigate = false): void {
-    if (searchTimer !== undefined) win.clearTimeout(searchTimer);
-    searchTimer = undefined;
-    if (destroyed || searchBar.hidden) return;
-    searchMatches.clear();
-    const query = searchInput.value.toLocaleLowerCase();
-    try {
-      if (query)
-        for (let row = 0; row < rowCount; row++)
-          for (let col = 0; col < columns.length; col++) {
-            const span = engine.getMerge(row, col);
-            if (span && (span.startRow !== row || span.startColumn !== col)) continue;
-            const value = engine.getValue(row, columns[col]!.key);
-            if (
-              value != null &&
-              !engine.isRowHidden(row) &&
-              !engine.isColumnHidden(col) &&
-              displayedText(
-                value,
-                columns[col]!.key,
-                engine.getFormat(row, col).contentFormat,
-                engine.getFormat(row, col).numberFormat,
-              )
-                .toLocaleLowerCase()
-                .includes(query) &&
-              engine.getCellPermission(row, col).selectable
-            )
-              searchMatches.add(row * columns.length + col);
-          }
-      if (!searchMatches.has(searchCurrent)) searchCurrent = searchMatches.values().next().value ?? -1;
-      updateSearchStatus();
-      if (navigate && searchCurrent >= 0)
-        select(Math.floor(searchCurrent / columns.length), searchCurrent % columns.length);
-    } catch (error) {
-      searchMatches.clear();
-      searchCurrent = -1;
-      searchPrevious.disabled = searchNext.disabled = true;
-      searchStatus.textContent = error instanceof Error ? t(error.message) : t('Search failed.');
-    }
-    render();
-  }
-
-  function moveSearch(backward = false): void {
-    if (!finishEdit(true)) return;
-    const pending = searchTimer !== undefined;
-    refreshSearch(pending);
-    if (!searchMatches.size || (pending && !backward)) return;
-    let next = backward ? [...searchMatches].at(-1)! : searchMatches.values().next().value!;
-    for (const index of searchMatches) {
-      if (backward && index < searchCurrent) next = index;
-      if (!backward && index > searchCurrent) {
-        next = index;
-        break;
-      }
-    }
-    searchCurrent = next;
-    select(Math.floor(next / columns.length), next % columns.length);
-    updateSearchStatus();
-    render();
-  }
-
-  function openSearch(): void {
-    if (destroyed || overlay.activeDialog?.open || !finishEdit(true)) return;
-    closeMenu();
-    endResize();
-    searchBar.hidden = false;
-    refreshSearch();
-    searchInput.focus({ preventScroll: true });
-    searchInput.select();
-  }
-
-  function closeSearch(): void {
-    if (searchTimer !== undefined) win.clearTimeout(searchTimer);
-    searchTimer = undefined;
-    searchBar.hidden = true;
-    searchMatches.clear();
-    searchCurrent = -1;
-    render();
-    scroller.focus({ preventScroll: true });
-  }
-
-  function searchShortcut(event: KeyboardEvent): void {
-    if (!event.isComposing && (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'f') {
-      event.preventDefault();
-      event.stopPropagation();
-      openSearch();
-    }
-  }
-  searchInput.addEventListener('input', () => {
-    if (searchTimer !== undefined) win.clearTimeout(searchTimer);
-    searchCurrent = -1;
-    searchTimer = win.setTimeout(() => refreshSearch(true), 150);
+  const { refreshSearch, openSearch, searchShortcut, highlightSearch, disposeSearch } = createSearch({
+    win,
+    searchBar,
+    searchInput,
+    searchStatus,
+    searchPrevious,
+    searchNext,
+    searchClose,
+    t,
+    engine,
+    displayedText,
+    scroller,
+    context,
+    overlay,
+    select: (row, col) => select(row, col),
+    render: () => render(),
+    finishEdit: (commit) => finishEdit(commit),
+    closeMenu: () => closeMenu(),
+    endResize: () => endResize(),
+    get destroyed() {
+      return destroyed;
+    },
+    get rowCount() {
+      return rowCount;
+    },
+    get columns() {
+      return columns;
+    },
+    get theme() {
+      return theme;
+    },
   });
-  searchBar.addEventListener('keydown', (event) => {
-    if (event.isComposing) return;
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      closeSearch();
-    }
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      moveSearch(event.shiftKey);
-    }
-    event.stopPropagation();
-  });
-  searchPrevious.addEventListener('click', () => moveSearch(true));
-  searchNext.addEventListener('click', () => moveSearch());
-  searchClose.addEventListener('click', closeSearch);
 
   function announceSelection(): void {
     const selection = engine.getSelection();
@@ -4462,18 +4369,6 @@ export function createGrid(options: GridOptions): Grid {
     return true;
   }
 
-  function highlightSearch(x: number, y: number, width: number, height: number, row: number, col: number): void {
-    if (!searchMatches.has(row * columns.length + col)) return;
-    const current = row * columns.length + col === searchCurrent;
-    context!.save();
-    context!.fillStyle = theme.searchHighlightColor;
-    context!.globalAlpha = current ? 0.22 : 0.09;
-    context!.fillRect(x, y, Math.max(0, width - 1), Math.max(0, height - 1));
-    context!.globalAlpha = 1;
-    if (current) context!.fillRect(x, y, 3, Math.max(0, height - 1));
-    context!.restore();
-  }
-
   function viewport() {
     return engine.getViewport({
       width: scroller.clientWidth,
@@ -5901,8 +5796,7 @@ export function createGrid(options: GridOptions): Grid {
       destroyed = true;
       for (const image of Object.values(stateIcons)) image.onload = null;
       closeMenu();
-      if (searchTimer !== undefined) win.clearTimeout(searchTimer);
-      searchMatches.clear();
+      disposeSearch();
       clearDisplayCache();
       visibleImages.clear();
       releaseUnusedImages();
