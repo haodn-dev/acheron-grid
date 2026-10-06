@@ -36,7 +36,7 @@ run([
   'react@19.1.0',
   'react-dom@19.1.0',
   '@types/react@18.3.31',
-  'vue@3.5.32',
+  'vue@3.5.43',
 ]);
 await writeFile(
   join(consumer, 'index.ts'),
