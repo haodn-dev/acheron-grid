@@ -1,6 +1,23 @@
 # @acheron-grid/canvas
 
+Documentation revision 2 · npm 0.1.0 + explicitly marked source additions. See [documentation versions](../../guides/versions.md).
+
+
 An experimental Canvas browser renderer for the headless @acheron-grid/core engine.
+
+## Installation
+
+```sh
+npm install @acheron-grid/canvas@0.1.0
+```
+
+Install core/Canvas at the same version when used. For newer APIs, use a built source checkout and install matching packed artifacts; see [Getting started](../../guides/getting-started.md).
+
+## Source preview additions
+
+Unreleased: `grid.replaceText(search,replacement,options)` forwards bounded literal replacement through core editable/writable validation and one history command. `grid.getValue(rowIndex,columnKey)` reads visible coordinates; it does not replace server read authorization. Optional charts use `renderCell`; optional CSV/XLSX export uses the same copy permission pipeline.
+
+Image upload hooks now receive `onProgress(loaded,total?)` alongside `columnKey` and `signal`. The grid shows completed-file/byte progress and a cancel button. `mediaOptions.maxConcurrentUploads` defaults to four (1–100 allowed), scoped to one paste; host uploads must honor abort and implement timeouts. Every broadcast destination is checked for changed row identity/value before committing. Nested values remain shallow caller-owned references. The host owns durable URLs and orphan upload cleanup. These changes are source previews, not npm 0.1.0.
 
 ## Current capabilities
 
@@ -17,7 +34,7 @@ An experimental Canvas browser renderer for the headless @acheron-grid/core engi
 - TSV copy/paste, atomic local batches, delta undo/redo and typed events.
 - Per-column rich text with HTML or an optional host-provided Markdown adapter.
 
-This package is a development preview, not a published release. Explicit read-only remote paging is available through core's `createAsyncDataSource`; the host controls loading. React and Vue lifecycle adapters are available in separate packages. The active cell has a bounded ARIA grid mirror; full screen-reader coverage has not been verified. A headless render-callback benchmark is available; end-to-end frame rate has not been verified.
+Version 0.1.0 is available on npm as a development preview; Unreleased additions require a matching source build. Explicit read-only remote paging is available through core's `createAsyncDataSource`; the host controls loading. React and Vue lifecycle adapters are available in separate packages. The active cell has a bounded ARIA grid mirror; full screen-reader coverage has not been verified. A headless render-callback benchmark is available; end-to-end frame rate has not been verified.
 
 ## Build from source
 
@@ -198,7 +215,7 @@ Native copy/paste events support Ctrl/Cmd+C/V on the focused viewport without Cl
 
 Paste starts at the selected range's top-left cell and uses the clipboard rectangle's dimensions. It does not tile/fill the selection, add rows or skip read-only columns. Every destination must be within bounds and permit `pasteable`/`writable`; values pass through column parsers. Non-string existing values require a parser. All values are validated before the atomic write, so parser/bounds/read-only failures leave data/history unchanged. Multi-cell paste requires an atomic source `setValues` implementation.
 
-Clipboard work is limited to 100,000 cells and 10,000,000 UTF-16 code units per payload. Over-limit transfers throw `RangeError`. Copy/paste APIs throw while editing or after destruction; no selection yields empty copy/no-op paste. Event errors use native alerts. Rich native clipboard and structured payloads preserve supported styles; cut and formula processing are not supported. Actual OS clipboard and spreadsheet interoperability have not been verified; browser tests exercise native event handlers with controlled `DataTransfer` payloads.
+Clipboard work is limited to 100,000 cells and 10,000,000 UTF-16 code units per payload. Over-limit transfers throw `RangeError`. Copy/paste APIs throw while editing or after destruction; no selection yields empty copy/no-op paste. Event errors use native alerts. Rich native clipboard and structured payloads preserve supported styles; same-grid cut is staged until paste; formula processing is not supported. Actual OS clipboard and spreadsheet interoperability have not been verified; browser tests exercise native event handlers with controlled `DataTransfer` payloads.
 
 ## Row/column resize and context menu
 
@@ -209,7 +226,7 @@ grid.setRowHeight(0, 48);
 
 Sizes are finite positive CSS pixel values; indices are zero-based integers. Invalid indices/sizes are rejected before layout changes. Calls throw while editing or after destruction. Sizes default to `columnWidth`/`rowHeight`, with sparse per-index overrides; rows do not require a size array. Resizing updates scroll dimensions and fully redraws, keeping hit testing, editor placement and selection aligned. Explicit resize commands share undo/redo; automatic row measurement stays outside history.
 
-Drag within 8 CSS pixels of a header edge to preview a column resize (24–1000px); release to apply. Row boundaries in the default index gutter also support resize preview. Right-click a cell and choose **Resize column…** or **Resize row…** for a native DOM dialog with a labeled number input, Apply and Cancel. The dialog accepts sizes of at least 1px. Double-click a column/header or index-row boundary, or choose Auto-fit column/row from the menu, to fit visible content. Persisted layout is not implemented.
+Drag within 8 CSS pixels of a header edge to preview a column resize (24–1000px); release to apply. Row boundaries in the default index gutter also support resize preview. Right-click a cell and choose **Resize column…** or **Resize row…** for a native DOM dialog with a labeled number input, Apply and Cancel. The dialog accepts sizes of at least 1px. Double-click a column/header or index-row boundary, or choose Auto-fit column/row from the menu, to fit visible content. Use exportConfiguration and validated restoreGridConfiguration for layout persistence; the host owns storage.
 
 The built-in cell menu also provides **Copy**, **Paste**, **Edit cell**, **Undo** and **Redo**. Right-clicking within the range preserves it and its active endpoint; right-clicking elsewhere selects that cell without scrolling. Resize targets the clicked cell, while Edit targets the active cell. Headers open Column actions and suppress the browser menu. Index numbers open the existing row/cell actions. Blank space and editor inputs retain their native context menu.
 
@@ -455,7 +472,7 @@ The Canvas grid exposes `mergeCells(range)`, `unmergeCells(range)`, `getMerge(ro
 
 Select a rectangular range and use **Merge cells** / **Unmerge cells** in the context menu. Select contiguous whole rows for **Group selected rows**. Nested row outlines show SVG collapse/expand buttons and continuous guide lines in the index gutter; buttons expose `aria-expanded`. Row index and editor labels retain source row numbers. The context menu also offers collapse/expand and ungroup actions. Merge geometry is shared by rendering, pointer hit tests, resize and editors; arrow navigation skips the covered span and the accessibility mirror exposes `aria-rowspan` / `aria-colspan`. Search only includes visible representative values.
 
-Hosts can disable these features with `allowMerging: false`, `allowRowGrouping: false`, or veto commands with `canChangeLayout`. Options, themes, custom renderers and editor factories remain available. Source values under a merge are retained on unmerge. Sorting/filtering requires removing merges and groups; expand groups before insert/delete/reorder and unmerge intersecting cells before collapse. See the core README for clipboard, structural and projection limits.
+Hosts can disable these features with `allowMerging: false`, `allowRowGrouping: false`, or veto commands with `canChangeLayout`. Options, themes, custom renderers and editor factories remain available. Source values under a merge are retained on unmerge. Sorting/filtering projects complete merge/group units; expand groups before insert/delete/reorder and unmerge intersecting cells before collapse. See the core README for clipboard, structural and projection limits.
 
 Automatic row height measures all columns for each visible row and caches the result, so horizontal scrolling does not change row geometry. For very wide schemas, use fixed/manual row heights to avoid measuring every column. Adjacent whole-row or whole-column selections share one outer outline; Ctrl-added ranges remain separate in selection state.
 

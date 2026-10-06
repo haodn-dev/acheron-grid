@@ -1,5 +1,7 @@
 # Release preparation
 
+For automated develop/stable publishing and one-time account configuration, see [release channels and trusted publishing](guides/releasing.md). The source release workflow remains inactive until maintainers configure its GitHub environments/npm publishers and push the corresponding develop branch or stable tag.
+
 Version `0.1.0` has been selected for the first release. Package manifests are prepared for public publication; the root workspace remains private. No package has been published by this preparation. This guide prepares a reviewable release; it does not authorize publishing, pushing tags or changing the license.
 
 ## Before release
@@ -25,7 +27,7 @@ npm pack --dry-run --workspaces
 npm run test:package
 ```
 
-Run the browser/playground suites sequentially; their server ports must be available. Inspect dry-run contents for built ESM/declarations, README and license files. Dry-run success is not evidence that package installation or registry publication will succeed. Before a package release, test the packed artifacts in an independent TypeScript application, including React/Vue where relevant. The test:package script installs all six tarballs in a temporary independent project, typechecks public imports, renders React/Vue SSR, and mounts/updates/destroys Canvas in Chromium. Its printed temporary directory is retained for diagnosis. Verify clipboard, reduced motion and intended browser support with the integration suites. Do not infer full screen-reader coverage or FPS from the existing Chromium suite.
+Run the browser/playground suites sequentially; their server ports must be available. Inspect dry-run contents for built ESM/declarations, README and license files. Dry-run success is not evidence that package installation or registry publication will succeed. Before a package release, test the packed artifacts in an independent TypeScript application, including React/Vue where relevant. The test:package script installs all eight source tarballs in a temporary independent project, typechecks public imports, renders React/Vue SSR, and mounts/updates/destroys Canvas in Chromium. Its printed temporary directory is retained for diagnosis. Verify clipboard, reduced motion and intended browser support with the integration suites. Do not infer full screen-reader coverage or FPS from the existing Chromium suite.
 
 CI checks Node 22/24 on Ubuntu and retains failed-browser diagnostics. Confirm the workflow for the intended release commit; local checks do not establish remote CI status.
 
@@ -57,4 +59,4 @@ TypeScript data grid with a headless core, Canvas rendering, and React/Vue adapt
 MIT; embedded third-party assets retain their documented notices.
 ```
 
-Once release approval exists, verify npm scope ownership and authentication, publish only the approved artifacts in dependency order (core, canvas, markdown, react, vue, mcp), and verify that each published package can be installed from the registry. Update the README and versioned notes from prepared to published only after successful publication. Create the agreed tag/draft from the verified release commit. A GitHub source release and npm publication are separate actions. Keep an unreleased section for subsequent work.
+Once release approval exists, verify npm scope ownership and authentication, publish only the approved artifacts in dependency order (core, canvas, markdown, react, vue, export, charts, mcp), and verify that each published package can be installed from the registry. Update the README and versioned notes from prepared to published only after successful publication. Create the agreed tag/draft from the verified release commit. A GitHub source release and npm publication are separate actions. Keep an unreleased section for subsequent work.

@@ -2,6 +2,8 @@ export { createGridEngine } from './engine.js';
 export type { GridEngine, GridEngineOptions, GridInvalidation } from './engine.js';
 export { LocalDataSource, LocalDataView } from './data-source.js';
 export { createAsyncDataSource } from './async-data-source.js';
+export { createLiveDataSource } from './live-data-source.js';
+export type { LiveUpdate, LiveSnapshot } from './live-data-source.js';
 export type { AsyncDataSourceOptions, PageState } from './async-data-source.js';
 export type { DataSource, CellUpdate, RowId, LocalViewOptions, DataRow, RowSplice } from './data-source.js';
 export type { Column, CellSelection, SelectionRange, CellLockTarget, CellFormatTarget, CellFormat, CellFormatPatch } from './types.js';

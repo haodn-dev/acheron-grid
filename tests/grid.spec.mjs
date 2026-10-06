@@ -2051,7 +2051,20 @@ test('dropdown arrows change single-choice drafts, skip disabled options and ret
 test('touch moves selected rows and columns through shared preview, history and veto',async({page})=>{
   await page.goto('/');await page.evaluate(async()=>{const {createGrid}=await import('/canvas/index.js');const {LocalDataSource}=await import('/core/index.js');window.requests=[];window.allowMove=true;window.source=new LocalDataSource(Array.from({length:100},(_,id)=>({id,a:'A'+id,b:'B'+id,c:'C'+id})),row=>row.id);window.grid=createGrid({container:document.querySelector('#grid'),dataSource:window.source,accessibility:'viewport',columns:['a','b','c'].map(key=>({key,title:key,editable:true})),onReorder:request=>{window.requests.push(request);request.axis==='row'?window.grid.moveRows(request.indices,request.beforeIndex):window.grid.moveColumns(request.indices,request.beforeIndex);},canReorder:()=>window.allowMove});window.grid.selectRow(1);});
   const session=await page.context().newCDPSession(page);
-  const point=async locator=>{await expect(locator).toBeVisible();const box=await locator.boundingBox();return {x:box.x+box.width/2,y:box.y+box.height/2};};
+  const point = async locator => {
+    let center;
+    // Headers are replaced during repaint; resolve and measure in one browser task.
+    await expect.poll(async () => {
+      center = await locator.evaluateAll(nodes => {
+        if (nodes.length !== 1) return null;
+        const box = nodes[0].getBoundingClientRect();
+        return box.width > 0 && box.height > 0
+          ? { x: box.x + box.width / 2, y: box.y + box.height / 2 } : null;
+      });
+      return center;
+    }).not.toBeNull();
+    return center;
+  };
   const send=async(type,p)=>session.send('Input.dispatchTouchEvent',{type,touchPoints:p?[{...p,id:1}]:[]});
   const from=await point(page.getByRole('button',{name:'Select row 2',exact:true})),to=await point(page.getByRole('button',{name:'Select row 5',exact:true}));to.y+=8;
   await send('touchStart',from);await send('touchMove',to);await expect(page.locator('[data-grid-reorder-guide]')).toBeVisible();expect(await page.evaluate(()=>window.requests.length)).toBe(0);await send('touchEnd');

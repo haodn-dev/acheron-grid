@@ -47,6 +47,16 @@ export function restoreGridConfiguration(input: unknown, columns: readonly Colum
     if (sort.direction !== 'asc' && sort.direction !== 'desc') throw new TypeError('Invalid configuration sort direction.');
     view = { sort: { columnKey: key(sort.columnKey), direction: sort.direction } };
   }
+  if (savedView.sorts !== undefined) {
+    if (savedView.sort !== undefined || !Array.isArray(savedView.sorts)) throw new TypeError('Invalid configuration sorts.');
+    const sorts: NonNullable<LocalViewOptions['sorts']> = savedView.sorts.map((value: unknown) => {
+      const sort = record(value);
+      if (sort.direction !== 'asc' && sort.direction !== 'desc') throw new TypeError('Invalid configuration sort direction.');
+      return { columnKey: key(sort.columnKey), direction: sort.direction };
+    });
+    if (new Set(sorts.map(sort=>sort.columnKey)).size !== sorts.length) throw new TypeError('Duplicate configuration sort column.');
+    view = { sorts };
+  }
   if (savedView.filters !== undefined) {
     if (!Array.isArray(savedView.filters)) throw new TypeError('Invalid configuration filters.');
     view = { ...view, filters: savedView.filters.map((value: unknown) => {

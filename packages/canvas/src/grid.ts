@@ -70,7 +70,7 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
   theme?: Partial<GridTheme>;
   imageColumns?: readonly string[];
   avatarColumns?: readonly string[];
-  mediaOptions?: { readonly size?: number; readonly maxVisible?: number; readonly upload?: (file:File, context:Readonly<{columnKey:string;signal:AbortSignal}>)=>Promise<MediaItem> };
+  mediaOptions?: { readonly size?: number; readonly maxVisible?: number; readonly maxConcurrentUploads?:number; readonly upload?: (file:File, context:Readonly<{columnKey:string;signal:AbortSignal;onProgress:(loaded:number,total?:number)=>void}>)=>Promise<MediaItem> };
   columnEditors?: Readonly<Record<string, ColumnEditor>>;
   richTextColumns?: Readonly<Record<string, RichTextFormat>>;
   markdownToHtml?: (source: string) => string;
@@ -112,6 +112,8 @@ export interface GridOptions extends Pick<GridEngineOptions, 'permissions' | 're
   indexColumn?: boolean;
 }
 export interface Grid {
+  getValue(rowIndex:number,columnKey:string):unknown;
+  replaceText(search:string,replacement:string,options?:Parameters<GridEngine['replaceText']>[2]):ReturnType<GridEngine['replaceText']>;
   subscribe: GridEngine['subscribe'];
   takeObserverErrors: GridEngine['takeObserverErrors'];
   captureRowIdentity(): readonly RowId[];
@@ -1047,7 +1049,7 @@ export function createGrid(options: GridOptions): Grid {
       const affected=span?engine.getMergedCells().filter(merge=>merge.startRow<=engine.getRowSourceIndex(span.endRow)&&merge.endRow>=engine.getRowSourceIndex(span.startRow)&&merge.startColumn<=span.endColumn&&merge.endColumn>=span.startColumn):[];
       item('Unmerge cells',affected.length>0&&affected.every(range=>engine.canChangeLayout({kind:'unmerge',range})),()=>{if(span)structureAction(()=>engine.unmergeCells(span));});
       const wholeRows=!!span&&span.startColumn===0&&span.endColumn===columns.length-1&&span.endRow>span.startRow;
-      item('Group selected rows',wholeRows&&!engine.getRowGroups().some(group=>group.collapsed)&&!engine.view.sort&&!engine.view.filters?.length&&!!span&&engine.canChangeLayout({kind:'group',group:{id:'',startRow:span.startRow,endRow:span.endRow,collapsed:false}}),()=>{if(span)groupRows(span.startRow,span.endRow);});
+      item('Group selected rows',wholeRows&&!engine.getRowGroups().some(group=>group.collapsed)&&!engine.view.sort&&!engine.view.sorts?.length&&!engine.view.filters?.length&&!!span&&engine.canChangeLayout({kind:'group',group:{id:'',startRow:span.startRow,endRow:span.endRow,collapsed:false}}),()=>{if(span)groupRows(span.startRow,span.endRow);});
       const sourceRow=engine.getRowSourceIndex(row),rowGroups=engine.getRowGroups().filter(group=>sourceRow>=group.startRow&&sourceRow<=group.endRow).sort((a,b)=>(a.endRow-a.startRow)-(b.endRow-b.startRow));
       const group=rowGroups[0];
       if(group){item(group.collapsed?'Expand row group':'Collapse row group',engine.canChangeLayout({kind:group.collapsed?'expand':'collapse',group}),()=>structureAction(()=>engine.setGroupCollapsed(group.id,!group.collapsed), 'row'));item('Ungroup rows',engine.canChangeLayout({kind:'ungroup',group}),()=>structureAction(()=>engine.ungroupRows(group.id)));}
@@ -1247,7 +1249,7 @@ export function createGrid(options: GridOptions): Grid {
         const operator = condition.value as 'contains' | 'equals' | 'not-empty' | 'empty';
         filters.push({ columnKey: key, query: input.value, operator });
       }
-      const view: LocalViewOptions = sort === 'clear' ? {} : sort ? { ...currentView, sort: { columnKey: key, direction: sort } }
+      const view: LocalViewOptions = sort === 'clear' ? {} : sort ? { ...(currentView?.filters ? {filters:currentView.filters} : {}), sort: { columnKey: key, direction: sort } }
         : { ...currentView, filters };
       try { if(managesView)engine.setView(view); currentView=view; options.onViewChange?.(view); if (dialog.isConnected) dialog.close(); }
       catch (error) { status.textContent = error instanceof Error ? error.message : 'Unable to change view.'; }
@@ -1784,22 +1786,42 @@ export function createGrid(options: GridOptions): Grid {
 
   async function pasteImages(files:readonly File[]):Promise<void> {
     const selection=engine.getSelection();if(!selection)return;
-    const key=selection.columnKey,target=JSON.stringify(getSelectionRanges()),originalValue=engine.getValue(selection.rowIndex,selection.columnKey),created:string[]=[];let controller:AbortController|undefined;
+    const key=selection.columnKey,ranges=getSelectionRanges(),target=JSON.stringify(ranges),created:string[]=[];let controller:AbortController|undefined,status:HTMLDivElement|undefined;
     try {
       if(!mediaColumn(key))throw new Error('Select an image or people column before pasting images.');
       if(files.length>100||files.some(file=>file.size>20*1024*1024))throw new Error('Paste at most 100 images, each no larger than 20 MiB.');
       if(!engine.canPaste())throw new Error('This cell does not allow pasting.');
+      if(ranges.reduce((count,range)=>count+(range.endRow-range.startRow+1)*(range.endColumn-range.startColumn+1),0)>100_000)throw new RangeError('Image paste selection is too large.');
+      const destinations=ranges.flatMap(range=>Array.from({length:range.endRow-range.startRow+1},(_,i)=>Array.from({length:range.endColumn-range.startColumn+1},(_,j)=>{
+        const row=range.startRow+i,col=range.startColumn+j;return {row,key:columns[col]!.key,id:engine.getRowId(row),value:engine.getValue(row,columns[col]!.key)};
+      })).flat());
+      const concurrency=options.mediaOptions?.maxConcurrentUploads ?? 4;
+      if(!Number.isSafeInteger(concurrency)||concurrency<1||concurrency>100)throw new RangeError('Invalid upload concurrency.');
       mediaUpload?.abort();controller=new win.AbortController();mediaUpload=controller;
-      const values=await Promise.all(files.map(async file=>{
-        if(options.mediaOptions?.upload)return await options.mediaOptions.upload(file,Object.freeze({columnKey:key,signal:controller!.signal}));
-        const src=win.URL.createObjectURL(file);created.push(src);return {src,alt:file.name};
+      status=doc.createElement('div');status.setAttribute('aria-label','Image upload');status.setAttribute('role','status');status.style.cssText='position:absolute;z-index:40;right:12px;bottom:12px;padding:10px;display:flex;gap:12px;align-items:center;background:var(--acheron-background);color:var(--acheron-text-color);border:1px solid var(--acheron-grid-line-color);font:13px sans-serif';
+      const label=doc.createElement('span'),cancel=doc.createElement('button');cancel.type='button';cancel.textContent='Cancel upload';cancel.addEventListener('click',()=>controller?.abort());status.append(label,cancel);root.append(status);controller.signal.addEventListener('abort',()=>status?.remove(),{once:true});
+      const progress=new Map<number,number>();let completed=0,nextFile=0;const values:MediaItem[]=[];
+      function reportProgress():void {label.textContent=`Uploading images: ${completed}/${files.length} completed${progress.size?`, ${[...progress.values()].reduce((sum,value)=>sum+value,0)} bytes`:''}`;}
+      reportProgress();
+      await Promise.all(Array.from({length:Math.min(concurrency,files.length)},async()=>{
+        while(nextFile<files.length) {
+          if(controller!.signal.aborted)throw new Error('Image upload canceled.');
+          const index=nextFile++,file=files[index]!;
+          if(options.mediaOptions?.upload)values[index]=await options.mediaOptions.upload(file,Object.freeze({columnKey:key,signal:controller!.signal,onProgress:(loaded:number,total?:number)=>{
+            if(mediaUpload!==controller||controller!.signal.aborted||!Number.isFinite(loaded)||loaded<0||total!==undefined&&(!Number.isFinite(total)||total<loaded))return;
+            progress.set(index,loaded);reportProgress();
+          }}));
+          else {const src=win.URL.createObjectURL(file);created.push(src);values[index]={src,alt:file.name};}
+          completed++;reportProgress();
+        }
       }));
-      if(destroyed||controller.signal.aborted||JSON.stringify(getSelectionRanges())!==target||engine.getSelection()?.rowId!==selection.rowId||engine.getSelection()?.columnKey!==key||!Object.is(engine.getValue(selection.rowIndex,key),originalValue))throw new Error('Image paste canceled because its destination changed.');
+      if(destroyed||controller.signal.aborted||JSON.stringify(getSelectionRanges())!==target||engine.getSelection()?.rowId!==selection.rowId||engine.getSelection()?.columnKey!==key||destinations.some(cell=>cell.row>=engine.rowCount||engine.getRowId(cell.row)!==cell.id||!Object.is(engine.getValue(cell.row,cell.key),cell.value)))throw new Error('Image paste canceled because its destination changed.');
       const value=validateMediaValue(values);
       pasteSelectionBlocks(encodeBlocks([{row:0,column:0,values:[[JSON.stringify(value)]]}]));
       for(const src of created)ownedImageUrls.add(src);
       if(mediaUpload===controller)mediaUpload=undefined;
-    } catch(error){controller?.abort();if(mediaUpload===controller)mediaUpload=undefined;for(const src of created)win.URL.revokeObjectURL(src);if(!destroyed)win.alert(error instanceof Error?error.message:'Unable to paste images.');}
+    } catch(error){const current=!controller||mediaUpload===controller&&!controller.signal.aborted;controller?.abort();if(mediaUpload===controller)mediaUpload=undefined;for(const src of created)win.URL.revokeObjectURL(src);if(!destroyed&&current)win.alert(error instanceof Error?error.message:'Unable to paste images.');}
+    finally {status?.remove();}
   }
 
   function select(rowIndex: number, columnIndex: number, extend = false, reveal = true, add = false): void {
@@ -2055,7 +2077,7 @@ export function createGrid(options: GridOptions): Grid {
     if (engine.isLocked({ scope: 'column', columnIndex: col })) labels.push('Column locked');
     if (col < engine.frozenColumns) labels.push('Column frozen');
     if (row === null) {
-      const sort = currentView?.sort;
+      const sort = currentView?.sorts?.find(item=>item.columnKey===columns[col]!.key) ?? currentView?.sort;
       if (sort?.columnKey === columns[col]!.key) labels.push(`Sorted ${sort.direction === 'asc' ? 'ascending' : 'descending'}`);
       const filter = currentView?.filters?.find(filter => filter.columnKey === columns[col]!.key);
       if (filter) labels.push(`Filtered: ${filter.operator ?? 'contains'} ${filter.query}`.trim());
@@ -2118,7 +2140,7 @@ export function createGrid(options: GridOptions): Grid {
           const title=doc.createElement('strong');title.textContent=(info.title ?? new URL(link.href).hostname).slice(0,160);detail.append(title);
           if(info.description){const description=doc.createElement('p');description.textContent=info.description.slice(0,320);description.style.margin='6px 0 0';detail.append(description);}
           const image=info.image && safeWebUrl(info.image);
-          if(image){const img=doc.createElement('img');img.src=image;img.alt='';img.referrerPolicy='no-referrer';img.style.cssText='width:100%;max-height:140px;object-fit:cover;border-radius:4px;margin-top:8px';img.addEventListener('load',positionLinks,{once:true});detail.append(img);}
+          if(image){const img=doc.createElement('img');img.crossOrigin='anonymous';img.alt='';img.referrerPolicy='no-referrer';img.src=image;img.style.cssText='width:100%;max-height:140px;object-fit:cover;border-radius:4px;margin-top:8px';img.addEventListener('load',positionLinks,{once:true});detail.append(img);}
           positionLinks();
         }).catch(()=>{if(!controller.signal.aborted && menu===popup){detail.textContent='Preview unavailable. The link is still available.';positionLinks();}});
       }
@@ -2151,8 +2173,9 @@ export function createGrid(options: GridOptions): Grid {
       ctx.globalAlpha = rangeTintOpacity; ctx.fillStyle = theme.selectionColor; ctx.fillRect(x, y, width, height); ctx.globalAlpha = 1;
     }
     if (header) {
-      if (currentView?.sort?.columnKey === columns[columnIndex]!.key) {
-        stateIcon(currentView!.sort!.direction === 'asc' ? 'arrow-up' : 'arrow-down', x + width - 36, y + (height - 16) / 2);
+      const sort=currentView?.sorts?.find(item=>item.columnKey===columns[columnIndex]!.key) ?? currentView?.sort;
+      if (sort?.columnKey === columns[columnIndex]!.key) {
+        stateIcon(sort.direction === 'asc' ? 'arrow-up' : 'arrow-down', x + width - 36, y + (height - 16) / 2);
       }
       if (currentView?.filters?.some(filter => filter.columnKey === columns[columnIndex]!.key)) {
         stateIcon('funnel', x + width - 54, y + (height - 16) / 2);
@@ -2353,7 +2376,7 @@ export function createGrid(options: GridOptions): Grid {
       const label=item.name ?? item.alt ?? (avatars?'Person ':'Image ')+(i+1);
       const fallback=doc.createElement('span');fallback.textContent=avatars?label.trim().split(/\s+/).slice(0,2).map(part=>part[0]).join('').toLocaleUpperCase():'Image unavailable';fallback.style.cssText='display:grid;place-items:center;background:var(--acheron-header-background);min-height:48px;padding:8px;border-radius:8px';
       figure.append(fallback);
-      if(item.src){try{const url=new win.URL(item.src,doc.baseURI);if(url.username||url.password||!['http:','https:','blob:','data:'].includes(url.protocol)||url.protocol==='data:'&&!/^data:image\//i.test(item.src))throw new Error();const image=doc.createElement('img');image.alt=label;image.referrerPolicy='no-referrer';image.loading='lazy';image.style.cssText=avatars?'width:44px;height:44px;object-fit:cover;border-radius:50%':'width:100%;height:160px;object-fit:contain;border-radius:8px';image.onload=()=>fallback.remove();image.onerror=()=>image.remove();image.src=url.href;figure.prepend(image);}catch{/* Keep a readable fallback for invalid image URLs. */}}
+      if(item.src){try{const url=new win.URL(item.src,doc.baseURI);if(url.username||url.password||!['http:','https:','blob:','data:'].includes(url.protocol)||url.protocol==='data:'&&!/^data:image\//i.test(item.src))throw new Error();const image=doc.createElement('img');image.crossOrigin='anonymous';image.alt=label;image.referrerPolicy='no-referrer';image.loading='lazy';image.style.cssText=avatars?'width:44px;height:44px;object-fit:cover;border-radius:50%':'width:100%;height:160px;object-fit:contain;border-radius:8px';image.onload=()=>fallback.remove();image.onerror=()=>image.remove();image.src=url.href;figure.prepend(image);}catch{/* Keep a readable fallback for invalid image URLs. */}}
       const caption=doc.createElement('figcaption');caption.textContent=label;figure.append(caption);list.append(figure);
     }
     if(!items.length)list.textContent=avatars?'No people':'No images';
@@ -2548,7 +2571,7 @@ export function createGrid(options: GridOptions): Grid {
         header.style.cssText = `position:absolute;left:${Math.max(band.x, columnAxis.position(col) + band.offset)}px;top:${layout.level * headerRowHeight}px;width:${Math.max(0, Math.min(band.x + band.width, columnAxis.position(col + 1) + band.offset) - Math.max(band.x, columnAxis.position(col) + band.offset))}px;height:${layout.rowSpan * headerRowHeight}px`;
         header.dataset.headerLevel = String(layout.level);
         header.setAttribute('aria-rowspan', String(layout.rowSpan));
-        if (viewportAccessibility) { header.setAttribute('role', 'columnheader'); header.setAttribute('aria-colindex', String(col + 1)); header.setAttribute('aria-label', columns[col]!.title); header.setAttribute('aria-description', stateLabels(null, col).join('; ')); const sort = currentView?.sort; header.setAttribute('aria-sort', sort?.columnKey === columns[col]!.key ? sort.direction === 'asc' ? 'ascending' : 'descending' : 'none'); }
+        if (viewportAccessibility) { header.setAttribute('role', 'columnheader'); header.setAttribute('aria-colindex', String(col + 1)); header.setAttribute('aria-label', columns[col]!.title); header.setAttribute('aria-description', stateLabels(null, col).join('; ')); const sort = currentView?.sorts?.[0] ?? currentView?.sort; header.setAttribute('aria-sort', sort?.columnKey === columns[col]!.key ? (currentView?.sorts?.length ?? 0)>1 ? 'other' : sort.direction === 'asc' ? 'ascending' : 'descending' : 'none'); }
         reorderHandle(header, 'column', col);
         headerNodes.push(header);
       }
@@ -3033,6 +3056,8 @@ export function createGrid(options: GridOptions): Grid {
   }
   return {
     subscribe:engine.subscribe,
+    getValue:engine.getValue,
+    replaceText:(search:string,replacement:string,options?:Parameters<GridEngine['replaceText']>[2])=>{finishEdit(false);clearCopyFeedback();return engine.replaceText(search,replacement,options);},
     takeObserverErrors:engine.takeObserverErrors,
     captureRowIdentity:engine.captureRowIdentity,
     refreshData:(ids?:readonly RowId[]|'values')=>{finishEdit(false);clearCopyFeedback();pendingCutText=undefined;engine.refreshData(ids);},

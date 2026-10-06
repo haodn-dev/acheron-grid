@@ -1,4 +1,4 @@
-import { createElement, StrictMode, useState } from 'react';
+import { createElement, StrictMode, useState, Component } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createApp, h, shallowRef } from 'vue';
 import { AcheronGrid as ReactGrid } from '../packages/react/dist/index.js';
@@ -28,3 +28,20 @@ const vue = createApp({ setup: () => () => h(VueGrid, { ...vueProps.value, style
 vue.mount('#vue');
 window.adapters.unmountReact = () => react.unmount();
 window.adapters.unmountVue = () => vue.unmount();
+window.adapters.mountFailingReact = () => {
+  const host=document.createElement('div');document.body.append(host);
+  class Boundary extends Component {
+    state={failed:false};
+    static getDerivedStateFromError(){return {failed:true};}
+    render(){return this.state.failed?createElement('p',null,'Ready failure handled'):this.props.children;}
+  }
+  const root=createRoot(host);
+  root.render(createElement(Boundary,null,createElement(ReactGrid,{options:options(),style:{width:400,height:240},onReady:grid=>{if(grid){window.adapters.failedReact=grid;throw new Error('Host ready failed');}}})));
+  window.adapters.unmountFailingReact=()=>{root.unmount();host.remove();};
+};
+window.adapters.mountFailingVue = () => {
+  const host=document.createElement('div');document.body.append(host);
+  const app=createApp({render:()=>h(VueGrid,{options:options(),frozenColumns:99,style:{width:'400px',height:'240px'},onReady:grid=>window.adapters.failedVue=grid})});
+  app.config.errorHandler=error=>window.adapters.vueMountError=error.message;
+  app.mount(host);window.adapters.unmountFailingVue=()=>{app.unmount();host.remove();};
+};

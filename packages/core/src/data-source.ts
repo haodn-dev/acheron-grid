@@ -107,7 +107,22 @@ export class LocalDataSource<T extends Record<string, unknown>> implements DataS
 
 export interface LocalViewOptions {
   readonly sort?: { readonly columnKey: string; readonly direction: 'asc' | 'desc' };
+  readonly sorts?: readonly { readonly columnKey: string; readonly direction: 'asc' | 'desc' }[];
   readonly filters?: readonly { readonly columnKey: string; readonly query: string; readonly operator?: 'contains' | 'equals' | 'not-empty' | 'empty' }[];
+}
+
+/** Shared immutable criteria for local projections and host-managed server queries. */
+export function snapshotLocalView(options: LocalViewOptions): Readonly<LocalViewOptions> {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) throw new TypeError('Invalid local view.');
+  const filters = options.filters ?? [];
+  if (options.filters !== undefined && !Array.isArray(options.filters) || !Array.isArray(filters) || Array.from(filters).some(filter => !filter || typeof filter.columnKey !== 'string' || !filter.columnKey || typeof filter.query !== 'string' || (filter.operator !== undefined && !['contains', 'equals', 'not-empty', 'empty'].includes(filter.operator)))) throw new TypeError('Invalid local filters.');
+  const sorts = options.sorts ?? (options.sort ? [options.sort] : []);
+  if (options.sort !== undefined && (!options.sort || typeof options.sort !== 'object') || options.sort && options.sorts !== undefined || options.sorts !== undefined && !Array.isArray(options.sorts) || !Array.isArray(sorts) || Array.from(sorts).some(sort => !sort || typeof sort.columnKey !== 'string' || !sort.columnKey || !['asc', 'desc'].includes(sort.direction)) || new Set(sorts.map(sort => sort.columnKey)).size !== sorts.length) throw new TypeError('Invalid local sort.');
+  return Object.freeze({
+    ...(options.sort ? { sort: Object.freeze({ ...options.sort }) } : {}),
+    ...(options.sorts !== undefined ? { sorts: Object.freeze(options.sorts.map(sort => Object.freeze({ ...sort }))) } : {}),
+    ...(options.filters !== undefined ? { filters: Object.freeze(options.filters.map(filter => Object.freeze({ ...filter }))) } : {}),
+  });
 }
 
 /** An immutable local row projection. Build a new view to reapply sorting/filtering after edits. */
@@ -119,10 +134,9 @@ export class LocalDataView implements DataSource {
   constructor(private readonly source: DataSource, options: LocalViewOptions = {}) {
     const count = source.getRowCount();
     if (!Number.isSafeInteger(count) || count < 0) throw new RangeError('Invalid local row count.');
-    const filters = options.filters ?? [];
-    if (!Array.isArray(filters) || filters.some(filter => !filter || typeof filter.columnKey !== 'string' || !filter.columnKey || typeof filter.query !== 'string' || (filter.operator !== undefined && !['contains', 'equals', 'not-empty', 'empty'].includes(filter.operator)))) throw new TypeError('Invalid local filters.');
-    const sort = options.sort;
-    if (sort && (typeof sort.columnKey !== 'string' || !sort.columnKey || !['asc', 'desc'].includes(sort.direction))) throw new TypeError('Invalid local sort.');
+    const criteria = snapshotLocalView(options);
+    const filters = criteria.filters ?? [];
+    const sorts = criteria.sorts ?? (criteria.sort ? [criteria.sort] : []);
     this.indices = Array.from({ length: count }, (_, index) => index).filter(index => filters.every(filter => {
       const value = source.getValue(index, filter.columnKey);
       const empty = value == null || value === '';
@@ -133,14 +147,17 @@ export class LocalDataView implements DataSource {
       const text = String(value).toLocaleLowerCase(); const query = filter.query.toLocaleLowerCase();
       return filter.operator === 'equals' ? text === query : text.includes(query);
     }));
-    if (sort) {
-      const values = new Map(this.indices.map(index => [index, source.getValue(index, sort.columnKey)]));
+    if (sorts.length) {
+      const values = sorts.map(sort => new Map(this.indices.map(index => [index, source.getValue(index, sort.columnKey)])));
       const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
       this.indices.sort((a, b) => {
-        const left = values.get(a); const right = values.get(b);
-        if (left == null || right == null) return left == null ? (right == null ? a - b : 1) : -1;
-        const order = typeof left === 'number' && typeof right === 'number' ? left - right : collator.compare(String(left), String(right));
-        return (sort.direction === 'asc' ? order : -order) || a - b;
+        for (let i = 0; i < sorts.length; i++) {
+          const left = values[i]!.get(a), right = values[i]!.get(b);
+          if (left == null || right == null) { if (left == null && right == null) continue; return left == null ? 1 : -1; }
+          const order = typeof left === 'number' && typeof right === 'number' ? left - right : collator.compare(String(left), String(right));
+          if (order) return sorts[i]!.direction === 'asc' ? order : -order;
+        }
+        return a - b;
       });
     }
     if (source.setValue) this.setValue = (index, key, value) => source.setValue!(this.sourceIndex(index), key, value);

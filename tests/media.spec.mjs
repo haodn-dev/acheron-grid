@@ -1,4 +1,29 @@
 import {test,expect} from '@playwright/test';
+test('upload progress is bounded and any broadcast destination change cancels atomic paste',async({page})=>{
+  await setup(page);
+  await page.evaluate(async()=>{
+    window.grid.destroy();const {createGrid}=await import('/canvas/index.js');window.uploads=[];window.alerts=[];window.alert=text=>window.alerts.push(text);
+    window.grid=createGrid({...window.options,mediaOptions:{maxConcurrentUploads:1,upload:(file,context)=>new Promise(resolve=>window.uploads.push({file,context,resolve}))}});window.selectCell(0,0);
+    window.pasteFiles=count=>{const data=new DataTransfer();for(let i=0;i<count;i++)data.items.add(new File(['image'],`image${i}.png`,{type:'image/png'}));document.querySelector('[role=grid]').dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));};
+  });
+  await page.getByRole('grid').press('Shift+ArrowDown');
+  await page.evaluate(()=>window.pasteFiles(2));
+  await expect.poll(()=>page.evaluate(()=>window.uploads.length)).toBe(1);
+  await page.evaluate(()=>{window.uploads[0].context.onProgress(2,5);window.uploads[0].resolve(window.photos[0]);});
+  await expect.poll(()=>page.evaluate(()=>window.uploads.length)).toBe(2);
+  await expect(page.getByRole('status',{name:'Image upload'})).toContainText('1/2 completed');
+  await page.evaluate(()=>{window.source.setValue(0,'photos',[window.photos[1]]);window.uploads[1].resolve(window.photos[0]);});
+  await expect.poll(()=>page.evaluate(()=>window.alerts.length)).toBe(1);
+  expect(await page.evaluate(()=>window.source.getValue(0,'photos'))).toEqual(await page.evaluate(()=>[window.photos[1]]));
+  expect(await page.evaluate(()=>window.source.getValue(1,'photos'))).toEqual([]);
+  await page.evaluate(()=>{window.uploads=[];window.pasteFiles(2);});
+  await page.getByRole('button',{name:'Cancel upload',exact:true}).click();
+  expect(await page.evaluate(()=>window.uploads[0].context.signal.aborted)).toBe(true);
+  await page.evaluate(()=>window.uploads[0].resolve(window.photos[0]));
+  await expect(page.getByRole('status',{name:'Image upload'})).toHaveCount(0);
+  expect(await page.evaluate(()=>window.uploads.length)).toBe(1);
+  expect(await page.evaluate(()=>window.source.getValue(1,'photos'))).toEqual([]);
+});
 async function setup(page){
  await page.goto('/');await page.evaluate(async()=>{
   const {createGrid}=await import('/canvas/index.js'),{LocalDataSource}=await import('/core/index.js');
@@ -13,7 +38,7 @@ async function setup(page){
 test('gallery thumbnails and avatar stacks describe values, open details and preserve structured clipboard/history',async({page})=>{
  await setup(page);const viewport=page.getByRole('grid');await viewport.press('Control+Home');
  await expect(page.getByRole('gridcell',{name:/Photos: 5 images/})).toBeAttached();
- await viewport.press('Alt+Enter');const gallery=page.getByRole('dialog',{name:'Cell images'});await expect(gallery.getByRole('img')).toHaveCount(5);await expect(gallery.getByRole('img',{name:'Front'})).toBeVisible();await gallery.getByRole('button',{name:'Close',exact:true}).click();
+ await viewport.press('Alt+Enter');const gallery=page.getByRole('dialog',{name:'Cell images'});await expect(gallery.getByRole('img')).toHaveCount(5);expect(await gallery.getByRole('img').evaluateAll(images=>images.every(image=>image.crossOrigin==='anonymous'&&image.referrerPolicy==='no-referrer'))).toBe(true);await expect(gallery.getByRole('img',{name:'Front'})).toBeVisible();await gallery.getByRole('button',{name:'Close',exact:true}).click();
  const result=await page.evaluate(()=>{window.copy=window.grid.copySelectionBlocks();window.selectCell(1,0);window.grid.pasteSelectionBlocks(window.copy);return window.source.getValue(1,'photos');});expect(result).toEqual(await page.evaluate(()=>window.photos));
  await page.evaluate(()=>window.grid.undo());expect(await page.evaluate(()=>window.source.getValue(1,'photos'))).toEqual([]);await page.evaluate(()=>window.grid.redo());
  await viewport.press('Control+Home');await viewport.press('ArrowRight');await viewport.press('Alt+Enter');const people=page.getByRole('dialog',{name:'Cell people'});await expect(people.getByText('Lin Chen',{exact:true})).toBeVisible();await expect(people.getByRole('img')).toHaveCount(2);await page.keyboard.press('Escape');

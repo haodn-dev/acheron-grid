@@ -1,34 +1,11 @@
-# Contributing to Acheron Grid
+# Contributing
 
-Acheron Grid is an experimental TypeScript project. Discuss substantial API or architecture changes before implementing them. Keep changes focused and include a reproducible example for reported bugs.
+Maintainers: see [package release setup and channels](guides/releasing.md) for GitHub Actions and npm trusted publishing.
 
-## Setup
+All features and optional modules are open source and free. Keep core headless; Canvas depends on public core, and framework/transport/export/chart dependencies belong in optional modules.
 
-Use Node.js 22 or later. From the repository root:
+Use a small branch and explain the observable problem, resulting behavior and validation. Reuse the controlled mutation/permission/validation/history pipeline. Do not turn synchronous atomic DataSource setters into promises. Define async lifecycle, cancellation, bounded work and stale-response behavior explicitly.
 
-```sh
-npm ci
-npm run build
-npx playwright install chromium
-```
+Use Node 22 or 24. From a clean checkout run `npm ci`, `npm run typecheck`, `npm test`, `npm run test:mcp`, `npx playwright install chromium`, `npm run test:browser` and `npm run test:package`. Changes affecting performance should also run the relevant benchmark; record raw samples, environment and source revision. Do not infer FPS or GPU cost from callback timings.
 
-Run `npm run playground` for the standalone example. No framework or application backend is required.
-
-## Making changes
-
-- Keep `packages/core` independent of browser globals and frameworks. Canvas imports only the public core API.
-- Route writes through the existing mutation/permission/history pipeline. Avoid per-dataset-cell state; use sparse metadata and viewport work.
-- Preserve validation, atomic batch writes, accessibility semantics and cleanup. Change source structure through the public structural commands; do not mutate source count/order externally behind a mounted engine.
-- Update the relevant public guide and add a focused regression test for behavior changes. Write source comments and public documentation in English.
-
-Run `npm run typecheck` and `npm test`. For rendering or interaction changes, also run `npm run test:browser`; for example changes, run `npm run test:playground`. Run `npm run test:mcp` for MCP or bundled documentation changes. Use `npm run benchmark` when changing render hot paths. Do not run suites sharing a server port simultaneously. There is no lint script.
-
-Describe the problem, resulting behavior and actual checks in a pull request. Include screenshots when a visual change needs comparison. Do not publish a package as part of an ordinary contribution.
-
-## Bug reports
-
-Include the browser/version, relevant options, a small dataset or source stub, steps to reproduce, and expected versus actual behavior. Remove credentials and private application data from examples. Distinguish an engine bug from externally mutated source data or backend behavior.
-
-## Licensing
-
-Original project code is licensed under [MIT](LICENSE). Contributions should be compatible with MIT. Retain the existing third-party icon notices and document any additional third-party material.
+Public API changes need consumer documentation, examples, regression checks and an Unreleased changelog entry. Source preview does not mean npm published. Do not introduce paid feature gates or license keys; retain dependency licenses. Keep credentials, application data and internal planning out of public submissions.

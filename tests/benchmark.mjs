@@ -51,11 +51,15 @@ for (const frozen of [0, 1]) test(`headless Canvas callback cost: million rows, 
     grid.destroy();
     window.requestAnimationFrame = request;
     return { userAgent: navigator.userAgent, viewport: '640x360 CSS px', devicePixelRatio,
-      rows: 1_000_000, columns: 1000, frozen, scroll: summarize(scroll), partial: summarize(partial) };
+      rows: 1_000_000, columns: 1000, frozen, scroll: summarize(scroll), partial: summarize(partial),
+      rawSamples: { scroll, partial } };
   }, frozen);
   expect(result.scroll.samples).toBeGreaterThanOrEqual(60);
   expect(result.scroll.maxCellReads).toBeLessThan(100);
   expect(result.partial.samples).toBe(60);
   expect(result.partial.maxCellReads).toBe(1);
+  await test.info().attach('callback-cost.json', {
+    body: Buffer.from(JSON.stringify(result, null, 2)), contentType: 'application/json'
+  });
   console.log(JSON.stringify(result));
 });

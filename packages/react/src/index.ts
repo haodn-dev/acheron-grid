@@ -31,7 +31,8 @@ export const AcheronGrid = forwardRef<AcheronGridHandle, AcheronGridProps>(funct
     const instance = createGrid({ ...props.options, container: container.current });
     instance.subscribe({onEvent:event=>callbacks.current.onEvent?.(event)});
     grid.current = instance;
-    callbacks.current.onReady?.(instance);
+    try { callbacks.current.onReady?.(instance); }
+    catch (error) { grid.current = null; instance.destroy(); throw error; }
     return () => { grid.current = null; instance.destroy(); callbacks.current.onReady?.(null); };
   }, [props.options]);
   useEffect(() => { if (props.theme) grid.current?.setTheme(props.theme); }, [props.options, props.theme]);

@@ -1,5 +1,18 @@
 import { test, expect } from '@playwright/test';
 
+test('adapter initialization failures destroy the created grid before reporting errors',async({page})=>{
+  await page.goto('/');await page.addScriptTag({type:'module',url:'/adapters.js'});
+  await expect(page.locator('#react').getByRole('grid')).toHaveCount(1);
+  await page.evaluate(()=>window.adapters.mountFailingReact());
+  await expect(page.getByText('Ready failure handled')).toBeVisible();
+  expect(await page.evaluate(()=>{try{window.adapters.failedReact.updateCells([{rowIndex:0,columnKey:'name',value:'bad'}]);return false;}catch(error){return /destroyed/.test(error.message);}})).toBe(true);
+  await page.evaluate(()=>window.adapters.mountFailingVue());
+  await expect.poll(()=>page.evaluate(()=>window.adapters.vueMountError)).toContain('Invalid frozen');
+  expect(await page.getByRole('grid').count()).toBe(2);
+  await page.evaluate(()=>{window.adapters.unmountFailingReact();window.adapters.unmountFailingVue();window.adapters.unmountReact();window.adapters.unmountVue();});
+  await expect(page.getByRole('grid')).toHaveCount(0);
+});
+
 test('framework adapters preserve live state, forward current events and clean up mounts', async ({ page }) => {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto('/'); await page.addScriptTag({ type: 'module', url: '/adapters.js' });

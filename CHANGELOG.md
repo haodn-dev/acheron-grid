@@ -1,8 +1,39 @@
 # Changelog
 
-## 0.1.0 — Release candidate (not published)
+## Unreleased
 
-This is the first development preview. Package versions are prepared; no npm publication or GitHub tag is announced here.
+- Add verified npm develop/stable release workflows, aligned workspace version tooling, registry consumer checks, and trusted publishing setup instructions.
+
+- Core accepts atomic batch-only sources for editing, discards collapsed groups moved across frozen boundaries during identity refresh, and bounds projected selection/clipboard fragmentation. Collapsed frozen-row counts are cached between state changes.
+- Async page totals invalidate older positional caches; empty pages beyond a shrinking total update the count and remain reloadable, with range capacity checked before admission. Host dataset revision consistency remains required.
+- Consumer documentation now includes the complete core contract/limit matrix, an executable lifecycle example and independent source/release document revisions on the website.
+
+- Harden CSV controls/full-width formula prefixes and anonymous image loading in details/previews. Document host security boundaries and update the build dependency fixing its Windows development-server advisory.
+
+- React/Vue dispose newly created grids when initialization fails. Media uploads report progress/cancel, bound concurrent jobs per paste and guard every broadcast destination against asynchronous overwrite.
+
+- Bounded literal find/replace goes through editable/writable validation and one undo command; Canvas exposes replaceText and a read-only getValue query.
+- Optional XLSX export writes scalar values and literal strings to one sheet, with copy permissions, Unicode/XML checks and archive budgets. ZIP dependency stays outside core.
+
+- Read-only live cache supports stable-ID snapshots, consecutive sequences, bounded cell coalescing, atomic flush and stale/resync handling. Host owns transport and scheduling.
+- Optional free inline charts module renders line, column and horizontal bar series with gaps, signed baselines and a bounded point budget. Source preview, not yet published.
+
+- Host-owned remote save example covers local drafts, revision/idempotency receipts, validation/conflict preservation, explicit rollback and late-response guards without changing synchronous DataSource writes.
+
+- Async sources capture immutable server sort/filter queries per request. Validated query changes cancel old loads and clear cache; reset retains the query. Host owns backend execution and engine refresh.
+
+- Optional free CSV export module reuses core copy permissions, supports quoted text/headers/BOM and default formula-text escaping. Source preview, not yet published.
+
+- MCP supports opt-in authorized row discovery, a bounded single-pass ID lookup or checked host resolver, and UTF-8 output budgets checked before write commit.
+
+- Multi-column local sort criteria preserve stable ties, nullish-last ordering, outline blocks, identity and state/history behavior. Canvas headers expose sorted keys; the existing single-column dialog replaces the criteria.
+
+- Async sources bound loader concurrency and pending pages, deduplicate queued work and preflight range capacity. Defaults are four concurrent and 100 pending loads; canceled loaders retain slots until they settle.
+- Core benchmarks cover allocated local data, sorting/filtering, batch/paste/history, atomic veto, refresh and state round-trips with correctness checks and environment metadata.
+
+## 0.1.0 — Development preview
+
+The original six packages are published on npm at 0.1.0. The export module and changes under Unreleased are not part of that release.
 
 ### Features
 

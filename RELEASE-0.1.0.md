@@ -1,16 +1,16 @@
-# Acheron Grid 0.1.0 — prepared, not published
+# Acheron Grid 0.1.0 — published development preview
 
-First release candidate: headless TypeScript grid, Canvas renderer, React/Vue adapters, optional Markdown and MCP adapters. Website: https://acheron-grid.haoduong.dev/.
+First published development preview: headless TypeScript grid, Canvas renderer, React/Vue adapters, optional Markdown and MCP adapters. Website: https://acheron-grid.haoduong.dev/.
 
-All six packages share 0.1.0. Publish in dependency order: core, canvas, markdown, react, vue, mcp. Root workspace stays private. Scope ownership and credentials must be checked by the publisher. No tag, release or npm publication has been created.
+All six packages share 0.1.0. Publish in dependency order: core, canvas, markdown, react, vue, mcp. Root workspace stays private. Scope ownership and credentials must be checked by the publisher. Git tag v0.1.0 and all six npm 0.1.0 packages are available. Unreleased APIs are outside this release.
 
-## Install after publication
+## Installation
 
 ```sh
 npm install @acheron-grid/core@0.1.0 @acheron-grid/canvas@0.1.0
 ```
 
-Optional packages: @acheron-grid/react, @acheron-grid/vue, @acheron-grid/markdown, @acheron-grid/mcp at 0.1.0. Until publication install the tarballs together to resolve internal dependencies locally.
+Optional packages: @acheron-grid/react, @acheron-grid/vue, @acheron-grid/markdown, @acheron-grid/mcp at 0.1.0. For modified source builds, install the matching tarballs together.
 
 ## Scope
 
@@ -22,6 +22,6 @@ Runtime commit `7fa33c5` passed clean-checkout verification on Windows / Node.js
 
 ## Limits
 
-Synchronous reads and atomic writes; optional async read-only page loading, cancellation and bounded caching. Remote editing/optimistic rollback, formulas, collaboration and cross-grid cut are not implemented. Optional parser remains separate from core. React >=18.3 <20, Vue >=3.5 <4. MCP local stdio documentation server and host-owned data adapter; no public HTTP endpoint or browser bridge. Chromium regression checks do not establish Safari/Firefox or full screen-reader support. Node 22/24 are CI targets; local results do not prove remote CI. Registry names and publication remain unverified.
+Synchronous reads and atomic writes; optional async read-only page loading, cancellation and bounded caching. Remote editing/optimistic rollback, formulas, collaboration and cross-grid cut are not implemented. Optional parser remains separate from core. React >=18.3 <20, Vue >=3.5 <4. MCP local stdio documentation server and host-owned data adapter; no public HTTP endpoint or browser bridge. Chromium regression checks do not establish Safari/Firefox or full screen-reader support. Node 22/24 are CI targets; local results do not prove remote CI. All six registry package versions were verified as 0.1.0 on 2026-10-05.
 
 MIT with bundled Lucide attribution. No previous public release to migrate from.
