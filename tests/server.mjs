@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 const coreFiles = new Set([
+  'internal/structure-mapping.js',
   'internal/history.js',
   'index.js',
   'viewport.js',
