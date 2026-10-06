@@ -106,8 +106,11 @@ export function createProjection(
         const interval = combined[intervalIndex];
         const end = interval?.[0] === row ? interval[1] : row;
         if (interval?.[0] === row) intervalIndex++;
-        if (Array.from({ length: end - row + 1 }, (_, i) => row + i).some((i) => matching.has(i)))
-          blocks.push({ start: row, end });
+        for (let member = row; member <= end; member++)
+          if (matching.has(member)) {
+            blocks.push({ start: row, end });
+            break;
+          }
         row = end + 1;
       }
       const pinned = blocks.filter((block) => block.start < frozen),
@@ -121,14 +124,13 @@ export function createProjection(
         { ...(next.sort ? { sort: next.sort } : {}), ...(next.sorts ? { sorts: next.sorts } : {}) },
       );
       const hidden = outlines.filter((group) => group.collapsed);
-      return [
-        ...pinned,
-        ...Array.from({ length: ordered.getRowCount() }, (_, i) => movable[ordered.getSourceIndex(i)]!),
-      ].flatMap((block) =>
-        Array.from({ length: block.end - block.start + 1 }, (_, i) => block.start + i).filter(
-          (row) => !hidden.some((group) => row > group.startRow && row <= group.endRow),
-        ),
-      );
+      const result: number[] = [];
+      for (let index = 0; index < pinned.length + ordered.getRowCount(); index++) {
+        const block = index < pinned.length ? pinned[index]! : movable[ordered.getSourceIndex(index - pinned.length)]!;
+        for (let row = block.start; row <= block.end; row++)
+          if (!hidden.some((group) => row > group.startRow && row <= group.endRow)) result.push(row);
+      }
+      return result;
     }
     const local = new LocalDataView(context.dataSource, next);
     return next.sort || next.sorts?.length || next.filters?.length
