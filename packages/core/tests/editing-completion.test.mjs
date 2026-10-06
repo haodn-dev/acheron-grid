@@ -64,6 +64,9 @@ test('state restore checks unhide policy by column identity and permits unchange
  let allow=true;const {engine}=fixture({canChangeVisibility:({hidden})=>hidden||allow});engine.setRowsHidden([1],true);engine.setColumnsHidden([1],true);
  const state=engine.exportState();allow=false;assert.throws(()=>engine.restoreState({...state,hiddenRows:[],hiddenColumns:[]}),/visibility/);assert.deepEqual(engine.exportState(),state);
  const swapped={...state,hiddenRows:[],configuration:{...state.configuration,columns:[...state.configuration.columns].reverse()},hiddenColumns:[0]};
- assert.throws(()=>engine.restoreState(swapped),/visibility/);allow=true;engine.restoreState(swapped);assert.deepEqual(engine.getHiddenColumns(),[0]);assert.equal(engine.columns[0].key,'y');
+ assert.throws(()=>engine.restoreState(swapped),/visibility/);
+ engine.restoreState({...swapped,hiddenRows:[1]});assert.deepEqual(engine.getHiddenColumns(),[0]);assert.equal(engine.columns[0].key,'y');
+ const reordered=engine.exportState();assert.throws(()=>engine.restoreState({...reordered,hiddenColumns:[]}),/visibility/);assert.deepEqual(engine.exportState(),reordered);
+ allow=true;engine.restoreState(swapped);assert.deepEqual(engine.getHiddenRows(),[]);
  const fixed=fixture({canChangeVisibility:()=>false}).engine;fixed.restoreState(fixed.exportState());assert.deepEqual(fixed.getHiddenRows(),[]);
 });
