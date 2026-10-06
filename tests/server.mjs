@@ -4,17 +4,13 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 const coreFiles = new Set([
   'internal/persistence.js',
-  'internal/persistence.js',
   'internal/clipboard.js',
-  'internal/selection.js',
   'internal/selection.js',
   'internal/projection.js',
   'internal/outline.js',
   'internal/layout.js',
-  'internal/layout.js',
   'internal/values.js',
   'internal/formatting.js',
-  'internal/permissions.js',
   'internal/permissions.js',
   'internal/structure.js',
   'internal/structure-mapping.js',
