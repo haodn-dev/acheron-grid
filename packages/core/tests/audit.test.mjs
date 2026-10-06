@@ -39,7 +39,7 @@ test('identity refresh drops collapsed groups that move across the frozen bounda
 
 test('async totals invalidate old positional pages and accept empty pages beyond a shrinking total', async () => {
   let total = 4, revision = 'old';
-  const source = createAsyncDataSource({ pageSize: 2, maxPages: 3, createAbortController: () => new AbortController(),
+  const source = createAsyncDataSource({ pageSize: 2, maxPages: 3, maxPendingLoads: 1, createAbortController: () => new AbortController(),
     load: async ({ offset, limit }) => ({ total, rows: Array.from({ length: Math.max(0, Math.min(limit, total - offset)) }, () => ({ value: revision })) }),
   });
   await source.loadPage(0);
@@ -48,6 +48,9 @@ test('async totals invalidate old positional pages and accept empty pages beyond
   assert.equal(source.getRowCount(), 1);
   assert.equal(source.getValue(0, 'value'), undefined);
   assert.equal(source.getPageState(0), null);
+  assert.throws(() => source.loadRange(2, 5), /pending load limit/);
+  assert.equal(source.getPageState(2).status, 'ready');
+  assert.equal(source.getPageState(4), null);
   await source.loadPage(0);
   assert.equal(source.getValue(0, 'value'), 'new');
   total = 4; revision = 'grown';

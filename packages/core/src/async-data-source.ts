@@ -68,7 +68,7 @@ export function createAsyncDataSource<S>(options: AsyncDataSourceOptions<S>) {
   function loadRange(start:number,end:number):Promise<void> {
     alive();if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<start||Math.floor(end/pageSize)-Math.floor(start/pageSize)+1>maxPages)throw new RangeError('Load range must fit the page cache.');
     const offsets=Array.from({length:Math.floor(end/pageSize)-Math.floor(start/pageSize)+1},(_,i)=>(Math.floor(start/pageSize)+i)*pageSize);
-    if(pending.size+offsets.filter(offset=>!pages.has(offset)&&!pending.has(offset)).length>maxPendingLoads)throw new RangeError('Async pending load limit reached.');
+    if(pending.size+offsets.filter(offset=>(!pages.has(offset)||offset>=count)&&!pending.has(offset)).length>maxPendingLoads)throw new RangeError('Async pending load limit reached.');
     return Promise.all(offsets.map(loadPage)).then(()=>{});
   }
   const source:DataSource={getRowCount:()=>{alive();return count;},getRowId:row=>{index(row);return options.getRowId?.(row) ?? row;},getValue:(row,key)=>{index(row);const value=pages.get(Math.floor(row/pageSize)*pageSize)?.[row%pageSize];return value&&Object.hasOwn(value,key)?value[key]:undefined;}};
