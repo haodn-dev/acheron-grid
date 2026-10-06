@@ -1,3 +1,4 @@
+import { createNumberDisplay, createRichDisplay } from './internal/display.js';
 import { reorderInsertionIndex } from './internal/reorder-geometry.js';
 import { validateColumnEditor } from './internal/editor-config.js';
 import { createCanvasTranslator } from './locale.js';
@@ -294,24 +295,7 @@ const stateIconSvg = {
 export function createGrid(options: GridOptions): Grid {
   const { container, dataSource } = options;
   const t = createCanvasTranslator(options.locale, options.messages);
-  const numberFormats = new Map<NumberFormat, Intl.NumberFormat>(
-    ['decimal', 'integer', 'percent', 'currency'].map((kind) => [
-      kind as NumberFormat,
-      new Intl.NumberFormat(
-        options.locale ?? 'en',
-        kind === 'currency'
-          ? { style: 'currency', currency: options.currency ?? 'USD' }
-          : kind === 'percent'
-            ? { style: 'percent', maximumFractionDigits: 2 }
-            : { maximumFractionDigits: kind === 'integer' ? 0 : 2 },
-      ),
-    ]),
-  );
-  function numberText(value: unknown, format?: NumberFormat): string {
-    return typeof value === 'number' && Number.isFinite(value) && format
-      ? numberFormats.get(format)!.format(value)
-      : String(value ?? '');
-  }
+  const numberText = createNumberDisplay(options);
   const motionDuration = typeof options.motion === 'object' ? (options.motion.duration ?? 220) : 220;
   if (!Number.isFinite(motionDuration) || motionDuration < 0 || motionDuration > 1000)
     throw new RangeError('Motion duration must be between 0 and 1000ms.');
@@ -341,45 +325,12 @@ export function createGrid(options: GridOptions): Grid {
   )
     throw new RangeError('Invalid selection style.');
   const doc = container.ownerDocument;
-  const richTextColumns = new Map(Object.entries(options.richTextColumns ?? {}));
-  for (const format of richTextColumns.values()) {
-    if (format !== 'html' && format !== 'markdown') throw new TypeError('Unsupported rich text format.');
-    if (format === 'markdown' && !options.markdownToHtml)
-      throw new TypeError('Markdown columns require a markdownToHtml adapter.');
-  }
-  const richCache = new Map<string, RichText>();
-  function richText(value: unknown, key: string, contentFormat?: CellFormat['contentFormat']): RichText | undefined {
-    const format = contentFormat ?? richTextColumns.get(key);
-    if (!format || format === 'plain' || typeof value !== 'string') return undefined;
-    if (value.length > 100_000)
-      return {
-        text: t('Rich text is too large to display'),
-        runs: [{ text: t('Rich text is too large to display') }],
-        unavailable: true,
-      };
-    const cacheKey = format + ':' + value;
-    let rich = richCache.get(cacheKey);
-    if (!rich) {
-      try {
-        rich = readHtml(format === 'markdown' ? options.markdownToHtml!(value) : value, doc);
-      } catch {
-        rich = { text: t('Rich text unavailable'), runs: [{ text: t('Rich text unavailable') }], unavailable: true };
-      }
-      if (value.length <= 4096) {
-        if (richCache.size >= 256) richCache.delete(richCache.keys().next().value!);
-        richCache.set(cacheKey, rich);
-      }
-    }
-    return rich;
-  }
-  function displayedText(
-    value: unknown,
-    key: string,
-    contentFormat?: CellFormat['contentFormat'],
-    numberFormat?: NumberFormat,
-  ): string {
-    return richText(value, key, contentFormat)?.text ?? numberText(value, numberFormat);
-  }
+  const { richTextColumns, richText, displayedText, clearDisplayCache } = createRichDisplay({
+    options,
+    doc,
+    t,
+    numberText,
+  });
   const win = doc.defaultView!;
   let theme = Object.freeze({
     background: '#ffffff',
@@ -6198,7 +6149,7 @@ export function createGrid(options: GridOptions): Grid {
       closeMenu();
       if (searchTimer !== undefined) win.clearTimeout(searchTimer);
       searchMatches.clear();
-      richCache.clear();
+      clearDisplayCache();
       visibleImages.clear();
       releaseUnusedImages();
       root.removeEventListener('contextmenu', onHeaderContextMenu);
