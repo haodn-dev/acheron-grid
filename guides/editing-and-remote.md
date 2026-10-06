@@ -62,6 +62,8 @@ English and Vietnamese UI packs are bundled. `locale` selects native number form
 
 ## Bounded optimistic remote source
 
+For pending/rejected/retry/conflict UI and a real loopback HTTP integration, run the [remote editing example](../examples/remote/README.md). It is not production backend acceptance.
+
 `createRemoteDataSource` adds synchronous atomic drafts backed by explicit asynchronous transport. It complements the read-only async page and live stream sources; it is a **full snapshot cache**, not a paged write adapter or a collaborative server.
 
 ```ts

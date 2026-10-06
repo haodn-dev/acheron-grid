@@ -1,7 +1,10 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { createRemoteDemoHandler } from '../remote/backend.mjs';
+const remoteDemo = createRemoteDemoHandler();
 
 createServer(async (request, response) => {
+  if (await remoteDemo(request, response)) return;
   if (request.method !== 'GET') {
     response.writeHead(405).end();
     return;

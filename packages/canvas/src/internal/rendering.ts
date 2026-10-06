@@ -828,8 +828,8 @@ export function createRendering(context: RenderingContext) {
         });
         header.style.cssText = `position:absolute;left:${Math.max(band.x, context.columnAxis.position(col) + band.offset)}px;top:${layout.level * context.headerRowHeight}px;width:${Math.max(0, Math.min(band.x + band.width, context.columnAxis.position(col + 1) + band.offset) - Math.max(band.x, context.columnAxis.position(col) + band.offset))}px;height:${layout.rowSpan * context.headerRowHeight}px`;
         header.dataset.headerLevel = String(layout.level);
-        header.setAttribute('aria-rowspan', String(layout.rowSpan));
         if (context.viewportAccessibility) {
+          header.setAttribute('aria-rowspan', String(layout.rowSpan));
           header.setAttribute('role', 'columnheader');
           header.setAttribute('aria-colindex', String(col + 1));
           header.setAttribute('aria-label', context.columns[col]!.title);
