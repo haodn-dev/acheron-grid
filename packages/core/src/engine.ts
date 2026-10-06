@@ -1,3 +1,4 @@
+import { createOutline } from './internal/outline.js';
 import { createLayout } from './internal/layout.js';
 import { createValues } from './internal/values.js';
 import { createFormatting } from './internal/formatting.js';
@@ -632,236 +633,6 @@ export function createGridEngine(options: GridEngineOptions) {
     );
     displayAnchor = from;
     return result;
-  }
-
-  function intersects(a: Readonly<SelectionRange>, b: Readonly<SelectionRange>): boolean {
-    return (
-      a.startRow <= b.endRow && b.startRow <= a.endRow && a.startColumn <= b.endColumn && b.startColumn <= a.endColumn
-    );
-  }
-  function mergeAt(row: number, col: number): Readonly<SelectionRange> | undefined {
-    return merges.find(
-      (range) => row >= range.startRow && row <= range.endRow && col >= range.startColumn && col <= range.endColumn,
-    );
-  }
-  function expandMergedRange(
-    range: SelectionRange,
-    spans: readonly Readonly<SelectionRange>[] = merges,
-  ): SelectionRange {
-    const result = { ...range };
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const span of spans)
-        if (intersects(result, span)) {
-          const next = {
-            startRow: Math.min(result.startRow, span.startRow),
-            endRow: Math.max(result.endRow, span.endRow),
-            startColumn: Math.min(result.startColumn, span.startColumn),
-            endColumn: Math.max(result.endColumn, span.endColumn),
-          };
-          if (JSON.stringify(next) !== JSON.stringify(result)) {
-            Object.assign(result, next);
-            changed = true;
-          }
-        }
-    }
-    return result;
-  }
-  function validateMergeFreeze(
-    spans: readonly Readonly<SelectionRange>[],
-    rows = frozenRows,
-    cols = frozenColumns,
-  ): void {
-    if (
-      spans.some(
-        (span) => (span.startRow < rows && span.endRow >= rows) || (span.startColumn < cols && span.endColumn >= cols),
-      )
-    )
-      throw new Error('A merged cell cannot cross a frozen boundary.');
-  }
-  function layoutAllowed(request: LayoutRequest): boolean {
-    assertAlive();
-    if (!request || !['merge', 'unmerge', 'group', 'ungroup', 'collapse', 'expand'].includes(request.kind))
-      return false;
-    if ('range' in request) {
-      const range = request.range;
-      if (
-        !range ||
-        ![range.startRow, range.endRow, range.startColumn, range.endColumn].every(Number.isSafeInteger) ||
-        range.startRow < 0 ||
-        range.endRow < range.startRow ||
-        range.endRow >= rowCount ||
-        range.startColumn < 0 ||
-        range.endColumn < range.startColumn ||
-        range.endColumn >= columns.length
-      )
-        return false;
-    } else {
-      const group = request.group;
-      if (
-        !group ||
-        typeof group.id !== 'string' ||
-        !Number.isSafeInteger(group.startRow) ||
-        !Number.isSafeInteger(group.endRow) ||
-        group.startRow < 0 ||
-        group.endRow <= group.startRow ||
-        group.endRow >= rowCount ||
-        typeof group.collapsed !== 'boolean'
-      )
-        return false;
-    }
-    const snapshot = Object.freeze(
-      'range' in request
-        ? { ...request, range: Object.freeze({ ...request.range }) }
-        : { ...request, group: Object.freeze({ ...request.group }) },
-    );
-    if (tableLocked || options.canChangeLayout?.(snapshot) === false) return false;
-    if ('range' in request) {
-      if (options.allowMerging === false) return false;
-      const range = request.range;
-      if ((range.endRow - range.startRow + 1) * (range.endColumn - range.startColumn + 1) > clipboardCellLimit)
-        return false;
-      for (let row = range.startRow; row <= range.endRow; row++)
-        for (let col = range.startColumn; col <= range.endColumn; col++)
-          if (!getCellPermission(row, col).writable) return false;
-    } else {
-      if (options.allowRowGrouping === false) return false;
-      for (let row = request.group.startRow; row <= request.group.endRow; row++) if (lockedRows.has(row)) return false;
-    }
-    return true;
-  }
-  function notifyOutline(kind: 'merge' | 'group', old: readonly number[], source: 'api' | 'undo' | 'redo'): void {
-    if (selection) {
-      const span = mergeAt(selection.rowIndex, selection.columnIndex);
-      if (span)
-        selection = {
-          rowIndex: span.startRow,
-          columnIndex: span.startColumn,
-          rowId: dataSource.getRowId(span.startRow),
-          columnKey: columns[span.startColumn]!.key,
-        };
-    }
-    installProjection(buildProjection(view));
-    notify(
-      { type: 'structure', rowMap: old.map(displayRow), columnMap: columns.map((_, i) => i) },
-      Object.freeze({ type: kind === 'merge' ? 'merge:change' : 'group:change', source }),
-    );
-  }
-  function changeOutline(
-    requests: readonly LayoutRequest[],
-    nextMerges: readonly Readonly<SelectionRange>[],
-    nextGroups: readonly Readonly<RowGroup>[],
-  ): void {
-    if (nextMerges.length > 1024 || nextGroups.length > 1024)
-      throw new RangeError('At most 1024 merged regions and row groups are supported.');
-    if (requests.some((request) => !layoutAllowed(request)))
-      throw new Error('Changing merged cells or row groups is disabled.');
-    const old = projection ?? Array.from({ length: rowCount }, (_, i) => i);
-    const entry: Extract<HistoryCommand, { kind: 'outline' }> = {
-      kind: 'outline',
-      requests,
-      beforeMerges: merges,
-      afterMerges: nextMerges,
-      beforeGroups: groups,
-      afterGroups: nextGroups,
-    };
-    merges = [...nextMerges];
-    groups = [...nextGroups];
-    past.push(entry);
-    if (past.length > 100) past.shift();
-    future.length = 0;
-    notifyOutline(requests[0] && 'range' in requests[0] ? 'merge' : 'group', old, 'api');
-  }
-  function mergeRange(range: SelectionRange): Readonly<SelectionRange> {
-    const parts = sourceRanges(range);
-    if (parts.length !== 1 || parts[0]!.endRow - parts[0]!.startRow !== range.endRow - range.startRow)
-      throw new Error('Merged rows must be contiguous and visible.');
-    return Object.freeze(parts[0]!);
-  }
-  function canMerge(range: SelectionRange): boolean {
-    try {
-      if ((range.endRow - range.startRow + 1) * (range.endColumn - range.startColumn + 1) > clipboardCellLimit)
-        return false;
-      const span = mergeRange(range);
-      validateMergeFreeze([span]);
-      return (
-        (span.startRow !== span.endRow || span.startColumn !== span.endColumn) &&
-        !merges.some((other) => intersects(span, other)) &&
-        layoutAllowed({ kind: 'merge', range: span })
-      );
-    } catch {
-      return false;
-    }
-  }
-  function mergeCells(range: SelectionRange): void {
-    if (!canMerge(range))
-      throw new Error('This range cannot be merged. Check locks, existing merges and frozen boundaries.');
-    const span = mergeRange(range);
-    changeOutline([{ kind: 'merge', range: span }], [...merges, span], groups);
-  }
-  function unmergeCells(range: SelectionRange): void {
-    const parts = sourceRanges(range),
-      removed = merges.filter((span) => parts.some((part) => intersects(part, span)));
-    if (!removed.length) return;
-    changeOutline(
-      removed.map((span) => ({ kind: 'unmerge', range: span })),
-      merges.filter((span) => !removed.includes(span)),
-      groups,
-    );
-  }
-  function groupRows(startRow: number, endRow: number): string {
-    sourceRow(startRow);
-    sourceRow(endRow);
-    if (projection || view.sort || view.sorts?.length || view.filters?.length || endRow <= startRow)
-      throw new Error('Group at least two contiguous rows in an expanded, unsorted view.');
-    if (
-      groups.some(
-        (group) =>
-          (group.startRow === startRow && group.endRow === endRow) ||
-          (group.startRow <= endRow &&
-            startRow <= group.endRow &&
-            !(
-              (startRow <= group.startRow && endRow >= group.endRow) ||
-              (group.startRow <= startRow && group.endRow >= endRow)
-            )),
-      )
-    )
-      throw new Error('Row groups must be nested or disjoint.');
-    let id: string;
-    do {
-      id = 'group-' + ++groupId;
-    } while (groups.some((group) => group.id === id));
-    const group = Object.freeze({ id, startRow, endRow, collapsed: false });
-    changeOutline([{ kind: 'group', group }], merges, [...groups, group]);
-    return group.id;
-  }
-  function findGroup(id: string): Readonly<RowGroup> {
-    const group = groups.find((group) => group.id === id);
-    if (!group) throw new Error('Unknown row group.');
-    return group;
-  }
-  function ungroupRows(id: string): void {
-    const group = findGroup(id);
-    changeOutline(
-      [{ kind: 'ungroup', group }],
-      merges,
-      groups.filter((other) => other !== group),
-    );
-  }
-  function setGroupCollapsed(id: string, collapsed: boolean): void {
-    if (typeof collapsed !== 'boolean') throw new TypeError('Collapsed must be boolean.');
-    const group = findGroup(id);
-    if (group.collapsed === collapsed) return;
-    if (collapsed && merges.some((span) => span.endRow > group.startRow && span.startRow <= group.endRow))
-      throw new Error('Unmerge cells in these rows before collapsing the group.');
-    if (collapsed && group.startRow < frozenRows && group.endRow >= frozenRows)
-      throw new Error('A collapsed group cannot cross a frozen boundary.');
-    changeOutline(
-      [{ kind: collapsed ? 'collapse' : 'expand', group }],
-      merges,
-      groups.map((other) => (other === group ? Object.freeze({ ...group, collapsed }) : other)),
-    );
   }
 
   const emptyFormat: Readonly<CellFormat> = Object.freeze({});
@@ -1916,6 +1687,49 @@ export function createGridEngine(options: GridEngineOptions) {
       },
     },
   );
+
+  const {
+    intersects,
+    mergeAt,
+    expandMergedRange,
+    validateMergeFreeze,
+    layoutAllowed,
+    notifyOutline,
+    changeOutline,
+    mergeRange,
+    canMerge,
+    mergeCells,
+    unmergeCells,
+    groupRows,
+    findGroup,
+    ungroupRows,
+    setGroupCollapsed,
+  } = createOutline(context, {
+    get assertAlive() {
+      return assertAlive;
+    },
+    get getCellPermission() {
+      return getCellPermission;
+    },
+    get installProjection() {
+      return installProjection;
+    },
+    get buildProjection() {
+      return buildProjection;
+    },
+    get notify() {
+      return notify;
+    },
+    get displayRow() {
+      return displayRow;
+    },
+    get sourceRanges() {
+      return sourceRanges;
+    },
+    get sourceRow() {
+      return sourceRow;
+    },
+  });
   if (options.view) {
     view = snapshotView(options.view);
     installProjection(buildProjection(view));
