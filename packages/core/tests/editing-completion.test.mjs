@@ -59,3 +59,11 @@ test('visibility veto and malformed saved state leave geometry unchanged',()=>{
  axis.replaceHidden(Array.from({length:10_000},(_,i)=>i+1));assert.equal(axis.position(10_001),24);assert.equal(axis.indexAt(24),10_001);assert.deepEqual(axis.range(24,48),{start:10_001,end:10_003});
  axis.replaceHidden([999_999]);assert.equal(axis.indexAt(axis.position(999_999)),1_000_000);axis.replaceHidden([]);assert.equal(axis.size(999_999),24);
  });
+
+test('state restore checks unhide policy by column identity and permits unchanged empty visibility',()=>{
+ let allow=true;const {engine}=fixture({canChangeVisibility:({hidden})=>hidden||allow});engine.setRowsHidden([1],true);engine.setColumnsHidden([1],true);
+ const state=engine.exportState();allow=false;assert.throws(()=>engine.restoreState({...state,hiddenRows:[],hiddenColumns:[]}),/visibility/);assert.deepEqual(engine.exportState(),state);
+ const swapped={...state,hiddenRows:[],configuration:{...state.configuration,columns:[...state.configuration.columns].reverse()},hiddenColumns:[0]};
+ assert.throws(()=>engine.restoreState(swapped),/visibility/);allow=true;engine.restoreState(swapped);assert.deepEqual(engine.getHiddenColumns(),[0]);assert.equal(engine.columns[0].key,'y');
+ const fixed=fixture({canChangeVisibility:()=>false}).engine;fixed.restoreState(fixed.exportState());assert.deepEqual(fixed.getHiddenRows(),[]);
+});

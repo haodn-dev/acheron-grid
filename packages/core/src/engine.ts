@@ -755,11 +755,14 @@ export function createGridEngine(options: GridEngineOptions) {
     if (previous !== size) notify({ type: 'layout' }, Object.freeze({ type: axis === rowAxis ? 'row:resize' : 'column:resize', index, previous, size }));
   }
 
+  function requireVisibilityPolicy(axis:'row'|'column',indices:readonly number[],hidden:boolean):void {
+    if(tableLocked||options.canChangeVisibility?.(Object.freeze({axis,indices:Object.freeze([...indices]),hidden}))===false)throw new Error('Changing visibility is disabled.');
+  }
   function changeVisibility(axis:'row'|'column',indices:readonly number[],hidden:boolean,history=true,source:'api'|'undo'|'redo'='api'):void {
     assertAlive();
     const layout=axis==='row'?rowAxis:columnAxis;
     if(typeof hidden!=='boolean'||!Array.isArray(indices)||new Set(indices).size!==indices.length||indices.some(index=>!Number.isSafeInteger(index)||index<0||index>=layout.count))throw new RangeError('Invalid visibility request.');
-    if(tableLocked||options.canChangeVisibility?.(Object.freeze({axis,indices:Object.freeze([...indices]),hidden}))===false)throw new Error('Changing visibility is disabled.');
+    requireVisibilityPolicy(axis,indices,hidden);
     const before=new Set(layout.hiddenIndices()),changed=indices.filter(index=>before.has(index)!==hidden);
     if(!changed.length)return;
     for(const index of changed){if(hidden)before.add(index);else before.delete(index);}
@@ -1189,7 +1192,10 @@ export function createGridEngine(options: GridEngineOptions) {
       for(const span of saved.merges)staged.mergeCells(span);
       const ids=new Set<string>();
       for(const group of saved.groups){if(!group||typeof group.id!=='string'||!group.id||ids.has(group.id)||typeof group.collapsed!=='boolean')throw new TypeError('Invalid state group.');ids.add(group.id);const stagedGroup=staged.groupRows(group.startRow,group.endRow);if(group.collapsed){staged.setGroupCollapsed(stagedGroup,true);staged.setGroupCollapsed(stagedGroup,false);}}
-      staged.setRowsHidden(saved.hiddenRows??[],true);staged.setColumnsHidden(saved.hiddenColumns??[],true);
+      const hiddenRows=saved.hiddenRows??[],hiddenColumns=saved.hiddenColumns??[];
+      if(!Array.isArray(hiddenRows)||!Array.isArray(hiddenColumns))throw new TypeError('Invalid saved visibility.');
+      if(hiddenRows.length)staged.setRowsHidden(hiddenRows,true);
+      if(hiddenColumns.length)staged.setColumnsHidden(hiddenColumns,true);
       // Restore selection in source coordinates before installing a sorted/filtered projection.
       for(const range of saved.ranges)if(!staged.selectRange(range,'add'))throw new Error('State selection is not selectable.');
       for(const cell of [saved.selection,saved.anchor])if(cell!==null){
@@ -1211,6 +1217,11 @@ export function createGridEngine(options: GridEngineOptions) {
       for(const span of valid.merges)for(let row=span.startRow;row<=span.endRow;row++)for(let col=span.startColumn;col<=span.endColumn;col++)requirePermission(row,restoredOrder[col]!,'writable');
       for(const group of valid.groups)for(let row=group.startRow;row<=group.endRow;row++)if(lockedRows.has(row))throw new Error('Changing locked row groups is disabled.');
       if(JSON.stringify(exportState().formats)!==JSON.stringify(valid.formats))for(const entry of formats.values())requireFormatPermission(entry.bounds);
+      const shownRows=rowAxis.hiddenIndices().filter(index=>!hiddenRows.includes(index));
+      const hiddenKeys=new Set(hiddenColumns.map(index=>configuration.columns[index]!.key));
+      const shownColumns=columnAxis.hiddenIndices().filter(index=>!hiddenKeys.has(columns[index]!.key));
+      if(shownRows.length)requireVisibilityPolicy('row',shownRows,false);
+      if(shownColumns.length)requireVisibilityPolicy('column',shownColumns,false);
       const nextFormats=new Map<string,FormatEntry>();let order=0;
       for(const entry of valid.formats){
         const target=entry.target,bounds:SelectionRange=target.scope==='range'?{...target.range}:{startRow:target.scope==='row'||target.scope==='cell'?target.rowIndex:0,endRow:target.scope==='row'||target.scope==='cell'?target.rowIndex:rowCount-1,startColumn:target.scope==='column'||target.scope==='cell'?target.columnIndex:0,endColumn:target.scope==='column'||target.scope==='cell'?target.columnIndex:columns.length-1};
