@@ -1,3 +1,4 @@
+import { createMenus } from './internal/menus.js';
 import { createAccessibility } from './internal/accessibility.js';
 import { createInteraction } from './internal/interaction.js';
 import { createEditors } from './internal/editors.js';
@@ -1245,7 +1246,186 @@ export function createGrid(options: GridOptions): Grid {
   });
   const { closeMenu, cancelLinkPreviewHover, openLinks } = overlay;
 
-  let suggestionsEnabled = options.contextMenuSuggestions ?? false;
+  const menus = createMenus({
+    get actionError() {
+      return actionError;
+    },
+    get animateLayout() {
+      return animateLayout;
+    },
+    get autoFitColumn() {
+      return autoFitColumn;
+    },
+    get autoFitRow() {
+      return autoFitRow;
+    },
+    get beginEdit() {
+      return beginEdit;
+    },
+    get cellLinks() {
+      return cellLinks;
+    },
+    get closeMenu() {
+      return closeMenu;
+    },
+    get columnAxis() {
+      return columnAxis;
+    },
+    get columnEditors() {
+      return columnEditors;
+    },
+    get columns() {
+      return columns;
+    },
+    get creationTypes() {
+      return creationTypes;
+    },
+    get currentView() {
+      return currentView;
+    },
+    set currentView(value) {
+      currentView = value;
+    },
+    get destroyed() {
+      return destroyed;
+    },
+    get doc() {
+      return doc;
+    },
+    get editors() {
+      return editors;
+    },
+    get engine() {
+      return engine;
+    },
+    get enterSurface() {
+      return enterSurface;
+    },
+    get finishEdit() {
+      return finishEdit;
+    },
+    get freezeHorizontal() {
+      return freezeHorizontal;
+    },
+    get freezeVertical() {
+      return freezeVertical;
+    },
+    get getSelectionRange() {
+      return getSelectionRange;
+    },
+    get getSelectionRanges() {
+      return getSelectionRanges;
+    },
+    get groupRows() {
+      return groupRows;
+    },
+    get headerColumn() {
+      return headerColumn;
+    },
+    get headerHeight() {
+      return headerHeight;
+    },
+    get htmlClipboardBlocks() {
+      return htmlClipboardBlocks;
+    },
+    get indexRow() {
+      return indexRow;
+    },
+    get indexWidth() {
+      return indexWidth;
+    },
+    get interaction() {
+      return interaction;
+    },
+    get lockNotice() {
+      return lockNotice;
+    },
+    get lockNoticeTimer() {
+      return lockNoticeTimer;
+    },
+    set lockNoticeTimer(value) {
+      lockNoticeTimer = value;
+    },
+    get managesView() {
+      return managesView;
+    },
+    get motionDuration() {
+      return motionDuration;
+    },
+    get motionEnabled() {
+      return motionEnabled;
+    },
+    get openLinks() {
+      return openLinks;
+    },
+    get options() {
+      return options;
+    },
+    get overlay() {
+      return overlay;
+    },
+    get paste() {
+      return paste;
+    },
+    get pasteSelectionBlocks() {
+      return pasteSelectionBlocks;
+    },
+    get pointerCell() {
+      return pointerCell;
+    },
+    get render() {
+      return render;
+    },
+    get replay() {
+      return replay;
+    },
+    get resizeAxis() {
+      return resizeAxis;
+    },
+    get root() {
+      return root;
+    },
+    get rowAxis() {
+      return rowAxis;
+    },
+    get rowCount() {
+      return rowCount;
+    },
+    get rowLockCache() {
+      return rowLockCache;
+    },
+    get scroller() {
+      return scroller;
+    },
+    get select() {
+      return select;
+    },
+    get selectColumn() {
+      return selectColumn;
+    },
+    get selectRow() {
+      return selectRow;
+    },
+    get selectedAxisIndices() {
+      return selectedAxisIndices;
+    },
+    get structureAction() {
+      return structureAction;
+    },
+    get svgIcon() {
+      return svgIcon;
+    },
+    get t() {
+      return t;
+    },
+    get win() {
+      return win;
+    },
+    get writeClipboard() {
+      return writeClipboard;
+    },
+  });
+  const { format, setFrozen, setLocked, openMenu, onHeaderContextMenu, onContextMenu } = menus;
 
   const resizeGuide = doc.createElement('div');
   resizeGuide.setAttribute('aria-hidden', 'true');
@@ -1361,821 +1541,6 @@ export function createGrid(options: GridOptions): Grid {
     },
   });
 
-  function openSizeDialog(
-    label: string,
-    current: number,
-    apply: (size: number) => void,
-    units: string | null = 'px',
-  ): void {
-    const dialog = doc.createElement('dialog');
-    overlay.activeDialog?.remove();
-    overlay.activeDialog = dialog;
-    dialog.setAttribute('aria-label', label);
-    dialog.dataset.gridDialog = '';
-    const form = doc.createElement('form');
-    const fieldLabel = doc.createElement('label');
-    fieldLabel.textContent = `${label}${units ? ` (${units})` : ''} `;
-    const input = doc.createElement('input');
-    input.type = 'number';
-    input.min = '1';
-    input.step = units ? 'any' : '1';
-    input.required = true;
-    input.value = String(current);
-
-    fieldLabel.append(input);
-    const save = doc.createElement('button');
-    save.type = 'submit';
-    save.textContent = t('Apply');
-    const cancel = doc.createElement('button');
-    cancel.type = 'button';
-    cancel.textContent = t('Cancel');
-
-    cancel.addEventListener('click', () => dialog.close());
-    input.addEventListener('input', () => input.setCustomValidity(''));
-    form.addEventListener('submit', (event) => {
-      event.preventDefault();
-      try {
-        apply(input.valueAsNumber);
-        dialog.close();
-      } catch (error) {
-        input.setCustomValidity(error instanceof Error ? t(error.message) : t('Invalid size.'));
-        input.reportValidity();
-      }
-    });
-    const actions = doc.createElement('div');
-    actions.dataset.dialogActions = '';
-    actions.append(save, cancel);
-    form.append(fieldLabel, actions);
-    dialog.append(form);
-    dialog.addEventListener('close', () => {
-      dialog.remove();
-      if (overlay.activeDialog === dialog) overlay.activeDialog = null;
-      if (!destroyed && !editors.editor) scroller.focus({ preventScroll: true });
-    });
-    root.append(dialog);
-    dialog.showModal();
-    input.focus();
-    input.select();
-  }
-
-  function format(targets: readonly CellFormatTarget[], patch: CellFormatPatch | null): void {
-    if (destroyed) throw new Error('Grid is destroyed.');
-    if (editors.editor) throw new Error('Finish editing before changing formatting.');
-    engine.format(targets, patch);
-  }
-
-  function openFormatDialog(row: number, col: number): void {
-    const ranges = getSelectionRanges();
-    const dialog = doc.createElement('dialog');
-    overlay.activeDialog?.remove();
-    overlay.activeDialog = dialog;
-    dialog.setAttribute('aria-label', t('Format cells'));
-    dialog.dataset.gridDialog = '';
-    const form = doc.createElement('form');
-    const scopeLabel = doc.createElement('label');
-    scopeLabel.textContent = t('Apply to ');
-    const scope = doc.createElement('select');
-    for (const [value, label] of [
-      ['selection', t('Selected cells')],
-      ['row', t('This row')],
-      ['column', t('This column')],
-      ['table', t('Whole table')],
-    ]) {
-      const option = doc.createElement('option');
-      option.value = value!;
-      option.textContent = label!;
-      scope.append(option);
-    }
-    scopeLabel.append(scope);
-    form.append(scopeLabel);
-    function field(label: string, value: string, checked: boolean) {
-      const line = doc.createElement('div');
-      line.style.cssText = 'display:flex;gap:12px;align-items:center;margin:16px 0';
-      const apply = doc.createElement('input');
-      apply.type = 'checkbox';
-      apply.checked = checked;
-      const applyLabel = doc.createElement('label');
-      applyLabel.append(apply, t(' Change {0}', label.toLowerCase()));
-      const color = doc.createElement('input');
-      color.type = 'color';
-      color.value = value;
-      color.setAttribute('aria-label', label);
-      line.append(applyLabel, color);
-      form.append(line);
-      return { apply, color };
-    }
-    const background = field(t('Background color'), '#fff4b3', true);
-    const text = field(t('Text color'), '#0f172a', false);
-    const numberApply = doc.createElement('input');
-    numberApply.type = 'checkbox';
-    const numberSelect = doc.createElement('select');
-    numberSelect.setAttribute('aria-label', t('Number format'));
-    for (const [value, label] of [
-      ['decimal', t('Decimal')],
-      ['integer', t('Integer')],
-      ['percent', t('Percent')],
-      ['currency', t('Currency')],
-    ]) {
-      const option = doc.createElement('option');
-      option.value = value!;
-      option.textContent = label!;
-      numberSelect.append(option);
-    }
-    const numberLabel = doc.createElement('label');
-    numberLabel.append(numberApply, t(' Change number format '), numberSelect);
-    form.append(numberLabel);
-    const error = doc.createElement('div');
-    error.setAttribute('role', 'alert');
-    error.style.cssText = 'color:#9f1239;margin-bottom:12px';
-    error.hidden = true;
-    const save = doc.createElement('button');
-    save.type = 'submit';
-    save.textContent = t('Apply');
-    const clear = doc.createElement('button');
-    clear.type = 'button';
-    clear.textContent = t('Clear formatting');
-    const cancel = doc.createElement('button');
-    cancel.type = 'button';
-    cancel.textContent = t('Cancel');
-
-    function targets(): CellFormatTarget[] {
-      if (scope.value === 'row') return [{ scope: 'row', rowIndex: row }];
-      if (scope.value === 'column') return [{ scope: 'column', columnIndex: col }];
-      if (scope.value === 'table') return [{ scope: 'table' }];
-      return ranges.map((range) => ({ scope: 'range', range }));
-    }
-    function checkPermission(): void {
-      const allowed = engine.canFormat(targets());
-      save.disabled = clear.disabled = !allowed;
-      error.hidden = allowed;
-      error.textContent = allowed ? '' : t('Formatting is not allowed for this selection.');
-    }
-    function apply(patch: CellFormatPatch): void {
-      try {
-        format(targets(), patch);
-        dialog.close();
-      } catch (failure) {
-        error.textContent = failure instanceof Error ? t(failure.message) : t('Formatting failed.');
-        error.hidden = false;
-      }
-    }
-    scope.addEventListener('change', checkPermission);
-    form.addEventListener('submit', (event) => {
-      event.preventDefault();
-      if (!background.apply.checked && !text.apply.checked && !numberApply.checked) {
-        error.textContent = t('Choose a format to change.');
-        error.hidden = false;
-        return;
-      }
-      apply({
-        ...(numberApply.checked ? { numberFormat: numberSelect.value as NumberFormat } : {}),
-        ...(background.apply.checked ? { background: background.color.value } : {}),
-        ...(text.apply.checked ? { textColor: text.color.value } : {}),
-      });
-    });
-    clear.addEventListener('click', () => apply({ background: null, textColor: null, numberFormat: null }));
-    cancel.addEventListener('click', () => dialog.close());
-    dialog.addEventListener('close', () => {
-      dialog.remove();
-      if (overlay.activeDialog === dialog) overlay.activeDialog = null;
-      if (!destroyed && !editors.editor) scroller.focus({ preventScroll: true });
-    });
-    const actions = doc.createElement('div');
-    actions.dataset.dialogActions = '';
-    actions.append(save, clear, cancel);
-    form.append(error, actions);
-    dialog.append(form);
-    root.append(dialog);
-    checkPermission();
-    dialog.showModal();
-    scope.focus();
-  }
-
-  function setLocked(target: CellLockTarget, locked: boolean): void {
-    if (destroyed) throw new Error('Grid is destroyed.');
-    if (editors.editor) throw new Error('Finish editing before changing locks.');
-    const wasLocked = engine.isLocked(target);
-    engine.setLocked(target, locked);
-    rowLockCache.clear();
-    if (target.scope === 'table') {
-      win.clearTimeout(lockNoticeTimer);
-      lockNotice.getAnimations().forEach((animation) => animation.cancel());
-      lockNotice.hidden = true;
-      if (locked && !wasLocked && options.tableLockNotice !== false) {
-        lockNotice.hidden = false;
-        if (motionEnabled())
-          lockNotice.animate(
-            [
-              { opacity: 0, transform: 'translateY(2px)' },
-              { opacity: 1, transform: 'translateY(0)', offset: 0.045 },
-              { opacity: 1, offset: 0.95 },
-              { opacity: 0 },
-            ],
-            { duration: 4000, easing: 'ease-out' },
-          );
-        lockNoticeTimer = win.setTimeout(() => {
-          lockNotice.hidden = true;
-        }, 4000);
-      }
-    }
-  }
-
-  function setFrozen(rows: number, columns: number): void {
-    if (destroyed) throw new Error('Grid is destroyed.');
-    if (editors.editor) throw new Error('Finish editing before changing frozen panes.');
-    const axis = rows !== engine.frozenRows ? 'row' : 'column';
-    animateLayout(() => engine.setFrozen(rows, columns), axis);
-    if (motionEnabled())
-      for (const [line, scale] of [
-        [freezeVertical, 'scaleY'],
-        [freezeHorizontal, 'scaleX'],
-      ] as const)
-        if (!line.hidden) {
-          line.style.transformOrigin = 'top left';
-          line.animate(
-            [
-              { opacity: 0, transform: `${scale}(0)` },
-              { opacity: 1, transform: `${scale}(1)` },
-            ],
-            { duration: motionDuration, easing: 'cubic-bezier(.22,1,.36,1)' },
-          );
-        }
-  }
-
-  function changeRows(request: Readonly<RowChangeRequest>): void {
-    if (!finishEdit(true)) return;
-    if (options.canRowChange?.(request) === false) throw new Error('Changing rows is disabled.');
-    options.onRowChange?.(request);
-  }
-  function openMenu(row: number, col: number, x: number, y: number, header = false): void {
-    closeMenu();
-    const range = getSelectionRange();
-    if (
-      rowCount &&
-      !getSelectionRanges().some(
-        (range) => row >= range.startRow && row <= range.endRow && col >= range.startColumn && col <= range.endColumn,
-      )
-    )
-      select(row, col, false, false);
-    if (destroyed || (rowCount > 0 && !engine.getCellPermission(row, col).selectable)) return;
-    header ||=
-      interaction.axisAnchor?.axis === 'column' &&
-      getSelectionRanges().some(
-        (range) =>
-          range.startRow === 0 && range.endRow === rowCount - 1 && col >= range.startColumn && col <= range.endColumn,
-      );
-    const selection =
-      engine.getSelection() ??
-      (header || (!rowCount && options.onRowChange)
-        ? { rowIndex: 0, columnIndex: col, columnKey: columns[col]!.key, rowId: 0 }
-        : null);
-    if (!selection) return;
-    const popup = doc.createElement('div');
-    overlay.menu = popup;
-    popup.popover = 'auto';
-    popup.setAttribute('role', 'menu');
-    popup.setAttribute('aria-label', header ? t('Column actions') : t('Cell actions'));
-    popup.className = 'acheron-context-menu';
-    popup.style.cssText =
-      'position:fixed;margin:0;padding:6px;min-width:200px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;border:1px solid var(--acheron-grid-line-color);border-radius:10px;box-shadow:0 12px 32px #0003;background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font)';
-    const style = doc.createElement('style');
-    style.textContent =
-      '.acheron-context-menu [hidden]{display:none!important}.acheron-context-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:0;border-radius:4px;background:transparent;text-align:left;color:inherit;font:inherit;cursor:pointer;outline:none}.acheron-context-menu button:hover:not(:disabled),.acheron-context-menu button:focus-visible{background:var(--acheron-header-background)}.acheron-context-menu button:focus-visible{box-shadow:inset 0 0 0 2px var(--acheron-selection-color)}.acheron-context-menu button:disabled{opacity:.45;cursor:default}.acheron-context-menu svg{flex:none;color:var(--acheron-icon-color)}.acheron-context-menu [role=separator]{height:1px;background:var(--acheron-grid-line-color);margin:5px 4px}';
-    popup.append(style);
-    style.textContent +=
-      '.acheron-context-menu:popover-open{display:grid;gap:2px}.acheron-context-menu:not(:popover-open){display:none}';
-    popup.addEventListener('toggle', () => {
-      if (!popup.matches(':popover-open') && overlay.menu === popup) closeMenu();
-    });
-    const filter = doc.createElement('input');
-    filter.type = 'search';
-    filter.hidden = true;
-    filter.placeholder = t('Filter actions…');
-    filter.setAttribute('aria-label', t('Filter actions'));
-    filter.style.cssText =
-      'position:sticky;top:0;width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--acheron-grid-line-color);border-radius:4px;background:var(--acheron-background);color:inherit;font:inherit;outline:none';
-    popup.append(filter);
-    const empty = doc.createElement('div');
-    empty.textContent = t('No matching actions');
-    empty.hidden = true;
-    empty.setAttribute('role', 'status');
-    empty.style.padding = '10px';
-    let showAll = !suggestionsEnabled;
-    const recommended = (label: string): boolean =>
-      /^(Copy|Cut|Paste|Undo|Redo|Open links|Edit cell)/.test(label) ||
-      (header
-        ? /^(Sort|Filter|Resize column|Auto-fit column|Move columns|Freeze columns|Lock.*column|Unlock.*column)/.test(
-            label,
-          )
-        : interaction.axisAnchor?.axis === 'row'
-          ? /^(Group|Ungroup|Collapse|Expand|Move rows|Insert row|Delete.*row|Lock.*row|Unlock.*row)/.test(label)
-          : /^(Merge|Unmerge|Format cells|Lock.*cell|Unlock.*cell)/.test(label));
-    function filterActions(): void {
-      const query = filter.value.trim().toLocaleLowerCase();
-      let count = 0;
-      for (const button of Array.from(popup.querySelectorAll<HTMLButtonElement>('button[data-action]'))) {
-        button.hidden = query
-          ? !button.textContent!.toLocaleLowerCase().includes(query)
-          : !showAll && (button.disabled || !recommended(button.dataset.action!) || count >= 8);
-        if (!button.hidden) count++;
-      }
-      let previousGroup = '';
-      for (const child of Array.from(popup.children)) {
-        if (child.getAttribute('role') === 'separator') (child as HTMLElement).hidden = true;
-        if (child instanceof win.HTMLButtonElement && !child.hidden) {
-          if (previousGroup && child.dataset.group !== previousGroup) {
-            let preceding = child.previousElementSibling;
-            while (preceding && preceding.getAttribute('role') !== 'separator')
-              preceding = preceding.previousElementSibling;
-            if (preceding) (preceding as HTMLElement).hidden = false;
-          }
-          previousGroup = child.dataset.group!;
-        }
-      }
-      empty.hidden = count > 0;
-      mode.hidden = !!query;
-      all.hidden = !!query || showAll;
-      if (popup.isConnected && popup.matches(':popover-open')) {
-        popup.style.left = `${Math.max(8, Math.min(x, win.innerWidth - popup.offsetWidth - 8))}px`;
-        popup.style.top = `${Math.max(8, Math.min(y, win.innerHeight - popup.offsetHeight - 8))}px`;
-      }
-    }
-    filter.addEventListener('input', filterActions);
-    const fingerprint = JSON.stringify(getSelectionRanges());
-    const menuIcons: readonly (readonly [string, keyof typeof icons, string])[] = [
-      ['Copy', 'copy', 'clipboard'],
-      ['Cut', 'scissors', 'clipboard'],
-      ['Paste', 'clipboard-paste', 'clipboard'],
-      ['Select row', 'rows-3', 'selection'],
-      ['Select column', 'columns-3', 'selection'],
-      ['Sort ascending', 'arrow-up', 'view'],
-      ['Sort descending', 'arrow-down', 'view'],
-      ['Filter', 'funnel', 'view'],
-      ['Clear sort', 'list-filter', 'view'],
-      ['Insert row above', 'between-horizontal-start', 'structure'],
-      ['Insert row', 'between-horizontal-end', 'structure'],
-      ['Insert rows', 'rows-3', 'structure'],
-      ['Insert column left', 'between-vertical-start', 'structure'],
-      ['Insert column', 'between-vertical-end', 'structure'],
-      ['Delete', 'x', 'structure'],
-      ['Move', 'move', 'structure'],
-      ['Merge', 'columns-3', 'outline'],
-      ['Unmerge', 'columns-3', 'outline'],
-      ['Group', 'rows-3', 'outline'],
-      ['Ungroup', 'rows-3', 'outline'],
-      ['Collapse', 'chevron-down', 'outline'],
-      ['Expand', 'chevron-down', 'outline'],
-      ['Open links', 'external-link', 'links'],
-      ['Edit', 'square-pen', 'editing'],
-      ['Undo', 'undo-2', 'editing'],
-      ['Redo', 'redo-2', 'editing'],
-      ['Format', 'palette', 'editing'],
-      ['Unlock', 'lock-open', 'permissions'],
-      ['Lock', 'lock', 'permissions'],
-      ['Cell is', 'lock', 'permissions'],
-      ['Freeze', 'snowflake', 'freeze'],
-      ['Unfreeze', 'panel-top-close', 'freeze'],
-      ['Auto-fit', 'maximize-2', 'layout'],
-      ['Resize column', 'arrow-left-right', 'layout'],
-      ['Resize row', 'arrow-up-down', 'layout'],
-    ];
-    let previousGroup = '';
-    function item(label: string, enabled: boolean, action: () => void | Promise<void>): void {
-      const button = doc.createElement('button');
-      button.type = 'button';
-      const [, name, group] = menuIcons.find(([prefix]) => label.startsWith(prefix)) ?? ['', 'square-pen', 'editing'];
-      if (previousGroup && group !== previousGroup) {
-        const separator = doc.createElement('div');
-        separator.setAttribute('role', 'separator');
-        popup.append(separator);
-      }
-      previousGroup = group;
-      button.dataset.group = group;
-      button.append(svgIcon(name), doc.createTextNode(t(label)));
-      button.dataset.action = label;
-      button.setAttribute('role', 'menuitem');
-      button.disabled = !enabled;
-      button.addEventListener('click', async () => {
-        closeMenu(true);
-        actionError.style.display = 'none';
-        try {
-          await action();
-        } catch (error) {
-          if (!destroyed) {
-            actionError.textContent = `${error instanceof Error ? t(error.message) : t('Action failed.')}${label === 'Copy' || label === 'Cut' || label.startsWith('Paste') ? t(' Use Ctrl/Cmd+C or Ctrl/Cmd+V if the browser blocks menu clipboard access.') : ''}`;
-            actionError.style.display = 'block';
-          }
-        }
-      });
-      popup.append(button);
-    }
-    item(
-      'Copy',
-      rowCount > 0 &&
-        getSelectionRanges().length > 0 &&
-        engine.getCellPermission(selection.rowIndex, selection.columnIndex).copyable &&
-        !!win.navigator.clipboard?.writeText,
-      writeClipboard,
-    );
-    item(
-      'Cut',
-      rowCount > 0 &&
-        getSelectionRanges().length > 0 &&
-        engine.canEdit(selection.rowIndex, selection.columnIndex) &&
-        !!win.navigator.clipboard?.writeText,
-      () => writeClipboard(true),
-    );
-    const readClipboard = async (pasteOptions?: PasteOptions) => {
-      let text = '',
-        html = '';
-      if (win.navigator.clipboard.read) {
-        const items = await win.navigator.clipboard.read();
-        for (const item of items) {
-          if (item.types.includes('text/html')) html = await (await item.getType('text/html')).text();
-          if (item.types.includes('text/plain')) text = await (await item.getType('text/plain')).text();
-        }
-      } else text = await win.navigator.clipboard.readText();
-      if (destroyed || fingerprint !== JSON.stringify(getSelectionRanges()))
-        throw new Error('Selection changed before paste. Try again.');
-      if (html) pasteSelectionBlocks(encodeBlocks(htmlClipboardBlocks(html)), pasteOptions);
-      else paste(text, pasteOptions);
-    };
-    item('Paste', !!win.navigator.clipboard?.readText && engine.canPaste(), () => readClipboard());
-    item('Paste values only', !!win.navigator.clipboard?.readText && engine.canPaste(), () =>
-      readClipboard({ mode: 'values' }),
-    );
-    item(
-      'Paste formats only',
-      !!win.navigator.clipboard?.readText &&
-        engine.canFormat(getSelectionRanges().map((range) => ({ scope: 'range' as const, range }))),
-      () => readClipboard({ mode: 'formats' }),
-    );
-    item('Paste transposed', !!win.navigator.clipboard?.readText && engine.canPaste(), () =>
-      readClipboard({ transpose: true }),
-    );
-    item('Paste skipping empty cells', !!win.navigator.clipboard?.readText && engine.canPaste(), () =>
-      readClipboard({ skipEmpty: true }),
-    );
-    if (header) {
-      item('Select column', true, () => selectColumn(col));
-      item('Sort ascending…', managesView || !!options.onViewChange, () => openViewDialog(col, 'asc'));
-      item('Sort descending…', managesView || !!options.onViewChange, () => openViewDialog(col, 'desc'));
-      item('Filter column…', managesView || !!options.onViewChange, () => openViewDialog(col));
-      item('Clear sort and filters…', managesView || !!options.onViewChange, () => openViewDialog(col, 'clear'));
-    } else {
-      item('Select row', rowCount > 0, () => selectRow(row));
-      item('Select column', true, () => selectColumn(col));
-    }
-    item(header ? 'Hide selected columns' : 'Hide selected rows', !engine.isLocked({ scope: 'table' }), () => {
-      if (header) engine.setColumnsHidden(selectedAxisIndices('column', col), true);
-      else engine.setRowsHidden(selectedAxisIndices('row', row), true);
-    });
-    item('Show all hidden rows', engine.getHiddenRows().length > 0, () =>
-      engine.setRowsHidden(engine.getHiddenRows(), false),
-    );
-    item(
-      'Show all hidden columns',
-      columns.some((_, i) => engine.isColumnHidden(i)),
-      () => engine.setColumnsHidden(engine.getHiddenColumns(), false),
-    );
-    const indices = selectedAxisIndices(header ? 'column' : 'row', header ? col : row);
-    if (!header && rowCount) {
-      const selected = getSelectionRanges(),
-        span = selected.length === 1 ? selected[0] : undefined;
-      item('Merge cells', !!span && engine.canMerge(span), () => {
-        if (span) structureAction(() => engine.mergeCells(span));
-      });
-      const affected = span
-        ? engine
-            .getMergedCells()
-            .filter(
-              (merge) =>
-                merge.startRow <= engine.getRowSourceIndex(span.endRow) &&
-                merge.endRow >= engine.getRowSourceIndex(span.startRow) &&
-                merge.startColumn <= span.endColumn &&
-                merge.endColumn >= span.startColumn,
-            )
-        : [];
-      item(
-        'Unmerge cells',
-        affected.length > 0 && affected.every((range) => engine.canChangeLayout({ kind: 'unmerge', range })),
-        () => {
-          if (span) structureAction(() => engine.unmergeCells(span));
-        },
-      );
-      const wholeRows =
-        !!span && span.startColumn === 0 && span.endColumn === columns.length - 1 && span.endRow > span.startRow;
-      item(
-        'Group selected rows',
-        wholeRows &&
-          !engine.getRowGroups().some((group) => group.collapsed) &&
-          !engine.view.sort &&
-          !engine.view.sorts?.length &&
-          !engine.view.filters?.length &&
-          !!span &&
-          engine.canChangeLayout({
-            kind: 'group',
-            group: { id: '', startRow: span.startRow, endRow: span.endRow, collapsed: false },
-          }),
-        () => {
-          if (span) groupRows(span.startRow, span.endRow);
-        },
-      );
-      const sourceRow = engine.getRowSourceIndex(row),
-        rowGroups = engine
-          .getRowGroups()
-          .filter((group) => sourceRow >= group.startRow && sourceRow <= group.endRow)
-          .sort((a, b) => a.endRow - a.startRow - (b.endRow - b.startRow));
-      const group = rowGroups[0];
-      if (group) {
-        item(
-          group.collapsed ? 'Expand row group' : 'Collapse row group',
-          engine.canChangeLayout({ kind: group.collapsed ? 'expand' : 'collapse', group }),
-          () => structureAction(() => engine.setGroupCollapsed(group.id, !group.collapsed), 'row'),
-        );
-        item('Ungroup rows', engine.canChangeLayout({ kind: 'ungroup', group }), () =>
-          structureAction(() => engine.ungroupRows(group.id)),
-        );
-      }
-    }
-    if (!header && options.onRowChange) {
-      const above = Object.freeze({ kind: 'insert' as const, beforeIndex: indices[0]!, count: 1 });
-      const below = Object.freeze({
-        kind: 'insert' as const,
-        beforeIndex: rowCount ? indices[indices.length - 1]! + 1 : 0,
-        count: 1,
-      });
-      const deletion = Object.freeze({ kind: 'delete' as const, indices: Object.freeze(indices) });
-      item('Insert row above', options.canRowChange?.(above) !== false, () => changeRows(above));
-      item('Insert row below', options.canRowChange?.(below) !== false, () => changeRows(below));
-      item('Insert rows…', options.canRowChange?.(above) !== false, () =>
-        openSizeDialog(
-          t('Number of rows'),
-          1,
-          (count) => {
-            if (!Number.isSafeInteger(count) || count < 1 || count > 1000) throw new RangeError('Choose 1–1000 rows.');
-            changeRows(Object.freeze({ ...above, count }));
-          },
-          null,
-        ),
-      );
-      item(
-        indices.length > 1 ? `Delete ${indices.length} selected rows` : 'Delete row',
-        rowCount > 0 && options.canRowChange?.(deletion) !== false,
-        () => changeRows(deletion),
-      );
-    }
-    if (header && options.allowColumnChanges) {
-      const request = {
-        axis: 'column' as const,
-        kind: 'insert' as const,
-        indices: [],
-        beforeIndex: indices[0]!,
-        count: 1,
-      };
-      item('Insert column left…', engine.canChangeStructure(request), () => openColumnDialog(indices[0]!));
-      item('Insert column right…', engine.canChangeStructure({ ...request, beforeIndex: indices.at(-1)! + 1 }), () =>
-        openColumnDialog(indices.at(-1)! + 1),
-      );
-      item(
-        indices.length > 1 ? 'Delete ' + indices.length + ' selected columns' : 'Delete column',
-        indices.length < columns.length &&
-          engine.canChangeStructure({
-            axis: 'column',
-            kind: 'delete',
-            indices,
-            beforeIndex: indices[0]!,
-            count: indices.length,
-          }),
-        () => engine.deleteColumns(indices),
-      );
-    }
-    if (options.onReorder)
-      item(
-        header ? 'Move columns to…' : 'Move rows to…',
-        (header || rowCount > 0) &&
-          options.canReorder?.({ axis: header ? 'column' : 'row', indices, beforeIndex: indices[0]! }) !== false,
-        () => {
-          const axis = header ? 'column' : 'row';
-          const count = header ? columns.length : rowCount;
-          openSizeDialog(
-            header ? t('Destination column') : t('Destination row'),
-            indices[0]! + 1,
-            (destination) => {
-              if (!Number.isSafeInteger(destination) || destination < 1 || destination > count - indices.length + 1)
-                throw new RangeError(`Choose a position from 1 to ${count - indices.length + 1}.`);
-              const moved = new Set(indices);
-              const remaining = Array.from({ length: count }, (_, i) => i).filter((i) => !moved.has(i));
-              const request = Object.freeze({
-                axis,
-                indices: Object.freeze(indices),
-                beforeIndex: remaining[destination - 1] ?? count,
-              });
-              if (options.canReorder?.(request) === false) throw new Error('Moving items is disabled.');
-              options.onReorder?.(request);
-            },
-            null,
-          );
-        },
-      );
-    if (!header && rowCount && cellLinks(row, col).length)
-      item('Open links…', options.allowOpenLinks !== false, () => openLinks(row, col, x, y));
-    item('Edit cell', rowCount > 0 && engine.canEdit(selection.rowIndex, selection.columnIndex), beginEdit);
-    item('Undo', engine.canUndo(), () => {
-      replay(false);
-    });
-    item('Redo', engine.canRedo(), () => {
-      replay(true);
-    });
-    item(
-      'Format cells…',
-      rowCount > 0 && engine.canFormat(getSelectionRanges().map((range) => ({ scope: 'range', range }))),
-      () => openFormatDialog(row, col),
-    );
-    const lockRanges = getSelectionRanges();
-    const selectedCellsLocked = lockRanges.every((range) => {
-      for (let r = range.startRow; r <= range.endRow; r++)
-        for (let c = range.startColumn; c <= range.endColumn; c++)
-          if (!engine.isLocked({ scope: 'cell', rowIndex: r, columnIndex: c })) return false;
-      return true;
-    });
-    const lockTargets: [string, CellLockTarget[]][] = [
-      [
-        lockRanges.length > 1 ||
-        lockRanges.some((range) => range.startRow !== range.endRow || range.startColumn !== range.endColumn)
-          ? 'selected cells'
-          : 'cell',
-        [{ scope: 'cell', rowIndex: row, columnIndex: col }],
-      ],
-      ['row', selectedAxisIndices('row', row).map((rowIndex) => ({ scope: 'row', rowIndex }))],
-      ['column', selectedAxisIndices('column', col).map((columnIndex) => ({ scope: 'column', columnIndex }))],
-      ['table', [{ scope: 'table' }]],
-    ];
-    for (const [label, targets] of lockTargets) {
-      if (!targets.length || (!rowCount && (label === 'row' || label.includes('cell')))) continue;
-      const locked = label.includes('cell') ? selectedCellsLocked : targets.every((target) => engine.isLocked(target));
-      const name =
-        targets.length > 1 && (label === 'row' || label === 'column')
-          ? t('{0} selected {1}s', targets.length, t(label))
-          : t(label);
-      item(`${locked ? 'Unlock' : 'Lock'} ${name}`, engine.canManageLocks(), () => {
-        if (label.includes('cell')) {
-          for (const range of lockRanges)
-            for (let r = range.startRow; r <= range.endRow; r++)
-              for (let c = range.startColumn; c <= range.endColumn; c++)
-                setLocked({ scope: 'cell', rowIndex: r, columnIndex: c }, !locked);
-        } else for (const target of targets) setLocked(target, !locked);
-      });
-    }
-    if (rowCount > 0 && !engine.getCellPermission(row, col).writable) item('Cell is read-only', false, () => {});
-    const rowsFit = rowCount > 0 && rowAxis.position(row + 1) < scroller.clientHeight;
-    const columnsFit = columnAxis.position(col + 1) < scroller.clientWidth;
-    item('Freeze rows through this row', rowsFit && engine.frozenRows !== row + 1, () =>
-      setFrozen(row + 1, engine.frozenColumns),
-    );
-    item('Freeze columns through this column', columnsFit && engine.frozenColumns !== col + 1, () =>
-      setFrozen(engine.frozenRows, col + 1),
-    );
-    item(
-      'Freeze through this cell',
-      rowsFit && columnsFit && (engine.frozenRows !== row + 1 || engine.frozenColumns !== col + 1),
-      () => setFrozen(row + 1, col + 1),
-    );
-    item('Unfreeze rows', engine.frozenRows > 0, () => setFrozen(0, engine.frozenColumns));
-    item('Unfreeze columns', engine.frozenColumns > 0, () => setFrozen(engine.frozenRows, 0));
-    item('Unfreeze table', engine.frozenRows > 0 || engine.frozenColumns > 0, () => setFrozen(0, 0));
-    item('Auto-fit column', true, () => autoFitColumn(col));
-    item('Auto-fit row', rowCount > 0, () => autoFitRow(row));
-    item('Resize column…', true, () =>
-      openSizeDialog(t('Column width'), columnAxis.size(col), (size) => resizeAxis(columnAxis, col, size)),
-    );
-    item('Resize row…', rowCount > 0, () =>
-      openSizeDialog(t('Row height'), rowAxis.size(row), (size) => resizeAxis(rowAxis, row, size)),
-    );
-    const mode = doc.createElement('button');
-    mode.type = 'button';
-    mode.setAttribute('role', 'menuitemcheckbox');
-    mode.textContent = t('Suggested actions');
-    mode.setAttribute('aria-checked', String(suggestionsEnabled));
-    mode.setAttribute('aria-label', t('Suggested actions'));
-    mode.textContent = t('Suggested actions: ') + (suggestionsEnabled ? t('On') : t('Off'));
-    mode.addEventListener('click', () => {
-      mode.focus();
-      suggestionsEnabled = !suggestionsEnabled;
-      showAll = !suggestionsEnabled;
-      mode.setAttribute('aria-checked', String(suggestionsEnabled));
-      mode.textContent = t('Suggested actions: ') + (suggestionsEnabled ? t('On') : t('Off'));
-      all.hidden = showAll;
-      filterActions();
-    });
-    const all = doc.createElement('button');
-    all.type = 'button';
-    all.textContent = t('Show all actions');
-    all.setAttribute('role', 'menuitem');
-    all.addEventListener('click', () => {
-      showAll = true;
-      filterActions();
-      all.hidden = true;
-    });
-    filter.before(mode);
-    popup.append(all, empty);
-    filterActions();
-    all.hidden = showAll;
-
-    popup.addEventListener('keydown', (event) => {
-      const buttons = Array.from(popup.querySelectorAll<HTMLButtonElement>('button:not(:disabled):not([hidden])'));
-      const index = buttons.indexOf(doc.activeElement as HTMLButtonElement);
-      if (event.key === 'Escape' && filter.value) {
-        event.preventDefault();
-        filter.value = '';
-        filterActions();
-        filter.hidden = true;
-        buttons[0]?.focus();
-      } else if (event.key === 'Escape' || event.key === 'Tab') {
-        event.preventDefault();
-        closeMenu(true);
-      } else if (
-        event.target !== filter &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        (event.key.length === 1 || event.key === 'Backspace')
-      ) {
-        event.preventDefault();
-        filter.hidden = false;
-        filter.value = event.key === 'Backspace' ? filter.value.slice(0, -1) : filter.value + event.key;
-        filterActions();
-        filter.focus();
-      } else if (event.target === filter && event.key === 'Enter') {
-        event.preventDefault();
-        popup.querySelector<HTMLButtonElement>('button[data-action]:not(:disabled):not([hidden])')?.click();
-      } else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
-        event.preventDefault();
-        const next =
-          event.key === 'Home'
-            ? 0
-            : event.key === 'End'
-              ? buttons.length - 1
-              : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
-        buttons[next]?.focus();
-      }
-      event.stopPropagation();
-    });
-    root.append(popup);
-    popup.showPopover();
-    popup.style.left = `${Math.max(8, Math.min(x, win.innerWidth - popup.offsetWidth - 8))}px`;
-    popup.style.top = `${Math.max(8, Math.min(y, win.innerHeight - popup.offsetHeight - 8))}px`;
-    enterSurface(popup);
-    popup.querySelector<HTMLButtonElement>('button[data-action]:not(:disabled):not([hidden])')?.focus();
-  }
-
-  function onHeaderContextMenu(event: MouseEvent): void {
-    if (event.target instanceof win.Node && overlay.menu?.contains(event.target)) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-    const bounds = root.getBoundingClientRect();
-    if (
-      indexWidth &&
-      event.clientX >= bounds.left &&
-      event.clientX < bounds.left + indexWidth &&
-      event.clientY >= bounds.top + headerHeight
-    ) {
-      event.preventDefault();
-      event.stopPropagation();
-      const row = indexRow(event);
-      if (row !== null && finishEdit(true)) {
-        if (
-          !getSelectionRanges().some(
-            (range) =>
-              range.startColumn === 0 &&
-              range.endColumn === columns.length - 1 &&
-              row >= range.startRow &&
-              row <= range.endRow,
-          )
-        )
-          selectRow(row);
-        openMenu(row, 0, event.clientX, event.clientY);
-      }
-      return;
-    }
-    if (event.clientY < bounds.top || event.clientY >= bounds.top + headerHeight) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const col = headerColumn(event);
-    if (col === null || !finishEdit(true)) return;
-    if (
-      !getSelectionRanges().some(
-        (range) =>
-          range.startRow === 0 && range.endRow === rowCount - 1 && col >= range.startColumn && col <= range.endColumn,
-      )
-    )
-      selectColumn(col);
-    const selection = engine.getSelection();
-    if (!rowCount || selection) openMenu(selection?.rowIndex ?? 0, col, event.clientX, event.clientY, true);
-  }
-
   const builtinColumnTypes: readonly ColumnType[] = [
     {
       key: 'text',
@@ -2222,201 +1587,6 @@ export function createGrid(options: GridOptions): Grid {
     creationTypes.some((type) => !type.key || !type.label || typeof type.create !== 'function')
   )
     throw new TypeError('Invalid column types.');
-  let createdColumn = 0;
-  function openColumnDialog(beforeIndex: number): void {
-    if (!options.allowColumnChanges || overlay.activeDialog?.open) return;
-    const dialog = doc.createElement('dialog');
-    dialog.dataset.gridDialog = '';
-    dialog.setAttribute('aria-label', t('Insert column'));
-    overlay.activeDialog = dialog;
-    const heading = doc.createElement('p');
-    heading.textContent = t('Insert column');
-    const key = doc.createElement('input'),
-      title = doc.createElement('input'),
-      type = doc.createElement('select'),
-      initial = doc.createElement('input');
-    do {
-      key.value = 'column_' + ++createdColumn;
-    } while (columns.some((column) => column.key === key.value));
-    key.required = title.required = true;
-    for (const item of creationTypes) {
-      const option = doc.createElement('option');
-      option.value = item.key;
-      option.textContent = item.label;
-      type.append(option);
-    }
-    const field = (name: string, input: HTMLElement) => {
-      const label = doc.createElement('label');
-      label.textContent = name;
-      input.setAttribute('aria-label', name);
-      label.append(input);
-      return label;
-    };
-    const status = doc.createElement('p');
-    status.setAttribute('role', 'alert');
-    const apply = doc.createElement('button');
-    apply.type = 'button';
-    apply.textContent = t('Insert column');
-    const cancel = doc.createElement('button');
-    cancel.type = 'button';
-    cancel.textContent = t('Cancel');
-    cancel.onclick = () => dialog.close();
-    apply.onclick = () => {
-      if (!key.reportValidity() || !title.reportValidity()) return;
-      try {
-        if (!key.value.trim() || !title.value.trim()) throw new Error('Key and title are required.');
-        const definition = creationTypes
-          .find((item) => item.key === type.value)!
-          .create(Object.freeze({ key: key.value.trim(), title: title.value.trim(), defaultText: initial.value }));
-        if (definition.column.key !== key.value.trim()) throw new Error('Column factory must retain the supplied key.');
-        const editorConfig = definition.editor ? validateColumnEditor(definition.column, definition.editor) : undefined;
-        engine.insertColumns(beforeIndex, [definition.column]);
-        if (editorConfig) columnEditors.set(definition.column.key, editorConfig);
-        dialog.close();
-        render();
-      } catch (error) {
-        status.textContent = error instanceof Error ? t(error.message) : t('Unable to insert column.');
-      }
-    };
-    const actions = doc.createElement('div');
-    actions.dataset.dialogActions = '';
-    actions.append(apply, cancel);
-    dialog.append(
-      heading,
-      field(t('Column key'), key),
-      field(t('Column title'), title),
-      field(t('Column type'), type),
-      field(t('Default value'), initial),
-      status,
-      actions,
-    );
-    root.append(dialog);
-    dialog.addEventListener('close', () => {
-      dialog.remove();
-      if (overlay.activeDialog === dialog) overlay.activeDialog = null;
-      if (!destroyed) scroller.focus({ preventScroll: true });
-    });
-    dialog.showModal();
-    title.focus();
-  }
-
-  function openViewDialog(col: number, sort?: 'asc' | 'desc' | 'clear'): void {
-    if ((!managesView && !options.onViewChange) || overlay.activeDialog?.open) return;
-    const dialog = doc.createElement('dialog');
-    overlay.activeDialog = dialog;
-    dialog.setAttribute('aria-label', sort ? t('Change row view') : t('Filter column'));
-    dialog.dataset.gridDialog = '';
-    const title = doc.createElement('p');
-    title.textContent =
-      sort === 'clear'
-        ? t('Show all rows in source order')
-        : `${sort ? t('Sort {0}', sort === 'asc' ? t('ascending') : t('descending')) : t('Filter')}: ${columns[col]!.title}`;
-    const note = doc.createElement('p');
-    note.textContent = managesView
-      ? t(
-          'Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Clear the view before changing rows or columns.',
-        )
-      : t('The host applies this row view. State retention depends on its handler.');
-    const input = doc.createElement('input');
-    input.type = 'search';
-    input.setAttribute('aria-label', t('Contains text'));
-    input.placeholder = t('Contains text (empty removes this filter)');
-    input.style.width = '100%';
-    input.value = currentView?.filters?.find((filter) => filter.columnKey === columns[col]!.key)?.query ?? '';
-    const condition = doc.createElement('select');
-    condition.setAttribute('aria-label', t('Filter condition'));
-    for (const [value, label] of [
-      ['contains', t('Contains text')],
-      ['equals', t('Equals text')],
-      ['not-empty', t('Has a value')],
-      ['empty', t('Is empty')],
-    ]) {
-      const option = doc.createElement('option');
-      option.value = value!;
-      option.textContent = label!;
-      condition.append(option);
-    }
-    condition.value =
-      currentView?.filters?.find((filter) => filter.columnKey === columns[col]!.key)?.operator ?? 'contains';
-    const updateInput = () => {
-      input.disabled = condition.value === 'empty' || condition.value === 'not-empty';
-    };
-    condition.addEventListener('change', updateInput);
-    updateInput();
-    const status = doc.createElement('p');
-    status.setAttribute('role', 'alert');
-    const apply = doc.createElement('button');
-    apply.type = 'button';
-    apply.textContent = t('Apply view');
-    const cancel = doc.createElement('button');
-    cancel.type = 'button';
-    cancel.textContent = t('Cancel');
-    cancel.addEventListener('click', () => dialog.close());
-    const commit = () => {
-      const key = columns[col]!.key;
-      const filters = (currentView?.filters ?? []).filter((filter) => filter.columnKey !== key);
-      if (!sort && (input.value || condition.value === 'empty' || condition.value === 'not-empty')) {
-        const operator = condition.value as 'contains' | 'equals' | 'not-empty' | 'empty';
-        filters.push({ columnKey: key, query: input.value, operator });
-      }
-      const view: LocalViewOptions =
-        sort === 'clear'
-          ? {}
-          : sort
-            ? {
-                ...(currentView?.filters ? { filters: currentView.filters } : {}),
-                sort: { columnKey: key, direction: sort },
-              }
-            : { ...currentView, filters };
-      try {
-        if (managesView) engine.setView(view);
-        currentView = view;
-        options.onViewChange?.(view);
-        if (dialog.isConnected) dialog.close();
-      } catch (error) {
-        status.textContent = error instanceof Error ? t(error.message) : t('Unable to change view.');
-      }
-    };
-    apply.addEventListener('click', commit);
-    input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && !event.isComposing) {
-        event.preventDefault();
-        commit();
-      }
-    });
-    dialog.append(title, note);
-    if (!sort) dialog.append(condition, input);
-    const actions = doc.createElement('div');
-    actions.dataset.dialogActions = '';
-    actions.append(apply, cancel);
-    dialog.append(status, actions);
-    root.append(dialog);
-    dialog.addEventListener('close', () => {
-      dialog.remove();
-      if (overlay.activeDialog === dialog) overlay.activeDialog = null;
-      if (!destroyed && !editors.editor) scroller.focus({ preventScroll: true });
-    });
-    dialog.showModal();
-    (sort ? apply : input).focus();
-  }
-
-  function onContextMenu(event: MouseEvent): void {
-    if (event.target === editors.editor) return;
-    const cell = pointerCell(event);
-    if (!cell) {
-      if (
-        columns.length &&
-        ((!rowCount && options.onRowChange) || engine.getHiddenRows().length || engine.getHiddenColumns().length)
-      ) {
-        event.preventDefault();
-        if (finishEdit(true)) openMenu(0, 0, event.clientX, event.clientY);
-      }
-      return;
-    }
-    event.preventDefault();
-    if (!finishEdit(true)) return;
-    openMenu(cell.row, cell.col, event.clientX, event.clientY);
-  }
 
   function invalidate(changes: readonly { rowIndex: number; columnKey: string }[]): void {
     const selection = engine.getSelection();
