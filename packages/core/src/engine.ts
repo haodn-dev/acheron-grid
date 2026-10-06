@@ -1,3 +1,4 @@
+import { createSelection } from './internal/selection.js';
 import { createProjection } from './internal/projection.js';
 import { createOutline } from './internal/outline.js';
 import { createLayout } from './internal/layout.js';
@@ -392,80 +393,6 @@ export function createGridEngine(options: GridEngineOptions) {
     },
   };
 
-  function selectDisplayRange(range: SelectionRange, mode: 'replace' | 'add' | 'extend' = 'replace'): boolean {
-    assertAlive();
-    if (merges.length)
-      range = expandMergedRange(
-        range,
-        merges.map((span) => ({ ...span, startRow: displayRow(span.startRow), endRow: displayRow(span.endRow) })),
-      );
-    const parts = sourceRanges(range);
-    if (
-      !getCellPermission(sourceRow(range.startRow), range.startColumn).selectable ||
-      !getCellPermission(sourceRow(range.endRow), range.endColumn).selectable
-    )
-      return false;
-    if (!['replace', 'add', 'extend'].includes(mode)) throw new TypeError('Invalid selection mode.');
-    if (mode === 'add' && displaySelectionRanges().length >= 128)
-      throw new RangeError('Selection supports at most 128 ranges.');
-    const old = getSelectionRanges();
-    const keep =
-      mode === 'replace' ? [] : mode === 'extend' ? old.slice(0, Math.max(0, old.length - activeParts)) : old;
-    const row = sourceRow(range.startRow);
-    const others = parts.flatMap((part) =>
-      row < part.startRow || row > part.endRow
-        ? [part]
-        : [
-            ...(part.startRow < row ? [{ ...part, endRow: row - 1 }] : []),
-            ...(row < part.endRow ? [{ ...part, startRow: row + 1 }] : []),
-          ],
-    );
-    if (keep.length + others.length + 1 > 128) throw new RangeError('Selection supports at most 128 source ranges.');
-    retainedRanges.splice(0, retainedRanges.length, ...keep, ...others);
-    selection = {
-      rowIndex: row,
-      rowId: dataSource.getRowId(row),
-      columnIndex: range.startColumn,
-      columnKey: columns[range.startColumn]!.key,
-    };
-    anchor = {
-      rowIndex: row,
-      rowId: selection.rowId,
-      columnIndex: range.endColumn,
-      columnKey: columns[range.endColumn]!.key,
-    };
-    activeParts = others.length + 1;
-    cachedRanges = null;
-    displayAnchor = { row: range.startRow, col: range.startColumn };
-    notifySelection(true, true);
-    return true;
-  }
-  function selectDisplay(row: number, col: number, extend = false, add = false): boolean {
-    if (!projection && activeParts === 1) {
-      displayAnchor = { row, col };
-      return select(row, col, extend, add);
-    }
-    const span = mergeAt(sourceRow(row), col);
-    if (span) {
-      row = displayRow(span.startRow);
-      col = span.startColumn;
-    }
-    const from = extend
-      ? (displayAnchor ?? { row: displaySelection()?.rowIndex ?? row, col: displaySelection()?.columnIndex ?? col })
-      : { row, col };
-    const result = selectDisplayRange(
-      {
-        startRow: Math.min(from.row, row),
-        endRow: Math.max(from.row, row),
-        startColumn: Math.min(from.col, col),
-        endColumn: Math.max(from.col, col),
-      },
-      add ? 'add' : extend ? 'extend' : 'replace',
-    );
-    displayAnchor = from;
-    return result;
-  }
-
   const emptyFormat: Readonly<CellFormat> = Object.freeze({});
 
   function assertAlive(): void {
@@ -517,62 +444,6 @@ export function createGridEngine(options: GridEngineOptions) {
       observe(() => subscriber.onInvalidate?.(change));
       observe(() => subscriber.onEvent?.(event));
     }
-  }
-
-  function getSelection(): CellSelection | null {
-    return selection ? { ...selection } : null;
-  }
-
-  function getSelectionRange(): SelectionRange | null {
-    if (!selection || !anchor) return null;
-    return expandMergedRange({
-      startRow: Math.min(anchor.rowIndex, selection.rowIndex),
-      endRow: Math.max(anchor.rowIndex, selection.rowIndex),
-      startColumn: Math.min(anchor.columnIndex, selection.columnIndex),
-      endColumn: Math.max(anchor.columnIndex, selection.columnIndex),
-    });
-  }
-
-  function getSelectionRanges(): SelectionRange[] {
-    const range = getSelectionRange();
-    return range ? [...retainedRanges.map((range) => ({ ...range })), range] : [];
-  }
-
-  function displaySelectionRanges(): SelectionRange[] {
-    if (!projection && activeParts === 1) return getSelectionRanges();
-    if (cachedRanges) return cachedRanges.map((range) => ({ ...range }));
-    const grouped = new Map<string, Set<number>>();
-    for (const range of getSelectionRanges()) {
-      const key = range.startColumn + ':' + range.endColumn;
-      const rows = grouped.get(key) ?? new Set<number>();
-      grouped.set(key, rows);
-      for (let row = range.startRow; row <= range.endRow; row++) {
-        const index = displayRow(row);
-        if (index >= 0) rows.add(index);
-      }
-    }
-    const result: SelectionRange[] = [];
-    for (const [key, rows] of grouped) {
-      const [startColumn, endColumn] = key.split(':').map(Number);
-      let last: SelectionRange | undefined;
-      for (const row of [...rows].sort((a, b) => a - b)) {
-        if (last && last.endRow + 1 === row) last.endRow = row;
-        else {
-          last = { startRow: row, endRow: row, startColumn: startColumn!, endColumn: endColumn! };
-          result.push(last);
-        }
-      }
-    }
-    if (selection) {
-      const row = displayRow(selection.rowIndex),
-        col = selection.columnIndex;
-      const index = result.findIndex(
-        (range) => row >= range.startRow && row <= range.endRow && col >= range.startColumn && col <= range.endColumn,
-      );
-      if (index >= 0) result.push(...result.splice(index, 1));
-    }
-    cachedRanges = result;
-    return result.map((range) => ({ ...range }));
   }
 
   function clipboardBlocks(): ClipboardBlock[] {
@@ -824,114 +695,6 @@ export function createGridEngine(options: GridEngineOptions) {
   }
   function paste(text: string, options?: PasteOptions): void {
     pasteBlocks([{ row: 0, column: 0, values: decodeTsv(text) }], false, false, options);
-  }
-
-  function select(rowIndex: number, columnIndex: number, extend = false, add = false): boolean {
-    assertAlive();
-    if (
-      !Number.isSafeInteger(rowIndex) ||
-      rowIndex < 0 ||
-      rowIndex >= rowCount ||
-      !Number.isSafeInteger(columnIndex) ||
-      columnIndex < 0 ||
-      columnIndex >= columns.length
-    )
-      throw new RangeError('Invalid cell position.');
-    if (!getCellPermission(rowIndex, columnIndex).selectable) return false;
-    const span = mergeAt(rowIndex, columnIndex);
-    if (span) {
-      rowIndex = span.startRow;
-      columnIndex = span.startColumn;
-      if (!getCellPermission(rowIndex, columnIndex).selectable) return false;
-    }
-    if (add && extend) throw new Error('Adding and extending a selection are separate operations.');
-    if (add && selection && retainedRanges.length >= 127)
-      throw new RangeError('Selection supports at most 128 ranges.');
-    const nextSelection = {
-      rowIndex,
-      rowId: dataSource.getRowId(rowIndex),
-      columnIndex,
-      columnKey: columns[columnIndex]!.key,
-    };
-    const previousRanges = JSON.stringify(getSelectionRanges());
-    const previous = getSelectionRange();
-    if (add && previous) retainedRanges.push(previous);
-    else if (!extend) retainedRanges.length = 0;
-    const changed = selection?.rowIndex !== rowIndex || selection?.columnIndex !== columnIndex;
-    const previousRange = JSON.stringify(getSelectionRange());
-    selection = nextSelection;
-    if (!extend || !anchor) anchor = { ...selection };
-    const rangeChanged = previousRange !== JSON.stringify(getSelectionRange());
-    const rangesChanged = previousRanges !== JSON.stringify(getSelectionRanges());
-    if (changed || rangeChanged || rangesChanged) notifySelection(changed, rangeChanged || rangesChanged);
-    return changed || rangeChanged || rangesChanged;
-  }
-
-  function selectRange(range: SelectionRange, mode: 'replace' | 'add' | 'extend' = 'replace'): boolean {
-    assertAlive();
-    range = expandMergedRange(range);
-    const { startRow, endRow, startColumn, endColumn } = range;
-    for (const [value, limit] of [
-      [startRow, rowCount],
-      [endRow, rowCount],
-      [startColumn, columns.length],
-      [endColumn, columns.length],
-    ]) {
-      if (!Number.isSafeInteger(value) || value! < 0 || value! >= limit!)
-        throw new RangeError('Invalid selection range.');
-    }
-    if (startRow > endRow || startColumn > endColumn) throw new RangeError('Invalid selection range order.');
-    if (!getCellPermission(startRow, startColumn).selectable || !getCellPermission(endRow, endColumn).selectable)
-      return false;
-    if (mode !== 'replace' && mode !== 'add' && mode !== 'extend') throw new TypeError('Invalid selection mode.');
-    if (mode === 'add' && selection && retainedRanges.length >= 127)
-      throw new RangeError('Selection supports at most 128 ranges.');
-    const previous = JSON.stringify(getSelectionRanges());
-    const previousRange = getSelectionRange();
-    if (mode === 'add' && previousRange) retainedRanges.push(previousRange);
-    else if (mode === 'replace') retainedRanges.length = 0;
-    const changed = selection?.rowIndex !== startRow || selection?.columnIndex !== startColumn;
-    selection = {
-      rowIndex: startRow,
-      rowId: dataSource.getRowId(startRow),
-      columnIndex: startColumn,
-      columnKey: columns[startColumn]!.key,
-    };
-    anchor = {
-      rowIndex: endRow,
-      rowId: dataSource.getRowId(endRow),
-      columnIndex: endColumn,
-      columnKey: columns[endColumn]!.key,
-    };
-    const rangeChanged = previous !== JSON.stringify(getSelectionRanges());
-    if (changed || rangeChanged) notifySelection(changed, rangeChanged);
-    return changed || rangeChanged;
-  }
-
-  function notifySelection(changed: boolean, rangeChanged: boolean): void {
-    cachedRanges = null;
-    const endpoint = displaySelection();
-    const range = displaySelectionRanges().at(-1) ?? null;
-    notify(
-      { type: 'selection', changed, rangeChanged },
-      Object.freeze({
-        type: 'selection:change',
-        selection: endpoint ? Object.freeze(endpoint) : null,
-        range: range ? Object.freeze(range) : null,
-        ranges: Object.freeze(displaySelectionRanges().map((range) => Object.freeze(range))),
-      }),
-    );
-  }
-
-  function clearSelection(): void {
-    assertAlive();
-    if (!selection) return;
-    selection = anchor = null;
-    activeParts = 1;
-    displayAnchor = null;
-    cachedRanges = null;
-    retainedRanges.length = 0;
-    notifySelection(true, true);
   }
 
   function canPaste(): boolean {
@@ -1575,6 +1338,47 @@ export function createGridEngine(options: GridEngineOptions) {
     },
     get assertAlive() {
       return assertAlive;
+    },
+    get notify() {
+      return notify;
+    },
+  });
+
+  const {
+    selectDisplayRange,
+    selectDisplay,
+    getSelection,
+    getSelectionRange,
+    getSelectionRanges,
+    displaySelectionRanges,
+    select,
+    selectRange,
+    notifySelection,
+    clearSelection,
+  } = createSelection(context, {
+    get assertAlive() {
+      return assertAlive;
+    },
+    get expandMergedRange() {
+      return expandMergedRange;
+    },
+    get displayRow() {
+      return displayRow;
+    },
+    get sourceRanges() {
+      return sourceRanges;
+    },
+    get getCellPermission() {
+      return getCellPermission;
+    },
+    get sourceRow() {
+      return sourceRow;
+    },
+    get mergeAt() {
+      return mergeAt;
+    },
+    get displaySelection() {
+      return displaySelection;
     },
     get notify() {
       return notify;

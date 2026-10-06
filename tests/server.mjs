@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 const coreFiles = new Set([
+  'internal/selection.js',
+  'internal/selection.js',
   'internal/projection.js',
   'internal/outline.js',
   'internal/layout.js',
