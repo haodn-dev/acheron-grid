@@ -950,47 +950,63 @@ export type GridInvalidation =
 
 ```ts
 export interface RemoteDataSourceOptions<S> {
- readonly datasetId:string;
- readonly columnKeys:readonly string[];
- readonly maxRows?:number;
- readonly maxPendingCells?:number;
- readonly createAbortController:()=>{readonly signal:S;abort():void};
- /** Unique for the lifetime of the server's idempotency records. */
- readonly createMutationId:()=>string;
- readonly load:(signal:S)=>Promise<RemoteSnapshot>;
- /** Server must check the revision and apply the complete batch atomically, deduplicated by mutationId. */
- readonly write:(mutation:RemoteMutation,signal:S)=>Promise<RemoteWriteResult>;
+  readonly datasetId: string;
+  readonly columnKeys: readonly string[];
+  readonly maxRows?: number;
+  readonly maxPendingCells?: number;
+  readonly createAbortController: () => { readonly signal: S; abort(): void };
+  /** Unique for the lifetime of the server's idempotency records. */
+  readonly createMutationId: () => string;
+  readonly load: (signal: S) => Promise<RemoteSnapshot>;
+  /** Server must check the revision and apply the complete batch atomically, deduplicated by mutationId. */
+  readonly write: (mutation: RemoteMutation, signal: S) => Promise<RemoteWriteResult>;
 }
 ```
 
 ### Type RemoteSnapshot
 
 ```ts
-export interface RemoteSnapshot { readonly datasetId:string; readonly revision:string; readonly rows:readonly DataRow[]; }
+export interface RemoteSnapshot {
+  readonly datasetId: string;
+  readonly revision: string;
+  readonly rows: readonly DataRow[];
+}
 ```
 
 ### Type RemoteChange
 
 ```ts
-export interface RemoteChange { readonly rowId:RowId; readonly columnKey:string; readonly previous:unknown; readonly value:unknown; }
+export interface RemoteChange {
+  readonly rowId: RowId;
+  readonly columnKey: string;
+  readonly previous: unknown;
+  readonly value: unknown;
+}
 ```
 
 ### Type RemoteMutation
 
 ```ts
-export interface RemoteMutation { readonly datasetId:string; readonly mutationId:string; readonly expectedRevision:string; readonly changes:readonly RemoteChange[]; }
+export interface RemoteMutation {
+  readonly datasetId: string;
+  readonly mutationId: string;
+  readonly expectedRevision: string;
+  readonly changes: readonly RemoteChange[];
+}
 ```
 
 ### Type RemoteWriteResult
 
 ```ts
-export type RemoteWriteResult = {readonly mutationId:string;readonly status:'accepted'|'conflict';readonly snapshot:RemoteSnapshot} | {readonly datasetId:string;readonly mutationId:string;readonly status:'rejected';readonly message:string};
+export type RemoteWriteResult =
+  | { readonly mutationId: string; readonly status: 'accepted' | 'conflict'; readonly snapshot: RemoteSnapshot }
+  | { readonly datasetId: string; readonly mutationId: string; readonly status: 'rejected'; readonly message: string };
 ```
 
 ### Type RemoteStatus
 
 ```ts
-export type RemoteStatus = 'disconnected'|'loading'|'ready'|'committing'|'conflict'|'destroyed';
+export type RemoteStatus = 'disconnected' | 'loading' | 'ready' | 'committing' | 'conflict' | 'destroyed';
 ```
 
 ### Type LiveUpdate
@@ -1006,7 +1022,11 @@ export interface LiveUpdate {
 ### Type LiveSnapshot
 
 ```ts
-export interface LiveSnapshot { readonly streamId: string; readonly sequence: number; readonly rows: readonly DataRow[]; }
+export interface LiveSnapshot {
+  readonly streamId: string;
+  readonly sequence: number;
+  readonly rows: readonly DataRow[];
+}
 ```
 
 ### Type AsyncDataSourceOptions
@@ -1020,7 +1040,12 @@ export interface AsyncDataSourceOptions<S> {
   readonly maxPendingLoads?: number;
   readonly query?: LocalViewOptions;
   readonly createAbortController: () => { readonly signal: S; abort(): void };
-  readonly load: (request: { readonly offset: number; readonly limit: number; readonly signal: S; readonly query: Readonly<LocalViewOptions> }) => Promise<{ readonly rows: readonly Readonly<Record<string, unknown>>[]; readonly total: number }>;
+  readonly load: (request: {
+    readonly offset: number;
+    readonly limit: number;
+    readonly signal: S;
+    readonly query: Readonly<LocalViewOptions>;
+  }) => Promise<{ readonly rows: readonly Readonly<Record<string, unknown>>[]; readonly total: number }>;
   /** Stable positional identity within one server query; query changes invalidate identity. */
   readonly getRowId?: (index: number) => RowId;
 }
@@ -1029,7 +1054,11 @@ export interface AsyncDataSourceOptions<S> {
 ### Type PageState
 
 ```ts
-export interface PageState { readonly offset: number; readonly status: 'loading' | 'ready' | 'error'; readonly error?: unknown; }
+export interface PageState {
+  readonly offset: number;
+  readonly status: 'loading' | 'ready' | 'error';
+  readonly error?: unknown;
+}
 ```
 
 ### Type DataSource
@@ -1040,7 +1069,7 @@ export interface DataSource {
   /** Full shallow row snapshot, including fields outside the visible columns. */
   getRow?(index: number): DataRow;
   /** Initialize missing fields atomically; existing hidden column values are retained. */
-  addColumns?(keys: readonly string[], defaults?: Readonly<Record<string,unknown>>): void;
+  addColumns?(keys: readonly string[], defaults?: Readonly<Record<string, unknown>>): void;
   /** Apply sequential splices atomically, preserving unique row IDs. */
   spliceRows?(splices: readonly RowSplice[]): void;
   getRowId(index: number): RowId;
@@ -1054,7 +1083,11 @@ export interface DataSource {
 ### Type CellUpdate
 
 ```ts
-export interface CellUpdate { rowIndex: number; columnKey: string; value: unknown; }
+export interface CellUpdate {
+  rowIndex: number;
+  columnKey: string;
+  value: unknown;
+}
 ```
 
 ### Type RowId
@@ -1069,38 +1102,68 @@ export type RowId = string | number;
 export interface LocalViewOptions {
   readonly sort?: { readonly columnKey: string; readonly direction: 'asc' | 'desc' };
   readonly sorts?: readonly { readonly columnKey: string; readonly direction: 'asc' | 'desc' }[];
-  readonly filters?: readonly { readonly columnKey: string; readonly query: string; readonly operator?: 'contains' | 'equals' | 'not-empty' | 'empty' }[];
+  readonly filters?: readonly {
+    readonly columnKey: string;
+    readonly query: string;
+    readonly operator?: 'contains' | 'equals' | 'not-empty' | 'empty';
+  }[];
 }
 ```
 
 ### Type DataRow
 
 ```ts
-export interface DataRow { readonly id: RowId; readonly values: Readonly<Record<string, unknown>>; }
+export interface DataRow {
+  readonly id: RowId;
+  readonly values: Readonly<Record<string, unknown>>;
+}
 ```
 
 ### Type RowSplice
 
 ```ts
-export interface RowSplice { readonly index: number; readonly deleteCount: number; readonly rows: readonly DataRow[]; }
+export interface RowSplice {
+  readonly index: number;
+  readonly deleteCount: number;
+  readonly rows: readonly DataRow[];
+}
 ```
 
 ### Type Column
 
 ```ts
-export interface Column { defaultValue?: unknown; key: string; title: string; editable?: boolean; permissions?: CellPermissionPolicy; parse?: (text: string) => unknown; validate?: (value: unknown) => string | undefined; invalidInput?: 'reject' | 'allow'; }
+export interface Column {
+  defaultValue?: unknown;
+  key: string;
+  title: string;
+  editable?: boolean;
+  permissions?: CellPermissionPolicy;
+  parse?: (text: string) => unknown;
+  validate?: (value: unknown) => string | undefined;
+  invalidInput?: 'reject' | 'allow';
+}
 ```
 
 ### Type CellSelection
 
 ```ts
-export interface CellSelection { rowIndex: number; rowId: RowId; columnIndex: number; columnKey: string; }
+export interface CellSelection {
+  rowIndex: number;
+  rowId: RowId;
+  columnIndex: number;
+  columnKey: string;
+}
 ```
 
 ### Type SelectionRange
 
 ```ts
-export interface SelectionRange { startRow: number; endRow: number; startColumn: number; endColumn: number; }
+export interface SelectionRange {
+  startRow: number;
+  endRow: number;
+  startColumn: number;
+  endColumn: number;
+}
 ```
 
 ### Type CellLockTarget
@@ -1122,13 +1185,27 @@ export type CellFormatTarget = CellLockTarget | { readonly scope: 'range'; reado
 ### Type CellFormat
 
 ```ts
-export interface CellFormat { readonly background?: string; readonly textColor?: string; readonly contentFormat?: 'plain' | 'html' | 'markdown'; readonly fontWeight?: 'normal' | 'bold'; readonly fontStyle?: 'normal' | 'italic'; readonly numberFormat?: NumberFormat; }
+export interface CellFormat {
+  readonly background?: string;
+  readonly textColor?: string;
+  readonly contentFormat?: 'plain' | 'html' | 'markdown';
+  readonly fontWeight?: 'normal' | 'bold';
+  readonly fontStyle?: 'normal' | 'italic';
+  readonly numberFormat?: NumberFormat;
+}
 ```
 
 ### Type CellFormatPatch
 
 ```ts
-export interface CellFormatPatch { readonly background?: string | null; readonly textColor?: string | null; readonly contentFormat?: 'plain' | 'html' | 'markdown' | null; readonly fontWeight?: 'normal' | 'bold' | null; readonly fontStyle?: 'normal' | 'italic' | null; readonly numberFormat?: NumberFormat | null; }
+export interface CellFormatPatch {
+  readonly background?: string | null;
+  readonly textColor?: string | null;
+  readonly contentFormat?: 'plain' | 'html' | 'markdown' | null;
+  readonly fontWeight?: 'normal' | 'bold' | null;
+  readonly fontStyle?: 'normal' | 'italic' | null;
+  readonly numberFormat?: NumberFormat | null;
+}
 ```
 
 ### Type NumberFormat
@@ -1140,7 +1217,11 @@ export type NumberFormat = 'decimal' | 'integer' | 'percent' | 'currency';
 ### Type PasteOptions
 
 ```ts
-export interface PasteOptions { readonly mode?: 'all' | 'values' | 'formats'; readonly transpose?: boolean; readonly skipEmpty?: boolean; }
+export interface PasteOptions {
+  readonly mode?: 'all' | 'values' | 'formats';
+  readonly transpose?: boolean;
+  readonly skipEmpty?: boolean;
+}
 ```
 
 ### Type CellPermission
@@ -1172,19 +1253,68 @@ export type CellPermissionResolver = (cell: Readonly<CellSelection>) => CellPerm
 
 ```ts
 export type GridEvent =
-  | { readonly type: 'visibility:change'; readonly axis: 'row' | 'column'; readonly indices: readonly number[]; readonly hidden: boolean; readonly source: 'api' | 'undo' | 'redo' }
-  | { readonly type: 'data:refresh'; readonly previousRowCount: number; readonly rowCount: number; readonly identitiesReconciled: boolean }
+  | {
+      readonly type: 'visibility:change';
+      readonly axis: 'row' | 'column';
+      readonly indices: readonly number[];
+      readonly hidden: boolean;
+      readonly source: 'api' | 'undo' | 'redo';
+    }
+  | {
+      readonly type: 'data:refresh';
+      readonly previousRowCount: number;
+      readonly rowCount: number;
+      readonly identitiesReconciled: boolean;
+    }
   | { readonly type: 'state:restore' }
   | { readonly type: 'merge:change' | 'group:change'; readonly source: 'api' | 'undo' | 'redo' }
-  | {readonly type:'view:change'; readonly view:Readonly<LocalViewOptions>; readonly rowCount:number; readonly sourceRowCount:number}
-  | { readonly type: 'structure:change'; readonly source: 'api' | 'undo' | 'redo'; readonly request: Readonly<StructureRequest>; readonly rowCount: number; readonly columnKeys: readonly string[] }
-  | { readonly type: 'cell:change'; readonly source: GridChangeSource;
-      readonly changes: readonly Readonly<CellUpdate & { rowId: RowId; previous: unknown }>[] }
-  | { readonly type: 'selection:change'; readonly selection: Readonly<CellSelection> | null; readonly range: Readonly<SelectionRange> | null; readonly ranges: readonly Readonly<SelectionRange>[] }
-  | { readonly type: 'format:change'; readonly source: 'api' | 'paste' | 'undo' | 'redo'; readonly changes: readonly { readonly target: Readonly<CellFormatTarget>; readonly previous: Readonly<CellFormatPatch> | null; readonly value: Readonly<CellFormatPatch> | null }[] }
+  | {
+      readonly type: 'view:change';
+      readonly view: Readonly<LocalViewOptions>;
+      readonly rowCount: number;
+      readonly sourceRowCount: number;
+    }
+  | {
+      readonly type: 'structure:change';
+      readonly source: 'api' | 'undo' | 'redo';
+      readonly request: Readonly<StructureRequest>;
+      readonly rowCount: number;
+      readonly columnKeys: readonly string[];
+    }
+  | {
+      readonly type: 'cell:change';
+      readonly source: GridChangeSource;
+      readonly changes: readonly Readonly<CellUpdate & { rowId: RowId; previous: unknown }>[];
+    }
+  | {
+      readonly type: 'selection:change';
+      readonly selection: Readonly<CellSelection> | null;
+      readonly range: Readonly<SelectionRange> | null;
+      readonly ranges: readonly Readonly<SelectionRange>[];
+    }
+  | {
+      readonly type: 'format:change';
+      readonly source: 'api' | 'paste' | 'undo' | 'redo';
+      readonly changes: readonly {
+        readonly target: Readonly<CellFormatTarget>;
+        readonly previous: Readonly<CellFormatPatch> | null;
+        readonly value: Readonly<CellFormatPatch> | null;
+      }[];
+    }
   | { readonly type: 'lock:change'; readonly target: Readonly<CellLockTarget>; readonly locked: boolean }
-  | { readonly type: 'freeze:change'; readonly previousRows: number; readonly previousColumns: number; readonly rows: number; readonly columns: number }
-  | { readonly type: 'column:resize' | 'row:resize'; readonly index: number; readonly previous: number; readonly size: number };
+  | {
+      readonly type: 'freeze:change';
+      readonly previousRows: number;
+      readonly previousColumns: number;
+      readonly rows: number;
+      readonly columns: number;
+    }
+  | {
+      readonly type: 'column:resize' | 'row:resize';
+      readonly index: number;
+      readonly previous: number;
+      readonly size: number;
+    };
 ```
 
 ### Type GridChangeSource
@@ -1196,7 +1326,12 @@ export type GridChangeSource = 'api' | 'edit' | 'paste' | 'undo' | 'redo';
 ### Type ViewportOptions
 
 ```ts
-export interface ViewportOptions { width: number; height: number; scrollLeft: number; scrollTop: number; }
+export interface ViewportOptions {
+  width: number;
+  height: number;
+  scrollLeft: number;
+  scrollTop: number;
+}
 ```
 
 ### Type ViewportLayout
@@ -1220,7 +1355,12 @@ export interface ViewportRegion {
 ### Type ViewportRect
 
 ```ts
-export interface ViewportRect { readonly x: number; readonly y: number; readonly width: number; readonly height: number; }
+export interface ViewportRect {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
 ```
 
 ### Type StructureRequest
@@ -1240,19 +1380,30 @@ export interface StructureRequest {
 ### Type ClipboardBlock
 
 ```ts
-export interface ClipboardBlock { readonly row:number; readonly column:number; readonly values:readonly (readonly string[])[]; readonly formats?: readonly (readonly CellFormat[])[]; }
+export interface ClipboardBlock {
+  readonly row: number;
+  readonly column: number;
+  readonly values: readonly (readonly string[])[];
+  readonly formats?: readonly (readonly CellFormat[])[];
+}
 ```
 
 ### Type RowGroup
 
 ```ts
-export interface RowGroup { readonly id: string; readonly startRow: number; readonly endRow: number; readonly collapsed: boolean; }
+export interface RowGroup {
+  readonly id: string;
+  readonly startRow: number;
+  readonly endRow: number;
+  readonly collapsed: boolean;
+}
 ```
 
 ### Type LayoutRequest
 
 ```ts
-export type LayoutRequest = { readonly kind: 'merge' | 'unmerge'; readonly range: Readonly<SelectionRange> }
+export type LayoutRequest =
+  | { readonly kind: 'merge' | 'unmerge'; readonly range: Readonly<SelectionRange> }
   | { readonly kind: 'group' | 'ungroup' | 'collapse' | 'expand'; readonly group: Readonly<RowGroup> };
 ```
 
@@ -1275,7 +1426,7 @@ export interface GridState {
   readonly version: 1;
   readonly configuration: GridConfiguration;
   readonly rowIds: readonly RowId[];
-  readonly rowHeights: readonly (readonly [number,number])[];
+  readonly rowHeights: readonly (readonly [number, number])[];
   readonly manualRows: readonly number[];
   readonly hiddenRows?: readonly number[];
   readonly hiddenColumns?: readonly number[];
@@ -1283,7 +1434,7 @@ export interface GridState {
   readonly selection: Readonly<CellSelection> | null;
   readonly anchor: Readonly<CellSelection> | null;
   readonly activeParts?: number;
-  readonly displayAnchor?: Readonly<{row:number;col:number}> | null;
+  readonly displayAnchor?: Readonly<{ row: number; col: number }> | null;
   readonly merges: readonly SelectionRange[];
   readonly groups: readonly RowGroup[];
   readonly locks: readonly CellLockTarget[];

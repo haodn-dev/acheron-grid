@@ -2,7 +2,6 @@
 
 Documentation revision 2 · npm 0.1.0 + explicitly marked source additions. See [documentation versions](../../../guides/versions.md).
 
-
 An experimental Canvas browser renderer for the headless @acheron-grid/core engine.
 
 ## Installation
@@ -161,6 +160,7 @@ All local rows reside in memory. Virtualization bounds cell rendering work, not 
 Click a data cell to select it and focus the viewport. Arrow keys move one cell; Home/End move to the first/last column; Ctrl/Meta+Home/End move to the first/last cell. Navigation clamps at dataset boundaries and scrolls the active cell into view. With no selection, arrows/Home start at the first cell; End starts at the last column and Ctrl/Meta+End at the last cell. Escape clears selection; Tab leaves the viewport normally. Shift-modified navigation extends a rectangular range. See range selection and clipboard below.
 
 `grid.getSelection()` returns a fresh `{ rowIndex, rowId, columnIndex, columnKey }` object or `null`. Indices are zero-based. Pass `onSelectionChange(selection)` to `createGrid` to observe changes, including `null` when cleared. Callback objects are copies; selecting the same cell does not fire again. Destroy clears selection without emitting an event. Headers select whole columns; blank space and scrollbar clicks do not select cells. Ctrl/Meta+click adds a range and Shift-click extends it. The viewport label describes the active cell, and the optional viewport accessibility mode exposes bounded visible rows, cells and headers; assistive-technology verification remains incomplete.
+
 ## Inline editing
 
 Set `editable: true` on a column and provide a synchronous `DataSource.setValue(index, columnKey, value)` method (`LocalDataSource` already provides it). Double-click a cell or press Enter/F2 to open the text input. Enter, Tab and blur save; Escape cancels. Edits are in memory only. Destroy discards an unfinished edit.
@@ -372,7 +372,6 @@ Touch-drag index/header selects axes; touching body cells preserves native scrol
 
 `grid.setTheme(patch)` validates concrete CSS colors/fonts before applying a snapshot. Canvas, native controls, dialogs, links and icon colors repaint without remounting. Selection, locks, formatting, sizes, frozen panes and value history remain. Per-cell colors retain precedence; font changes do not automatically resize cells. The examples include Light/Teal/Dark palettes. Custom renderers own their colors and the host remains responsible for contrast.
 
-
 ## Grouped headers and content height
 
 Keep `columns` flat; pass `headerGroups` to describe contiguous groups by column key. Ungrouped columns span the full header height. `headerHeight` is the height of **one header row**, with one row by default.
@@ -393,9 +392,7 @@ Groups must contain unique, existing leaf keys in the same contiguous order as `
 
 Select editor lists may include `''` as an optional empty value; all values remain unique strings and the list must be nonempty. Parsers still validate commits. A desktop corner handle adjusts the selected range through the same pointer/permission pipeline as touch handles; it does not autofill values.
 
-
 Scrollbars use native thin styling, with `scrollbarColor` for the thumb and `headerBackground` for the track. Frozen boundaries use the independent `freezeColor`, keeping them distinct from selection. Both colors support `setTheme`; scrollbar thickness follows browser/platform support with an 8px WebKit fallback.
-
 
 `columnEditors: { tags: { type: 'multiselect', values: ['Idea', 'Design', 'Content'] } }` uses a native multiple-select list. Ctrl/Cmd-click toggles options; Enter saves and Escape cancels. Selected labels serialize as a comma-separated string through the column parser; option labels must be unique, nonempty and contain no commas. An empty selection saves an empty string. Active cells use a 1px outline; the corresponding leaf header and every ancestor group receive a tint.
 
@@ -409,13 +406,11 @@ Providing `onReorder(request)` enables dragging selected whole rows/columns dire
 
 `request` contains `axis: 'row' | 'column'`, immutable `indices` and `beforeIndex`, an insertion boundary in the current order **before removal**. `canReorder(request)` can veto the operation. `reorderedIndices(count, indices, beforeIndex)` validates the request and returns a stable index permutation. The host can call the structural APIs to apply ordering with state reconciliation and history, or handle external mutations itself. Omit `onReorder` to disable reordering entirely.
 
-
 `editorOptions: { pinned: true, showLabel: true, guardNavigation: true }` keeps the active editor at its initial screen position while either the grid or page scrolls. It remains inside the browser viewport, with a label showing column title, row number and stable row ID. In pinned mode, blur alone does not save the draft; Enter, Escape, Apply/Cancel or selecting another cell use the existing commit/cancel pipeline. Pinned layout is opt-in; the default editor follows its cell. `showLabel: false` hides the label. Use `showLabel: 'scroll'` to display it only while scrolling has displaced the cell from the pinned editor; returning to the original position hides it again. `showLabel: 'always'` (or `true`, the default) always displays it in pinned mode.
 
 While an editor is open, `beforeunload` requests the browser's native leave/close confirmation. The listener is removed on commit, cancel or destroy. Set `guardNavigation: false` to disable it. Browsers control whether the prompt appears and its text; forced process termination cannot be blocked. Choice search fields use a neutral border without an accent focus ring.
 
 Custom renderer clipping includes the full cell rectangle. Grid boundary strokes paint after the renderer and selection tint, so full-cell semantic colors do not leave an inset gap. Returning false or throwing clears custom paint before drawing the default fallback.
-
 
 ### Row actions and selection appearance
 
@@ -426,7 +421,6 @@ With `onReorder`, **Move rows to…** and **Move columns to…** accept a one-ba
 Selection is a translucent Canvas overlay; it never changes cell formatting. Adjacent selected whole-row ranges share one visual outer boundary, while the underlying ranges and clipboard rules remain unchanged. `selectionStyle.rangeBorderWidth` (1–4px, default 1) and `rangeTintOpacity` (0–1, default 0.06) customize the appearance. Whole-axis selections omit the extra active-cell outline.
 
 Selected row/column dragging shows a theme-colored insertion line across the viewport and a compact count/destination preview. Denied destinations hide the line and show a disabled message; drop permissions are checked again before dispatch. Ending or cancelling a native drag clears the preview.
-
 
 ## Rich text columns
 
@@ -450,22 +444,20 @@ Canvas exposes insertRows/deleteRows/moveRows/insertColumns/deleteColumns/moveCo
 
 Keep onRowChange/onReorder for menu/drag intents and call these APIs from the callbacks to create core history. External callback mutations remain host-owned. canChangeStructure applies host/admin policy to API and replay. New row IDs/defaults and column definitions remain host choices. Initial columnWidths configures sizes by key without history commands. Explicit resize/freeze are undoable; automatic row measurement is excluded.
 
-
 ## Column creation menu
 
 allowColumnChanges: true enables Insert column left/right and Delete selected columns in the header menu. The native dialog collects key, title, type and default value. Built-in types are text, finite number (empty means null) and boolean checkbox (true/false, empty means false). Defaults and insertion are one structural command; undo restores definitions and hidden values. The menu retains at least one column; the core API permits an empty schema. Right-click inside selected whole columns retains their selection. Group and host policy validation runs again at commit.
 
 columnTypes replaces the built-in list with {key, label, create(input)} definitions. Input contains key/title/defaultText; return {column, editor?}, retaining the supplied key. Column supports defaultValue; editor uses the existing select/multiselect/checkbox contract. Factories own parsing and validation and may throw to retain the dialog draft. Invalid editor configurations are rejected before insertion. Defaults initialize missing fields without overwriting hidden values.
 
-
 Context menus use bundled Lucide SVG icons and separators between clipboard, selection, view, structure, editing, permissions, freeze and layout actions. theme.iconColor controls icon contrast independently of header text; use a light icon color for dark themes. Icons have no opaque header backing. Select/multiselect cells show a chevron on hover when editable; click the trailing chevron area to open the existing editor. Locked cells do not show an editable affordance.
 
 Find inputs retain their neutral input border without a focus ring. Matches use a translucent theme.searchHighlightColor overlay (default amber); the current match has stronger tint and a narrow leading marker. This does not change cell formatting or values, and closes with the search panel.
 
-
 Choice panels support Up/Down to navigate enabled filtered options. Single-choice arrows update only the draft; Enter/Apply commits and Escape/Cancel discards it. Multiple-choice arrows move focus, Space toggles a value, and Enter/Apply commits the set. Home/End jump to the first/last enabled option when focus is in the options; search input Home/End retain text-caret behavior. Focused options have a theme tint and scroll into view. Tab stays inside the panel; Enter on Cancel activates Cancel.
 
 Touch dragging an already selected row index or column header reorders the selected items through the same onReorder/canReorder contract as desktop drag. A six-pixel movement threshold prevents taps from issuing moves. The preview shows the insertion boundary; release dispatches one request, and policy is checked again. Edge auto-scroll follows the dragged axis. Pointer cancel, lost capture, Escape, blur and destroy discard the drag. Touching an unselected axis retains selection behavior; body touch scrolling remains native.
+
 ## Merged cells and row outlines
 
 The Canvas grid exposes `mergeCells(range)`, `unmergeCells(range)`, `getMerge(row, col)`, `getMergedCells()`, `canMerge(range)`, `groupRows(first, last)`, `ungroupRows(id)`, `getRowGroups()` and `setGroupCollapsed(id, collapsed)`.
@@ -476,9 +468,7 @@ Hosts can disable these features with `allowMerging: false`, `allowRowGrouping: 
 
 Automatic row height measures all columns for each visible row and caches the result, so horizontal scrolling does not change row geometry. For very wide schemas, use fixed/manual row heights to avoid measuring every column. Adjacent whole-row or whole-column selections share one outer outline; Ctrl-added ranges remain separate in selection state.
 
-
 Locking the table through `setLocked({ scope: 'table' }, true)` displays a non-blocking notice for four seconds. It uses the grid theme; it does not change selection or clipboard permissions. Configure `tableLockNotice: { title: 'Read only', description: 'Custom host message' }` or set `tableLockNotice: false` to hide it. `motion: false` disables grid motion; reduced-motion preferences are respected automatically. Headless core has no visual notifications.
-
 
 Canvas animates row/column reordering and group collapse/expand using temporary visible-strip snapshots. State, focus and hit testing update immediately. Freeze separators draw in; context menus and choice panels use short entrance/exit transitions. The default layout duration is 220ms; customize it with `motion: { duration: 300 }` (0–1000ms, 0 disables motion). Scrolling cancels layout snapshots, reduced motion is respected, and at most 64 visible strips participate per transition. Selection and ordinary scrolling do not animate. Very wide/tall viewports beyond that cap update the remaining strips immediately.
 
@@ -708,24 +698,23 @@ Use a same-origin backend endpoint. Next.js route handlers work for this; a stat
 
 ### Other extension points and ownership
 
-| Area | Public extension point | Host responsibility |
-| --- | --- | --- |
-| Data and remote loading | `dataSource`, `createAsyncDataSource` from core | Storage, server queries, authorization, async save coordination |
-| External source changes | `captureRowIdentity`, `refreshData` | Capture IDs before structure changes; use `'values'` only for unchanged identities |
-| Notifications | `subscribe`, `onEvent`, `onObserverError` | Unsubscribe on unmount; avoid nested mutations from callbacks |
-| Persisted state | `exportState`, `restoreState`, `exportConfiguration` | Persist/version storage; supply matching row IDs/schema and application policies |
-| Painted content | `renderCell`, `measureCellHeight` | Return handled=true only when fully painted; honor bounds/format; provide height measurement |
-| Accessible content | `getCellLabel`, `accessibility` | Describe custom content and use viewport accessibility when appropriate |
-| Parsing/validation | column parser, `invalidInput`, permissions/resolver | Validate paste and editor values; enforce server authorization |
-| Appearance | `theme`, `selectionStyle`, `motion`, choice renderer | Shared light/dark tokens, reduced-motion support and meaningful labels |
-| Host sorting/filtering | `viewMode: 'host'`, `onViewChange` | Fetch/reconcile a server view; local search does not query unloaded records |
-| Structural changes | `canChangeStructure`, `onRowChange`, `onReorder`, column types | Veto disallowed actions and persist application data |
-| Context menu | `contextMenuSuggestions` | Enable contextual suggestions or the complete built-in menu; custom menu items are not supported |
+| Area                    | Public extension point                                         | Host responsibility                                                                              |
+| ----------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Data and remote loading | `dataSource`, `createAsyncDataSource` from core                | Storage, server queries, authorization, async save coordination                                  |
+| External source changes | `captureRowIdentity`, `refreshData`                            | Capture IDs before structure changes; use `'values'` only for unchanged identities               |
+| Notifications           | `subscribe`, `onEvent`, `onObserverError`                      | Unsubscribe on unmount; avoid nested mutations from callbacks                                    |
+| Persisted state         | `exportState`, `restoreState`, `exportConfiguration`           | Persist/version storage; supply matching row IDs/schema and application policies                 |
+| Painted content         | `renderCell`, `measureCellHeight`                              | Return handled=true only when fully painted; honor bounds/format; provide height measurement     |
+| Accessible content      | `getCellLabel`, `accessibility`                                | Describe custom content and use viewport accessibility when appropriate                          |
+| Parsing/validation      | column parser, `invalidInput`, permissions/resolver            | Validate paste and editor values; enforce server authorization                                   |
+| Appearance              | `theme`, `selectionStyle`, `motion`, choice renderer           | Shared light/dark tokens, reduced-motion support and meaningful labels                           |
+| Host sorting/filtering  | `viewMode: 'host'`, `onViewChange`                             | Fetch/reconcile a server view; local search does not query unloaded records                      |
+| Structural changes      | `canChangeStructure`, `onRowChange`, `onReorder`, column types | Veto disallowed actions and persist application data                                             |
+| Context menu            | `contextMenuSuggestions`                                       | Enable contextual suggestions or the complete built-in menu; custom menu items are not supported |
 
 Canvas forwards the headless refresh, state and subscription APIs. See the core integration recipes for complete paging/refresh contracts. `destroy()` releases grid-owned UI and listeners; it does not destroy a host-owned source, subscriptions outside the grid or a metadata backend.
 
 React/Vue adapters expose the grid instance through their documented ref/getGrid API. Keep construction options stable and call runtime methods on that instance; replacing factory options is not a reactive configuration update. Mount external components through `onEditorMount` and return their unmount function. Use the same hooks in vanilla, React and Vue; no framework dependency is added to core.
-
 
 ## Paste special, visibility, numbers and localization (source preview)
 
