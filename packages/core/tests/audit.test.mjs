@@ -98,5 +98,14 @@ test('projected selection preflights source fragmentation and clipboard bounds v
   engine.selectRange({ startRow: 0, endRow: 129, startColumn: 0, endColumn: 0 });
   engine.setView({ sort: { columnKey: 'order', direction: 'asc' } });
   assert.throws(() => engine.copySelectionBlocks(), /128 visible ranges/);
+  engine.setView({});
+  const order = new Map([1, 0, 2, ...Array.from({ length: 127 }, (_, i) => 4 + i * 2)].map((id, rank) => [id, rank]));
+  source.setValues(Array.from({ length: 260 }, (_, rowIndex) => ({ rowIndex, columnKey: 'order', value: order.get(rowIndex) ?? 130 + rowIndex })));
+  engine.refreshData('values');
+  engine.setView({ sort: { columnKey: 'order', direction: 'asc' } });
+  engine.select(0, 0);
+  const beforeSplit = engine.exportState();
+  assert.throws(() => engine.selectRange({ startRow: 0, endRow: 129, startColumn: 0, endColumn: 0 }), /128 source ranges/);
+  assert.deepEqual(engine.exportState(), beforeSplit);
   engine.destroy();
 });
