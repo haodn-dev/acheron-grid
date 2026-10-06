@@ -1619,7 +1619,12 @@ test('auto-fit measures visible content, handles multiline rows and shares resiz
   expect(column.size).toBeGreaterThan(40); expect(column.size).toBeLessThan(300); expect(row.size).toBeGreaterThan(32); expect(result.reads).not.toContain(99);
   const viewport = page.getByRole('grid'); const b = await viewport.boundingBox();
   await page.evaluate(() => window.grid.setColumnWidth(1, 40));
-  await page.mouse.dblclick(b.x + 200, b.y - 18);
+  await expect(page.locator('[data-grid-header-cell="1"]').first()).toHaveCSS('width', '40px');
+  await page.locator('[data-grid-header-cell="1"]').first().dispatchEvent('dblclick', { clientX: b.x + 198, clientY: b.y - 18 });
+  expect(await page.evaluate(() => window.sizes.filter(event => event.type === 'column:resize').at(-1).size)).toBe(column.size);
+  await page.evaluate(() => window.grid.setColumnWidth(1, 40));
+  await expect(page.locator('[data-grid-header-cell="1"]').first()).toHaveCSS('width', '40px');
+  await page.mouse.dblclick(b.x + 198, b.y - 18);
   expect(await page.evaluate(() => window.sizes.filter(event => event.type === 'column:resize').at(-1).size)).toBe(column.size);
   await viewport.click({ position: { x: 240, y: 16 }, button: 'right' });
   await page.getByRole('menuitem', { name: 'Auto-fit row', exact: true }).click();

@@ -891,7 +891,7 @@ export function createGrid(options: GridOptions): Grid {
     return Math.min(1000, height);
   }
   function onAxisDoubleClick(event: MouseEvent): void {
-    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || !(event.target instanceof win.Node) || (event.target !== root && !scroller.contains(event.target) && !indexGutter.contains(event.target))) return;
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || !(event.target instanceof win.Node) || (event.target !== root && !scroller.contains(event.target) && !indexGutter.contains(event.target) && !headerSurface.contains(event.target))) return;
     const column = columnEdge(event); const row = column === null ? rowEdge(event) : null;
     if (column === null && row === null) return;
     event.preventDefault(); event.stopPropagation(); endResize(); onPointerEnd();
