@@ -1,3 +1,4 @@
+import { createClipboard } from './internal/clipboard.js';
 import { createSelection } from './internal/selection.js';
 import { createProjection } from './internal/projection.js';
 import { createOutline } from './internal/outline.js';
@@ -444,267 +445,6 @@ export function createGridEngine(options: GridEngineOptions) {
       observe(() => subscriber.onInvalidate?.(change));
       observe(() => subscriber.onEvent?.(event));
     }
-  }
-
-  function clipboardBlocks(): ClipboardBlock[] {
-    assertAlive();
-    const ranges = displaySelectionRanges().sort((a, b) => a.startRow - b.startRow || a.startColumn - b.startColumn);
-    if (!ranges.length) return [];
-    if (ranges.length > 128) throw new RangeError('Clipboard supports at most 128 visible ranges.');
-    const firstRow = Math.min(...ranges.map((range) => range.startRow)),
-      firstColumn = Math.min(...ranges.map((range) => range.startColumn));
-    let cells = 0,
-      length = 0;
-    return ranges.map((range) => {
-      cells += (range.endRow - range.startRow + 1) * (range.endColumn - range.startColumn + 1);
-      if (cells > clipboardCellLimit) throw new RangeError('Selection has too many cells.');
-      const values: string[][] = [],
-        cellFormats: CellFormat[][] = [];
-      for (let row = range.startRow; row <= range.endRow; row++) {
-        const line: string[] = [],
-          formatLine: CellFormat[] = [];
-        for (let col = range.startColumn; col <= range.endColumn; col++) {
-          const index = sourceRow(row);
-          requirePermission(index, col, 'copyable');
-          const span = mergeAt(index, col),
-            value =
-              span && (index !== span.startRow || col !== span.startColumn)
-                ? null
-                : dataSource.getValue(index, columns[col]!.key),
-            text = value == null ? '' : String(value);
-          length += text.length;
-          if (length > clipboardTextLimit) throw new RangeError('Selection text is too large.');
-          line.push(text);
-          formatLine.push(getFormat(index, col));
-        }
-        values.push(line);
-        cellFormats.push(formatLine);
-      }
-      return {
-        row: range.startRow - firstRow,
-        column: range.startColumn - firstColumn,
-        values,
-        ...(cellFormats.some((line) => line.some((format) => Object.keys(format).length))
-          ? { formats: cellFormats }
-          : {}),
-      };
-    });
-  }
-  function copySelection(): string {
-    return blocksToTsv(clipboardBlocks());
-  }
-  function cutSelectionBlocks(): string {
-    const blocks = clipboardBlocks();
-    if (!blocks.length) throw new Error('Select cells before cutting.');
-    const cells = new Map<string, CellUpdate & { rowId: RowId }>();
-    for (const range of displaySelectionRanges())
-      for (let row = range.startRow; row <= range.endRow; row++)
-        for (let col = range.startColumn; col <= range.endColumn; col++) {
-          const rowIndex = sourceRow(row),
-            columnKey = columns[col]!.key;
-          if (mergeAt(rowIndex, col)) throw new Error('Unmerge cells before cutting.');
-          requirePermission(rowIndex, col, 'writable');
-          cells.set(`${rowIndex}:${columnKey}`, {
-            rowIndex,
-            columnKey,
-            rowId: dataSource.getRowId(rowIndex),
-            value: dataSource.getValue(rowIndex, columnKey),
-          });
-        }
-    const text = encodeBlocks(blocks);
-    pendingCut = {
-      cells: [...cells.values()],
-      columnKeys: columns.map((column) => column.key),
-      blockCount: blocks.length,
-    };
-    return text;
-  }
-  function pasteBlocks(
-    blocks: readonly ClipboardBlock[],
-    structured: boolean,
-    move = false,
-    options: PasteOptions = {},
-  ): void {
-    assertAlive();
-    if (
-      !options ||
-      typeof options !== 'object' ||
-      (options.mode !== undefined && !['all', 'values', 'formats'].includes(options.mode)) ||
-      (options.transpose !== undefined && typeof options.transpose !== 'boolean') ||
-      (options.skipEmpty !== undefined && typeof options.skipEmpty !== 'boolean')
-    )
-      throw new TypeError('Invalid paste options.');
-    const mode = options.mode ?? 'all';
-    if (move && (mode !== 'all' || options.transpose || options.skipEmpty))
-      throw new Error('Cut cannot use paste special.');
-    if (options.transpose)
-      blocks = blocks.map((block) => ({
-        ...block,
-        row: block.column,
-        column: block.row,
-        values: block.values[0]!.map((_, col) => block.values.map((row) => row[col]!)),
-        ...(block.formats
-          ? { formats: block.formats[0]!.map((_, col) => block.formats!.map((row) => row[col]!)) }
-          : {}),
-      }));
-    const ranges = displaySelectionRanges().sort((a, b) => a.startRow - b.startRow || a.startColumn - b.startColumn);
-    if (!ranges.length) return;
-    const cut = move ? pendingCut : undefined;
-    if (move && !cut) throw new Error('No pending cut.');
-    if (cut) {
-      if (blocks.length !== cut.blockCount || (ranges.length > 1 && ranges.length !== blocks.length))
-        throw new Error('Cut requires matching destination ranges.');
-      if (cut.columnKeys.length !== columns.length || cut.columnKeys.some((key, index) => key !== columns[index]!.key))
-        throw new Error('Columns changed after cut. Cut again.');
-      for (const cell of cut.cells) {
-        if (
-          cell.rowIndex >= rowCount ||
-          dataSource.getRowId(cell.rowIndex) !== cell.rowId ||
-          !Object.is(dataSource.getValue(cell.rowIndex, cell.columnKey), cell.value)
-        )
-          throw new Error('Cut source changed. Cut again.');
-        requirePermission(cell.rowIndex, columnIndices.get(cell.columnKey)!, 'writable');
-      }
-    }
-    const broadcast =
-      !move && blocks.length === 1 && blocks[0]!.values.length === 1 && blocks[0]!.values[0]!.length === 1;
-    if (structured && !broadcast && ranges.length > 1 && ranges.length !== blocks.length)
-      throw new Error('Clipboard and target range counts must match.');
-    const placements: (ClipboardBlock & { col: number; height?: number; width?: number })[] = broadcast
-      ? ranges.map((range) => ({
-          ...blocks[0]!,
-          row: range.startRow,
-          col: range.startColumn,
-          height: range.endRow - range.startRow + 1,
-          width: range.endColumn - range.startColumn + 1,
-        }))
-      : structured
-        ? ranges.length === 1
-          ? blocks.map((block) => ({
-              ...block,
-              row: ranges[0]!.startRow + block.row,
-              col: ranges[0]!.startColumn + block.column,
-            }))
-          : blocks.map((block, i) => ({ ...block, row: ranges[i]!.startRow, col: ranges[i]!.startColumn }))
-        : ranges.map((range) => ({ ...blocks[0]!, row: range.startRow, col: range.startColumn }));
-    let cells = 0;
-    const texts = new Map<
-      string,
-      { rowIndex: number; columnKey: string; columnIndex: number; text: string; format?: CellFormat }
-    >();
-    for (const place of placements) {
-      const height = place.height ?? place.values.length,
-        width = place.width ?? place.values[0]!.length;
-      cells += height * width;
-      if (cells > clipboardCellLimit) throw new RangeError('Paste has too many cells.');
-      if (place.row + height > visibleRowCount() || place.col + width > columns.length)
-        throw new RangeError('Paste extends beyond grid bounds.');
-      for (let row = 0; row < height; row++)
-        for (let col = 0; col < width; col++) {
-          const rowIndex = sourceRow(place.row + row),
-            columnIndex = place.col + col,
-            columnKey = columns[columnIndex]!.key,
-            text = place.values[broadcast ? 0 : row]![broadcast ? 0 : col]!,
-            key = `${rowIndex}:${columnKey}`,
-            previous = texts.get(key);
-          if (options.skipEmpty && text === '') continue;
-          const span = mergeAt(rowIndex, columnIndex);
-          if (span && (rowIndex !== span.startRow || columnIndex !== span.startColumn)) {
-            if (mode !== 'formats' && text !== '')
-              throw new Error('Paste would overwrite a hidden merged value. Unmerge first.');
-            continue;
-          }
-          if (previous && previous.text !== text)
-            throw new Error('Overlapping paste targets contain conflicting values.');
-          const format = mode === 'values' ? undefined : place.formats?.[broadcast ? 0 : row]?.[broadcast ? 0 : col];
-          if (previous && JSON.stringify(previous.format) !== JSON.stringify(format))
-            throw new Error('Overlapping paste targets contain conflicting formats.');
-          texts.set(key, { rowIndex, columnKey, columnIndex, text, ...(format ? { format } : {}) });
-        }
-    }
-    for (const cell of texts.values()) {
-      if (mode !== 'formats') requirePermission(cell.rowIndex, cell.columnIndex, 'pasteable');
-      if (cell.format && Object.keys(cell.format).length)
-        requireFormatPermission({
-          startRow: cell.rowIndex,
-          endRow: cell.rowIndex,
-          startColumn: cell.columnIndex,
-          endColumn: cell.columnIndex,
-        });
-    }
-    const updates =
-      mode === 'formats'
-        ? []
-        : [...texts.values()].map((cell) => {
-            const column = columns[cell.columnIndex]!,
-              current = dataSource.getValue(cell.rowIndex, column.key);
-            if (!column.parse && current != null && typeof current !== 'string')
-              throw new Error('Column requires a parser: ' + column.key);
-            return {
-              rowIndex: cell.rowIndex,
-              columnKey: column.key,
-              value: column.parse ? column.parse(cell.text) : cell.text,
-            };
-          });
-    if (cut)
-      for (const cell of cut.cells)
-        if (!texts.has(`${cell.rowIndex}:${cell.columnKey}`))
-          updates.push({ rowIndex: cell.rowIndex, columnKey: cell.columnKey, value: null });
-    const formatChanges: FormatChange[] = [];
-    for (const cell of texts.values())
-      if (cell.format && Object.keys(cell.format).length) {
-        const bounds = {
-          startRow: cell.rowIndex,
-          endRow: cell.rowIndex,
-          startColumn: cell.columnIndex,
-          endColumn: cell.columnIndex,
-        };
-        requireFormatPermission(bounds);
-        const target = { scope: 'cell' as const, rowIndex: cell.rowIndex, columnIndex: cell.columnIndex };
-        const key = JSON.stringify(['cell', cell.rowIndex, cell.rowIndex, cell.columnIndex, cell.columnIndex]);
-        const previous = formats.get(key),
-          orders = { ...previous?.orders };
-        for (const property of Object.keys(cell.format) as (keyof CellFormat)[]) orders[property] = ++formatOrder;
-        formatChanges.push({
-          key,
-          previous,
-          value: {
-            target,
-            bounds: Object.freeze(bounds),
-            patch: Object.freeze({ ...previous?.patch, ...cell.format }),
-            orders: Object.freeze(orders),
-            order: formatOrder,
-          },
-        });
-      }
-    applyUpdates(updates, 'paste', formatChanges);
-    if (move) pendingCut = undefined;
-    // Preserve selection when a live filter removes a pasted row from the visible view.
-    const targets = placements.map((place) => ({
-      startRow: place.row,
-      endRow: place.row + (place.height ?? place.values.length) - 1,
-      startColumn: place.col,
-      endColumn: place.col + (place.width ?? place.values[0]!.length) - 1,
-    }));
-    if (targets.length <= 128 && targets.every((range) => range.endRow < visibleRowCount()))
-      targets.forEach((range, index) =>
-        !projection && activeParts === 1
-          ? selectRange(range, index === 0 ? 'replace' : 'add')
-          : selectDisplayRange(range, index === 0 ? 'replace' : 'add'),
-      );
-  }
-  function paste(text: string, options?: PasteOptions): void {
-    pasteBlocks([{ row: 0, column: 0, values: decodeTsv(text) }], false, false, options);
-  }
-
-  function canPaste(): boolean {
-    const range = getSelectionRange();
-    return (
-      !destroyed &&
-      !!range &&
-      !!(dataSource.setValue || dataSource.setValues) &&
-      getCellPermission(range.startRow, range.startColumn).pasteable
-    );
   }
 
   function refreshData(previousRowIds?: readonly RowId[] | 'values'): void {
@@ -1384,6 +1124,51 @@ export function createGridEngine(options: GridEngineOptions) {
       return notify;
     },
   });
+
+  const { clipboardBlocks, copySelection, cutSelectionBlocks, pasteBlocks, paste, canPaste } = createClipboard(
+    context,
+    {
+      get assertAlive() {
+        return assertAlive;
+      },
+      get displaySelectionRanges() {
+        return displaySelectionRanges;
+      },
+      get sourceRow() {
+        return sourceRow;
+      },
+      get requirePermission() {
+        return requirePermission;
+      },
+      get mergeAt() {
+        return mergeAt;
+      },
+      get getFormat() {
+        return getFormat;
+      },
+      get visibleRowCount() {
+        return visibleRowCount;
+      },
+      get requireFormatPermission() {
+        return requireFormatPermission;
+      },
+      get applyUpdates() {
+        return applyUpdates;
+      },
+      get selectRange() {
+        return selectRange;
+      },
+      get selectDisplayRange() {
+        return selectDisplayRange;
+      },
+      get getSelectionRange() {
+        return getSelectionRange;
+      },
+      get getCellPermission() {
+        return getCellPermission;
+      },
+    },
+  );
   if (options.view) {
     view = snapshotView(options.view);
     installProjection(buildProjection(view));
