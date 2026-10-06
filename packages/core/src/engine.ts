@@ -125,13 +125,14 @@ export function createGridEngine(options: GridEngineOptions) {
   let reverseProjection = new Map<number, number>();
   let projectedAxis: GridAxis | null = null;
   let cachedRanges: SelectionRange[] | null = null;
+  let cachedFrozenRows: number | null = null;
   let activeParts = 1;
   let displayAnchor: { row: number; col: number } | null = null;
 
   function viewAxis(): GridAxis { return projectedAxis ?? rowAxis; }
   function visibleFrozenRows():number {
     if(!projection||!groups.some(group=>group.collapsed))return Math.min(frozenRows,visibleRowCount());
-    return projection.filter(row=>row<frozenRows).length;
+    return cachedFrozenRows ??= projection.reduce((count,row)=>count+(row<frozenRows?1:0),0);
   }
   function rebuildViewAxis(): void {
     if (!projection) { projectedAxis = null; return; }
@@ -167,7 +168,7 @@ export function createGridEngine(options: GridEngineOptions) {
   }
   function installProjection(next: number[] | null): void {
     projection = next; reverseProjection = new Map(next?.map((row, index) => [row, index]) ?? []);
-    cachedRanges = null; rebuildViewAxis();
+    cachedRanges = null; cachedFrozenRows = null; rebuildViewAxis();
   }
   function displayRow(row: number): number { return projection ? reverseProjection.get(row) ?? -1 : row; }
   function displaySelection(): CellSelection | null {
@@ -208,6 +209,7 @@ export function createGridEngine(options: GridEngineOptions) {
     if (mode==='add' && displaySelectionRanges().length>=128) throw new RangeError('Selection supports at most 128 ranges.');
     const old=getSelectionRanges();
     const keep=mode==='replace' ? [] : mode==='extend' ? old.slice(0, Math.max(0,old.length-activeParts)) : old;
+    if(keep.length+parts.length>128)throw new RangeError('Selection supports at most 128 source ranges.');
     const row=sourceRow(range.startRow);
     const others=parts.flatMap(part=>row<part.startRow||row>part.endRow ? [part] : [
       ...(part.startRow<row ? [{...part,endRow:row-1}] : []),
@@ -345,6 +347,7 @@ export function createGridEngine(options: GridEngineOptions) {
 
   function notify(change: GridInvalidation, event: GridEvent): void {
     cachedRanges = null;
+    cachedFrozenRows = null;
     if (projection && change.type === 'cells') {
       const old = projection;
       installProjection(buildProjection(view));
@@ -537,6 +540,7 @@ export function createGridEngine(options: GridEngineOptions) {
     assertAlive();
     const ranges=displaySelectionRanges().sort((a,b)=>a.startRow-b.startRow||a.startColumn-b.startColumn);
     if(!ranges.length)return [];
+    if(ranges.length>128)throw new RangeError('Clipboard supports at most 128 visible ranges.');
     const firstRow=Math.min(...ranges.map(range=>range.startRow)),firstColumn=Math.min(...ranges.map(range=>range.startColumn));
     let cells=0,length=0;
     return ranges.map(range=>{
@@ -707,7 +711,7 @@ export function createGridEngine(options: GridEngineOptions) {
     const span=mergeAt(rowIndex,columnIndex);
     if(span){rowIndex=span.startRow;columnIndex=span.startColumn;for(let row=span.startRow;row<=span.endRow;row++)for(let col=span.startColumn;col<=span.endColumn;col++)if(!getCellPermission(row,col).writable)return false;}
     const column = columns[columnIndex];
-    if (destroyed || !Number.isSafeInteger(rowIndex) || !Number.isSafeInteger(columnIndex) || !dataSource.setValue || !column || rowIndex < 0 || rowIndex >= rowCount) return false;
+    if (destroyed || !Number.isSafeInteger(rowIndex) || !Number.isSafeInteger(columnIndex) || !(dataSource.setValue || dataSource.setValues) || !column || rowIndex < 0 || rowIndex >= rowCount) return false;
     if (!getCellPermission(rowIndex, columnIndex).editable) return false;
     const value = dataSource.getValue(rowIndex, column.key);
     return column.parse !== undefined || value == null || typeof value === 'string';
@@ -1121,7 +1125,7 @@ export function createGridEngine(options: GridEngineOptions) {
     const previousLookup=new Map(previousRowIds?.map((id,i)=>[id,i]) ?? []), order=ids.map(id=>previousLookup.get(id) ?? -1);
     const before=snapshotStructure(oldIds), contiguous=(start:number,end:number)=>rowMap.slice(start,end+1).every((row,i,rows)=>row>=0&&row===rows[0]!+i);
     before.merges=before.merges.filter(span=>contiguous(span.startRow,span.endRow)&&!(rowMap[span.startRow]!<Math.min(frozenRows,count)&&rowMap[span.endRow]!>=Math.min(frozenRows,count)));
-    before.groups=before.groups.filter(group=>contiguous(group.startRow,group.endRow));
+    before.groups=before.groups.filter(group=>contiguous(group.startRow,group.endRow)&&!(group.collapsed&&rowMap[group.startRow]!<Math.min(frozenRows,count)&&rowMap[group.endRow]!>=Math.min(frozenRows,count)));
     const oldDisplay=projection ?? Array.from({length:rowCount},(_,i)=>i), next=mappedState(before,order,'row',rowMap,columnsMap,[],ids);
     next.rowIds=ids;
     for(const cell of [next.selection,next.anchor])if(cell)cell.rowId=ids[cell.rowIndex]!;

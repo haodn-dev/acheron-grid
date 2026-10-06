@@ -45,15 +45,18 @@ export function createAsyncDataSource<S>(options: AsyncDataSourceOptions<S>) {
   function loadPage(offset:number):Promise<void> {
     alive();if(!Number.isSafeInteger(offset)||offset<0||offset%pageSize)throw new RangeError('Page offset must align with pageSize.');
     const existing=pending.get(offset);if(existing)return existing.promise;
-    if(pages.has(offset)){const cached=pages.get(offset)!;pages.delete(offset);pages.set(offset,cached);return Promise.resolve();}
+    if(pages.has(offset)&&offset<count){const cached=pages.get(offset)!;pages.delete(offset);pages.set(offset,cached);return Promise.resolve();}
     if(pending.size>=maxPendingLoads)throw new RangeError('Async pending load limit reached.');
     const controller=options.createAbortController(), revision=generation, requestQuery=query;
     let wake!:()=>void, started=false;
     const slot=new Promise<void>(resolve=>{wake=resolve;});
     const promise=slot.then(()=>{if(destroyed||revision!==generation||pending.get(offset)?.controller!==controller)throw new Error('Page load canceled.');return options.load({offset,limit:pageSize,signal:controller.signal,query:requestQuery});}).then(result=>{
       if(destroyed||revision!==generation||pending.get(offset)?.controller!==controller)return;
-      if(!Number.isSafeInteger(result.total)||result.total<0||!Array.isArray(result.rows)||result.rows.length>pageSize||offset+result.rows.length>result.total||result.rows.length!==Math.max(0,Math.min(pageSize,result.total-offset)))throw new TypeError('Invalid page result.');
+      if(!Number.isSafeInteger(result.total)||result.total<0||!Array.isArray(result.rows)||result.rows.length>pageSize||result.rows.length!==Math.max(0,Math.min(pageSize,result.total-offset)))throw new TypeError('Invalid page result.');
       const rows=result.rows.map(row=>{if(!row||typeof row!=='object'||Array.isArray(row))throw new TypeError('Invalid page row.');return Object.freeze({...row});});
+      if(count!==result.total) {
+        for(const cached of pages.keys()){pages.delete(cached);if(states.get(cached)?.status==='ready')states.delete(cached);}
+      }
       count=result.total;pages.set(offset,rows);
       while(pages.size>maxPages){const evicted=pages.keys().next().value!;pages.delete(evicted);states.delete(evicted);}
       emit({offset,status:'ready'});
