@@ -1,5 +1,11 @@
 # Benchmark evidence
 
+## Retained Canvas lifecycle memory
+
+`tests/benchmark-memory.mjs` uses Chromium CDP heap and DOM/listener counters at named checkpoints. Each run allocates 100,000 rows, mounts Canvas with the viewport ARIA tree, pastes 100,000 values, verifies undo, releases host references and performs 20 additional mount/update/undo/destroy cycles. Two warmup cycles precede the baseline. Explicit GC follows teardown; DOM/document/listener counts must return to the warm baseline. Heap deltas are informational, without a timing or memory threshold.
+
+[Three sequential Windows Chromium runs](benchmark-results/2026-10-06-lifecycle-memory.json) at `cc28d5c` passed on 2026-10-06. Maximum sampled isolate heap was 68.88–70.60 MiB; post-GC retained delta after 20 cycles was about 0.42 MiB. DOM nodes returned to 46 and listeners to 3 in all runs. These are sampled checkpoints, not transient peak memory, total browser RSS or GPU/Canvas backing-store measurements. GC/JIT/cache behavior changes retained heap; stable counters in this workload do not prove every integration is leak-free. Host-owned sources, subscriptions and object URLs still require host cleanup. CI's existing Chromium benchmark job also runs this workload; this new benchmark has been verified locally, pending a remote run.
+
 ## Browser command task evidence
 
 The benchmark configuration also runs `tests/benchmark-commands.mjs`: three trials of multi-sort, paste and undo on 100,000 allocated rows. Full row identity/value assertions follow each operation. Raw attachments include synchronous operation duration, zero-delay timer latency and overlapping Long Tasks API entries when supported. Timer latency includes scheduling overhead; overlapping tasks can include fixture/assertion work outside the measured operation. This measures browser main-thread blocking, without Canvas rendering, GPU time, presented FPS or peak memory. There is no warmup or timing pass/fail threshold. Set `ACHERON_TEST_BROWSER` to select Firefox or WebKit; unsupported long-task collection is explicitly recorded.

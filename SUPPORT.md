@@ -18,4 +18,16 @@ Browser suites normalize explicit synthetic clipboard payloads in Firefox; they 
 
 Release checks must pass on the exact release commit: clean install, typecheck, Node/MCP/browser/playground tests, eight independent tarballs, relevant benchmark correctness and dependency licenses. Select release scope/version explicitly, synchronize public documentation/site snapshots, provide migration notes for breaking changes and preserve actual raw evidence. Package publication is a separate release action.
 
+## Manual accessibility validation
+
+Automated keyboard/ARIA checks are not screen-reader acceptance. Record OS, browser, screen-reader versions, source revision and pass/fail for each workload before expanding support claims:
+
+1. Focus the viewport and use arrows, Home/End and Ctrl/Meta+Home/End. Check the announced row/column, value, selection and read-only state against visible data.
+2. Open an editor with F2, submit an invalid draft, correct it, save with Enter and cancel with Escape. Check focus, accessible name and error announcement; values must remain unchanged after cancellation.
+3. Extend a range with Shift, select a row/column and navigate frozen/grouped/projected rows. Check identity and announcements after scrolling, sort/filter and collapse.
+4. Open menus with Shift+F10, type to search, use arrows and Escape/Tab. Exercise choices, disabled options and Apply/Cancel; focus must return to the intended control.
+5. Repeat with reduced motion and keyboard-only navigation, then destroy/remount. Check that hidden or removed controls cannot receive focus and announcements do not duplicate.
+
+Start with NVDA + Firefox/Chromium on Windows and VoiceOver + Safari on macOS, using authorized non-sensitive sample data. These combinations are a validation plan, not verified support. Real-device touch and operating-system clipboard tests require separate manual evidence. [Lifecycle heap checkpoints](BENCHMARKS.md#retained-canvas-lifecycle-memory) cover one automated teardown workload, without a true peak-memory guarantee.
+
 Report bugs with package/source revision, runtime/browser/OS, a minimal public reproduction, observed/expected behavior and relevant permissions/view/lifecycle settings. Exclude secrets and private datasets.
