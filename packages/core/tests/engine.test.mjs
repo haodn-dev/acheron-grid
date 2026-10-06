@@ -4,6 +4,20 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createGridEngine, LocalDataSource, LocalDataView } from '@acheron-grid/core';
 
+test('batch and paste keys remain distinct for numeric prefixes, colons and quotes', () => {
+  const keys = ['1:a', 'a', 'quoted"\n:b'];
+  const source = new LocalDataSource([0, 1].map(id => ({ id, ...Object.fromEntries(keys.map(key => [key, 'original'])) })), row => row.id);
+  const engine = createGridEngine({ dataSource: source, columns: keys.map(key => ({ key, title: key, editable: true })) });
+  engine.updateCells([{ rowIndex: 0, columnKey: keys[0], value: 'left' }, { rowIndex: 1, columnKey: keys[1], value: 'right' }, { rowIndex: 0, columnKey: keys[0], value: 'last' }]);
+  assert.equal(source.getValue(0, keys[0]), 'last');assert.equal(source.getValue(1, keys[1]), 'right');
+  assert.equal(engine.undo(), true);assert.equal(source.getValue(0, keys[0]), 'original');assert.equal(source.getValue(1, keys[1]), 'original');
+  assert.equal(engine.redo(), true);assert.equal(source.getValue(0, keys[0]), 'last');assert.equal(source.getValue(1, keys[1]), 'right');engine.undo();
+  engine.select(0, 0);engine.paste('x\ty\tz\nu\tv\tw');
+  assert.deepEqual([0, 1].map(row => keys.map(key => source.getValue(row, key))), [['x', 'y', 'z'], ['u', 'v', 'w']]);
+  assert.equal(engine.undo(), true);assert.deepEqual([0, 1].map(row => keys.map(key => source.getValue(row, key))), [['original', 'original', 'original'], ['original', 'original', 'original']]);
+  engine.destroy();
+});
+
 function fixture(options = {}) {
   const source = new LocalDataSource([{ id: 1, name: 'Ada', score: 1 }, { id: 2, name: 'Grace', score: 2 }], row => row.id);
   const changes = [];

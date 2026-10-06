@@ -401,7 +401,7 @@ export function createGridEngine(options: GridEngineOptions) {
     for (const update of updates) {
       if (!Number.isSafeInteger(update.rowIndex) || update.rowIndex < 0 || update.rowIndex >= rowCount) throw new RangeError('Invalid row index.');
       if (!columnIndices.has(update.columnKey)) throw new Error(`Unknown column: ${update.columnKey}`);
-      unique.set(JSON.stringify([update.rowIndex, update.columnKey]), { ...update });
+      unique.set(`${update.rowIndex}:${update.columnKey}`, { ...update });
     }
     const changes: Change[] = [...unique.values()].map(update => ({ ...update,
       previous: dataSource.getValue(update.rowIndex, update.columnKey), rowId: dataSource.getRowId(update.rowIndex),
@@ -570,7 +570,7 @@ export function createGridEngine(options: GridEngineOptions) {
       const rowIndex=sourceRow(row),columnKey=columns[col]!.key;
       if (mergeAt(rowIndex,col)) throw new Error('Unmerge cells before cutting.');
       requirePermission(rowIndex,col,'writable');
-      cells.set(JSON.stringify([rowIndex,columnKey]),{rowIndex,columnKey,rowId:dataSource.getRowId(rowIndex),value:dataSource.getValue(rowIndex,columnKey)});
+      cells.set(`${rowIndex}:${columnKey}`,{rowIndex,columnKey,rowId:dataSource.getRowId(rowIndex),value:dataSource.getValue(rowIndex,columnKey)});
     }
     const text=encodeBlocks(blocks);
     pendingCut={cells:[...cells.values()],columnKeys:columns.map(column=>column.key),blockCount:blocks.length};
@@ -603,7 +603,7 @@ export function createGridEngine(options: GridEngineOptions) {
       cells+=height*width;if(cells>clipboardCellLimit)throw new RangeError('Paste has too many cells.');
       if(place.row+height>visibleRowCount()||place.col+width>columns.length)throw new RangeError('Paste extends beyond grid bounds.');
       for(let row=0;row<height;row++)for(let col=0;col<width;col++){
-        const rowIndex=sourceRow(place.row+row),columnIndex=place.col+col,columnKey=columns[columnIndex]!.key,text=place.values[broadcast?0:row]![broadcast?0:col]!,key=JSON.stringify([rowIndex,columnKey]),previous=texts.get(key);
+        const rowIndex=sourceRow(place.row+row),columnIndex=place.col+col,columnKey=columns[columnIndex]!.key,text=place.values[broadcast?0:row]![broadcast?0:col]!,key=`${rowIndex}:${columnKey}`,previous=texts.get(key);
         const span=mergeAt(rowIndex,columnIndex);
         if(span&&(rowIndex!==span.startRow||columnIndex!==span.startColumn)) {
           if(text!=='')throw new Error('Paste would overwrite a hidden merged value. Unmerge first.');
@@ -624,7 +624,7 @@ export function createGridEngine(options: GridEngineOptions) {
       if(!column.parse&&current!=null&&typeof current!=='string')throw new Error('Column requires a parser: '+column.key);
       return {rowIndex:cell.rowIndex,columnKey:column.key,value:column.parse?column.parse(cell.text):cell.text};
     });
-    if (cut) for (const cell of cut.cells) if (!texts.has(JSON.stringify([cell.rowIndex,cell.columnKey]))) updates.push({rowIndex:cell.rowIndex,columnKey:cell.columnKey,value:null});
+    if (cut) for (const cell of cut.cells) if (!texts.has(`${cell.rowIndex}:${cell.columnKey}`)) updates.push({rowIndex:cell.rowIndex,columnKey:cell.columnKey,value:null});
     const formatChanges: FormatChange[] = [];
     for (const cell of texts.values()) if (cell.format && Object.keys(cell.format).length) {
       const bounds = { startRow: cell.rowIndex, endRow: cell.rowIndex, startColumn: cell.columnIndex, endColumn: cell.columnIndex };

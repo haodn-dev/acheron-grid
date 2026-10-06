@@ -58,13 +58,15 @@ export class LocalDataSource<T extends Record<string, unknown>> implements DataS
   }
 
   setValues(updates: readonly CellUpdate[]): void {
-    const next = new Map<number, Readonly<T>>();
+    const next = new Map<number, T>();
     for (const { rowIndex, columnKey, value } of updates) {
       this.assertIndex(rowIndex);
       if (!Object.hasOwn(this.rows[rowIndex]!, columnKey) && !this.addedColumns.has(columnKey)) throw new Error(`Unknown column: ${columnKey}`);
-      next.set(rowIndex, Object.freeze({ ...(next.get(rowIndex) ?? this.rows[rowIndex]!), [columnKey]: value }));
+      let row = next.get(rowIndex);
+      if (!row) { row = { ...this.rows[rowIndex]! }; next.set(rowIndex, row); }
+      Object.assign(row, { [columnKey]: value });
     }
-    for (const [index, row] of next) this.rows[index] = row;
+    for (const [index, row] of next) this.rows[index] = Object.freeze(row);
   }
 
   addColumns(keys: readonly string[], defaults:Readonly<Record<string,unknown>>={}): void {
