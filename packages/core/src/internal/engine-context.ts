@@ -1,8 +1,7 @@
 import { GridAxis } from '../axis.js';
 import type { CellUpdate, DataSource, LocalViewOptions, RowId, RowSplice } from '../data-source.js';
-import type { GridEngineOptions, GridInvalidation } from '../engine.js';
-import type { GridEvent } from '../events.js';
-import type { CellPermissionResolver } from '../permissions.js';
+import type { GridEngineOptions } from '../engine.js';
+import type { CellPermissionPolicy, CellPermissionResolver } from '../permissions.js';
 import type { StructureRequest } from '../structure.js';
 import type {
   CellFormat,
@@ -77,53 +76,36 @@ export type HistoryCommand =
       columnMap: readonly number[];
     };
 export interface EngineContext {
-  dataSource: DataSource;
+  readonly dataSource: DataSource;
   columns: readonly Readonly<Column>[];
-  rowHeight: number;
-  columnWidth: number;
-  columnIndices: Map<string, number>;
+  readonly rowHeight: number;
+  readonly columnWidth: number;
+  readonly columnIndices: Map<string, number>;
   rowCount: number;
   frozenRows: number;
   frozenColumns: number;
-  rowAxis: GridAxis;
-  columnAxis: GridAxis;
-  permissions:
-    | Readonly<{
-        editable?: boolean;
-        selectable?: boolean;
-        copyable?: boolean;
-        pasteable?: boolean;
-        writable?: boolean;
-        formatting?: boolean;
-      }>
-    | undefined;
+  readonly rowAxis: GridAxis;
+  readonly columnAxis: GridAxis;
+  readonly permissions: Readonly<CellPermissionPolicy> | undefined;
   resolver: CellPermissionResolver | undefined;
-  onEvent: ((event: GridEvent) => void) | undefined;
-  allowLockChanges: boolean;
+  readonly allowLockChanges: boolean;
   tableLocked: boolean;
   merges: Readonly<SelectionRange>[];
   groups: Readonly<RowGroup>[];
   groupId: number;
-  addedColumnKeys: Set<string>;
-  manualRows: Set<number>;
-  lockedRows: Set<number>;
-  lockedColumns: Set<number>;
-  lockedCells: Set<string>;
-  busy: boolean;
+  readonly addedColumnKeys: Set<string>;
+  readonly manualRows: Set<number>;
+  readonly lockedRows: Set<number>;
+  readonly lockedColumns: Set<number>;
+  readonly lockedCells: Set<string>;
   destroyed: boolean;
-  onInvalidate: ((change: GridInvalidation) => void) | undefined;
-  subscribers: Set<{
-    readonly onEvent?: (event: GridEvent) => void;
-    readonly onInvalidate?: (change: GridInvalidation) => void;
-  }>;
-  observerErrors: unknown[];
   selection: CellSelection | null;
   anchor: CellSelection | null;
-  retainedRanges: SelectionRange[];
+  readonly retainedRanges: SelectionRange[];
   pendingCut:
     | { cells: readonly (CellUpdate & { rowId: RowId })[]; columnKeys: readonly string[]; blockCount: number }
     | undefined;
-  formats: Map<string, FormatEntry>;
+  readonly formats: Map<string, FormatEntry>;
   orderedFormats: FormatEntry[];
   formatOrder: number;
   view: Readonly<LocalViewOptions>;
@@ -134,8 +116,8 @@ export interface EngineContext {
   cachedFrozenRows: number | null;
   activeParts: number;
   displayAnchor: { row: number; col: number } | null;
-  emptyFormat: Readonly<CellFormat>;
-  options: GridEngineOptions;
-  past: HistoryCommand[];
-  future: HistoryCommand[];
+  readonly emptyFormat: Readonly<CellFormat>;
+  readonly options: GridEngineOptions;
+  readonly past: HistoryCommand[];
+  readonly future: HistoryCommand[];
 }

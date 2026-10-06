@@ -8,19 +8,14 @@ import { createValues } from './internal/values.js';
 import { createFormatting } from './internal/formatting.js';
 import { createPermissions } from './internal/permissions.js';
 import { createStructure } from './internal/structure.js';
-import { mappedIntervals, mappedRanges, inverseMap, rowBlocks } from './internal/structure-mapping.js';
 import type { GridConfiguration } from './configuration.js';
-import { restoreGridConfiguration } from './configuration.js';
-import { readGridState } from './state.js';
 import type { GridState } from './state.js';
-import { LocalDataView, snapshotLocalView as snapshotView } from './data-source.js';
+import { snapshotLocalView as snapshotView } from './data-source.js';
 import type { LocalViewOptions } from './data-source.js';
-import { blocksToTsv, encodeBlocks, decodeBlocks } from './clipboard.js';
-import type { ClipboardBlock } from './clipboard.js';
+import { encodeBlocks, decodeBlocks } from './clipboard.js';
 import type { PasteOptions } from './types.js';
-import { reorderedIndices } from './structure.js';
 import type { StructureRequest } from './structure.js';
-import type { CellUpdate, DataSource, RowId, DataRow, RowSplice } from './data-source.js';
+import type { CellUpdate, DataSource, RowId, DataRow } from './data-source.js';
 import type {
   Column,
   CellSelection,
@@ -32,22 +27,13 @@ import type {
   RowGroup,
   LayoutRequest,
 } from './types.js';
-import { resolvePermissions } from './permissions.js';
 import type { CellPermission, CellPermissionPolicy, CellPermissionResolver } from './permissions.js';
-import type { GridEvent, GridChangeSource } from './events.js';
+import type { GridEvent } from './events.js';
 import { GridAxis } from './axis.js';
-import { createViewport } from './panes.js';
 import type { ViewportOptions } from './panes.js';
-import { clipboardCellLimit, clipboardTextLimit, decodeTsv } from './tsv.js';
-import type {
-  Change,
-  EngineContext,
-  FormatChange,
-  FormatEntry,
-  HistoryCommand,
-  StructureState,
-} from './internal/engine-context.js';
+import type { EngineContext, FormatEntry, HistoryCommand } from './internal/engine-context.js';
 import { createHistory } from './internal/history.js';
+
 export type GridInvalidation =
   | { readonly type: 'cells'; readonly cells: readonly { readonly rowIndex: number; readonly columnKey: string }[] }
   | { readonly type: 'selection'; readonly changed: boolean; readonly rangeChanged: boolean }
@@ -175,26 +161,19 @@ export function createGridEngine(options: GridEngineOptions) {
   let activeParts = 1;
   let displayAnchor: { row: number; col: number } | null = null;
 
+  const emptyFormat: Readonly<CellFormat> = Object.freeze({});
   const context: EngineContext = {
     options,
-    get dataSource() {
-      return dataSource;
-    },
+    dataSource,
     get columns() {
       return columns;
     },
     set columns(value) {
       columns = value;
     },
-    get rowHeight() {
-      return rowHeight;
-    },
-    get columnWidth() {
-      return columnWidth;
-    },
-    get columnIndices() {
-      return columnIndices;
-    },
+    rowHeight,
+    columnWidth,
+    columnIndices,
     get rowCount() {
       return rowCount;
     },
@@ -213,30 +192,16 @@ export function createGridEngine(options: GridEngineOptions) {
     set frozenColumns(value) {
       frozenColumns = value;
     },
-    get rowAxis() {
-      return rowAxis;
-    },
-    get columnAxis() {
-      return columnAxis;
-    },
-    get permissions() {
-      return permissions;
-    },
+    rowAxis,
+    columnAxis,
+    permissions,
     get resolver() {
       return resolver;
     },
     set resolver(value) {
       resolver = value;
     },
-    get onEvent() {
-      return onEvent;
-    },
-    set onEvent(value) {
-      onEvent = value;
-    },
-    get allowLockChanges() {
-      return allowLockChanges;
-    },
+    allowLockChanges,
     get tableLocked() {
       return tableLocked;
     },
@@ -261,44 +226,16 @@ export function createGridEngine(options: GridEngineOptions) {
     set groupId(value) {
       groupId = value;
     },
-    get addedColumnKeys() {
-      return addedColumnKeys;
-    },
-    get manualRows() {
-      return manualRows;
-    },
-    get lockedRows() {
-      return lockedRows;
-    },
-    get lockedColumns() {
-      return lockedColumns;
-    },
-    get lockedCells() {
-      return lockedCells;
-    },
-    get busy() {
-      return busy;
-    },
-    set busy(value) {
-      busy = value;
-    },
+    addedColumnKeys,
+    manualRows,
+    lockedRows,
+    lockedColumns,
+    lockedCells,
     get destroyed() {
       return destroyed;
     },
     set destroyed(value) {
       destroyed = value;
-    },
-    get onInvalidate() {
-      return onInvalidate;
-    },
-    set onInvalidate(value) {
-      onInvalidate = value;
-    },
-    get subscribers() {
-      return subscribers;
-    },
-    get observerErrors() {
-      return observerErrors;
     },
     get selection() {
       return selection;
@@ -312,24 +249,16 @@ export function createGridEngine(options: GridEngineOptions) {
     set anchor(value) {
       anchor = value;
     },
-    get retainedRanges() {
-      return retainedRanges;
-    },
-    get past() {
-      return past;
-    },
-    get future() {
-      return future;
-    },
+    retainedRanges,
+    past,
+    future,
     get pendingCut() {
       return pendingCut;
     },
     set pendingCut(value) {
       pendingCut = value;
     },
-    get formats() {
-      return formats;
-    },
+    formats,
     get orderedFormats() {
       return orderedFormats;
     },
@@ -390,12 +319,8 @@ export function createGridEngine(options: GridEngineOptions) {
     set displayAnchor(value) {
       displayAnchor = value;
     },
-    get emptyFormat() {
-      return emptyFormat;
-    },
+    emptyFormat,
   };
-
-  const emptyFormat: Readonly<CellFormat> = Object.freeze({});
 
   function assertAlive(): void {
     if (destroyed) throw new Error('Grid is destroyed.');
@@ -467,9 +392,7 @@ export function createGridEngine(options: GridEngineOptions) {
     get notifyStructure() {
       return notifyStructure;
     },
-    get notify() {
-      return notify;
-    },
+    notify,
     get requireFormatPermission() {
       return requireFormatPermission;
     },
@@ -498,7 +421,6 @@ export function createGridEngine(options: GridEngineOptions) {
     structureRequest,
     notifyStructure,
     replayStructure,
-    changeStructure,
     insertRows,
     deleteRows,
     insertColumns,
@@ -517,67 +439,39 @@ export function createGridEngine(options: GridEngineOptions) {
     get getCellPermission() {
       return getCellPermission;
     },
-    get notify() {
-      return notify;
-    },
-    get assertAlive() {
-      return assertAlive;
-    },
+    notify,
+    assertAlive,
   });
 
   const { getCellPermission, requirePermission, validateLockTarget, isLocked, setLocked } = createPermissions(context, {
-    get assertAlive() {
-      return assertAlive;
-    },
-    get query() {
-      return query;
-    },
+    assertAlive,
+    query,
     get mergeAt() {
       return mergeAt;
     },
-    get notify() {
-      return notify;
-    },
+    notify,
   });
 
-  const { formatBounds, requireFormatPermission, canFormat, getFormat, writeFormats, notifyFormats, format } =
-    createFormatting(context, {
-      get validateLockTarget() {
-        return validateLockTarget;
-      },
-      get requirePermission() {
-        return requirePermission;
-      },
-      get assertAlive() {
-        return assertAlive;
-      },
-      get notify() {
-        return notify;
-      },
-    });
+  const { requireFormatPermission, canFormat, getFormat, writeFormats, notifyFormats, format } = createFormatting(
+    context,
+    {
+      validateLockTarget,
+      requirePermission,
+      assertAlive,
+      notify,
+    },
+  );
 
   const { notifyCells, write, applyUpdates, canEdit, editCell, replaceText } = createValues(context, {
-    get notify() {
-      return notify;
-    },
-    get assertAlive() {
-      return assertAlive;
-    },
-    get requirePermission() {
-      return requirePermission;
-    },
-    get writeFormats() {
-      return writeFormats;
-    },
-    get notifyFormats() {
-      return notifyFormats;
-    },
+    notify,
+    assertAlive,
+    requirePermission,
+    writeFormats,
+    notifyFormats,
     get mergeAt() {
       return mergeAt;
     },
-    get getCellPermission() {
-      return getCellPermission;
-    },
+    getCellPermission,
     get displaySelectionRanges() {
       return displaySelectionRanges;
     },
@@ -607,12 +501,8 @@ export function createGridEngine(options: GridEngineOptions) {
       get displayRow() {
         return displayRow;
       },
-      get assertAlive() {
-        return assertAlive;
-      },
-      get notify() {
-        return notify;
-      },
+      assertAlive,
+      notify,
       get rebuildViewAxis() {
         return rebuildViewAxis;
       },
@@ -626,37 +516,27 @@ export function createGridEngine(options: GridEngineOptions) {
   );
 
   const {
-    intersects,
     mergeAt,
     expandMergedRange,
     validateMergeFreeze,
     layoutAllowed,
     notifyOutline,
-    changeOutline,
-    mergeRange,
     canMerge,
     mergeCells,
     unmergeCells,
     groupRows,
-    findGroup,
     ungroupRows,
     setGroupCollapsed,
   } = createOutline(context, {
-    get assertAlive() {
-      return assertAlive;
-    },
-    get getCellPermission() {
-      return getCellPermission;
-    },
+    assertAlive,
+    getCellPermission,
     get installProjection() {
       return installProjection;
     },
     get buildProjection() {
       return buildProjection;
     },
-    get notify() {
-      return notify;
-    },
+    notify,
     get displayRow() {
       return displayRow;
     },
@@ -686,12 +566,8 @@ export function createGridEngine(options: GridEngineOptions) {
     get displaySelectionRanges() {
       return displaySelectionRanges;
     },
-    get assertAlive() {
-      return assertAlive;
-    },
-    get notify() {
-      return notify;
-    },
+    assertAlive,
+    notify,
   });
 
   const {
@@ -701,134 +577,56 @@ export function createGridEngine(options: GridEngineOptions) {
     getSelectionRange,
     getSelectionRanges,
     displaySelectionRanges,
-    select,
     selectRange,
-    notifySelection,
     clearSelection,
   } = createSelection(context, {
-    get assertAlive() {
-      return assertAlive;
-    },
-    get expandMergedRange() {
-      return expandMergedRange;
-    },
-    get displayRow() {
-      return displayRow;
-    },
-    get sourceRanges() {
-      return sourceRanges;
-    },
-    get getCellPermission() {
-      return getCellPermission;
-    },
-    get sourceRow() {
-      return sourceRow;
-    },
-    get mergeAt() {
-      return mergeAt;
-    },
-    get displaySelection() {
-      return displaySelection;
-    },
-    get notify() {
-      return notify;
-    },
+    assertAlive,
+    expandMergedRange,
+    displayRow,
+    sourceRanges,
+    getCellPermission,
+    sourceRow,
+    mergeAt,
+    displaySelection,
+    notify,
   });
 
   const { clipboardBlocks, copySelection, cutSelectionBlocks, pasteBlocks, paste, canPaste } = createClipboard(
     context,
     {
-      get assertAlive() {
-        return assertAlive;
-      },
-      get displaySelectionRanges() {
-        return displaySelectionRanges;
-      },
-      get sourceRow() {
-        return sourceRow;
-      },
-      get requirePermission() {
-        return requirePermission;
-      },
-      get mergeAt() {
-        return mergeAt;
-      },
-      get getFormat() {
-        return getFormat;
-      },
-      get visibleRowCount() {
-        return visibleRowCount;
-      },
-      get requireFormatPermission() {
-        return requireFormatPermission;
-      },
-      get applyUpdates() {
-        return applyUpdates;
-      },
-      get selectRange() {
-        return selectRange;
-      },
-      get selectDisplayRange() {
-        return selectDisplayRange;
-      },
-      get getSelectionRange() {
-        return getSelectionRange;
-      },
-      get getCellPermission() {
-        return getCellPermission;
-      },
+      assertAlive,
+      displaySelectionRanges,
+      sourceRow,
+      requirePermission,
+      mergeAt,
+      getFormat,
+      visibleRowCount,
+      requireFormatPermission,
+      applyUpdates,
+      selectRange,
+      selectDisplayRange,
+      getSelectionRange,
+      getCellPermission,
     },
   );
 
   const { refreshData, exportConfiguration, exportState, restoreState } = createPersistence(context, {
-    get assertAlive() {
-      return assertAlive;
-    },
-    get buildProjection() {
-      return buildProjection;
-    },
-    get installProjection() {
-      return installProjection;
-    },
-    get notify() {
-      return notify;
-    },
-    get displayRow() {
-      return displayRow;
-    },
-    get snapshotStructure() {
-      return snapshotStructure;
-    },
-    get mappedState() {
-      return mappedState;
-    },
-    get restoreStructure() {
-      return restoreStructure;
-    },
-    get getSelectionRanges() {
-      return getSelectionRanges;
-    },
-    get structureRequest() {
-      return structureRequest;
-    },
-    get structureAllowed() {
-      return structureAllowed;
-    },
-    get createGridEngine() {
-      return createGridEngine;
-    },
-    get layoutAllowed() {
-      return layoutAllowed;
-    },
-    get requirePermission() {
-      return requirePermission;
-    },
-    get requireFormatPermission() {
-      return requireFormatPermission;
-    },
-    get requireVisibilityPolicy() {
-      return requireVisibilityPolicy;
-    },
+    assertAlive,
+    buildProjection,
+    installProjection,
+    notify,
+    displayRow,
+    snapshotStructure,
+    mappedState,
+    restoreStructure,
+    getSelectionRanges,
+    structureRequest,
+    structureAllowed,
+    createGridEngine,
+    layoutAllowed,
+    requirePermission,
+    requireFormatPermission,
+    requireVisibilityPolicy,
   });
   if (options.view) {
     view = snapshotView(options.view);
@@ -917,7 +715,7 @@ export function createGridEngine(options: GridEngineOptions) {
     getSelection: displaySelection,
     getSelectionRange: () => displaySelectionRanges().at(-1) ?? null,
     getSelectionRanges: displaySelectionRanges,
-    getCellPermission: (row: number, col: number) => getCellPermission(sourceRow(row), col),
+    getCellPermission: (row: number, col: number): CellPermission => getCellPermission(sourceRow(row), col),
     canEdit: (row: number, col: number) =>
       !destroyed && row >= 0 && row < visibleRowCount() && canEdit(sourceRow(row), col),
     canPaste: () => displaySelectionRanges().length > 0 && canPaste(),
