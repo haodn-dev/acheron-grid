@@ -61,7 +61,7 @@ The source exposes 1,000,000 logical rows and 1,000 columns lazily, with two spa
 
 Ranges describe three per-run summaries, not pooled percentiles. The 10 ms p95 is retained as measured. Outputs contain per-run summaries, not individual callback samples. This instrumentation measures synchronous animation-frame callbacks that read source cells. It does not measure presented FPS, raster/GPU time, peak memory, all UI callbacks or production application latency. Concurrent machine activity is uncontrolled; these results do not establish a regression against earlier runs.
 
-The sections above and below add allocated local sort/filter/refresh, batch/paste/history, browser task-delay and retained teardown-memory evidence. Complex layouts, remote cache churn, presented frame cadence, real-device workloads and true peak memory still need dedicated measurements. Each benchmark must pair cost measurements with correctness checks. Timing gates require repeated baselines on a stable runner; current read-count assertions can already catch virtualization regressions.
+The sections above and below add allocated local sort/filter/refresh, batch/paste/history, browser task-delay and retained teardown-memory evidence. Operational sections below now cover complex layouts, synthetic remote cache churn and animation-frame scheduling cadence. Presented frames, real-device workloads and true peak memory remain unverified. Each benchmark must pair cost measurements with correctness checks. Timing gates require repeated baselines on a stable runner; current read-count assertions can already catch virtualization regressions.
 
 ## Raw callback evidence
 
@@ -92,3 +92,16 @@ Run `npx playwright test --config benchmark.config.mjs tests/benchmark-rendering
 Use the [manual validation protocol](guides/manual-validation.md) for screen readers, operating-system clipboard, physical devices and host responsiveness budgets. These remain unverified until a tester records actual evidence.
 
 [CI at 3a613a9](https://github.com/haodn-dev/acheron-grid/actions/runs/37430133004) passed on Node 22/24, Firefox and WebKit, including repeated rendering benchmarks, operational correctness and independent packed consumers. This confirms automated assertions on those runners; it does not close the manual acceptance cases.
+
+## Warmed responsiveness reference profiles
+
+The opt-in `tests/benchmark-responsiveness.mjs` measures two warmups followed by 30 sequential samples for multi-sort, equality filter, one-column paste and undo at 10k/100k rows. Enable `ACHERON_RESPONSIVENESS=1` and select that file with the existing benchmark config. Oracles run outside measured commands; timer scheduling latency is recorded separately. No new runtime path or dependency is introduced. Default variable-host CI skips this workload, without weakening existing correctness gates.
+
+[Windows Chromium samples](benchmark-results/2026-10-06-responsiveness.json) record source revision and runner hash. Nearest-rank p95 command/timer latency in ms:
+
+| Allocated rows | Multi-sort | Filter | Paste | Undo | Reference p95 target |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 10,000 | 17.4 / 17.5 | 1.5 / 5.4 | 12.4 / 12.5 | 6.1 / 6.1 | 50 ms frequent local commands |
+| 100,000 | 176.7 / 176.8 | 13.8 / 13.8 | 158.8 / 158.9 | 70.9 / 71.1 | 250 ms explicit bulk commands |
+
+All correctness checks passed. Samples fit these reference targets on this machine; 100k sort/paste do not fit the 50 ms frequent-command target. This is one fixture-specific warmed sequence on an uncontrolled local host, not a stable-runner regression baseline, production SLA or portable responsiveness guarantee. No Canvas/application subscribers/network/real-device workload is included. The [manual protocol](guides/manual-validation.md#local-command-reference-budgets) describes integration choices and host acceptance.

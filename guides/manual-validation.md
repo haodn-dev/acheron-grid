@@ -2,6 +2,21 @@
 
 Automated tests do not establish screen-reader announcements, native clipboard interoperability, physical touch behavior, presented frame rate or true peak memory. Use this protocol on the exact source revision being evaluated, with public sample data. Record failures and evidence before expanding support claims. No result is implied by this document.
 
+## Local command reference budgets
+
+Use two initial workload profiles: 10,000 allocated rows for frequent local commands (50 ms p95 command/timer-delay target), and 100,000 rows for explicit bulk commands (250 ms target). These are engineering targets for evaluation, not supported-device guarantees or a production SLA. The paste profile changes one editable numeric column across all rows; sort uses two keys and filter tests equality. A host with more columns, expensive parsers/policies, groups or application subscribers needs its own profile.
+
+After building the engine, run the opt-in warmed measurement on a quiet machine:
+
+```powershell
+$env:ACHERON_RESPONSIVENESS='1'
+npx playwright test --config benchmark.config.mjs tests/benchmark-responsiveness.mjs --workers=1 --reporter=json
+```
+
+On POSIX shells prefix the command with `ACHERON_RESPONSIVENESS=1`. Each profile performs two warmup trials and 30 measured trials. The attachment retains raw command/timer durations, median and nearest-rank p95, correctness checks and informational budget results. Default CI skips this opt-in timing workload; other correctness gates remain active. A budget miss is reported rather than failing correctness. Establish repeated stable-host baselines before enforcing a timing gate.
+
+Keep small cell edits on the ordinary synchronous API. Treat 100,000-row sort/paste/history as explicit bulk actions: show a pending state before starting (allow the browser a paint opportunity), prevent duplicate submissions and preserve atomic validation/history. A pending state cannot make a synchronous command interruptible. If the host needs interaction while sorting large datasets, use server-owned sorting/filtering through the existing read-only async source query lifecycle. Do not slice one atomic paste into separate commands without deliberately accepting different rollback/history behavior. Remote writes remain outside the current core contract.
+
 ## Environment record
 
 Copy this record for each combination:

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "3a15e7b388e2be2a669b536557d6b27239cb413a",
+  "sourceRevision": "8a00d8ad0482b02d7aa00de49e7aa46994833e00",
   "release": {
     "version": "0.1.0",
     "tag": "v0.1.0",
@@ -327,12 +327,20 @@
     {
       "id": "manual-validation",
       "path": "guides/manual-validation.md",
-      "revision": 1,
+      "revision": 3,
       "updated": "2026-10-06",
-      "sha256": "b089863bacc93193c26dc896e9c88b7c47734b88f390be25a3544100311d9703",
+      "sha256": "8008125119f239b0131d580ac5f99820f7b8b91edaa0aba83526947f40e5ee25",
       "history": [
         {
           "revision": 1,
+          "summary": "Manual accessibility, device, clipboard and operational acceptance protocol."
+        },
+        {
+          "revision": 2,
+          "summary": "Manual accessibility, device, clipboard and operational acceptance protocol."
+        },
+        {
+          "revision": 3,
           "summary": "Manual accessibility, device, clipboard and operational acceptance protocol."
         }
       ]

@@ -1,0 +1,1536 @@
+{
+  "browserName": "chromium",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36",
+  "dpr": 1,
+  "profiles": [
+    {
+      "rows": 10000,
+      "pasteCells": 10000,
+      "warmupTrials": 2,
+      "measuredTrials": 30,
+      "samples": [
+        {
+          "trial": 0,
+          "name": "multiSort",
+          "ms": 13.5,
+          "timerDelayMs": 13.599999997764826
+        },
+        {
+          "trial": 0,
+          "name": "filter",
+          "ms": 1,
+          "timerDelayMs": 4.5
+        },
+        {
+          "trial": 0,
+          "name": "paste",
+          "ms": 12.199999999254942,
+          "timerDelayMs": 12.199999999254942
+        },
+        {
+          "trial": 0,
+          "name": "undo",
+          "ms": 5.400000002235174,
+          "timerDelayMs": 5.400000002235174
+        },
+        {
+          "trial": 1,
+          "name": "multiSort",
+          "ms": 12.400000002235174,
+          "timerDelayMs": 12.400000002235174
+        },
+        {
+          "trial": 1,
+          "name": "filter",
+          "ms": 1,
+          "timerDelayMs": 5.300000000745058
+        },
+        {
+          "trial": 1,
+          "name": "paste",
+          "ms": 9.199999999254942,
+          "timerDelayMs": 9.199999999254942
+        },
+        {
+          "trial": 1,
+          "name": "undo",
+          "ms": 3.300000000745058,
+          "timerDelayMs": 4
+        },
+        {
+          "trial": 2,
+          "name": "multiSort",
+          "ms": 14.699999999254942,
+          "timerDelayMs": 14.699999999254942
+        },
+        {
+          "trial": 2,
+          "name": "filter",
+          "ms": 0.9000000022351742,
+          "timerDelayMs": 4.5
+        },
+        {
+          "trial": 2,
+          "name": "paste",
+          "ms": 9,
+          "timerDelayMs": 9
+        },
+        {
+          "trial": 2,
+          "name": "undo",
+          "ms": 3.5,
+          "timerDelayMs": 4.900000002235174
+        },
+        {
+          "trial": 3,
+          "name": "multiSort",
+          "ms": 13.800000000745058,
+          "timerDelayMs": 13.900000002235174
+        },
+        {
+          "trial": 3,
+          "name": "filter",
+          "ms": 1.1000000014901161,
+          "timerDelayMs": 4.100000001490116
+        },
+        {
+          "trial": 3,
+          "name": "paste",
+          "ms": 10.300000000745058,
+          "timerDelayMs": 10.300000000745058
+        },
+        {
+          "trial": 3,
+          "name": "undo",
+          "ms": 3.699999999254942,
+          "timerDelayMs": 4.599999997764826
+        },
+        {
+          "trial": 4,
+          "name": "multiSort",
+          "ms": 12.300000000745058,
+          "timerDelayMs": 12.300000000745058
+        },
+        {
+          "trial": 4,
+          "name": "filter",
+          "ms": 0.8000000007450581,
+          "timerDelayMs": 4.5
+        },
+        {
+          "trial": 4,
+          "name": "paste",
+          "ms": 8.300000000745058,
+          "timerDelayMs": 8.399999998509884
+        },
+        {
+          "trial": 4,
+          "name": "undo",
+          "ms": 3.600000001490116,
+          "timerDelayMs": 5.100000001490116
+        },
+        {
+          "trial": 5,
+          "name": "multiSort",
+          "ms": 12.199999999254942,
+          "timerDelayMs": 12.199999999254942
+        },
+        {
+          "trial": 5,
+          "name": "filter",
+          "ms": 1,
+          "timerDelayMs": 4.699999999254942
+        },
+        {
+          "trial": 5,
+          "name": "paste",
+          "ms": 9.300000000745058,
+          "timerDelayMs": 9.300000000745058
+        },
+        {
+          "trial": 5,
+          "name": "undo",
+          "ms": 3.300000000745058,
+          "timerDelayMs": 4.200000002980232
+        },
+        {
+          "trial": 6,
+          "name": "multiSort",
+          "ms": 12.400000002235174,
+          "timerDelayMs": 12.400000002235174
+        },
+        {
+          "trial": 6,
+          "name": "filter",
+          "ms": 1.2000000029802322,
+          "timerDelayMs": 5.300000000745058
+        },
+        {
+          "trial": 6,
+          "name": "paste",
+          "ms": 10.100000001490116,
+          "timerDelayMs": 10.199999999254942
+        },
+        {
+          "trial": 6,
+          "name": "undo",
+          "ms": 5.099999997764826,
+          "timerDelayMs": 5.199999999254942
+        },
+        {
+          "trial": 7,
+          "name": "multiSort",
+          "ms": 12.699999999254942,
+          "timerDelayMs": 12.699999999254942
+        },
+        {
+          "trial": 7,
+          "name": "filter",
+          "ms": 0.8999999985098839,
+          "timerDelayMs": 5.399999998509884
+        },
+        {
+          "trial": 7,
+          "name": "paste",
+          "ms": 9.200000002980232,
+          "timerDelayMs": 9.200000002980232
+        },
+        {
+          "trial": 7,
+          "name": "undo",
+          "ms": 4.899999998509884,
+          "timerDelayMs": 5
+        },
+        {
+          "trial": 8,
+          "name": "multiSort",
+          "ms": 13,
+          "timerDelayMs": 13.099999997764826
+        },
+        {
+          "trial": 8,
+          "name": "filter",
+          "ms": 1.1000000014901161,
+          "timerDelayMs": 4.5
+        },
+        {
+          "trial": 8,
+          "name": "paste",
+          "ms": 11.900000002235174,
+          "timerDelayMs": 11.900000002235174
+        },
+        {
+          "trial": 8,
+          "name": "undo",
+          "ms": 3.5,
+          "timerDelayMs": 4.900000002235174
+        },
+        {
+          "trial": 9,
+          "name": "multiSort",
+          "ms": 14.100000001490116,
+          "timerDelayMs": 14.199999999254942
+        },
+        {
+          "trial": 9,
+          "name": "filter",
+          "ms": 1,
+          "timerDelayMs": 5.5
+        },
+        {
+          "trial": 9,
+          "name": "paste",
+          "ms": 10.199999999254942,
+          "timerDelayMs": 10.199999999254942
+        },
+        {
+          "trial": 9,
+          "name": "undo",
+          "ms": 3.400000002235174,
+          "timerDelayMs": 4.900000002235174
+        },
+        {
+          "trial": 10,
+          "name": "multiSort",
+          "ms": 17.199999999254942,
+          "timerDelayMs": 17.199999999254942
+        },
+        {
+          "trial": 10,
+          "name": "filter",
+          "ms": 0.9000000022351742,
+          "timerDelayMs": 4.5
+        },
+        {
+          "trial": 10,
+          "name": "paste",
+          "ms": 8.199999999254942,
+          "timerDelayMs": 8.199999999254942
+        },
+        {
+          "trial": 10,
+          "name": "undo",
+          "ms": 3.099999997764826,
+          "timerDelayMs": 4.099999997764826
+        },
+        {
+          "trial": 11,
+          "name": "multiSort",
+          "ms": 12.699999999254942,
+          "timerDelayMs": 12.800000000745058
+        },
+        {
+          "trial": 11,
+          "name": "filter",
+          "ms": 1,
+          "timerDelayMs": 5.100000001490116
+        },
+        {
+          "trial": 11,
+          "name": "paste",
+          "ms": 8.600000001490116,
+          "timerDelayMs": 8.600000001490116
+        },
+        {
+          "trial": 11,
+          "name": "undo",
+          "ms": 3.899999998509884,
+          "timerDelayMs": 4.899999998509884
+        },
+        {
+          "trial": 12,
+          "name": "multiSort",
+          "ms": 12.100000001490116,
+          "timerDelayMs": 12.100000001490116
+        },
+        {
+          "trial": 12,
+          "name": "filter",
+          "ms": 0.9000000022351742,
+          "timerDelayMs": 4.5
+        },
+        {
+          "trial": 12,
+          "name": "paste",
+          "ms": 11.100000001490116,
+          "timerDelayMs": 11.100000001490116
+        },
+        {
+          "trial": 12,
+          "name": "undo",
+          "ms": 6.5,
+          "timerDelayMs": 6.600000001490116
+        },
+        {
+          "trial": 13,
+          "name": "multiSort",
+          "ms": 12.099999997764826,
+          "timerDelayMs": 12.099999997764826
+        },
+        {
+          "trial": 13,
+          "name": "filter",
+          "ms": 0.9000000022351742,
+          "timerDelayMs": 4.600000001490116
+        },
+        {
+          "trial": 13,
+          "name": "paste",
+          "ms": 9,
+          "timerDelayMs": 9.099999997764826
+        },
+        {
+          "trial": 13,
+          "name": "undo",
+          "ms": 4.100000001490116,
+          "timerDelayMs": 4.100000001490116
+        },
+        {
+          "trial": 14,
+          "name": "multiSort",
+          "ms": 13.099999997764826,
+          "timerDelayMs": 13.099999997764826
+        },
+        {
+          "trial": 14,
+          "name": "filter",
+          "ms": 0.8999999985098839,
+          "timerDelayMs": 5
+        },
+        {
+          "trial": 14,
+          "name": "paste",
+          "ms": 8.199999999254942,
+          "timerDelayMs": 8.299999997019768
+        },
+        {
+          "trial": 14,
+          "name": "undo",
+          "ms": 4.800000000745058,
+          "timerDelayMs": 4.800000000745058
+        },
+        {
+          "trial": 15,
+          "name": "multiSort",
+          "ms": 15,
+          "timerDelayMs": 15
+        },
+        {
+          "trial": 15,
+          "name": "filter",
+          "ms": 0.8999999985098839,
+          "timerDelayMs": 4.5
+        },
+        {
+          "trial": 15,
+          "name": "paste",
+          "ms": 8.899999998509884,
+          "timerDelayMs": 8.899999998509884
+        },
+        {
+          "trial": 15,
+          "name": "undo",
+          "ms": 3,
+          "timerDelayMs": 5
+        },
+        {
+          "trial": 16,
+          "name": "multiSort",
+          "ms": 17.399999998509884,
+          "timerDelayMs": 17.5
+        },
+        {
+          "trial": 16,
+          "name": "filter",
+          "ms": 1.300000000745058,
+          "timerDelayMs": 4
+        },
+        {
+          "trial": 16,
+          "name": "paste",
+          "ms": 8.100000001490116,
+          "timerDelayMs": 8.199999999254942
+        },
+        {
+          "trial": 16,
+          "name": "undo",
+          "ms": 3.800000000745058,
+          "timerDelayMs": 5.899999998509884
+        },
+        {
+          "trial": 17,
+          "name": "multiSort",
+          "ms": 13.099999997764826,
+          "timerDelayMs": 13.199999999254942
+        },
+        {
+          "trial": 17,
+          "name": "filter",
+          "ms": 0.8999999985098839,
+          "timerDelayMs": 4.5
+        },
+        {
+          "trial": 17,
+          "name": "paste",
+          "ms": 8.199999999254942,
+          "timerDelayMs": 8.199999999254942
+        },
+        {
+          "trial": 17,
+          "name": "undo",
+          "ms": 3.199999999254942,
+          "timerDelayMs": 4.100000001490116
+        },
+        {
+          "trial": 18,
+          "name": "multiSort",
+          "ms": 12.700000002980232,
+          "timerDelayMs": 12.700000002980232
+        },
+        {
+          "trial": 18,
+          "name": "filter",
+          "ms": 1,
+          "timerDelayMs": 4.600000001490116
+        },
+        {
+          "trial": 18,
+          "name": "paste",
+          "ms": 11.899999998509884,
+          "timerDelayMs": 12
+        },
+        {
+          "trial": 18,
+          "name": "undo",
+          "ms": 3.600000001490116,
+          "timerDelayMs": 4.900000002235174
+        },
+        {
+          "trial": 19,
+          "name": "multiSort",
+          "ms": 13.099999997764826,
+          "timerDelayMs": 13.099999997764826
+        },
+        {
+          "trial": 19,
+          "name": "filter",
+          "ms": 0.8000000007450581,
+          "timerDelayMs": 4.400000002235174
+        },
+        {
+          "trial": 19,
+          "name": "paste",
+          "ms": 8.399999998509884,
+          "timerDelayMs": 8.399999998509884
+        },
+        {
+          "trial": 19,
+          "name": "undo",
+          "ms": 3.5,
+          "timerDelayMs": 5.300000000745058
+        },
+        {
+          "trial": 20,
+          "name": "multiSort",
+          "ms": 12,
+          "timerDelayMs": 12
+        },
+        {
+          "trial": 20,
+          "name": "filter",
+          "ms": 1.0999999977648258,
+          "timerDelayMs": 4.099999997764826
+        },
+        {
+          "trial": 20,
+          "name": "paste",
+          "ms": 9.700000002980232,
+          "timerDelayMs": 9.700000002980232
+        },
+        {
+          "trial": 20,
+          "name": "undo",
+          "ms": 4.300000000745058,
+          "timerDelayMs": 4.400000002235174
+        },
+        {
+          "trial": 21,
+          "name": "multiSort",
+          "ms": 12.699999999254942,
+          "timerDelayMs": 12.699999999254942
+        },
+        {
+          "trial": 21,
+          "name": "filter",
+          "ms": 1,
+          "timerDelayMs": 4.400000002235174
+        },
+        {
+          "trial": 21,
+          "name": "paste",
+          "ms": 18,
+          "timerDelayMs": 18.099999997764826
+        },
+        {
+          "trial": 21,
+          "name": "undo",
+          "ms": 5.599999997764826,
+          "timerDelayMs": 5.599999997764826
+        },
+        {
+          "trial": 22,
+          "name": "multiSort",
+          "ms": 12.5,
+          "timerDelayMs": 12.5
+        },
+        {
+          "trial": 22,
+          "name": "filter",
+          "ms": 1,
+          "timerDelayMs": 5.399999998509884
+        },
+        {
+          "trial": 22,
+          "name": "paste",
+          "ms": 11.100000001490116,
+          "timerDelayMs": 11.100000001490116
+        },
+        {
+          "trial": 22,
+          "name": "undo",
+          "ms": 4.799999997019768,
+          "timerDelayMs": 4.799999997019768
+        },
+        {
+          "trial": 23,
+          "name": "multiSort",
+          "ms": 14.199999999254942,
+          "timerDelayMs": 14.199999999254942
+        },
+        {
+          "trial": 23,
+          "name": "filter",
+          "ms": 1.8999999985098839,
+          "timerDelayMs": 4.799999997019768
+        },
+        {
+          "trial": 23,
+          "name": "paste",
+          "ms": 8.600000001490116,
+          "timerDelayMs": 8.600000001490116
+        },
+        {
+          "trial": 23,
+          "name": "undo",
+          "ms": 3.600000001490116,
+          "timerDelayMs": 4.199999999254942
+        },
+        {
+          "trial": 24,
+          "name": "multiSort",
+          "ms": 19,
+          "timerDelayMs": 19
+        },
+        {
+          "trial": 24,
+          "name": "filter",
+          "ms": 0.8999999985098839,
+          "timerDelayMs": 5.300000000745058
+        },
+        {
+          "trial": 24,
+          "name": "paste",
+          "ms": 11.199999999254942,
+          "timerDelayMs": 11.199999999254942
+        },
+        {
+          "trial": 24,
+          "name": "undo",
+          "ms": 3.899999998509884,
+          "timerDelayMs": 5.099999997764826
+        },
+        {
+          "trial": 25,
+          "name": "multiSort",
+          "ms": 11.800000000745058,
+          "timerDelayMs": 11.800000000745058
+        },
+        {
+          "trial": 25,
+          "name": "filter",
+          "ms": 0.8999999985098839,
+          "timerDelayMs": 4.5
+        },
+        {
+          "trial": 25,
+          "name": "paste",
+          "ms": 9,
+          "timerDelayMs": 9
+        },
+        {
+          "trial": 25,
+          "name": "undo",
+          "ms": 4.800000000745058,
+          "timerDelayMs": 4.800000000745058
+        },
+        {
+          "trial": 26,
+          "name": "multiSort",
+          "ms": 13.199999999254942,
+          "timerDelayMs": 13.199999999254942
+        },
+        {
+          "trial": 26,
+          "name": "filter",
+          "ms": 1,
+          "timerDelayMs": 4.5
+        },
+        {
+          "trial": 26,
+          "name": "paste",
+          "ms": 12.399999998509884,
+          "timerDelayMs": 12.5
+        },
+        {
+          "trial": 26,
+          "name": "undo",
+          "ms": 4.899999998509884,
+          "timerDelayMs": 4.899999998509884
+        },
+        {
+          "trial": 27,
+          "name": "multiSort",
+          "ms": 14.100000001490116,
+          "timerDelayMs": 14.199999999254942
+        },
+        {
+          "trial": 27,
+          "name": "filter",
+          "ms": 1.5,
+          "timerDelayMs": 4.899999998509884
+        },
+        {
+          "trial": 27,
+          "name": "paste",
+          "ms": 8.400000002235174,
+          "timerDelayMs": 8.5
+        },
+        {
+          "trial": 27,
+          "name": "undo",
+          "ms": 3.800000000745058,
+          "timerDelayMs": 4.399999998509884
+        },
+        {
+          "trial": 28,
+          "name": "multiSort",
+          "ms": 12.600000001490116,
+          "timerDelayMs": 12.600000001490116
+        },
+        {
+          "trial": 28,
+          "name": "filter",
+          "ms": 0.7999999970197678,
+          "timerDelayMs": 4.899999998509884
+        },
+        {
+          "trial": 28,
+          "name": "paste",
+          "ms": 11,
+          "timerDelayMs": 11.100000001490116
+        },
+        {
+          "trial": 28,
+          "name": "undo",
+          "ms": 6.100000001490116,
+          "timerDelayMs": 6.100000001490116
+        },
+        {
+          "trial": 29,
+          "name": "multiSort",
+          "ms": 12.699999999254942,
+          "timerDelayMs": 12.699999999254942
+        },
+        {
+          "trial": 29,
+          "name": "filter",
+          "ms": 0.7999999970197678,
+          "timerDelayMs": 4.5
+        },
+        {
+          "trial": 29,
+          "name": "paste",
+          "ms": 9.399999998509884,
+          "timerDelayMs": 9.399999998509884
+        },
+        {
+          "trial": 29,
+          "name": "undo",
+          "ms": 3.5,
+          "timerDelayMs": 5
+        }
+      ],
+      "summary": {
+        "multiSort": {
+          "samples": 30,
+          "medianMs": 12.700000002980232,
+          "p95Ms": 17.399999998509884,
+          "p95TimerDelayMs": 17.5,
+          "budgetMs": 50,
+          "withinReferenceBudget": true
+        },
+        "filter": {
+          "samples": 30,
+          "medianMs": 1,
+          "p95Ms": 1.5,
+          "p95TimerDelayMs": 5.399999998509884,
+          "budgetMs": 50,
+          "withinReferenceBudget": true
+        },
+        "paste": {
+          "samples": 30,
+          "medianMs": 9.200000002980232,
+          "p95Ms": 12.399999998509884,
+          "p95TimerDelayMs": 12.5,
+          "budgetMs": 50,
+          "withinReferenceBudget": true
+        },
+        "undo": {
+          "samples": 30,
+          "medianMs": 3.800000000745058,
+          "p95Ms": 6.100000001490116,
+          "p95TimerDelayMs": 6.100000001490116,
+          "budgetMs": 50,
+          "withinReferenceBudget": true
+        }
+      }
+    },
+    {
+      "rows": 100000,
+      "pasteCells": 100000,
+      "warmupTrials": 2,
+      "measuredTrials": 30,
+      "samples": [
+        {
+          "trial": 0,
+          "name": "multiSort",
+          "ms": 162.10000000149012,
+          "timerDelayMs": 162.10000000149012
+        },
+        {
+          "trial": 0,
+          "name": "filter",
+          "ms": 12.200000002980232,
+          "timerDelayMs": 12.200000002980232
+        },
+        {
+          "trial": 0,
+          "name": "paste",
+          "ms": 137.5,
+          "timerDelayMs": 137.5
+        },
+        {
+          "trial": 0,
+          "name": "undo",
+          "ms": 48.599999997764826,
+          "timerDelayMs": 48.69999999925494
+        },
+        {
+          "trial": 1,
+          "name": "multiSort",
+          "ms": 159.69999999925494,
+          "timerDelayMs": 159.79999999701977
+        },
+        {
+          "trial": 1,
+          "name": "filter",
+          "ms": 9.400000002235174,
+          "timerDelayMs": 9.5
+        },
+        {
+          "trial": 1,
+          "name": "paste",
+          "ms": 145.69999999925494,
+          "timerDelayMs": 145.80000000074506
+        },
+        {
+          "trial": 1,
+          "name": "undo",
+          "ms": 49.5,
+          "timerDelayMs": 49.5
+        },
+        {
+          "trial": 2,
+          "name": "multiSort",
+          "ms": 160.10000000149012,
+          "timerDelayMs": 160.19999999925494
+        },
+        {
+          "trial": 2,
+          "name": "filter",
+          "ms": 9.5,
+          "timerDelayMs": 9.5
+        },
+        {
+          "trial": 2,
+          "name": "paste",
+          "ms": 138,
+          "timerDelayMs": 138.09999999776483
+        },
+        {
+          "trial": 2,
+          "name": "undo",
+          "ms": 50.19999999925494,
+          "timerDelayMs": 50.19999999925494
+        },
+        {
+          "trial": 3,
+          "name": "multiSort",
+          "ms": 159.40000000223517,
+          "timerDelayMs": 159.5
+        },
+        {
+          "trial": 3,
+          "name": "filter",
+          "ms": 9.399999998509884,
+          "timerDelayMs": 9.399999998509884
+        },
+        {
+          "trial": 3,
+          "name": "paste",
+          "ms": 123.60000000149012,
+          "timerDelayMs": 123.60000000149012
+        },
+        {
+          "trial": 3,
+          "name": "undo",
+          "ms": 74.79999999701977,
+          "timerDelayMs": 74.89999999850988
+        },
+        {
+          "trial": 4,
+          "name": "multiSort",
+          "ms": 165.59999999776483,
+          "timerDelayMs": 165.69999999925494
+        },
+        {
+          "trial": 4,
+          "name": "filter",
+          "ms": 15.599999997764826,
+          "timerDelayMs": 15.599999997764826
+        },
+        {
+          "trial": 4,
+          "name": "paste",
+          "ms": 136.30000000074506,
+          "timerDelayMs": 136.30000000074506
+        },
+        {
+          "trial": 4,
+          "name": "undo",
+          "ms": 46.399999998509884,
+          "timerDelayMs": 46.399999998509884
+        },
+        {
+          "trial": 5,
+          "name": "multiSort",
+          "ms": 158,
+          "timerDelayMs": 158.10000000149012
+        },
+        {
+          "trial": 5,
+          "name": "filter",
+          "ms": 9,
+          "timerDelayMs": 9.099999997764826
+        },
+        {
+          "trial": 5,
+          "name": "paste",
+          "ms": 123,
+          "timerDelayMs": 123.09999999776483
+        },
+        {
+          "trial": 5,
+          "name": "undo",
+          "ms": 70.89999999850988,
+          "timerDelayMs": 71.09999999776483
+        },
+        {
+          "trial": 6,
+          "name": "multiSort",
+          "ms": 157.20000000298023,
+          "timerDelayMs": 157.20000000298023
+        },
+        {
+          "trial": 6,
+          "name": "filter",
+          "ms": 9.699999999254942,
+          "timerDelayMs": 9.699999999254942
+        },
+        {
+          "trial": 6,
+          "name": "paste",
+          "ms": 131.10000000149012,
+          "timerDelayMs": 131.19999999925494
+        },
+        {
+          "trial": 6,
+          "name": "undo",
+          "ms": 52.19999999925494,
+          "timerDelayMs": 52.29999999701977
+        },
+        {
+          "trial": 7,
+          "name": "multiSort",
+          "ms": 158.59999999776483,
+          "timerDelayMs": 158.69999999925494
+        },
+        {
+          "trial": 7,
+          "name": "filter",
+          "ms": 9.5,
+          "timerDelayMs": 9.5
+        },
+        {
+          "trial": 7,
+          "name": "paste",
+          "ms": 127.80000000074506,
+          "timerDelayMs": 127.89999999850988
+        },
+        {
+          "trial": 7,
+          "name": "undo",
+          "ms": 45,
+          "timerDelayMs": 45
+        },
+        {
+          "trial": 8,
+          "name": "multiSort",
+          "ms": 160,
+          "timerDelayMs": 160.10000000149012
+        },
+        {
+          "trial": 8,
+          "name": "filter",
+          "ms": 9.099999997764826,
+          "timerDelayMs": 9.199999999254942
+        },
+        {
+          "trial": 8,
+          "name": "paste",
+          "ms": 135.19999999925494,
+          "timerDelayMs": 135.29999999701977
+        },
+        {
+          "trial": 8,
+          "name": "undo",
+          "ms": 48.80000000074506,
+          "timerDelayMs": 48.80000000074506
+        },
+        {
+          "trial": 9,
+          "name": "multiSort",
+          "ms": 164.39999999850988,
+          "timerDelayMs": 164.39999999850988
+        },
+        {
+          "trial": 9,
+          "name": "filter",
+          "ms": 11.199999999254942,
+          "timerDelayMs": 11.300000000745058
+        },
+        {
+          "trial": 9,
+          "name": "paste",
+          "ms": 140.59999999776483,
+          "timerDelayMs": 140.69999999925494
+        },
+        {
+          "trial": 9,
+          "name": "undo",
+          "ms": 49.399999998509884,
+          "timerDelayMs": 49.399999998509884
+        },
+        {
+          "trial": 10,
+          "name": "multiSort",
+          "ms": 168.39999999850988,
+          "timerDelayMs": 168.5
+        },
+        {
+          "trial": 10,
+          "name": "filter",
+          "ms": 9.300000000745058,
+          "timerDelayMs": 9.300000000745058
+        },
+        {
+          "trial": 10,
+          "name": "paste",
+          "ms": 132.90000000223517,
+          "timerDelayMs": 132.90000000223517
+        },
+        {
+          "trial": 10,
+          "name": "undo",
+          "ms": 52.30000000074506,
+          "timerDelayMs": 52.400000002235174
+        },
+        {
+          "trial": 11,
+          "name": "multiSort",
+          "ms": 160.09999999776483,
+          "timerDelayMs": 160.09999999776483
+        },
+        {
+          "trial": 11,
+          "name": "filter",
+          "ms": 11,
+          "timerDelayMs": 11
+        },
+        {
+          "trial": 11,
+          "name": "paste",
+          "ms": 139.80000000074506,
+          "timerDelayMs": 139.90000000223517
+        },
+        {
+          "trial": 11,
+          "name": "undo",
+          "ms": 54.69999999925494,
+          "timerDelayMs": 54.69999999925494
+        },
+        {
+          "trial": 12,
+          "name": "multiSort",
+          "ms": 161.20000000298023,
+          "timerDelayMs": 161.30000000074506
+        },
+        {
+          "trial": 12,
+          "name": "filter",
+          "ms": 11.299999997019768,
+          "timerDelayMs": 11.299999997019768
+        },
+        {
+          "trial": 12,
+          "name": "paste",
+          "ms": 139.89999999850988,
+          "timerDelayMs": 139.89999999850988
+        },
+        {
+          "trial": 12,
+          "name": "undo",
+          "ms": 49.400000002235174,
+          "timerDelayMs": 49.5
+        },
+        {
+          "trial": 13,
+          "name": "multiSort",
+          "ms": 161.30000000074506,
+          "timerDelayMs": 161.40000000223517
+        },
+        {
+          "trial": 13,
+          "name": "filter",
+          "ms": 11,
+          "timerDelayMs": 11
+        },
+        {
+          "trial": 13,
+          "name": "paste",
+          "ms": 138.29999999701977,
+          "timerDelayMs": 138.39999999850988
+        },
+        {
+          "trial": 13,
+          "name": "undo",
+          "ms": 50.099999997764826,
+          "timerDelayMs": 50.19999999925494
+        },
+        {
+          "trial": 14,
+          "name": "multiSort",
+          "ms": 161.89999999850988,
+          "timerDelayMs": 162
+        },
+        {
+          "trial": 14,
+          "name": "filter",
+          "ms": 9.100000001490116,
+          "timerDelayMs": 9.100000001490116
+        },
+        {
+          "trial": 14,
+          "name": "paste",
+          "ms": 158.80000000074506,
+          "timerDelayMs": 158.90000000223517
+        },
+        {
+          "trial": 14,
+          "name": "undo",
+          "ms": 51.30000000074506,
+          "timerDelayMs": 51.399999998509884
+        },
+        {
+          "trial": 15,
+          "name": "multiSort",
+          "ms": 174,
+          "timerDelayMs": 174.10000000149012
+        },
+        {
+          "trial": 15,
+          "name": "filter",
+          "ms": 13.799999997019768,
+          "timerDelayMs": 13.799999997019768
+        },
+        {
+          "trial": 15,
+          "name": "paste",
+          "ms": 143.5,
+          "timerDelayMs": 143.60000000149012
+        },
+        {
+          "trial": 15,
+          "name": "undo",
+          "ms": 57.69999999925494,
+          "timerDelayMs": 57.899999998509884
+        },
+        {
+          "trial": 16,
+          "name": "multiSort",
+          "ms": 169.69999999925494,
+          "timerDelayMs": 169.80000000074506
+        },
+        {
+          "trial": 16,
+          "name": "filter",
+          "ms": 10.099999997764826,
+          "timerDelayMs": 10.199999999254942
+        },
+        {
+          "trial": 16,
+          "name": "paste",
+          "ms": 143.59999999776483,
+          "timerDelayMs": 143.80000000074506
+        },
+        {
+          "trial": 16,
+          "name": "undo",
+          "ms": 48.599999997764826,
+          "timerDelayMs": 48.69999999925494
+        },
+        {
+          "trial": 17,
+          "name": "multiSort",
+          "ms": 170.10000000149012,
+          "timerDelayMs": 170.10000000149012
+        },
+        {
+          "trial": 17,
+          "name": "filter",
+          "ms": 9.899999998509884,
+          "timerDelayMs": 9.899999998509884
+        },
+        {
+          "trial": 17,
+          "name": "paste",
+          "ms": 141.90000000223517,
+          "timerDelayMs": 142
+        },
+        {
+          "trial": 17,
+          "name": "undo",
+          "ms": 51.099999997764826,
+          "timerDelayMs": 51.099999997764826
+        },
+        {
+          "trial": 18,
+          "name": "multiSort",
+          "ms": 165.79999999701977,
+          "timerDelayMs": 165.79999999701977
+        },
+        {
+          "trial": 18,
+          "name": "filter",
+          "ms": 10.700000002980232,
+          "timerDelayMs": 10.700000002980232
+        },
+        {
+          "trial": 18,
+          "name": "paste",
+          "ms": 151.90000000223517,
+          "timerDelayMs": 152.10000000149012
+        },
+        {
+          "trial": 18,
+          "name": "undo",
+          "ms": 49.30000000074506,
+          "timerDelayMs": 49.30000000074506
+        },
+        {
+          "trial": 19,
+          "name": "multiSort",
+          "ms": 176.69999999925494,
+          "timerDelayMs": 176.80000000074506
+        },
+        {
+          "trial": 19,
+          "name": "filter",
+          "ms": 10.099999997764826,
+          "timerDelayMs": 10.099999997764826
+        },
+        {
+          "trial": 19,
+          "name": "paste",
+          "ms": 139.10000000149012,
+          "timerDelayMs": 139.19999999925494
+        },
+        {
+          "trial": 19,
+          "name": "undo",
+          "ms": 48.29999999701977,
+          "timerDelayMs": 48.29999999701977
+        },
+        {
+          "trial": 20,
+          "name": "multiSort",
+          "ms": 160.89999999850988,
+          "timerDelayMs": 160.89999999850988
+        },
+        {
+          "trial": 20,
+          "name": "filter",
+          "ms": 9.5,
+          "timerDelayMs": 9.600000001490116
+        },
+        {
+          "trial": 20,
+          "name": "paste",
+          "ms": 133.69999999925494,
+          "timerDelayMs": 133.89999999850988
+        },
+        {
+          "trial": 20,
+          "name": "undo",
+          "ms": 50.399999998509884,
+          "timerDelayMs": 50.5
+        },
+        {
+          "trial": 21,
+          "name": "multiSort",
+          "ms": 180.09999999776483,
+          "timerDelayMs": 180.19999999925494
+        },
+        {
+          "trial": 21,
+          "name": "filter",
+          "ms": 11.199999999254942,
+          "timerDelayMs": 11.199999999254942
+        },
+        {
+          "trial": 21,
+          "name": "paste",
+          "ms": 165.30000000074506,
+          "timerDelayMs": 165.40000000223517
+        },
+        {
+          "trial": 21,
+          "name": "undo",
+          "ms": 63.600000001490116,
+          "timerDelayMs": 63.80000000074506
+        },
+        {
+          "trial": 22,
+          "name": "multiSort",
+          "ms": 174.40000000223517,
+          "timerDelayMs": 174.5
+        },
+        {
+          "trial": 22,
+          "name": "filter",
+          "ms": 10.400000002235174,
+          "timerDelayMs": 10.5
+        },
+        {
+          "trial": 22,
+          "name": "paste",
+          "ms": 148.40000000223517,
+          "timerDelayMs": 148.40000000223517
+        },
+        {
+          "trial": 22,
+          "name": "undo",
+          "ms": 47.5,
+          "timerDelayMs": 47.5
+        },
+        {
+          "trial": 23,
+          "name": "multiSort",
+          "ms": 166.19999999925494,
+          "timerDelayMs": 166.19999999925494
+        },
+        {
+          "trial": 23,
+          "name": "filter",
+          "ms": 9.899999998509884,
+          "timerDelayMs": 9.899999998509884
+        },
+        {
+          "trial": 23,
+          "name": "paste",
+          "ms": 138.69999999925494,
+          "timerDelayMs": 138.89999999850988
+        },
+        {
+          "trial": 23,
+          "name": "undo",
+          "ms": 51.19999999925494,
+          "timerDelayMs": 51.19999999925494
+        },
+        {
+          "trial": 24,
+          "name": "multiSort",
+          "ms": 171.69999999925494,
+          "timerDelayMs": 171.80000000074506
+        },
+        {
+          "trial": 24,
+          "name": "filter",
+          "ms": 11.300000000745058,
+          "timerDelayMs": 11.300000000745058
+        },
+        {
+          "trial": 24,
+          "name": "paste",
+          "ms": 135.30000000074506,
+          "timerDelayMs": 135.40000000223517
+        },
+        {
+          "trial": 24,
+          "name": "undo",
+          "ms": 50.19999999925494,
+          "timerDelayMs": 50.19999999925494
+        },
+        {
+          "trial": 25,
+          "name": "multiSort",
+          "ms": 164.5,
+          "timerDelayMs": 164.5
+        },
+        {
+          "trial": 25,
+          "name": "filter",
+          "ms": 9.100000001490116,
+          "timerDelayMs": 9.199999999254942
+        },
+        {
+          "trial": 25,
+          "name": "paste",
+          "ms": 137.39999999850988,
+          "timerDelayMs": 137.5
+        },
+        {
+          "trial": 25,
+          "name": "undo",
+          "ms": 46,
+          "timerDelayMs": 46
+        },
+        {
+          "trial": 26,
+          "name": "multiSort",
+          "ms": 155.60000000149012,
+          "timerDelayMs": 155.69999999925494
+        },
+        {
+          "trial": 26,
+          "name": "filter",
+          "ms": 11.5,
+          "timerDelayMs": 11.5
+        },
+        {
+          "trial": 26,
+          "name": "paste",
+          "ms": 140.60000000149012,
+          "timerDelayMs": 140.60000000149012
+        },
+        {
+          "trial": 26,
+          "name": "undo",
+          "ms": 48,
+          "timerDelayMs": 48
+        },
+        {
+          "trial": 27,
+          "name": "multiSort",
+          "ms": 163.69999999925494,
+          "timerDelayMs": 163.80000000074506
+        },
+        {
+          "trial": 27,
+          "name": "filter",
+          "ms": 10.899999998509884,
+          "timerDelayMs": 10.899999998509884
+        },
+        {
+          "trial": 27,
+          "name": "paste",
+          "ms": 129.59999999776483,
+          "timerDelayMs": 129.69999999925494
+        },
+        {
+          "trial": 27,
+          "name": "undo",
+          "ms": 50.599999997764826,
+          "timerDelayMs": 50.69999999925494
+        },
+        {
+          "trial": 28,
+          "name": "multiSort",
+          "ms": 162.30000000074506,
+          "timerDelayMs": 162.40000000223517
+        },
+        {
+          "trial": 28,
+          "name": "filter",
+          "ms": 10.100000001490116,
+          "timerDelayMs": 10.100000001490116
+        },
+        {
+          "trial": 28,
+          "name": "paste",
+          "ms": 140.09999999776483,
+          "timerDelayMs": 140.19999999925494
+        },
+        {
+          "trial": 28,
+          "name": "undo",
+          "ms": 48.69999999925494,
+          "timerDelayMs": 48.69999999925494
+        },
+        {
+          "trial": 29,
+          "name": "multiSort",
+          "ms": 159.69999999925494,
+          "timerDelayMs": 159.79999999701977
+        },
+        {
+          "trial": 29,
+          "name": "filter",
+          "ms": 9,
+          "timerDelayMs": 9
+        },
+        {
+          "trial": 29,
+          "name": "paste",
+          "ms": 134.5,
+          "timerDelayMs": 134.59999999776483
+        },
+        {
+          "trial": 29,
+          "name": "undo",
+          "ms": 47.599999997764826,
+          "timerDelayMs": 47.599999997764826
+        }
+      ],
+      "summary": {
+        "multiSort": {
+          "samples": 30,
+          "medianMs": 162.10000000149012,
+          "p95Ms": 176.69999999925494,
+          "p95TimerDelayMs": 176.80000000074506,
+          "budgetMs": 250,
+          "withinReferenceBudget": true
+        },
+        "filter": {
+          "samples": 30,
+          "medianMs": 10.099999997764826,
+          "p95Ms": 13.799999997019768,
+          "p95TimerDelayMs": 13.799999997019768,
+          "budgetMs": 250,
+          "withinReferenceBudget": true
+        },
+        "paste": {
+          "samples": 30,
+          "medianMs": 138.29999999701977,
+          "p95Ms": 158.80000000074506,
+          "p95TimerDelayMs": 158.90000000223517,
+          "budgetMs": 250,
+          "withinReferenceBudget": true
+        },
+        "undo": {
+          "samples": 30,
+          "medianMs": 49.5,
+          "p95Ms": 70.89999999850988,
+          "p95TimerDelayMs": 71.09999999776483,
+          "budgetMs": 250,
+          "withinReferenceBudget": true
+        }
+      }
+    }
+  ],
+  "limitations": "Reference engineering budgets, not portable guarantees. Two fixture-specific warmups and 30 sequential trials. Timer latency includes scheduling. Correctness oracles run outside measured commands. Headless core only, no Canvas/host/network/FPS/peak memory. Budget misses are reported, not correctness failures.",
+  "baseRevision": "836928539d297eee9438ac2ddcbb44db121bc119",
+  "runnerSha256": "1eea1ac84b90ddd46dff7eabab9bf80933a8cab2788e5c0dd79d6fbe71e1e30c",
+  "node": "v24.13.0",
+  "platform": "win32"
+}
