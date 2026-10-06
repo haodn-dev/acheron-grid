@@ -1,3 +1,4 @@
+import { createMotion } from './internal/motion.js';
 import { createNumberDisplay, createRichDisplay } from './internal/display.js';
 import { reorderInsertionIndex } from './internal/reorder-geometry.js';
 import { validateColumnEditor } from './internal/editor-config.js';
@@ -1424,42 +1425,6 @@ export function createGrid(options: GridOptions): Grid {
     }
   }
 
-  function enterSurface(node: HTMLElement): void {
-    if (!motionEnabled()) return;
-    node.style.transformOrigin = 'top left';
-    node.animate(
-      [
-        { opacity: 0, transform: 'translateY(-2px)' },
-        { opacity: 1, transform: 'translateY(0)' },
-      ],
-      { duration: Math.min(160, motionDuration), easing: 'cubic-bezier(.22,1,.36,1)' },
-    );
-  }
-  function exitSurface(node: HTMLElement): void {
-    node.style.pointerEvents = 'none';
-    node.inert = true;
-    node.setAttribute('aria-hidden', 'true');
-    node.removeAttribute('data-grid-choices');
-    if (!motionEnabled() || destroyed) {
-      node.remove();
-      return;
-    }
-    const opacity = win.getComputedStyle(node).opacity;
-    const transform = win.getComputedStyle(node).transform;
-    node.getAnimations().forEach((animation) => animation.cancel());
-    node
-      .animate(
-        [
-          { opacity, transform },
-          { opacity: 0, transform: 'translateY(-1px)' },
-        ],
-        { duration: Math.min(100, motionDuration), easing: 'ease-out' },
-      )
-      .finished.then(
-        () => node.remove(),
-        () => node.remove(),
-      );
-  }
   function closeMenu(focus = false): void {
     previewAbort?.abort();
     previewAbort = undefined;
@@ -5856,119 +5821,41 @@ export function createGrid(options: GridOptions): Grid {
     )
       beginEdit();
   }
-  const layoutMotion = new Set<HTMLElement>();
-  const motionPreference = win.matchMedia('(prefers-reduced-motion: reduce)');
-  const reducedMotion = () => win.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const motionEnabled = () => options.motion !== false && motionDuration > 0 && !reducedMotion();
-  const cancelMotion = () => {
-    if (reducedMotion()) {
-      clearLayoutMotion();
-      root.getAnimations({ subtree: true }).forEach((animation) => animation.cancel());
-    }
-  };
-  motionPreference.addEventListener('change', cancelMotion);
   function clearLayoutMotion(): void {
-    for (const node of layoutMotion) {
-      node.getAnimations().forEach((animation) => animation.cancel());
-      node.remove();
-    }
-    layoutMotion.clear();
+    motion.clearLayoutMotion();
   }
-  function animateLayout<T>(run: () => T, axis: 'row' | 'column'): T {
-    clearLayoutMotion();
-    if (!motionEnabled() || !canvas.clientWidth || !canvas.clientHeight) return run();
-    if (frame !== undefined) {
-      win.cancelAnimationFrame(frame);
-      frame = undefined;
-      draw();
-    }
-    const oldView = viewport();
-    const indices = [
-      ...new Set(
-        oldView.regions.flatMap((region) => {
-          const range = axis === 'row' ? region.rows : region.columns;
-          return Array.from({ length: range.end - range.start }, (_, i) => range.start + i);
-        }),
-      ),
-    ].slice(0, 64);
-    const old = indices.map((index) => {
-      const rect = oldView.cellRect(axis === 'row' ? index : 0, axis === 'column' ? index : 0);
-      return {
-        key: axis === 'row' ? dataSource.getRowId(engine.getRowSourceIndex(index)) : columns[index]!.key,
-        position: axis === 'row' ? headerHeight + rect.y : rect.x,
-        size: axis === 'row' ? rect.height : rect.width,
-      };
-    });
-    const snapshot = doc.createElement('canvas');
-    snapshot.width = canvas.width;
-    snapshot.height = canvas.height;
-    snapshot.getContext('2d')!.drawImage(canvas, 0, 0);
-    const result = run();
-    if (frame !== undefined) {
-      win.cancelAnimationFrame(frame);
-      frame = undefined;
-    }
-    draw();
-    const nextView = viewport();
-    const positions = new Map<string | number, number>();
-    for (const region of nextView.regions) {
-      const range = axis === 'row' ? region.rows : region.columns;
-      for (let i = range.start; i < range.end; i++) {
-        const rect = nextView.cellRect(axis === 'row' ? i : 0, axis === 'column' ? i : 0);
-        positions.set(
-          axis === 'row' ? dataSource.getRowId(engine.getRowSourceIndex(i)) : columns[i]!.key,
-          axis === 'row' ? headerHeight + rect.y : rect.x,
-        );
-      }
-    }
-    const ratio = snapshot.width / canvas.clientWidth;
-    for (const strip of old) {
-      const next = positions.get(strip.key);
-      if (next === strip.position) continue;
-      const start = Math.max(axis === 'row' ? headerHeight : 0, strip.position),
-        end = Math.min(axis === 'row' ? canvas.clientHeight : canvas.clientWidth, strip.position + strip.size);
-      if (end <= start) continue;
-      const tile = doc.createElement('canvas');
-      tile.dataset.gridMotion = axis;
-      tile.setAttribute('aria-hidden', 'true');
-      const width = axis === 'row' ? canvas.clientWidth : end - start,
-        height = axis === 'row' ? end - start : canvas.clientHeight;
-      tile.width = Math.ceil(width * ratio);
-      tile.height = Math.ceil(height * ratio);
-      tile
-        .getContext('2d')!
-        .drawImage(
-          snapshot,
-          (axis === 'row' ? 0 : start) * ratio,
-          (axis === 'row' ? start : 0) * ratio,
-          width * ratio,
-          height * ratio,
-          0,
-          0,
-          tile.width,
-          tile.height,
-        );
-      const destination = next ?? start;
-      tile.style.cssText = `position:absolute;pointer-events:none;z-index:8;left:${indexWidth + (axis === 'column' ? destination : 0)}px;top:${axis === 'row' ? destination : 0}px;width:${width}px;height:${height}px`;
-      root.append(tile);
-      layoutMotion.add(tile);
-      const delta = start - destination;
-      const animation = tile.animate(
-        [
-          { transform: axis === 'row' ? `translateY(${delta}px)` : `translateX(${delta}px)`, opacity: 1 },
-          { transform: 'translate(0,0)', opacity: 1, offset: 0.8 },
-          { transform: 'translate(0,0)', opacity: 0 },
-        ],
-        { duration: motionDuration, easing: 'cubic-bezier(.22,1,.36,1)' },
-      );
-      const remove = () => {
-        tile.remove();
-        layoutMotion.delete(tile);
-      };
-      animation.finished.then(remove, remove);
-    }
-    return result;
-  }
+  const motion = createMotion({
+    options,
+    motionDuration,
+    win,
+    root,
+    canvas,
+    doc,
+    engine,
+    dataSource,
+    draw,
+    viewport,
+    get destroyed() {
+      return destroyed;
+    },
+    get columns() {
+      return columns;
+    },
+    get headerHeight() {
+      return headerHeight;
+    },
+    get indexWidth() {
+      return indexWidth;
+    },
+    get frame() {
+      return frame;
+    },
+    set frame(value) {
+      frame = value;
+    },
+  });
+
+  const { enterSurface, exitSurface, animateLayout, motionEnabled, removeMotionListener } = motion;
   const enteringGroups = new Set<string>();
   function groupRows(start: number, end: number): string {
     return structureAction(() => {
@@ -6134,7 +6021,7 @@ export function createGrid(options: GridOptions): Grid {
       win.clearTimeout(lockNoticeTimer);
       clearCopyFeedback();
       clearLayoutMotion();
-      motionPreference.removeEventListener('change', cancelMotion);
+      removeMotionListener();
       if (choices) {
         disposeChoicePanel(choices);
         choices.remove();
