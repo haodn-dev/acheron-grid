@@ -1,5 +1,13 @@
 # Benchmark evidence
 
+## Readiness profiling — 2026-10-07
+
+Local Node 24.13.0 measurements on Windows compared batch preparation before/after numeric coordinate keys, with three warmups, ten interleaved trials, explicit GC and correctness checks outside the timer. For 100,000 updates, median controller/source work fell from 58.02 to 41.63 ms when all values changed, and 40.89 to 34.12 ms when half were unchanged. These measurements exclude clipboard parsing and Canvas rendering; they do not establish end-to-end paste latency.
+
+A separate Chromium headless profile at source `bee55a8` used two warmups and six samples. At 100,000 cells, desktop paste p50/p95 was 132.6/161.9 ms; mobile viewport/touch emulation with 4× CPU throttling was 680.6/717.0 ms. The emulated profile is not a physical low-end phone. Undo/redo and sort remain synchronous; the monotonic sort fixture is favorable and is not a general sort benchmark. No timing acceptance gate is claimed.
+
+A fresh Node process running allocated core fixtures reached an OS-reported lifetime RSS high-water of 331.90 MiB. This includes startup, setup, oracles and all commands, not a per-command JavaScript heap peak. Browser heap checkpoints and remaining-process working-set records do not establish a full browser/GPU peak. Raw local evidence is retained separately from source; these profiles do not close physical-device or production host acceptance.
+
 ## Atomic row batches: 2026-10-06
 
 `tests/benchmark-batch.mjs` measures 100,000 cells arranged as 100k rows × 1 column, 10k × 10 and 1k × 100. Three sequential Chromium trials per shape check every value after direct source writes, API batches, paste, undo and redo. Permission veto and a final invalid cell must leave values, events and history unchanged. This workload now runs in the existing benchmark CI job.

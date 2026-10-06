@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — integration readiness
+
+- Generate MCP declarations from TypeScript while preserving the existing server factory. Add structured error codes, a host-controlled schema row-count policy and post-write revision receipts with an explicit revision-unavailable success fallback.
+- Add a runnable HTTP remote-editing example with pending, rejected, retry and conflict review states. Its process-local backend checks revisions and deduplicates uncertain retries; production authorization and durable storage remain host responsibilities.
+- Add desktop/mobile-viewport axe checks to the remote playground and correct invalid `aria-rowspan` on button-role headers. Manual assistive-technology and physical-device acceptance remains open.
+- Reduce batch coordinate-key allocation without changing mutation order, validation, duplicate handling or history. Large commands remain synchronous.
+- Update development and packed-consumer Vue to 3.5.43. Publish an English architecture guide and complete contribution verification instructions. No package release is made by these source changes.
+
 ## Unreleased — MCP application workflow
 
 - Optional host-managed dataset revisions detect stale reads, pagination and writes while retaining per-cell expected-value checks.

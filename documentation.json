@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "3f13d97ca3edfd164314615c82d2c93773244a45",
+  "sourceRevision": "bee55a8c4127f5d3e07f583fca5b24f7ddaa6ddf",
   "release": {
     "version": "0.1.0",
     "tag": "v0.1.0",
@@ -60,9 +60,9 @@
     {
       "id": "frameworks",
       "path": "guides/frameworks.md",
-      "revision": 2,
+      "revision": 3,
       "updated": "2026-10-06",
-      "sha256": "55fe5594b39c54f2701407b29c0f93ed7afe034dd069dfb65cf2589e1556e7ae",
+      "sha256": "c2635aa3f02b27a3cd15bf17f4754092ff299d6cb2ac5cdfe1d1661d93808785",
       "history": [
         {
           "revision": 1,
@@ -70,6 +70,10 @@
         },
         {
           "revision": 2,
+          "summary": "Canonical React/Vue lifecycle guide."
+        },
+        {
+          "revision": 3,
           "summary": "Canonical React/Vue lifecycle guide."
         }
       ]
@@ -280,9 +284,9 @@
     {
       "id": "vue",
       "path": "packages/vue/README.md",
-      "revision": 4,
+      "revision": 5,
       "updated": "2026-10-06",
-      "sha256": "e1d170a7a371845e89bda6853aebfd35f988d9549bd91a3149f192fb840aa50b",
+      "sha256": "a81b2d445020385c0f62c29c50d0eaddca85e381f98853ee8ddbbcff7aae4527",
       "history": [
         {
           "revision": 1,
@@ -298,6 +302,10 @@
         },
         {
           "revision": 4,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 5,
           "summary": "Align publication status, installation and current source contracts."
         }
       ]
@@ -334,9 +342,9 @@
     {
       "id": "mcp",
       "path": "packages/mcp/README.md",
-      "revision": 5,
+      "revision": 6,
       "updated": "2026-10-06",
-      "sha256": "14acf52a18a145072c502a699d904b425260061c8ff82537f3a740690885573f",
+      "sha256": "0bfbc1e6ad637a62165034ce8ed3603b7a8bedae6a42a532fc5f5433b4e849c5",
       "history": [
         {
           "revision": 1,
@@ -356,6 +364,10 @@
         },
         {
           "revision": 5,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 6,
           "summary": "Align publication status, installation and current source contracts."
         }
       ]
@@ -418,9 +430,9 @@
     {
       "id": "support",
       "path": "SUPPORT.md",
-      "revision": 9,
+      "revision": 10,
       "updated": "2026-10-06",
-      "sha256": "246dc44a2d9ff76e988a67565fbbfad05901ee553bb4f3bbd826ba86cd2d06af",
+      "sha256": "7b4c34bae62265faa2be1f861fda0db43a0b10a8f0f647f8c15353145e409f3a",
       "history": [
         {
           "revision": 1,
@@ -457,15 +469,19 @@
         {
           "revision": 9,
           "summary": "Verified environments and practical limits."
+        },
+        {
+          "revision": 10,
+          "summary": "Verified environments and practical limits."
         }
       ]
     },
     {
       "id": "editing-and-remote",
       "path": "guides/editing-and-remote.md",
-      "revision": 3,
+      "revision": 4,
       "updated": "2026-10-06",
-      "sha256": "e74eec65a8db192fa12e5e5a69591b328b0fd9f868c4336b29e4e3377e1a47a6",
+      "sha256": "c9d80f3590a306b10f7091ca75b5442d046f24f127a71bb7759467d5a3169a51",
       "history": [
         {
           "revision": 1,
@@ -477,6 +493,10 @@
         },
         {
           "revision": 3,
+          "summary": "Paste special, hidden axes, number formats, Canvas localization and bounded remote write lifecycle."
+        },
+        {
+          "revision": 4,
           "summary": "Paste special, hidden axes, number formats, Canvas localization and bounded remote write lifecycle."
         }
       ]
