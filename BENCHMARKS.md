@@ -16,6 +16,8 @@ These sequential process samples have no dedicated warmup, controlled system-loa
 
 [Chromium follow-up raw samples](benchmark-results/2026-10-06-local-view-browser.json) at `53835be` passed nine benchmark tests: three command workloads and six viewport/partial-repaint workloads. Each command workload contains three trials; per-workload median multi-sort was 154.2–156.3 ms, paste 144.4–149.9 ms and undo 52.1–61.3 ms on 100k rows. Sorting still blocks the main thread for the duration of the operation. These later samples are not a controlled paired browser comparison against the earlier command report. Full Chromium integration and independently packed consumers were checked separately.
 
+[Final runtime CI at 266d411](https://github.com/haodn-dev/acheron-grid/actions/runs/37427020290) passed on Node 22/24 and Firefox/WebKit, including repeated benchmark correctness. The intervening Canvas fix accepts header-origin double-click events for edge auto-fit; it does not alter the measured LocalDataView sort/filter implementation. Later documentation-only evidence updates do not change this runtime validation revision.
+
 ## Retained Canvas lifecycle memory
 
 `tests/benchmark-memory.mjs` uses Chromium CDP heap and DOM/listener counters at named checkpoints. Each run allocates 100,000 rows, mounts Canvas with the viewport ARIA tree, pastes 100,000 values, verifies undo, releases host references and performs 20 additional mount/update/undo/destroy cycles. Two warmup cycles precede the baseline. Explicit GC follows teardown; DOM/document/listener counts must return to the warm baseline. Heap deltas are informational, without a timing or memory threshold.

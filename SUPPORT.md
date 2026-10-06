@@ -22,6 +22,8 @@ The tested baseline is ready for integration evaluation within its documented co
 
 Open validation work includes manual assistive-technology announcements, real-device touch, operating-system clipboard interoperability, true peak browser memory and representative host responsiveness. Local sorting/filtering and large paste/history commands remain synchronous. The current measurements expose these costs; they are not universal performance budgets. Remote writes, formula/workbook execution, pivot and collaborative editing are outside the current core acceptance scope.
 
+The local projection optimization and Canvas header auto-fit fix were subsequently validated at runtime commit `266d411`: [CI on Node 22/24 and Firefox/WebKit](https://github.com/haodn-dev/acheron-grid/actions/runs/37427020290) passed on 2026-10-06. This run includes 103 Node tests (two additional projection regressions), the full browser suites, documentation checks, repeated benchmarks and independent packed consumers. [Projection measurements](BENCHMARKS.md#local-projection-optimization-2026-10-06) retain before/after raw evidence and measurement limits. This validation does not close the manual/device or peak-memory work above.
+
 Release checks must pass on the exact release commit: clean install, typecheck, Node/MCP/browser/playground tests, eight independent tarballs, relevant benchmark correctness and dependency licenses. Select release scope/version explicitly, synchronize public documentation/site snapshots, provide migration notes for breaking changes and preserve actual raw evidence. Package publication is a separate release action.
 
 ## Manual accessibility validation
