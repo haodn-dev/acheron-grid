@@ -24,6 +24,7 @@ const coreFiles = new Set([
 ]);
 const canvasFiles = new Set([
   'internal/editor-config.js',
+  'internal/media-controller.js',
   'internal/clipboard.js',
   'internal/search.js',
   'internal/overlay.js',
