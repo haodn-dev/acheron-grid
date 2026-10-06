@@ -28,7 +28,15 @@ import { GridAxis } from './axis.js';
 import { createViewport } from './panes.js';
 import type { ViewportOptions } from './panes.js';
 import { clipboardCellLimit, clipboardTextLimit, decodeTsv } from './tsv.js';
-
+import type {
+  Change,
+  EngineContext,
+  FormatChange,
+  FormatEntry,
+  HistoryCommand,
+  StructureState,
+} from './internal/engine-context.js';
+import { createHistory } from './internal/history.js';
 export type GridInvalidation =
   | { readonly type: 'cells'; readonly cells: readonly { readonly rowIndex: number; readonly columnKey: string }[] }
   | { readonly type: 'selection'; readonly changed: boolean; readonly rangeChanged: boolean }
@@ -138,68 +146,7 @@ export function createGridEngine(options: GridEngineOptions) {
   let selection: CellSelection | null = null;
   let anchor: CellSelection | null = null;
   const retainedRanges: SelectionRange[] = [];
-  type Change = CellUpdate & { previous: unknown; rowId: RowId };
-  type FormatEntry = {
-    target: Readonly<CellFormatTarget>;
-    bounds: Readonly<SelectionRange>;
-    patch: Readonly<CellFormatPatch>;
-    orders: Readonly<{
-      background?: number;
-      textColor?: number;
-      contentFormat?: number;
-      fontWeight?: number;
-      fontStyle?: number;
-      numberFormat?: number;
-    }>;
-    order: number;
-  };
-  type FormatChange = { key: string; previous: FormatEntry | undefined; value: FormatEntry | undefined };
-  type StructureState = {
-    merges: readonly Readonly<SelectionRange>[];
-    groups: readonly Readonly<RowGroup>[];
-    columns: typeof columns;
-    rowCount: number;
-    rowIds: readonly RowId[];
-    rows: ReturnType<GridAxis['snapshot']>;
-    widths: ReturnType<GridAxis['snapshot']>;
-    selection: CellSelection | null;
-    anchor: CellSelection | null;
-    ranges: SelectionRange[];
-    manualRows: number[];
-    hiddenRows: number[];
-    hiddenColumns: number[];
-    lockedRows: number[];
-    lockedColumns: number[];
-    lockedCells: string[];
-    formats: Map<string, FormatEntry>;
-    frozenRows: number;
-    frozenColumns: number;
-  };
-  type HistoryCommand =
-    | { kind: 'values'; changes: Change[]; formats?: FormatChange[] }
-    | { kind: 'format'; changes: FormatChange[] }
-    | { kind: 'visibility'; axis: 'row' | 'column'; indices: readonly number[]; hidden: boolean }
-    | {
-        kind: 'outline';
-        requests: readonly LayoutRequest[];
-        beforeMerges: readonly Readonly<SelectionRange>[];
-        afterMerges: readonly Readonly<SelectionRange>[];
-        beforeGroups: readonly Readonly<RowGroup>[];
-        afterGroups: readonly Readonly<RowGroup>[];
-      }
-    | { kind: 'resize'; axis: 'row' | 'column'; index: number; previous: number; size: number; previousManual: boolean }
-    | { kind: 'freeze'; previousRows: number; previousColumns: number; rows: number; columns: number }
-    | {
-        kind: 'structure';
-        request: Readonly<StructureRequest>;
-        reverseRequest: Readonly<StructureRequest>;
-        before: StructureState;
-        after: StructureState;
-        forward: readonly RowSplice[];
-        backward: readonly RowSplice[];
-        rowMap: readonly number[];
-        columnMap: readonly number[];
-      };
+
   const past: HistoryCommand[] = [];
   const future: HistoryCommand[] = [];
   let pendingCut:
@@ -217,6 +164,225 @@ export function createGridEngine(options: GridEngineOptions) {
   let activeParts = 1;
   let displayAnchor: { row: number; col: number } | null = null;
 
+  const context: EngineContext = {
+    options,
+    get dataSource() {
+      return dataSource;
+    },
+    get columns() {
+      return columns;
+    },
+    set columns(value) {
+      columns = value;
+    },
+    get rowHeight() {
+      return rowHeight;
+    },
+    get columnWidth() {
+      return columnWidth;
+    },
+    get columnIndices() {
+      return columnIndices;
+    },
+    get rowCount() {
+      return rowCount;
+    },
+    set rowCount(value) {
+      rowCount = value;
+    },
+    get frozenRows() {
+      return frozenRows;
+    },
+    set frozenRows(value) {
+      frozenRows = value;
+    },
+    get frozenColumns() {
+      return frozenColumns;
+    },
+    set frozenColumns(value) {
+      frozenColumns = value;
+    },
+    get rowAxis() {
+      return rowAxis;
+    },
+    get columnAxis() {
+      return columnAxis;
+    },
+    get permissions() {
+      return permissions;
+    },
+    get resolver() {
+      return resolver;
+    },
+    set resolver(value) {
+      resolver = value;
+    },
+    get onEvent() {
+      return onEvent;
+    },
+    set onEvent(value) {
+      onEvent = value;
+    },
+    get allowLockChanges() {
+      return allowLockChanges;
+    },
+    get tableLocked() {
+      return tableLocked;
+    },
+    set tableLocked(value) {
+      tableLocked = value;
+    },
+    get merges() {
+      return merges;
+    },
+    set merges(value) {
+      merges = value;
+    },
+    get groups() {
+      return groups;
+    },
+    set groups(value) {
+      groups = value;
+    },
+    get groupId() {
+      return groupId;
+    },
+    set groupId(value) {
+      groupId = value;
+    },
+    get addedColumnKeys() {
+      return addedColumnKeys;
+    },
+    get manualRows() {
+      return manualRows;
+    },
+    get lockedRows() {
+      return lockedRows;
+    },
+    get lockedColumns() {
+      return lockedColumns;
+    },
+    get lockedCells() {
+      return lockedCells;
+    },
+    get busy() {
+      return busy;
+    },
+    set busy(value) {
+      busy = value;
+    },
+    get destroyed() {
+      return destroyed;
+    },
+    set destroyed(value) {
+      destroyed = value;
+    },
+    get onInvalidate() {
+      return onInvalidate;
+    },
+    set onInvalidate(value) {
+      onInvalidate = value;
+    },
+    get subscribers() {
+      return subscribers;
+    },
+    get observerErrors() {
+      return observerErrors;
+    },
+    get selection() {
+      return selection;
+    },
+    set selection(value) {
+      selection = value;
+    },
+    get anchor() {
+      return anchor;
+    },
+    set anchor(value) {
+      anchor = value;
+    },
+    get retainedRanges() {
+      return retainedRanges;
+    },
+    get past() {
+      return past;
+    },
+    get future() {
+      return future;
+    },
+    get pendingCut() {
+      return pendingCut;
+    },
+    set pendingCut(value) {
+      pendingCut = value;
+    },
+    get formats() {
+      return formats;
+    },
+    get orderedFormats() {
+      return orderedFormats;
+    },
+    set orderedFormats(value) {
+      orderedFormats = value;
+    },
+    get formatOrder() {
+      return formatOrder;
+    },
+    set formatOrder(value) {
+      formatOrder = value;
+    },
+    get view() {
+      return view;
+    },
+    set view(value) {
+      view = value;
+    },
+    get projection() {
+      return projection;
+    },
+    set projection(value) {
+      projection = value;
+    },
+    get reverseProjection() {
+      return reverseProjection;
+    },
+    set reverseProjection(value) {
+      reverseProjection = value;
+    },
+    get projectedAxis() {
+      return projectedAxis;
+    },
+    set projectedAxis(value) {
+      projectedAxis = value;
+    },
+    get cachedRanges() {
+      return cachedRanges;
+    },
+    set cachedRanges(value) {
+      cachedRanges = value;
+    },
+    get cachedFrozenRows() {
+      return cachedFrozenRows;
+    },
+    set cachedFrozenRows(value) {
+      cachedFrozenRows = value;
+    },
+    get activeParts() {
+      return activeParts;
+    },
+    set activeParts(value) {
+      activeParts = value;
+    },
+    get displayAnchor() {
+      return displayAnchor;
+    },
+    set displayAnchor(value) {
+      displayAnchor = value;
+    },
+    get emptyFormat() {
+      return emptyFormat;
+    },
+  };
   function viewAxis(): GridAxis {
     return projectedAxis ?? rowAxis;
   }
@@ -876,165 +1042,6 @@ export function createGridEngine(options: GridEngineOptions) {
     future.length = 0;
     if (changes.length) notifyCells(changes, source);
     if (formatChanges.length) notifyFormats(formatChanges, source === 'paste' ? 'paste' : 'api');
-  }
-
-  function replay(redo: boolean): boolean {
-    if (destroyed) return false;
-    const from = redo ? future : past;
-    const to = redo ? past : future;
-    const entry = from.at(-1);
-    if (!entry) return false;
-    if (entry.kind === 'visibility') {
-      changeVisibility(entry.axis, entry.indices, redo ? entry.hidden : !entry.hidden, false, redo ? 'redo' : 'undo');
-      from.pop();
-      to.push(entry);
-      return true;
-    }
-    if (entry.kind === 'outline') {
-      const requests = entry.requests.map((request) =>
-        redo
-          ? request
-          : 'range' in request
-            ? { ...request, kind: request.kind === 'merge' ? ('unmerge' as const) : ('merge' as const) }
-            : {
-                ...request,
-                kind: ({ group: 'ungroup', ungroup: 'group', collapse: 'expand', expand: 'collapse' } as const)[
-                  request.kind
-                ],
-              },
-      );
-      if (requests.some((request) => !layoutAllowed(request)))
-        throw new Error('Changing merged cells or row groups is disabled.');
-      const nextMerges = redo ? entry.afterMerges : entry.beforeMerges,
-        nextGroups = redo ? entry.afterGroups : entry.beforeGroups;
-      if ((nextMerges.length || nextGroups.length) && (view.sort || view.sorts?.length || view.filters?.length))
-        throw new Error('Clear sort and filters before restoring merged cells or row groups.');
-      validateMergeFreeze(nextMerges);
-      if (nextGroups.some((group) => group.collapsed && group.startRow < frozenRows && group.endRow >= frozenRows))
-        throw new Error('A collapsed group cannot cross a frozen boundary.');
-      const old = projection ?? Array.from({ length: rowCount }, (_, i) => i);
-      merges = [...nextMerges];
-      groups = [...nextGroups];
-      from.pop();
-      to.push(entry);
-      notifyOutline('range' in entry.requests[0]! ? 'merge' : 'group', old, redo ? 'redo' : 'undo');
-      return true;
-    }
-    if (entry.kind === 'structure') {
-      replayStructure(entry, redo);
-      from.pop();
-      to.push(entry);
-      notifyStructure(entry, redo, redo ? 'redo' : 'undo');
-      return true;
-    }
-    if (entry.kind === 'resize') {
-      const axis = entry.axis === 'row' ? rowAxis : columnAxis;
-      if (
-        (entry.axis !== 'row' || manualRows.has(entry.index)) &&
-        axis.storedSize(entry.index) !== (redo ? entry.previous : entry.size)
-      )
-        throw new Error('Layout history conflicts with external changes.');
-      axis.setSize(entry.index, redo ? entry.size : entry.previous);
-      if (entry.axis === 'row') {
-        if (redo || entry.previousManual) manualRows.add(entry.index);
-        else manualRows.delete(entry.index);
-      }
-      from.pop();
-      to.push(entry);
-      notify(
-        { type: 'layout' },
-        Object.freeze({
-          type: entry.axis === 'row' ? 'row:resize' : 'column:resize',
-          index: entry.index,
-          previous: redo ? entry.previous : entry.size,
-          size: redo ? entry.size : entry.previous,
-        }),
-      );
-      return true;
-    }
-    if (entry.kind === 'freeze') {
-      if (
-        frozenRows !== (redo ? entry.previousRows : entry.rows) ||
-        frozenColumns !== (redo ? entry.previousColumns : entry.columns)
-      )
-        throw new Error('Frozen history conflicts with external changes.');
-      const previousRows = frozenRows,
-        previousColumns = frozenColumns;
-      validateMergeFreeze(merges, redo ? entry.rows : entry.previousRows, redo ? entry.columns : entry.previousColumns);
-      if (
-        groups.some(
-          (group) =>
-            group.collapsed &&
-            group.startRow < (redo ? entry.rows : entry.previousRows) &&
-            group.endRow >= (redo ? entry.rows : entry.previousRows),
-        )
-      )
-        throw new Error('A collapsed group cannot cross a frozen boundary.');
-      frozenRows = redo ? entry.rows : entry.previousRows;
-      frozenColumns = redo ? entry.columns : entry.previousColumns;
-      from.pop();
-      to.push(entry);
-      notify(
-        { type: 'layout' },
-        Object.freeze({
-          type: 'freeze:change',
-          previousRows,
-          previousColumns,
-          rows: frozenRows,
-          columns: frozenColumns,
-        }),
-      );
-      return true;
-    }
-    if (entry.kind === 'format') {
-      for (const change of entry.changes) {
-        if (formats.get(change.key) !== (redo ? change.previous : change.value))
-          throw new Error('Formatting history conflicts with external changes.');
-        requireFormatPermission((change.value ?? change.previous)!.bounds);
-      }
-      const changes = entry.changes.map((change) => ({
-        ...change,
-        previous: redo ? change.previous : change.value,
-        value: redo ? change.value : change.previous,
-      }));
-      writeFormats(changes);
-      from.pop();
-      to.push(entry);
-      notifyFormats(changes, redo ? 'redo' : 'undo');
-      return true;
-    }
-    const changes = entry.changes;
-    for (const change of entry.formats ?? []) {
-      if (formats.get(change.key) !== (redo ? change.previous : change.value))
-        throw new Error('Formatting history conflicts with external changes.');
-      requireFormatPermission((change.value ?? change.previous)!.bounds);
-    }
-    for (const change of changes) {
-      if (
-        dataSource.getRowId(change.rowIndex) !== change.rowId ||
-        !Object.is(dataSource.getValue(change.rowIndex, change.columnKey), redo ? change.previous : change.value)
-      ) {
-        throw new Error('History conflicts with external data changes.');
-      }
-    }
-    for (const change of changes) requirePermission(change.rowIndex, columnIndices.get(change.columnKey)!, 'writable');
-    const updates = changes.map((change) => ({
-      ...change,
-      previous: redo ? change.previous : change.value,
-      value: redo ? change.value : change.previous,
-    }));
-    if (updates.length) write(updates);
-    const formatChanges = (entry.formats ?? []).map((change) => ({
-      ...change,
-      previous: redo ? change.previous : change.value,
-      value: redo ? change.value : change.previous,
-    }));
-    writeFormats(formatChanges);
-    from.pop();
-    to.push(entry);
-    if (updates.length) notifyCells(updates, redo ? 'redo' : 'undo');
-    if (formatChanges.length) notifyFormats(formatChanges, redo ? 'redo' : 'undo');
-    return true;
   }
 
   function getSelection(): CellSelection | null {
@@ -2825,6 +2832,47 @@ export function createGridEngine(options: GridEngineOptions) {
     }
   }
 
+  const { replay } = createHistory(context, {
+    get changeVisibility() {
+      return changeVisibility;
+    },
+    get layoutAllowed() {
+      return layoutAllowed;
+    },
+    get validateMergeFreeze() {
+      return validateMergeFreeze;
+    },
+    get notifyOutline() {
+      return notifyOutline;
+    },
+    get replayStructure() {
+      return replayStructure;
+    },
+    get notifyStructure() {
+      return notifyStructure;
+    },
+    get notify() {
+      return notify;
+    },
+    get requireFormatPermission() {
+      return requireFormatPermission;
+    },
+    get writeFormats() {
+      return writeFormats;
+    },
+    get notifyFormats() {
+      return notifyFormats;
+    },
+    get requirePermission() {
+      return requirePermission;
+    },
+    get write() {
+      return write;
+    },
+    get notifyCells() {
+      return notifyCells;
+    },
+  });
   if (options.view) {
     view = snapshotView(options.view);
     installProjection(buildProjection(view));
