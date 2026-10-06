@@ -1,12 +1,19 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { ListResourcesRequestSchema, ReadResourceRequestSchema, ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
-export function createGridMcpServer({ engine, documents = {}, authorize, validateWrite, allowWrites = false, allowDiscovery = false, maxRowScan = 10_000, maxOutputBytes = 1_000_000, resolveRowIndex }) {
+export function createGridMcpServer({ engine, documents = {}, authorize, validateWrite, allowWrites = false, allowDiscovery = false, maxRowScan = 10_000, maxOutputBytes = 1_000_000, resolveRowIndex, getRevision }) {
     if (engine && typeof authorize !== 'function') throw new TypeError('Grid access requires an authorize callback.');
     if (allowWrites && typeof validateWrite !== 'function') throw new TypeError('Writes require host validation.');
     if (!Number.isSafeInteger(maxRowScan) || maxRowScan < 1) throw new RangeError('Invalid row scan budget.');
     if (!Number.isSafeInteger(maxOutputBytes) || maxOutputBytes < 1) throw new RangeError('Invalid output budget.');
     if (resolveRowIndex !== undefined && typeof resolveRowIndex !== 'function') throw new TypeError('Invalid row resolver.');
+    if (getRevision !== undefined && typeof getRevision !== 'function') throw new TypeError('Invalid revision provider.');
+    function revision() {
+        if (!getRevision) return undefined;
+        const token = getRevision();
+        if (typeof token !== 'string' || !token.length || token.length > 256) throw new Error('Invalid dataset revision.');
+        return token;
+    }
     function result(value) {
         const text = JSON.stringify(value);
         if (new TextEncoder().encode(text).byteLength > maxOutputBytes) throw new Error('Output budget exceeded.');
@@ -31,16 +38,29 @@ export function createGridMcpServer({ engine, documents = {}, authorize, validat
         ...(allowDiscovery ? [{ name: 'grid_rows', description: 'Discover up to 100 host-approved visible row IDs within a bounded positional scan.', inputSchema: { type: 'object', properties: { cursor: { type: 'integer', minimum: 0 }, limit: { type: 'integer', minimum: 1, maximum: 100 } }, additionalProperties: false } }] : []),
         ...(allowWrites ? [{ name: 'grid_update', description: 'Atomically update up to 100 cells, requiring expected values and host validation.', inputSchema: { type: 'object', properties: { cells: cellList(true) }, required: ['cells'], additionalProperties: false } }] : []),
     ] : [];
+    if (getRevision) for (const tool of tools) {
+        tool.inputSchema.properties.expectedRevision = { type: 'string', minLength: 1, maxLength: 256 };
+        if (tool.name === 'grid_update') tool.inputSchema.required.push('expectedRevision');
+    }
     server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
     server.setRequestHandler(CallToolRequestSchema, async ({ params }) => {
         try {
             if (!tools.some(tool => tool.name === params.name)) throw new Error('Unknown or disabled tool.');
+            const input = params.arguments;
+            const currentRevision = revision();
+            if (currentRevision !== undefined) {
+                if (input?.expectedRevision !== undefined && input.expectedRevision !== currentRevision) throw new Error('Conflict: dataset revision changed. Read again.');
+                if ((params.name === 'grid_update' || params.name === 'grid_rows' && (input?.cursor ?? 0) > 0) && input?.expectedRevision === undefined) throw new Error('Expected dataset revision is required.');
+            } else if (input?.expectedRevision !== undefined) throw new Error('Dataset revisions are not enabled.');
+            const readResult = value => {
+                if (currentRevision !== revision()) throw new Error('Conflict: dataset revision changed during read.');
+                return result(currentRevision === undefined ? value : { ...value, revision: currentRevision });
+            };
             if (params.name === 'grid_schema') {
                 if (authorize({ operation: 'schema' }) !== true) throw new Error('Access denied.');
                 const columns = engine.columns.filter(column => authorize({ operation: 'read', columnKey: column.key }) === true).map(({ key, title }) => ({ key, title }));
-                return result({ columns, rowCount: engine.rowCount });
+                return readResult({ columns, rowCount: engine.rowCount });
             }
-            const input = params.arguments;
             if (params.name === 'grid_rows') {
                 if (authorize({ operation: 'discover' }) !== true || authorize({ operation: 'schema' }) !== true) throw new Error('Access denied.');
                 const cursor = input?.cursor ?? 0, limit = input?.limit ?? 100;
@@ -51,7 +71,7 @@ export function createGridMcpServer({ engine, documents = {}, authorize, validat
                     const rowId = engine.getRowId(next++); scanned++;
                     if (authorize({ operation: 'read', rowId }) === true) rowIds.push(rowId);
                 }
-                return result({ rowIds, nextCursor: next < engine.rowCount ? next : null });
+                return readResult({ rowIds, nextCursor: next < engine.rowCount ? next : null });
             }
             if (!input || !Array.isArray(input.cells) || !input.cells.length || input.cells.length > 100) throw new Error('Expected 1–100 cells.');
             const writing = params.name === 'grid_update';
@@ -92,7 +112,8 @@ export function createGridMcpServer({ engine, documents = {}, authorize, validat
                 if (validateWrite({ rowId: cell.rowId, columnKey: cell.columnKey, value: cell.value }) !== undefined) throw new Error('Validation must be synchronous and return no value.');
                 return { rowIndex, columnKey: cell.columnKey, value: cell.value };
             });
-            const response = result(writing ? { updated: updates.length } : { cells: updates });
+            if (currentRevision !== revision()) throw new Error('Conflict: dataset revision changed before commit.');
+            const response = writing ? result({ updated: updates.length, ...(currentRevision === undefined ? {} : { checkedRevision: currentRevision }) }) : readResult({ cells: updates });
             if (writing) engine.updateCells(updates);
             return response;
         } catch (error) {

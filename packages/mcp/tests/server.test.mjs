@@ -4,6 +4,22 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createGridEngine, LocalDataSource } from '@acheron-grid/core';
 import { createGridMcpServer } from '../src/index.mjs';
+test('revision provider validates tokens and detects changes during reads before returning values', async () => {
+ let token = '', moving = false;
+ const engine = createGridEngine({ columns: [{ key: 'value', title: 'Value' }], dataSource: new LocalDataSource([{ id: 'a', value: 'private' }], row => row.id) });
+ assert.throws(() => createGridMcpServer({ engine, authorize: () => true, getRevision: 'bad' }), /revision provider/);
+ const server = createGridMcpServer({ engine, authorize: () => true, getRevision: () => { if (moving) token = String(Number(token) + 1); return token; } });
+ const client = new Client({ name: 'revision-test', version: '1' });
+ const [a,b] = InMemoryTransport.createLinkedPair(); await Promise.all([server.connect(a), client.connect(b)]);
+ try {
+  const call = args => client.callTool({ name: 'grid_read', arguments: { cells: [{ rowId: 'a', columnKey: 'value' }], ...args } });
+  assert.equal((await call()).isError, true);
+  token = '1';
+  assert.equal((await call({ expectedRevision: 1 })).isError, true);
+  moving = true;
+  const changed = await call(); assert.equal(changed.isError, true); assert.ok(!JSON.stringify(changed).includes('private'));
+ } finally { await client.close(); await server.close(); engine.destroy(); }
+});
 test('MCP resources, approved reads, atomic conflict-safe writes and history', async () => {
  const engine = createGridEngine({ columns: [{ key: 'title', title: 'Title', editable: true }], dataSource: new LocalDataSource([{ id: 'a', title: 'Old' }, { id: 'b', title: 'Other' }], row => row.id) });
  const server = createGridMcpServer({ engine, documents: { core: '# Core' }, authorize: () => true, allowWrites: true, validateWrite: cell => { if (typeof cell.value !== 'string') throw new Error('String required'); } });

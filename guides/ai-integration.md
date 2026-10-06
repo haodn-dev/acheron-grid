@@ -2,6 +2,8 @@
 
 ## Read first
 
+Unreleased source now includes a runnable [application-owned MCP task session](../examples/mcp/README.md) and optional host-managed dataset revisions. The session defaults to read-only, loads bounded JSON, and supports authorized status writes with read-back and stale-revision rejection. It does not connect to browser data or provide durable persistence. Its executable checks test protocol behavior; real-model evaluation remains separate and no model-quality score is claimed.
+
 Read [getting-started.md](getting-started.md), then the package README files and exported TypeScript types in the version being integrated. Acheron Grid is an experimental preview; all six packages have version 0.1.0 on npm; APIs remain experimental. Read-only async paging is implemented; do not infer async writes or server-wide local queries. React and Vue adapters are implemented; read their package references for the exact contract.
 
 ## Architecture

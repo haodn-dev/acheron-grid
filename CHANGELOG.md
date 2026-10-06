@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — MCP application workflow
+
+- Optional host-managed dataset revisions detect stale reads, pagination and writes while retaining per-cell expected-value checks.
+- Runnable application-owned task session over stdio, read-only by default, with bounded JSON input and controlled in-memory status writes.
+- End-to-end SDK checks and a separate real-model evaluation protocol; no browser bridge or model-quality claim.
+
 ## Unreleased
 
 - Change original Acheron source and future package distributions from MIT to Apache-2.0; ship LICENSE/NOTICE in every package. Preserve third-party notices and the license of already published 0.1.0 artifacts.

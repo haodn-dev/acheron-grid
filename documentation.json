@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "27eab04804e1e79035040ccf5e0e9e4e19386f09",
+  "sourceRevision": "966f3415589f11ac6ea121d61850d36b73fad085",
   "release": {
     "version": "0.1.0",
     "tag": "v0.1.0",
@@ -69,9 +69,9 @@
     {
       "id": "ai",
       "path": "guides/ai-integration.md",
-      "revision": 2,
+      "revision": 4,
       "updated": "2026-10-06",
-      "sha256": "378a94aed44e0a55927d831166c6d6a1f8a914465c70d5d674b213a5cf4733bf",
+      "sha256": "b31a93f8ec176d1df43da24b263022b0f22714035c054ee61f507d6359805927",
       "history": [
         {
           "revision": 1,
@@ -79,6 +79,14 @@
         },
         {
           "revision": 2,
+          "summary": "Canonical public integration and host boundaries."
+        },
+        {
+          "revision": 3,
+          "summary": "Canonical public integration and host boundaries."
+        },
+        {
+          "revision": 4,
           "summary": "Canonical public integration and host boundaries."
         }
       ]
@@ -286,9 +294,9 @@
     {
       "id": "mcp",
       "path": "packages/mcp/README.md",
-      "revision": 3,
+      "revision": 4,
       "updated": "2026-10-06",
-      "sha256": "60dcec763611ee4eec85dcb91644b422588acae8c6e9799a30d75365eb991e55",
+      "sha256": "94333b3c8f47cf92077f09112ac0659d6d0d09b48af028108cabee1f518c7be7",
       "history": [
         {
           "revision": 1,
@@ -300,6 +308,10 @@
         },
         {
           "revision": 3,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 4,
           "summary": "Align publication status, installation and current source contracts."
         }
       ]
