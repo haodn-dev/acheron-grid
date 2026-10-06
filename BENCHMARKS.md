@@ -1,5 +1,21 @@
 # Benchmark evidence
 
+## Local projection optimization: 2026-10-06
+
+[Before/after raw trials](benchmark-results/2026-10-06-local-view-comparison.json) compare the unchanged Node runner at runtime baseline `fcab797` and optimization `53835be`. Both use Node 24.13.0 on the same Windows i5-12400F machine, three trials each at 10k/100k allocated rows, with full identity/value/history assertions. Runtime/runner SHA-256 hashes are included. Documentation changes present during the baseline run do not change the measured runtime.
+
+| Operation | 10k before / after median, ms | 100k before / after median, ms |
+| --- | ---: | ---: |
+| Numeric sort | 7.31 / 4.07 | 81.34 / 33.80 |
+| Multi-sort | 16.34 / 11.07 | 276.92 / 141.57 |
+| Equals filter | 1.55 / 1.63 | 19.24 / 11.19 |
+
+LocalDataView now caches sort keys in dense arrays indexed by matched positions, instead of hashing source indices during every comparison. It skips the filtering pass when no filters are configured and normalizes each filter query once. Nullish-last ordering, stable source-order ties, source read order, immutable projection and mapped writes retain their contracts. Storage scales with matched rows and sort keys, without allocating sort caches for filtered-out rows. Filtering still scans the source and commands remain synchronous; no API or dependency changes were made.
+
+These sequential process samples have no dedicated warmup, controlled system-load budget or timing threshold. The 10k filter did not improve in this run. Unmodified paste/history paths also fluctuate: 100k paste median was 166.82 / 157.96 ms and undo 51.58 / 59.53 ms. Do not attribute those differences to this sort/filter change or claim universal speedups, p95, FPS or peak memory.
+
+[Chromium follow-up raw samples](benchmark-results/2026-10-06-local-view-browser.json) at `53835be` passed nine benchmark tests: three command workloads and six viewport/partial-repaint workloads. Each command workload contains three trials; per-workload median multi-sort was 154.2–156.3 ms, paste 144.4–149.9 ms and undo 52.1–61.3 ms on 100k rows. Sorting still blocks the main thread for the duration of the operation. These later samples are not a controlled paired browser comparison against the earlier command report. Full Chromium integration and independently packed consumers were checked separately.
+
 ## Retained Canvas lifecycle memory
 
 `tests/benchmark-memory.mjs` uses Chromium CDP heap and DOM/listener counters at named checkpoints. Each run allocates 100,000 rows, mounts Canvas with the viewport ARIA tree, pastes 100,000 values, verifies undo, releases host references and performs 20 additional mount/update/undo/destroy cycles. Two warmup cycles precede the baseline. Explicit GC follows teardown; DOM/document/listener counts must return to the warm baseline. Heap deltas are informational, without a timing or memory threshold.
@@ -27,7 +43,7 @@ The source exposes 1,000,000 logical rows and 1,000 columns lazily, with two spa
 
 Ranges describe three per-run summaries, not pooled percentiles. The 10 ms p95 is retained as measured. Outputs contain per-run summaries, not individual callback samples. This instrumentation measures synchronous animation-frame callbacks that read source cells. It does not measure presented FPS, raster/GPU time, peak memory, all UI callbacks or production application latency. Concurrent machine activity is uncontrolled; these results do not establish a regression against earlier runs.
 
-Further evidence is needed for allocated local datasets, sort/filter/refresh, batch/paste/history, complex layout, remote cache lifecycle, interactive frame cadence, memory after teardown, other browsers and real devices. Each benchmark must pair cost measurements with correctness checks. Timing gates require repeated baselines on a stable runner; current read-count assertions can already catch virtualization regressions.
+The sections above and below add allocated local sort/filter/refresh, batch/paste/history, browser task-delay and retained teardown-memory evidence. Complex layouts, remote cache churn, presented frame cadence, real-device workloads and true peak memory still need dedicated measurements. Each benchmark must pair cost measurements with correctness checks. Timing gates require repeated baselines on a stable runner; current read-count assertions can already catch virtualization regressions.
 
 ## Raw callback evidence
 
@@ -35,7 +51,7 @@ The runner now includes ordered `rawSamples.scroll` and `rawSamples.partial` arr
 
 [The repeated raw-sample run](benchmark-results/2026-10-05-raw-callback-cost.json) passed all six tests. Its metadata records the base runtime revision and SHA-256 of the instrumented runner. Maximum reads remained 44 without frozen panes, 55 with frozen panes and 1 for partial updates. This separate run does not replace the earlier baseline or establish a speed improvement.
 
-CI is configured to repeat both workloads three times on Node 22 and 24 and upload the JSON report plus raw-sample attachments for seven days, including on failure. Read-count assertions gate correctness; timings have no pass/fail threshold. Local validation passed; this workflow change has not yet been verified on the remote runner.
+CI repeats the Canvas workloads three times on Node 22 and 24 and uploads the JSON report plus raw-sample attachments for seven days, including on failure. Read-count assertions gate correctness; timings have no pass/fail threshold. [CI at 5cf6601](https://github.com/haodn-dev/acheron-grid/actions/runs/37419226252) verified the benchmark job remotely.
 
 ## Live batches and inline chart geometry
 
@@ -47,4 +63,4 @@ Run `npm run benchmark:core`. The Node runner uses three trials each at 10,000 a
 
 [Recorded trial durations and environment](benchmark-results/2026-10-05-core-cost.json) preserve individual trial costs. Trials run in one process without a dedicated warm-up, so JIT/GC and operation ordering affect timings; do not compare dataset sizes as an isolated scaling experiment. Heap delta is retained heap after optional explicit GC and includes the live fixture, source, views and correctness oracle. It is neither peak memory nor evidence of a leak. CI is configured to retain this report alongside Canvas evidence.
 
-CI is configured to repeat both workloads three times on Node 22 and 24 and upload the JSON report plus raw-sample attachments for seven days, including on failure. Read-count assertions gate correctness; timings have no pass/fail threshold. Local validation passed; this workflow change has not yet been verified on the remote runner.
+The Node runner performs three trials per dataset size, and CI retains its report on Node 22 and 24 for seven days. Correctness assertions gate the result; timings have no pass/fail threshold. [CI at 5cf6601](https://github.com/haodn-dev/acheron-grid/actions/runs/37419226252) verified this workload remotely.

@@ -14,7 +14,13 @@ The original six packages are npm 0.1.0 development previews. Export/charts modu
 
 Browser suites normalize explicit synthetic clipboard payloads in Firefox; they do not establish native OS clipboard interoperability. Native scroll dimensions differ: the portable accessibility scroll workload uses 100,000 rows rather than assuming every browser accepts a 32-million-pixel surface. Large local commands remain synchronous; [browser command measurements](BENCHMARKS.md#browser-command-task-evidence) record main-thread delay without an FPS or peak-memory guarantee.
 
-[Full browser and Node 22/24 CI at bfdf60b](https://github.com/haodn-dev/acheron-grid/actions/runs/37417574315) passed on 2026-10-06. Playwright browser evidence does not certify all browser versions or physical devices. Firefox could not launch locally on this Windows machine; its full-suite evidence comes from the Linux runner.
+[Full browser and Node 22/24 CI at 5cf6601](https://github.com/haodn-dev/acheron-grid/actions/runs/37419226252) passed on 2026-10-06, including the repeated lifecycle-memory workload. The accepted source baseline includes 101 Node tests, six MCP tests, two release-tooling tests, 106 Chromium integration tests, 102 portable integration tests each in Firefox/WebKit and eight independently packed packages. Four Chromium-specific checks are excluded from each portable suite. Playwright browser evidence does not certify all browser versions or physical devices. Firefox could not launch locally on this Windows machine; its full-suite evidence comes from the Linux runner.
+
+## Source acceptance boundary
+
+The tested baseline is ready for integration evaluation within its documented contracts. This acceptance does not change package versions or establish stable 1.0 support. API documentation covers 73 GridEngine members and 46 root exports, with executable examples and document-hash checks. Later runtime changes require their own regression checks; an earlier green CI run does not validate a later commit.
+
+Open validation work includes manual assistive-technology announcements, real-device touch, operating-system clipboard interoperability, true peak browser memory and representative host responsiveness. Local sorting/filtering and large paste/history commands remain synchronous. The current measurements expose these costs; they are not universal performance budgets. Remote writes, formula/workbook execution, pivot and collaborative editing are outside the current core acceptance scope.
 
 Release checks must pass on the exact release commit: clean install, typecheck, Node/MCP/browser/playground tests, eight independent tarballs, relevant benchmark correctness and dependency licenses. Select release scope/version explicitly, synchronize public documentation/site snapshots, provide migration notes for breaking changes and preserve actual raw evidence. Package publication is a separate release action.
 
