@@ -209,12 +209,12 @@ export function createGridEngine(options: GridEngineOptions) {
     if (mode==='add' && displaySelectionRanges().length>=128) throw new RangeError('Selection supports at most 128 ranges.');
     const old=getSelectionRanges();
     const keep=mode==='replace' ? [] : mode==='extend' ? old.slice(0, Math.max(0,old.length-activeParts)) : old;
-    if(keep.length+parts.length>128)throw new RangeError('Selection supports at most 128 source ranges.');
     const row=sourceRow(range.startRow);
     const others=parts.flatMap(part=>row<part.startRow||row>part.endRow ? [part] : [
       ...(part.startRow<row ? [{...part,endRow:row-1}] : []),
       ...(row<part.endRow ? [{...part,startRow:row+1}] : []),
     ]);
+    if(keep.length+others.length+1>128)throw new RangeError('Selection supports at most 128 source ranges.');
     retainedRanges.splice(0,retainedRanges.length,...keep,...others);
     selection={rowIndex:row,rowId:dataSource.getRowId(row),columnIndex:range.startColumn,columnKey:columns[range.startColumn]!.key};
     anchor={rowIndex:row,rowId:selection.rowId,columnIndex:range.endColumn,columnKey:columns[range.endColumn]!.key};
