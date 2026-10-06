@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Complete the headless API behavior/export/type catalog and prevent undocumented new engine members during documentation sync. Clarify source/view coordinates, capability probes and disposal ownership; add regression checks for source write support and permission-sensitive replay.
+
 - Add verified npm develop/stable release workflows, aligned workspace version tooling, registry consumer checks, and trusted publishing setup instructions.
 
 - Core accepts atomic batch-only sources for editing, discards collapsed groups moved across frozen boundaries during identity refresh, and bounds projected selection/clipboard fragmentation. Collapsed frozen-row counts are cached between state changes.

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "ae8c47390f94b12abf6c40af76b90101248845da",
+  "sourceRevision": "135dd67477deacee9b4c5e9fc7eb27afc7ccfd39",
   "release": {
     "version": "0.1.0",
     "tag": "v0.1.0",
@@ -83,13 +83,29 @@
     {
       "id": "core-api",
       "path": "guides/core-api.md",
-      "revision": 1,
-      "updated": "2026-10-05",
-      "sha256": "e61dcf64ca8a0acc49ab6ddf57090c2f80afd4800fb445ae7f76fb1f173f61b9",
+      "revision": 5,
+      "updated": "2026-10-06",
+      "sha256": "c4816355ba9746211d06e36574f991bd33e2b26aee304df8263d9367488e845f",
       "history": [
         {
           "revision": 1,
           "summary": "Generated source API signatures and construction options."
+        },
+        {
+          "revision": 2,
+          "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
+        },
+        {
+          "revision": 3,
+          "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
+        },
+        {
+          "revision": 4,
+          "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
+        },
+        {
+          "revision": 5,
+          "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
         }
       ]
     },
@@ -109,9 +125,9 @@
     {
       "id": "core",
       "path": "packages/core/README.md",
-      "revision": 3,
+      "revision": 4,
       "updated": "2026-10-06",
-      "sha256": "966fe0815804406fa5aef1c74073119621133e3fef4996535559e6d4e7718931",
+      "sha256": "f09a2f88bfbc8d7bfefb91957bbe5aab4fdd296ca5a5c70ba1ffd878c6ad8bf1",
       "history": [
         {
           "revision": 1,
@@ -123,6 +139,10 @@
         },
         {
           "revision": 3,
+          "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
+        },
+        {
+          "revision": 4,
           "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
         }
       ]

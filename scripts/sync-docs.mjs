@@ -3,10 +3,11 @@ import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {coreContracts,coreExportContracts,sourceContracts} from './core-contracts.mjs';
 
 const root=new URL('../',import.meta.url);
 const previous=JSON.parse(await readFile(new URL('documentation.json',root),'utf8'));
-const program=ts.createProgram(['packages/core/src/engine.ts','packages/canvas/src/grid.ts'],{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext,strict:true,skipLibCheck:true});
+const program=ts.createProgram(['packages/core/src/headless.ts','packages/core/src/engine.ts','packages/canvas/src/grid.ts'],{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.NodeNext,moduleResolution:ts.ModuleResolutionKind.NodeNext,strict:true,skipLibCheck:true});
 const checker=program.getTypeChecker();
 const groups={
   'Data and lifecycle':/^(getValue|getRowId|updateCells|editCell|replaceText|refreshData|captureRowIdentity|subscribe|takeObserverErrors|destroy|render|rowCount|sourceRowCount|columns)$/,
@@ -26,7 +27,8 @@ for(const [name,file,typeName,optionsName] of [['core','packages/core/src/engine
     const declaration=symbol.valueDeclaration??symbol.declarations[0];const value=checker.getTypeOfSymbolAtLocation(symbol,declaration);
     const signature=checker.typeToString(value,declaration,ts.TypeFormatFlags.NoTruncation|ts.TypeFormatFlags.UseAliasDefinedOutsideCurrentScope);
     const group=Object.entries(groups).find(([,pattern])=>pattern.test(symbol.name))[0];
-    grouped.get(group).push(`### ${symbol.name}\n\n\`\`\`ts\n${symbol.name}: ${signature}\n\`\`\`\n\n${descriptions[symbol.name]??ts.displayPartsToString(symbol.getDocumentationComment(checker))??''}\n`);
+    if(name==='core'&&!coreContracts[symbol.name])throw new Error('Missing core behavioral contract: '+symbol.name);
+    grouped.get(group).push(`### ${symbol.name}\n\n\`\`\`ts\n${symbol.name}: ${signature}\n\`\`\`\n\n${name==='core'?coreContracts[symbol.name]:descriptions[symbol.name]??ts.displayPartsToString(symbol.getDocumentationComment(checker))??''}\n`);
   }
   let markdown=`# ${name==='core'?'Core':'Canvas'} API signatures\n\nSource-preview catalog generated from the exported TypeScript ${typeName} type. Use the package guide for behavior/examples; do not copy source-only members into an npm 0.1.0 application. Coordinates are zero-based visible indices unless a contract states otherwise.\n\n[Package guide](../packages/${name}/README.md) · [Version policy](versions.md)\n\n`;
   for(const [group,entries] of grouped)if(entries.length)markdown+=`## ${group}\n\n${entries.join('\n')}\n`;
@@ -36,6 +38,43 @@ for(const [name,file,typeName,optionsName] of [['core','packages/core/src/engine
     const declaration=symbol.valueDeclaration??symbol.declarations[0];const signature=checker.typeToString(checker.getTypeOfSymbolAtLocation(symbol,declaration),declaration,ts.TypeFormatFlags.NoTruncation|ts.TypeFormatFlags.UseAliasDefinedOutsideCurrentScope).replaceAll('|','\\|');
     markdown+=`| ${symbol.name} | ${symbol.flags&ts.SymbolFlags.Optional?'No':'Yes'} | \`${signature}\` |\n`;
   }
+  if(name==='core'){
+    const entry=program.getSourceFile('packages/core/src/headless.ts');
+    const symbols=checker.getExportsOfModule(checker.getSymbolAtLocation(entry));
+    markdown+='\n## Public exports and source interfaces\n\nThe root and headless alias expose the same API. Source interfaces use their own row indices, not an engine visible projection. The table lists every public export, including types; declarations and the package guide define their contracts. Async/live sources remain read-only.\n\n| Export | Kind | Defined in | Contract |\n| --- | --- | --- | --- |\n';
+    for(const symbol of symbols){
+      const target=symbol.flags&ts.SymbolFlags.Alias?checker.getAliasedSymbol(symbol):symbol;
+      const declaration=target.valueDeclaration??target.declarations?.[0];
+      const runtime=!!(target.flags&ts.SymbolFlags.Value);
+      if(runtime&&!coreExportContracts[symbol.name])throw new Error('Missing exported core contract: '+symbol.name);
+      markdown+=`| ${symbol.name} | ${runtime?'Runtime':'Type'} | ${declaration?.getSourceFile().fileName.split(/[\\/]/).at(-1)??'inferred'} | ${runtime?coreExportContracts[symbol.name]:'Compile-time contract; see the exported type definitions below or engine construction/member signatures.'} |\n`;
+    }
+    for(const symbol of symbols.filter(symbol=>['LocalDataSource','LocalDataView','createAsyncDataSource','createLiveDataSource'].includes(symbol.name))){
+      const target=checker.getAliasedSymbol(symbol),declaration=target.valueDeclaration??target.declarations[0];
+      const value=checker.getTypeOfSymbolAtLocation(target,declaration);
+      const instance=value.getConstructSignatures()[0]?.getReturnType()??value.getCallSignatures()[0]?.getReturnType();
+      markdown+=`\n### ${symbol.name} source members\n\nUse source indices here; engine selection/value APIs use visible indices.${symbol.name==='LocalDataView'?' This view fixes a projection at construction; rebuild it to reapply criteria.':''}\n\n\`\`\`ts\n`;
+      const members=instance.getProperties().filter(member=>!(ts.getCombinedModifierFlags(member.valueDeclaration??member.declarations[0])&ts.ModifierFlags.Private));
+      for(const member of members){
+        const node=member.valueDeclaration??member.declarations[0];
+        markdown+=`${member.name}${member.flags&ts.SymbolFlags.Optional?'?':''}: ${checker.typeToString(checker.getTypeOfSymbolAtLocation(member,node),node,ts.TypeFormatFlags.NoTruncation|ts.TypeFormatFlags.UseAliasDefinedOutsideCurrentScope)}\n`;
+      }
+      markdown+='\`\`\`\n';
+      markdown+='\n| Source member | Behavior |\n| --- | --- |\n';
+      for(const member of members){
+        if(!sourceContracts[member.name])throw new Error('Missing source contract: '+symbol.name+'.'+member.name);
+        const absent=['createAsyncDataSource','createLiveDataSource'].includes(symbol.name)&&['getRow','addColumns','spliceRows','setValue','setValues'].includes(member.name);
+        markdown+=`| ${member.name} | ${absent?'Optional DataSource compatibility slot; not implemented by this read-only factory and undefined at runtime.':sourceContracts[member.name]} |\n`;
+      }
+    }
+    markdown+='\n## Exported type definitions\n\nThese declaration excerpts describe compile-time contracts, not executable examples or runtime validators. GridEngine members and GridEngineOptions are catalogued above. Unknown persisted/clipboard input still requires its validation API; never trust a TypeScript assertion as validation.\n';
+    for(const symbol of symbols){
+      const target=symbol.flags&ts.SymbolFlags.Alias?checker.getAliasedSymbol(symbol):symbol;
+      if(target.flags&ts.SymbolFlags.Value||['GridEngine','GridEngineOptions'].includes(symbol.name))continue;
+      const declaration=target.declarations?.[0];
+      markdown+=`\n### Type ${symbol.name}\n\n\`\`\`ts\n${declaration.getText()}\n\`\`\`\n`;
+    }
+  }
   await writeFile(new URL(`guides/${name}-api.md`,root),markdown);
 }
 const entries=[
@@ -44,7 +83,7 @@ const entries=[
  ['frameworks','guides/frameworks.md',1,'Canonical React/Vue lifecycle guide.'],
  ['ai','guides/ai-integration.md',1,'Canonical public integration and host boundaries.'],
  ['versions','guides/versions.md',1,'Separate package releases, source previews and per-document revisions.'],
- ['core-api','guides/core-api.md',1,'Generated source API signatures and construction options.'],
+ ['core-api','guides/core-api.md',1,'Complete behavioral contracts for every engine member, all public exports and source interface signatures.'],
  ['canvas-api','guides/canvas-api.md',1,'Generated source API signatures and construction options.'],
  ...['core','canvas','react','vue','markdown','mcp','export','charts'].map(name=>[name,`packages/${name}/README.md`,2,name==='core'?'Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts.':'Align publication status, installation and current source contracts.']),
  ['security','SECURITY.md',1,'Host authorization and untrusted-data boundaries.'],
