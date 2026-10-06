@@ -1,3 +1,4 @@
+import { createProjection } from './internal/projection.js';
 import { createOutline } from './internal/outline.js';
 import { createLayout } from './internal/layout.js';
 import { createValues } from './internal/values.js';
@@ -390,177 +391,7 @@ export function createGridEngine(options: GridEngineOptions) {
       return emptyFormat;
     },
   };
-  function viewAxis(): GridAxis {
-    return projectedAxis ?? rowAxis;
-  }
-  function visibleFrozenRows(): number {
-    if (!projection || !groups.some((group) => group.collapsed)) return Math.min(frozenRows, visibleRowCount());
-    return (cachedFrozenRows ??= projection.reduce((count, row) => count + (row < frozenRows ? 1 : 0), 0));
-  }
-  function rebuildViewAxis(): void {
-    if (!projection) {
-      projectedAxis = null;
-      return;
-    }
-    const axis = new GridAxis(projection.length, rowHeight);
-    axis.replace(
-      projection.length,
-      rowAxis.snapshot().flatMap(([row, size]) => {
-        const index = reverseProjection.get(row);
-        return index === undefined ? [] : [[index, size] as const];
-      }),
-    );
-    projectedAxis = axis;
-    axis.replaceHidden(
-      rowAxis.hiddenIndices().flatMap((row) => {
-        const index = reverseProjection.get(row);
-        return index === undefined ? [] : [index];
-      }),
-    );
-  }
-  function buildProjection(
-    next: LocalViewOptions,
-    count = rowCount,
-    spans: readonly Readonly<SelectionRange>[] = merges,
-    outlines: readonly Readonly<RowGroup>[] = groups,
-    frozen = frozenRows,
-  ): number[] | null {
-    if (!next.sort && !next.sorts?.length && !next.filters?.length) {
-      const hidden = outlines.filter((group) => group.collapsed);
-      return hidden.length
-        ? Array.from({ length: count }, (_, i) => i).filter(
-            (row) => !hidden.some((group) => row > group.startRow && row <= group.endRow),
-          )
-        : null;
-    }
-    for (const key of [
-      next.sort?.columnKey,
-      ...(next.sorts ?? []).map((sort) => sort.columnKey),
-      ...(next.filters ?? []).map((filter) => filter.columnKey),
-    ]) {
-      if (key !== undefined && !columnIndices.has(key)) throw new Error('Unknown view column: ' + key);
-    }
-    if (spans.length || outlines.length) {
-      // Outline blocks move as units; filters retain the entire block if any member matches.
-      const intervals = [
-        ...spans.map((span) => [span.startRow, span.endRow] as const),
-        ...outlines.map((group) => [group.startRow, group.endRow] as const),
-      ].sort((a, b) => a[0] - b[0]);
-      const combined: [number, number][] = [];
-      for (const interval of intervals) {
-        const last = combined.at(-1);
-        if (last && interval[0] <= last[1]) last[1] = Math.max(last[1], interval[1]);
-        else combined.push([...interval]);
-      }
-      const matches = new LocalDataView(dataSource, { ...(next.filters ? { filters: next.filters } : {}) }),
-        matching = new Set(Array.from({ length: matches.getRowCount() }, (_, i) => matches.getSourceIndex(i)));
-      const blocks: { start: number; end: number }[] = [];
-      let intervalIndex = 0;
-      for (let row = 0; row < count;) {
-        const interval = combined[intervalIndex];
-        const end = interval?.[0] === row ? interval[1] : row;
-        if (interval?.[0] === row) intervalIndex++;
-        if (Array.from({ length: end - row + 1 }, (_, i) => row + i).some((i) => matching.has(i)))
-          blocks.push({ start: row, end });
-        row = end + 1;
-      }
-      const pinned = blocks.filter((block) => block.start < frozen),
-        movable = blocks.filter((block) => block.start >= frozen);
-      const ordered = new LocalDataView(
-        {
-          getRowCount: () => movable.length,
-          getRowId: (i) => i,
-          getValue: (i, key) => dataSource.getValue(movable[i]!.start, key),
-        },
-        { ...(next.sort ? { sort: next.sort } : {}), ...(next.sorts ? { sorts: next.sorts } : {}) },
-      );
-      const hidden = outlines.filter((group) => group.collapsed);
-      return [
-        ...pinned,
-        ...Array.from({ length: ordered.getRowCount() }, (_, i) => movable[ordered.getSourceIndex(i)]!),
-      ].flatMap((block) =>
-        Array.from({ length: block.end - block.start + 1 }, (_, i) => block.start + i).filter(
-          (row) => !hidden.some((group) => row > group.startRow && row <= group.endRow),
-        ),
-      );
-    }
-    const local = new LocalDataView(dataSource, next);
-    return next.sort || next.sorts?.length || next.filters?.length
-      ? Array.from({ length: local.getRowCount() }, (_, i) => local.getSourceIndex(i))
-      : null;
-  }
-  function installProjection(next: number[] | null): void {
-    projection = next;
-    reverseProjection = new Map(next?.map((row, index) => [row, index]) ?? []);
-    cachedRanges = null;
-    cachedFrozenRows = null;
-    rebuildViewAxis();
-  }
-  function displayRow(row: number): number {
-    return projection ? (reverseProjection.get(row) ?? -1) : row;
-  }
-  function displaySelection(): CellSelection | null {
-    if (!selection) return null;
-    const rowIndex = displayRow(selection.rowIndex);
-    if (rowIndex >= 0) return { ...selection, rowIndex };
-    const range = displaySelectionRanges().at(-1);
-    return range
-      ? {
-          rowIndex: range.startRow,
-          rowId: dataSource.getRowId(sourceRow(range.startRow)),
-          columnIndex: range.startColumn,
-          columnKey: columns[range.startColumn]!.key,
-        }
-      : null;
-  }
-  function setView(next: LocalViewOptions): void {
-    assertAlive();
-    const snapshot = snapshotView(next);
-    const nextProjection = buildProjection(snapshot);
-    const old = projection ?? Array.from({ length: rowCount }, (_, i) => i);
-    view = snapshot;
-    installProjection(nextProjection);
-    displayAnchor = null;
-    notify(
-      { type: 'structure', rowMap: old.map(displayRow), columnMap: columns.map((_, i) => i) },
-      Object.freeze({ type: 'view:change', view, rowCount: visibleRowCount(), sourceRowCount: rowCount }),
-    );
-  }
-  function sourceTarget<T extends CellLockTarget>(target: T): T {
-    return target.scope === 'row' || target.scope === 'cell'
-      ? { ...target, rowIndex: sourceRow(target.rowIndex) }
-      : target;
-  }
-  function sourceRanges(range: SelectionRange): SelectionRange[] {
-    if (
-      ![range.startRow, range.endRow, range.startColumn, range.endColumn].every(Number.isSafeInteger) ||
-      range.startRow < 0 ||
-      range.endRow < range.startRow ||
-      range.endRow >= visibleRowCount() ||
-      range.startColumn < 0 ||
-      range.endColumn < range.startColumn ||
-      range.endColumn >= columns.length
-    )
-      throw new RangeError('Invalid selection range.');
-    if (!projection) return [{ ...range }];
-    const rows = Array.from({ length: range.endRow - range.startRow + 1 }, (_, i) =>
-      sourceRow(range.startRow + i),
-    ).sort((a, b) => a - b);
-    const result: SelectionRange[] = [];
-    for (const row of rows) {
-      const last = result.at(-1);
-      if (last && last.endRow + 1 === row) last.endRow = row;
-      else result.push({ ...range, startRow: row, endRow: row });
-    }
-    return result;
-  }
-  function sourceFormats(targets: readonly CellFormatTarget[]): CellFormatTarget[] {
-    return targets.flatMap<CellFormatTarget>((target) =>
-      target.scope === 'range'
-        ? sourceRanges(target.range).map((range) => ({ scope: 'range' as const, range }))
-        : [sourceTarget(target)],
-    );
-  }
+
   function selectDisplayRange(range: SelectionRange, mode: 'replace' | 'add' | 'extend' = 'replace'): boolean {
     assertAlive();
     if (merges.length)
@@ -743,14 +574,7 @@ export function createGridEngine(options: GridEngineOptions) {
     cachedRanges = result;
     return result.map((range) => ({ ...range }));
   }
-  function sourceRow(index: number): number {
-    if (!Number.isSafeInteger(index) || index < 0 || index >= visibleRowCount())
-      throw new RangeError('Invalid row index in view.');
-    return projection ? projection[index]! : index;
-  }
-  function visibleRowCount(): number {
-    return projection?.length ?? rowCount;
-  }
+
   function clipboardBlocks(): ClipboardBlock[] {
     assertAlive();
     const ranges = displaySelectionRanges().sort((a, b) => a.startRow - b.startRow || a.startColumn - b.startColumn);
@@ -1728,6 +1552,32 @@ export function createGridEngine(options: GridEngineOptions) {
     },
     get sourceRow() {
       return sourceRow;
+    },
+  });
+
+  const {
+    viewAxis,
+    visibleFrozenRows,
+    rebuildViewAxis,
+    buildProjection,
+    installProjection,
+    displayRow,
+    displaySelection,
+    setView,
+    sourceTarget,
+    sourceRanges,
+    sourceFormats,
+    sourceRow,
+    visibleRowCount,
+  } = createProjection(context, {
+    get displaySelectionRanges() {
+      return displaySelectionRanges;
+    },
+    get assertAlive() {
+      return assertAlive;
+    },
+    get notify() {
+      return notify;
     },
   });
   if (options.view) {
