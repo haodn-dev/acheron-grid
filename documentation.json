@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "a59f76975c3bc021014965f926b1f4a67cf43572",
+  "sourceRevision": "9d5d69a481a280443c84b7b9c209f73bf017540c",
   "release": {
     "version": "0.1.0",
     "tag": "v0.1.0",
@@ -286,9 +286,9 @@
     {
       "id": "support",
       "path": "SUPPORT.md",
-      "revision": 3,
+      "revision": 4,
       "updated": "2026-10-06",
-      "sha256": "e8401fe0bd6c6fffff733d6e57b6dbdb973e6437b06475d8ef66f7b1c86d24e7",
+      "sha256": "dbbb8e5e5bf509924d6babbdfac263e2e036e5d5201b53a1b50301e2b50d9ba1",
       "history": [
         {
           "revision": 1,
@@ -300,6 +300,10 @@
         },
         {
           "revision": 3,
+          "summary": "Verified environments and practical limits."
+        },
+        {
+          "revision": 4,
           "summary": "Verified environments and practical limits."
         }
       ]
