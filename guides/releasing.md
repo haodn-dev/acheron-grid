@@ -40,7 +40,7 @@ git tag -a v0.2.0 -m "Release 0.2.0"
 git push origin v0.2.0
 ```
 
-Approve `npm-production` when requested. Do not tag an older version to replace a newer `latest`. Site deployment remains separate: update its committed distribution snapshots and docs in a site PR; Vercel deploys site `main`.
+Approve `npm-production` when requested. Do not tag an older version to replace a newer `latest`. Site deployment remains separate: update its committed distribution snapshots and docs in a site PR; Vercel deploys the site's configured production branch.
 
 ## Verification and retries
 
