@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './browser-fixtures.mjs';
 async function setup(page) {
  await page.goto('/');await page.evaluate(async()=>{
   const {createGrid}=await import('/canvas/index.js');const {LocalDataSource}=await import('/core/index.js');

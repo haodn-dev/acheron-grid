@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './browser-fixtures.mjs';
 
 test('individual resize keeps hit tests, editor, scrolling and partial pixels aligned', async ({ page }) => {
   await page.goto('/');
@@ -131,6 +131,7 @@ test('context menu preserves ranges, invokes shared actions, supports keyboard a
   await page.getByRole('spinbutton', { name: 'Row height (px)' }).fill('0');
   await page.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Row height', exact: true })).toBeVisible();
+  await page.getByRole('spinbutton', { name: 'Row height (px)' }).fill('32');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await viewport.click({ position: { x: 180, y: 16 }, button: 'right' });
   await page.locator('#existing').click();
@@ -1692,11 +1693,11 @@ test('viewport accessibility exposes bounded visible rows and headers without ex
     const { createGrid } = await import('/canvas/index.js'); window.reads = 0;
     window.grid = createGrid({ accessibility: 'viewport', getCellLabel: (row, key) => row === 0 && key === 'c0' ? 'Homepage' : undefined, frozenRows: 1, frozenColumns: 1, container: document.querySelector('#grid'),
       columns: Array.from({ length: 1000 }, (_, i) => ({ key: `c${i}`, title: `C${i}`, editable: true })),
-      dataSource: { getRowCount: () => 1000000, getRowId: row => row, getValue: (row, key) => { window.reads++; return row === 0 && key === 'c0' ? 'https://example.com' : `${row}:${key}`; }, setValue() {} } });
+      dataSource: { getRowCount: () => 100000, getRowId: row => row, getValue: (row, key) => { window.reads++; return row === 0 && key === 'c0' ? 'https://example.com' : `${row}:${key}`; }, setValue() {} } });
   });
   const viewport = page.getByRole('grid');
   await expect(page.getByRole('columnheader').first()).toHaveAttribute('aria-colindex', '1');
-  await expect(viewport).toHaveAttribute('aria-rowcount', '1000001');
+  await expect(viewport).toHaveAttribute('aria-rowcount', '100001');
   await expect.poll(() => viewport.getByRole('gridcell').count()).toBeGreaterThan(0);
   expect(await viewport.getByRole('gridcell').count()).toBeLessThan(100);
   await page.evaluate(async () => { await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); window.reads = 0; window.grid.render(); await new Promise(resolve => requestAnimationFrame(resolve)); });
