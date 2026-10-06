@@ -1,3 +1,4 @@
+import { createPermissions } from './internal/permissions.js';
 import { createStructure } from './internal/structure.js';
 import { mappedIntervals, mappedRanges, inverseMap, rowBlocks } from './internal/structure-mapping.js';
 import type { GridConfiguration } from './configuration.js';
@@ -939,57 +940,6 @@ export function createGridEngine(options: GridEngineOptions) {
     }
   }
 
-  function getCellPermission(rowIndex: number, columnIndex: number): CellPermission {
-    assertAlive();
-    if (
-      !Number.isSafeInteger(rowIndex) ||
-      rowIndex < 0 ||
-      rowIndex >= rowCount ||
-      !Number.isSafeInteger(columnIndex) ||
-      columnIndex < 0 ||
-      columnIndex >= columns.length
-    )
-      throw new RangeError('Invalid cell position.');
-    const column = columns[columnIndex]!;
-    return query(() => {
-      const cell = Object.freeze({
-        rowIndex,
-        rowId: dataSource.getRowId(rowIndex),
-        columnIndex,
-        columnKey: column.key,
-      });
-      return resolvePermissions(
-        column.editable ?? false,
-        permissions,
-        column.permissions,
-        resolver?.(cell),
-        tableLocked ||
-          lockedRows.has(rowIndex) ||
-          lockedColumns.has(columnIndex) ||
-          lockedCells.has(`${rowIndex}:${columnIndex}`)
-          ? { writable: false }
-          : undefined,
-      );
-    });
-  }
-
-  function requirePermission(rowIndex: number, columnIndex: number, key: keyof CellPermission): void {
-    if (!getCellPermission(rowIndex, columnIndex)[key])
-      throw new Error(`Cell is read-only or permission denied: ${key}.`);
-    const span = mergeAt(rowIndex, columnIndex);
-    if (
-      span &&
-      rowIndex === span.startRow &&
-      columnIndex === span.startColumn &&
-      (key === 'writable' || key === 'pasteable')
-    ) {
-      for (let row = span.startRow; row <= span.endRow; row++)
-        for (let col = span.startColumn; col <= span.endColumn; col++)
-          if (!getCellPermission(row, col).writable)
-            throw new Error('Merged cell contains a locked or read-only cell.');
-    }
-  }
-
   function notifyCells(changes: readonly Change[], source: GridChangeSource): void {
     notify(
       { type: 'cells', cells: changes.map(({ rowIndex, columnKey }) => ({ rowIndex, columnKey })) },
@@ -1773,50 +1723,6 @@ export function createGridEngine(options: GridEngineOptions) {
     notifyFormats(changes, 'api');
   }
 
-  function validateLockTarget(target: CellLockTarget): void {
-    if (!target || !['table', 'row', 'column', 'cell'].includes(target.scope))
-      throw new TypeError('Invalid lock scope.');
-    if (
-      (target.scope === 'row' || target.scope === 'cell') &&
-      (!Number.isSafeInteger(target.rowIndex) || target.rowIndex < 0 || target.rowIndex >= rowCount)
-    )
-      throw new RangeError('Invalid lock row.');
-    if (
-      (target.scope === 'column' || target.scope === 'cell') &&
-      (!Number.isSafeInteger(target.columnIndex) || target.columnIndex < 0 || target.columnIndex >= columns.length)
-    )
-      throw new RangeError('Invalid lock column.');
-  }
-
-  function isLocked(target: CellLockTarget): boolean {
-    assertAlive();
-    validateLockTarget(target);
-    if (target.scope === 'table') return tableLocked;
-    if (target.scope === 'row') return lockedRows.has(target.rowIndex);
-    if (target.scope === 'column') return lockedColumns.has(target.columnIndex);
-    return lockedCells.has(`${target.rowIndex}:${target.columnIndex}`);
-  }
-
-  function setLocked(target: CellLockTarget, locked: boolean): void {
-    assertAlive();
-    if (!allowLockChanges) throw new Error('Lock management is disabled.');
-    if (typeof locked !== 'boolean') throw new TypeError('Lock state must be boolean.');
-    if (isLocked(target) === locked) return;
-    if (target.scope === 'table') tableLocked = locked;
-    else if (target.scope === 'row') {
-      if (locked) lockedRows.add(target.rowIndex);
-      else lockedRows.delete(target.rowIndex);
-    } else if (target.scope === 'column') {
-      if (locked) lockedColumns.add(target.columnIndex);
-      else lockedColumns.delete(target.columnIndex);
-    } else {
-      const key = `${target.rowIndex}:${target.columnIndex}`;
-      if (locked) lockedCells.add(key);
-      else lockedCells.delete(key);
-    }
-    notify({ type: 'layout' }, Object.freeze({ type: 'lock:change', target: Object.freeze({ ...target }), locked }));
-  }
-
   function setFrozen(rows: number, columnCount: number): void {
     assertAlive();
     if (
@@ -2319,6 +2225,21 @@ export function createGridEngine(options: GridEngineOptions) {
     },
     get assertAlive() {
       return assertAlive;
+    },
+  });
+
+  const { getCellPermission, requirePermission, validateLockTarget, isLocked, setLocked } = createPermissions(context, {
+    get assertAlive() {
+      return assertAlive;
+    },
+    get query() {
+      return query;
+    },
+    get mergeAt() {
+      return mergeAt;
+    },
+    get notify() {
+      return notify;
     },
   });
   if (options.view) {
