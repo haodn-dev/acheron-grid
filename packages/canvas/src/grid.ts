@@ -1,3 +1,4 @@
+import { createAccessibility } from './internal/accessibility.js';
 import { createInteraction } from './internal/interaction.js';
 import { createEditors } from './internal/editors.js';
 import { createMediaController } from './internal/media-controller.js';
@@ -473,7 +474,7 @@ export function createGrid(options: GridOptions): Grid {
           indexGutter.replaceChildren();
           clearReorder();
           measuredRows.clear();
-          accessibleCells.clear();
+          accessibility.accessibleCells.clear();
           accessibleBody.replaceChildren();
           scroller.setAttribute('aria-rowcount', String(rowCount + (viewportAccessibility ? headers.levels : 0)));
           scroller.setAttribute('aria-colcount', String(columns.length));
@@ -658,7 +659,81 @@ export function createGrid(options: GridOptions): Grid {
   activeRow.append(activeCell);
   const accessibleBody = doc.createElement('div');
   accessibleBody.style.cssText = activeRow.style.cssText;
-  const accessibleCells = new Map<string, HTMLElement>();
+  const accessibility = createAccessibility({
+    get activeCell() {
+      return activeCell;
+    },
+    get activeRow() {
+      return activeRow;
+    },
+    get avatarColumns() {
+      return avatarColumns;
+    },
+    get columns() {
+      return columns;
+    },
+    get currentView() {
+      return currentView;
+    },
+    get displayedText() {
+      return displayedText;
+    },
+    get doc() {
+      return doc;
+    },
+    get engine() {
+      return engine;
+    },
+    get getSelectionRanges() {
+      return getSelectionRanges;
+    },
+    get headers() {
+      return headers;
+    },
+    get indicatorPolicy() {
+      return indicatorPolicy;
+    },
+    get instanceId() {
+      return instanceId;
+    },
+    get interaction() {
+      return interaction;
+    },
+    get linksForValue() {
+      return linksForValue;
+    },
+    get mediaColumn() {
+      return mediaColumn;
+    },
+    get numberText() {
+      return numberText;
+    },
+    get options() {
+      return options;
+    },
+    get rowValueLocked() {
+      return rowValueLocked;
+    },
+    get scroller() {
+      return scroller;
+    },
+    get selectionStatus() {
+      return selectionStatus;
+    },
+    get t() {
+      return t;
+    },
+    get validationMessage() {
+      return validationMessage;
+    },
+    get viewportAccessibility() {
+      return viewportAccessibility;
+    },
+    get viewportLabel() {
+      return viewportLabel;
+    },
+  });
+  const { announceSelection, stateLabels, accessibleCell, syncAccessibleCell } = accessibility;
   const headerSurface = doc.createElement('div');
   headerSurface.style.cssText = `position:absolute;top:0;left:${indexWidth}px;right:0;height:${headerHeight}px;overflow:hidden;touch-action:none`;
   if (viewportAccessibility) {
@@ -1285,11 +1360,6 @@ export function createGrid(options: GridOptions): Grid {
       return theme;
     },
   });
-
-  function announceSelection(): void {
-    const selection = engine.getSelection();
-    selectionStatus.textContent = `${selection ? t('Row {0}, {1}. {2} selected range(s).', selection.rowIndex + 1, columns[selection.columnIndex]!.title, getSelectionRanges().length) : t('Selection cleared.')}${interaction.addNextSelection ? t(' Next click or navigation adds a range.') : ''}`;
-  }
 
   function openSizeDialog(
     label: string,
@@ -2377,50 +2447,6 @@ export function createGrid(options: GridOptions): Grid {
   const getSelectionRange = engine.getSelectionRange;
   const getSelectionRanges = engine.getSelectionRanges;
 
-  function stateLabels(row: number | null, col: number): string[] {
-    const labels: string[] = [];
-    if (engine.isLocked({ scope: 'table' })) labels.push('Table locked');
-    if (engine.isLocked({ scope: 'column', columnIndex: col })) labels.push('Column locked');
-    if (col < engine.frozenColumns) labels.push('Column frozen');
-    if (row === null) {
-      const sort = currentView?.sorts?.find((item) => item.columnKey === columns[col]!.key) ?? currentView?.sort;
-      if (sort?.columnKey === columns[col]!.key)
-        labels.push(t('Sorted {0}', t(sort.direction === 'asc' ? 'ascending' : 'descending')));
-      const filter = currentView?.filters?.find((filter) => filter.columnKey === columns[col]!.key);
-      if (filter)
-        labels.push(
-          t(
-            'Filtered: {0} {1}',
-            t(
-              { contains: 'Contains text', equals: 'Equals text', 'not-empty': 'Has a value', empty: 'Is empty' }[
-                filter.operator ?? 'contains'
-              ],
-            ),
-            filter.query,
-          ).trim(),
-        );
-      const policy = columns[col]!.permissions;
-      if (
-        [indicatorPolicy, policy].some(
-          (scope) => scope?.writable === false || scope?.selectable === false || scope?.editable === false,
-        )
-      )
-        labels.push('Column disabled by permissions');
-    } else {
-      if (rowValueLocked(row)) labels.push('Row locked');
-      if (engine.isLocked({ scope: 'cell', rowIndex: row, columnIndex: col })) labels.push('Cell locked');
-      if (row < engine.frozenRows) labels.push('Row frozen');
-      const permission = engine.getCellPermission(row, col);
-      if (
-        !permission.selectable ||
-        (!permission.writable && !labels.some((label) => label.endsWith('locked'))) ||
-        (columns[col]!.editable && !permission.editable && permission.writable)
-      )
-        labels.push('Cell disabled by permissions');
-    }
-    return labels;
-  }
-
   function cellLinks(row: number, col: number) {
     return linksForValue(
       engine.getValue(row, columns[col]!.key),
@@ -2945,67 +2971,6 @@ export function createGrid(options: GridOptions): Grid {
     context!.clip();
   }
 
-  function accessibleText(row: number, col: number, value: unknown): string {
-    const column = columns[col]!;
-    const label = options.getCellLabel?.(row, column.key, value);
-    if (label !== undefined) return label;
-    if (mediaColumn(column.key)) {
-      const items = mediaItems(value);
-      return t(
-        '{0}: {1} {2}{3}. Alt+Enter opens details.',
-        column.title,
-        items.length,
-        avatarColumns.has(column.key) ? t('people') : t('images'),
-        items.length
-          ? '; ' +
-              items
-                .map(
-                  (item, i) =>
-                    item.name ?? item.alt ?? (avatarColumns.has(column.key) ? t('Person ') : t('Image ')) + (i + 1),
-                )
-                .join(', ')
-          : '',
-      );
-    }
-    return `${column.title}: ${typeof value === 'number' ? numberText(value, engine.getFormat(row, col).numberFormat) : displayedText(value, column.key, engine.getFormat(row, col).contentFormat)}`;
-  }
-  function accessibleCell(row: number, col: number, value: unknown): HTMLElement {
-    const key = `${row}:${col}`;
-    let node = accessibleCells.get(key);
-    if (!node) {
-      node = doc.createElement('div');
-      node.id = `acheron-visible-${instanceId}-${row}-${col}`;
-      node.setAttribute('role', 'gridcell');
-      accessibleCells.set(key, node);
-    }
-    node.setAttribute('aria-colindex', String(col + 1));
-    const span = engine.getMerge(row, col);
-    node.setAttribute('aria-rowspan', String(span ? span.endRow - span.startRow + 1 : 1));
-    node.setAttribute('aria-colspan', String(span ? span.endColumn - span.startColumn + 1 : 1));
-    const invalid = validationMessage(value, col);
-    node.setAttribute('aria-invalid', String(!!invalid));
-    node.setAttribute('aria-readonly', String(!engine.canEdit(row, col)));
-    node.setAttribute(
-      'aria-selected',
-      String(
-        getSelectionRanges().some(
-          (range) => row >= range.startRow && row <= range.endRow && col >= range.startColumn && col <= range.endColumn,
-        ),
-      ),
-    );
-    node.setAttribute(
-      'aria-description',
-      [
-        ...stateLabels(row, col).map((label) => t(label)),
-        ...(invalid ? [invalid] : []),
-        ...(linksForValue(value, columns[col]!.key, engine.getFormat(row, col).contentFormat).length
-          ? [t('Contains links. Alt+Enter opens links.')]
-          : []),
-      ].join('; '),
-    );
-    node.textContent = accessibleText(row, col, value);
-    return node;
-  }
   function draw(): void {
     rowLockCache.clear();
     frame = undefined;
@@ -3284,10 +3249,11 @@ export function createGrid(options: GridOptions): Grid {
       rowNode.append(accessibleCell(row, col, value));
     }
     if (viewportAccessibility) {
-      for (const key of accessibleCells.keys()) if (!seenCells.has(key)) accessibleCells.delete(key);
+      for (const key of accessibility.accessibleCells.keys())
+        if (!seenCells.has(key)) accessibility.accessibleCells.delete(key);
       accessibleBody.replaceChildren(...[...accessibleRows.entries()].sort(([a], [b]) => a - b).map(([, row]) => row));
       const selection = engine.getSelection();
-      const node = selection && accessibleCells.get(`${selection.rowIndex}:${selection.columnIndex}`);
+      const node = selection && accessibility.accessibleCells.get(`${selection.rowIndex}:${selection.columnIndex}`);
       if (node) {
         activeRow.hidden = true;
         scroller.setAttribute('aria-activedescendant', node.id);
@@ -3585,52 +3551,6 @@ export function createGrid(options: GridOptions): Grid {
         );
       }
       context!.restore();
-    }
-  }
-
-  function syncAccessibleCell(): void {
-    const selection = engine.getSelection();
-    activeRow.hidden = !selection;
-    if (!selection) {
-      activeCell.textContent = '';
-      activeRow.removeAttribute('aria-rowindex');
-      activeCell.removeAttribute('aria-colindex');
-      activeCell.removeAttribute('aria-readonly');
-      scroller.removeAttribute('aria-activedescendant');
-      scroller.setAttribute('aria-label', viewportLabel);
-      return;
-    }
-    const value = engine.getValue(selection.rowIndex, selection.columnKey);
-    activeRow.setAttribute(
-      'aria-rowindex',
-      String(selection.rowIndex + (viewportAccessibility ? headers.levels + 1 : 1)),
-    );
-    activeCell.setAttribute('aria-colindex', String(selection.columnIndex + 1));
-    const span = engine.getMerge(selection.rowIndex, selection.columnIndex);
-    activeCell.setAttribute('aria-rowspan', String(span ? span.endRow - span.startRow + 1 : 1));
-    activeCell.setAttribute('aria-colspan', String(span ? span.endColumn - span.startColumn + 1 : 1));
-    activeCell.setAttribute('aria-readonly', String(!engine.canEdit(selection.rowIndex, selection.columnIndex)));
-    const content = accessibleText(selection.rowIndex, selection.columnIndex, value);
-    activeCell.setAttribute(
-      'aria-description',
-      [
-        ...stateLabels(selection.rowIndex, selection.columnIndex).map((label) => t(label)),
-        ...(linksForValue(
-          value,
-          selection.columnKey,
-          engine.getFormat(selection.rowIndex, selection.columnIndex).contentFormat,
-        ).length
-          ? [t('Contains links. Alt+Enter opens links.')]
-          : []),
-      ].join('; '),
-    );
-    if (activeCell.textContent !== content) activeCell.textContent = content;
-    scroller.setAttribute('aria-activedescendant', activeCell.id);
-    scroller.setAttribute('aria-label', t('{0}: row {1}, {2}', viewportLabel, selection.rowIndex + 1, content));
-    if (viewportAccessibility && accessibleCells.has(`${selection.rowIndex}:${selection.columnIndex}`)) {
-      const node = accessibleCell(selection.rowIndex, selection.columnIndex, value);
-      activeRow.hidden = true;
-      scroller.setAttribute('aria-activedescendant', node.id);
     }
   }
 
