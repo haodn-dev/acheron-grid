@@ -1,0 +1,2735 @@
+{
+  "runtimeRevision": "3a15e7b388e2be2a669b536557d6b27239cb413a",
+  "runnerSha256": "7dae65db0eded6491e815491896fcb35510a897787f64a0d0167e2c4036206c7",
+  "platform": "win32",
+  "node": "v24.13.0",
+  "stats": {
+    "startTime": "2026-10-06T07:26:42.313Z",
+    "duration": 22927.678,
+    "expected": 9,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "runs": [
+    {
+      "dpr": 1,
+      "intervals": [
+        16.80000000000001,
+        16.599999999999994,
+        16.700000000000017,
+        16.599999999999994,
+        16.69999999999999,
+        16.599999999999994,
+        16.69999999999999,
+        16.700000000000045,
+        16.69999999999999,
+        16.599999999999966,
+        16.700000000000045,
+        16.69999999999999,
+        16.599999999999966,
+        16.700000000000045,
+        16.599999999999966,
+        16.69999999999999,
+        16.700000000000045,
+        16.599999999999966,
+        16.80000000000001,
+        16.600000000000023,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.600000000000023,
+        16.799999999999955,
+        16.600000000000023,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.699999999999932,
+        16.600000000000023,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.600000000000023,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045,
+        16.699999999999818,
+        16.600000000000136,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045
+      ],
+      "readCounts": [
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44
+      ],
+      "canvases": [
+        {
+          "width": 584,
+          "height": 360,
+          "cssWidth": 584,
+          "cssHeight": 360,
+          "estimatedRgbaBytes": 840960
+        }
+      ],
+      "rows": 10000,
+      "columns": 2,
+      "dumps": [
+        {
+          "label": "baseline",
+          "heap": {
+            "usedSize": 1385756,
+            "totalSize": 2621440,
+            "embedderHeapUsedSize": 1503312,
+            "backingStorageSize": 332
+          },
+          "dom": {
+            "documents": 4,
+            "nodes": 29,
+            "jsEventListeners": 6
+          },
+          "dump": {
+            "dumpGuid": "0x1",
+            "success": true
+          }
+        },
+        {
+          "label": "mountedAfterScrollAndHistory",
+          "heap": {
+            "usedSize": 5283668,
+            "totalSize": 8650752,
+            "embedderHeapUsedSize": 26183448,
+            "backingStorageSize": 501540
+          },
+          "dom": {
+            "documents": 19,
+            "nodes": 5397,
+            "jsEventListeners": 935
+          },
+          "dump": {
+            "dumpGuid": "0x2",
+            "success": true
+          }
+        },
+        {
+          "label": "afterDestroyGC",
+          "heap": {
+            "usedSize": 1643908,
+            "totalSize": 2097152,
+            "embedderHeapUsedSize": 1131432,
+            "backingStorageSize": 480572
+          },
+          "dom": {
+            "documents": 6,
+            "nodes": 46,
+            "jsEventListeners": 3
+          },
+          "dump": {
+            "dumpGuid": "0x3",
+            "success": true
+          }
+        }
+      ],
+      "processSamples": [
+        {
+          "pid": 32788,
+          "ts": 25673042533,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "12ae000"
+        },
+        {
+          "pid": 29576,
+          "ts": 25673042533,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "171c000"
+        },
+        {
+          "pid": 23888,
+          "ts": 25673042533,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "20c5000"
+        },
+        {
+          "pid": 20724,
+          "ts": 25673042533,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "f72000"
+        },
+        {
+          "pid": 30704,
+          "ts": 25673042533,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "d0b000"
+        },
+        {
+          "pid": 32788,
+          "ts": 25674233612,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1396000"
+        },
+        {
+          "pid": 29576,
+          "ts": 25674233612,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "41ac000"
+        },
+        {
+          "pid": 23888,
+          "ts": 25674233612,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "21f5000"
+        },
+        {
+          "pid": 20724,
+          "ts": 25674233612,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "fb8000"
+        },
+        {
+          "pid": 30704,
+          "ts": 25674233612,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "f4e000"
+        },
+        {
+          "pid": 32788,
+          "ts": 25674270116,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1482000"
+        },
+        {
+          "pid": 29576,
+          "ts": 25674270116,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "236a000"
+        },
+        {
+          "pid": 23888,
+          "ts": 25674270116,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "220a000"
+        },
+        {
+          "pid": 20724,
+          "ts": 25674270116,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "fa9000"
+        },
+        {
+          "pid": 30704,
+          "ts": 25674270116,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "f3c000"
+        }
+      ],
+      "limitations": "Headless animation-frame intervals are scheduling cadence, not presented FPS. Heap/process totals are explicit sampled checkpoints, not true transient peak. Trace fields use hexadecimal byte strings; private footprint is not RSS and zero peak RSS does not establish zero usage. Canvas RGBA bytes are a dimension-based estimate, not measured GPU allocation. Explicit GC differs from production. No timing threshold."
+    },
+    {
+      "dpr": 2,
+      "intervals": [
+        16.69999999999999,
+        16.599999999999994,
+        16.700000000000017,
+        16.599999999999994,
+        16.69999999999999,
+        16.700000000000017,
+        16.599999999999994,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.599999999999966,
+        16.700000000000045,
+        16.600000000000023,
+        16.799999999999955,
+        16.600000000000023,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.700000000000045,
+        16.699999999999932,
+        16.600000000000023,
+        16.700000000000045,
+        16.699999999999932,
+        16.600000000000023,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.600000000000023,
+        16.800000000000068,
+        16.699999999999932,
+        16.5,
+        16.700000000000045,
+        16.699999999999932,
+        16.700000000000045,
+        16.600000000000023,
+        16.800000000000068,
+        16.59999999999991,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045
+      ],
+      "readCounts": [
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44
+      ],
+      "canvases": [
+        {
+          "width": 1168,
+          "height": 720,
+          "cssWidth": 584,
+          "cssHeight": 360,
+          "estimatedRgbaBytes": 3363840
+        }
+      ],
+      "rows": 10000,
+      "columns": 2,
+      "dumps": [
+        {
+          "label": "baseline",
+          "heap": {
+            "usedSize": 1385756,
+            "totalSize": 2621440,
+            "embedderHeapUsedSize": 1504192,
+            "backingStorageSize": 332
+          },
+          "dom": {
+            "documents": 4,
+            "nodes": 29,
+            "jsEventListeners": 6
+          },
+          "dump": {
+            "dumpGuid": "0x4",
+            "success": true
+          }
+        },
+        {
+          "label": "mountedAfterScrollAndHistory",
+          "heap": {
+            "usedSize": 3872052,
+            "totalSize": 8388608,
+            "embedderHeapUsedSize": 26214896,
+            "backingStorageSize": 501541
+          },
+          "dom": {
+            "documents": 19,
+            "nodes": 5398,
+            "jsEventListeners": 935
+          },
+          "dump": {
+            "dumpGuid": "0x5",
+            "success": true
+          }
+        },
+        {
+          "label": "afterDestroyGC",
+          "heap": {
+            "usedSize": 1643908,
+            "totalSize": 2359296,
+            "embedderHeapUsedSize": 1133552,
+            "backingStorageSize": 480572
+          },
+          "dom": {
+            "documents": 6,
+            "nodes": 46,
+            "jsEventListeners": 3
+          },
+          "dump": {
+            "dumpGuid": "0x6",
+            "success": true
+          }
+        }
+      ],
+      "processSamples": [
+        {
+          "pid": 19432,
+          "ts": 25675191937,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "19d6000"
+        },
+        {
+          "pid": 32788,
+          "ts": 25675191937,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "15a4000"
+        },
+        {
+          "pid": 23888,
+          "ts": 25675191937,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1ae1000"
+        },
+        {
+          "pid": 20724,
+          "ts": 25675191937,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "124a000"
+        },
+        {
+          "pid": 30704,
+          "ts": 25675191937,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "dee000"
+        },
+        {
+          "pid": 19432,
+          "ts": 25676387059,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "4748000"
+        },
+        {
+          "pid": 32788,
+          "ts": 25676387059,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "15da000"
+        },
+        {
+          "pid": 23888,
+          "ts": 25676387059,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "21ea000"
+        },
+        {
+          "pid": 20724,
+          "ts": 25676387059,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1277000"
+        },
+        {
+          "pid": 30704,
+          "ts": 25676387059,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "f1b000"
+        },
+        {
+          "pid": 19432,
+          "ts": 25676424150,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "2730000"
+        },
+        {
+          "pid": 32788,
+          "ts": 25676424150,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "16c1000"
+        },
+        {
+          "pid": 23888,
+          "ts": 25676424150,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "2315000"
+        },
+        {
+          "pid": 20724,
+          "ts": 25676424150,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "124d000"
+        },
+        {
+          "pid": 30704,
+          "ts": 25676424150,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "f20000"
+        }
+      ],
+      "limitations": "Headless animation-frame intervals are scheduling cadence, not presented FPS. Heap/process totals are explicit sampled checkpoints, not true transient peak. Trace fields use hexadecimal byte strings; private footprint is not RSS and zero peak RSS does not establish zero usage. Canvas RGBA bytes are a dimension-based estimate, not measured GPU allocation. Explicit GC differs from production. No timing threshold."
+    },
+    {
+      "dpr": 3,
+      "intervals": [
+        16.700000000000017,
+        16.599999999999994,
+        16.599999999999994,
+        16.80000000000001,
+        16.599999999999994,
+        16.69999999999999,
+        16.599999999999994,
+        16.600000000000023,
+        16.80000000000001,
+        16.599999999999966,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.700000000000045,
+        16.599999999999966,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.700000000000045,
+        16.699999999999932,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.600000000000023,
+        16.700000000000045,
+        16.699999999999932,
+        16.600000000000023,
+        16.700000000000045,
+        16.699999999999932,
+        16.600000000000023,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045,
+        16.699999999999932,
+        16.600000000000023,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.59999999999991,
+        16.800000000000182,
+        16.59999999999991,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045
+      ],
+      "readCounts": [
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44
+      ],
+      "canvases": [
+        {
+          "width": 1752,
+          "height": 1080,
+          "cssWidth": 584,
+          "cssHeight": 360,
+          "estimatedRgbaBytes": 7568640
+        }
+      ],
+      "rows": 10000,
+      "columns": 2,
+      "dumps": [
+        {
+          "label": "baseline",
+          "heap": {
+            "usedSize": 1385756,
+            "totalSize": 2621440,
+            "embedderHeapUsedSize": 1504512,
+            "backingStorageSize": 332
+          },
+          "dom": {
+            "documents": 4,
+            "nodes": 29,
+            "jsEventListeners": 6
+          },
+          "dump": {
+            "dumpGuid": "0x7",
+            "success": true
+          }
+        },
+        {
+          "label": "mountedAfterScrollAndHistory",
+          "heap": {
+            "usedSize": 3926872,
+            "totalSize": 8650752,
+            "embedderHeapUsedSize": 26209488,
+            "backingStorageSize": 501542
+          },
+          "dom": {
+            "documents": 19,
+            "nodes": 5397,
+            "jsEventListeners": 935
+          },
+          "dump": {
+            "dumpGuid": "0x8",
+            "success": true
+          }
+        },
+        {
+          "label": "afterDestroyGC",
+          "heap": {
+            "usedSize": 1643908,
+            "totalSize": 2359296,
+            "embedderHeapUsedSize": 1137232,
+            "backingStorageSize": 480572
+          },
+          "dom": {
+            "documents": 6,
+            "nodes": 46,
+            "jsEventListeners": 3
+          },
+          "dump": {
+            "dumpGuid": "0x9",
+            "success": true
+          }
+        }
+      ],
+      "processSamples": [
+        {
+          "pid": 32788,
+          "ts": 25677554209,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "16b8000"
+        },
+        {
+          "pid": 33200,
+          "ts": 25677554209,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1726000"
+        },
+        {
+          "pid": 23888,
+          "ts": 25677554209,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "2043000"
+        },
+        {
+          "pid": 20724,
+          "ts": 25677554209,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "129b000"
+        },
+        {
+          "pid": 30704,
+          "ts": 25677554209,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "e0d000"
+        },
+        {
+          "pid": 32788,
+          "ts": 25678747755,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "16c0000"
+        },
+        {
+          "pid": 33200,
+          "ts": 25678747755,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "495f000"
+        },
+        {
+          "pid": 23888,
+          "ts": 25678747755,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "2278000"
+        },
+        {
+          "pid": 20724,
+          "ts": 25678747755,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "12b1000"
+        },
+        {
+          "pid": 30704,
+          "ts": 25678747755,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "f67000"
+        },
+        {
+          "pid": 32788,
+          "ts": 25678787772,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "16d7000"
+        },
+        {
+          "pid": 33200,
+          "ts": 25678787772,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "24ed000"
+        },
+        {
+          "pid": 23888,
+          "ts": 25678787772,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "2260000"
+        },
+        {
+          "pid": 20724,
+          "ts": 25678787772,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1292000"
+        },
+        {
+          "pid": 30704,
+          "ts": 25678787772,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "f27000"
+        }
+      ],
+      "limitations": "Headless animation-frame intervals are scheduling cadence, not presented FPS. Heap/process totals are explicit sampled checkpoints, not true transient peak. Trace fields use hexadecimal byte strings; private footprint is not RSS and zero peak RSS does not establish zero usage. Canvas RGBA bytes are a dimension-based estimate, not measured GPU allocation. Explicit GC differs from production. No timing threshold."
+    },
+    {
+      "dpr": 1,
+      "intervals": [
+        16.599999999999994,
+        16.700000000000017,
+        16.69999999999999,
+        16.599999999999994,
+        16.700000000000017,
+        16.599999999999994,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.600000000000023,
+        16.799999999999955,
+        16.600000000000023,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045,
+        16.699999999999932,
+        16.600000000000023,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045,
+        16.699999999999932,
+        16.600000000000023,
+        16.700000000000045,
+        16.699999999999932,
+        16.600000000000023,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.600000000000136,
+        16.699999999999818,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045
+      ],
+      "readCounts": [
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44
+      ],
+      "canvases": [
+        {
+          "width": 584,
+          "height": 360,
+          "cssWidth": 584,
+          "cssHeight": 360,
+          "estimatedRgbaBytes": 840960
+        }
+      ],
+      "rows": 10000,
+      "columns": 2,
+      "dumps": [
+        {
+          "label": "baseline",
+          "heap": {
+            "usedSize": 1385756,
+            "totalSize": 2621440,
+            "embedderHeapUsedSize": 1503312,
+            "backingStorageSize": 332
+          },
+          "dom": {
+            "documents": 4,
+            "nodes": 29,
+            "jsEventListeners": 6
+          },
+          "dump": {
+            "dumpGuid": "0x1",
+            "success": true
+          }
+        },
+        {
+          "label": "mountedAfterScrollAndHistory",
+          "heap": {
+            "usedSize": 5273268,
+            "totalSize": 8912896,
+            "embedderHeapUsedSize": 26183632,
+            "backingStorageSize": 501540
+          },
+          "dom": {
+            "documents": 19,
+            "nodes": 5397,
+            "jsEventListeners": 935
+          },
+          "dump": {
+            "dumpGuid": "0x2",
+            "success": true
+          }
+        },
+        {
+          "label": "afterDestroyGC",
+          "heap": {
+            "usedSize": 1643908,
+            "totalSize": 2097152,
+            "embedderHeapUsedSize": 1273872,
+            "backingStorageSize": 480572
+          },
+          "dom": {
+            "documents": 6,
+            "nodes": 46,
+            "jsEventListeners": 3
+          },
+          "dump": {
+            "dumpGuid": "0x3",
+            "success": true
+          }
+        }
+      ],
+      "processSamples": [
+        {
+          "pid": 33076,
+          "ts": 25680529618,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1723000"
+        },
+        {
+          "pid": 32632,
+          "ts": 25680529618,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "12c9000"
+        },
+        {
+          "pid": 10732,
+          "ts": 25680529618,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "20c8000"
+        },
+        {
+          "pid": 6612,
+          "ts": 25680529618,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "f67000"
+        },
+        {
+          "pid": 27816,
+          "ts": 25680529618,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "d10000"
+        },
+        {
+          "pid": 33076,
+          "ts": 25681711425,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "42c5000"
+        },
+        {
+          "pid": 32632,
+          "ts": 25681711425,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "13b6000"
+        },
+        {
+          "pid": 10732,
+          "ts": 25681711425,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "220b000"
+        },
+        {
+          "pid": 6612,
+          "ts": 25681711425,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "faf000"
+        },
+        {
+          "pid": 27816,
+          "ts": 25681711425,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "efe000"
+        },
+        {
+          "pid": 33076,
+          "ts": 25681747941,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "24a2000"
+        },
+        {
+          "pid": 32632,
+          "ts": 25681747941,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "145c000"
+        },
+        {
+          "pid": 10732,
+          "ts": 25681747941,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "2221000"
+        },
+        {
+          "pid": 6612,
+          "ts": 25681747941,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "f9f000"
+        },
+        {
+          "pid": 27816,
+          "ts": 25681747941,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "f0d000"
+        }
+      ],
+      "limitations": "Headless animation-frame intervals are scheduling cadence, not presented FPS. Heap/process totals are explicit sampled checkpoints, not true transient peak. Trace fields use hexadecimal byte strings; private footprint is not RSS and zero peak RSS does not establish zero usage. Canvas RGBA bytes are a dimension-based estimate, not measured GPU allocation. Explicit GC differs from production. No timing threshold."
+    },
+    {
+      "dpr": 2,
+      "intervals": [
+        16.69999999999999,
+        16.700000000000017,
+        16.599999999999994,
+        16.69999999999999,
+        16.700000000000017,
+        16.599999999999994,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.80000000000001,
+        16.599999999999966,
+        16.69999999999999,
+        16.600000000000023,
+        16.700000000000045,
+        16.699999999999932,
+        16.600000000000023,
+        16.700000000000045,
+        16.699999999999932,
+        16.600000000000023,
+        16.700000000000045,
+        16.699999999999932,
+        16.600000000000023,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.600000000000023,
+        16.799999999999955,
+        16.600000000000023,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.600000000000023,
+        16.799999999999955,
+        16.600000000000023,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991
+      ],
+      "readCounts": [
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44
+      ],
+      "canvases": [
+        {
+          "width": 1168,
+          "height": 720,
+          "cssWidth": 584,
+          "cssHeight": 360,
+          "estimatedRgbaBytes": 3363840
+        }
+      ],
+      "rows": 10000,
+      "columns": 2,
+      "dumps": [
+        {
+          "label": "baseline",
+          "heap": {
+            "usedSize": 1385756,
+            "totalSize": 2621440,
+            "embedderHeapUsedSize": 1504600,
+            "backingStorageSize": 332
+          },
+          "dom": {
+            "documents": 4,
+            "nodes": 29,
+            "jsEventListeners": 6
+          },
+          "dump": {
+            "dumpGuid": "0x4",
+            "success": true
+          }
+        },
+        {
+          "label": "mountedAfterScrollAndHistory",
+          "heap": {
+            "usedSize": 3914408,
+            "totalSize": 8388608,
+            "embedderHeapUsedSize": 26216424,
+            "backingStorageSize": 501541
+          },
+          "dom": {
+            "documents": 19,
+            "nodes": 5398,
+            "jsEventListeners": 935
+          },
+          "dump": {
+            "dumpGuid": "0x5",
+            "success": true
+          }
+        },
+        {
+          "label": "afterDestroyGC",
+          "heap": {
+            "usedSize": 1643908,
+            "totalSize": 2359296,
+            "embedderHeapUsedSize": 1133456,
+            "backingStorageSize": 480572
+          },
+          "dom": {
+            "documents": 6,
+            "nodes": 46,
+            "jsEventListeners": 3
+          },
+          "dump": {
+            "dumpGuid": "0x6",
+            "success": true
+          }
+        }
+      ],
+      "processSamples": [
+        {
+          "pid": 30376,
+          "ts": 25682672553,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1827000"
+        },
+        {
+          "pid": 32632,
+          "ts": 25682672553,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "15ca000"
+        },
+        {
+          "pid": 10732,
+          "ts": 25682672553,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "2169000"
+        },
+        {
+          "pid": 6612,
+          "ts": 25682672553,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1168000"
+        },
+        {
+          "pid": 27816,
+          "ts": 25682672553,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "ded000"
+        },
+        {
+          "pid": 30376,
+          "ts": 25683868342,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "4552000"
+        },
+        {
+          "pid": 32632,
+          "ts": 25683868342,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "15de000"
+        },
+        {
+          "pid": 10732,
+          "ts": 25683868342,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "2249000"
+        },
+        {
+          "pid": 6612,
+          "ts": 25683868342,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "118c000"
+        },
+        {
+          "pid": 27816,
+          "ts": 25683868342,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "f10000"
+        },
+        {
+          "pid": 30376,
+          "ts": 25683907953,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "243a000"
+        },
+        {
+          "pid": 32632,
+          "ts": 25683907953,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "16c8000"
+        },
+        {
+          "pid": 10732,
+          "ts": 25683907953,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "2277000"
+        },
+        {
+          "pid": 6612,
+          "ts": 25683907953,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1162000"
+        },
+        {
+          "pid": 27816,
+          "ts": 25683907953,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "f19000"
+        }
+      ],
+      "limitations": "Headless animation-frame intervals are scheduling cadence, not presented FPS. Heap/process totals are explicit sampled checkpoints, not true transient peak. Trace fields use hexadecimal byte strings; private footprint is not RSS and zero peak RSS does not establish zero usage. Canvas RGBA bytes are a dimension-based estimate, not measured GPU allocation. Explicit GC differs from production. No timing threshold."
+    },
+    {
+      "dpr": 3,
+      "intervals": [
+        16.700000000000003,
+        16.599999999999994,
+        16.700000000000017,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.600000000000023,
+        16.700000000000045,
+        16.699999999999932,
+        16.600000000000023,
+        16.700000000000045,
+        16.699999999999932,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.600000000000023,
+        16.700000000000045,
+        16.699999999999932,
+        16.700000000000045,
+        16.600000000000023,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.699999999999932,
+        16.600000000000023,
+        16.700000000000045,
+        16.699999999999932,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.600000000000136,
+        16.699999999999818,
+        16.600000000000136
+      ],
+      "readCounts": [
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44
+      ],
+      "canvases": [
+        {
+          "width": 1752,
+          "height": 1080,
+          "cssWidth": 584,
+          "cssHeight": 360,
+          "estimatedRgbaBytes": 7568640
+        }
+      ],
+      "rows": 10000,
+      "columns": 2,
+      "dumps": [
+        {
+          "label": "baseline",
+          "heap": {
+            "usedSize": 1385756,
+            "totalSize": 2621440,
+            "embedderHeapUsedSize": 1504192,
+            "backingStorageSize": 332
+          },
+          "dom": {
+            "documents": 4,
+            "nodes": 29,
+            "jsEventListeners": 6
+          },
+          "dump": {
+            "dumpGuid": "0x7",
+            "success": true
+          }
+        },
+        {
+          "label": "mountedAfterScrollAndHistory",
+          "heap": {
+            "usedSize": 5303556,
+            "totalSize": 8912896,
+            "embedderHeapUsedSize": 26207144,
+            "backingStorageSize": 501542
+          },
+          "dom": {
+            "documents": 19,
+            "nodes": 5397,
+            "jsEventListeners": 935
+          },
+          "dump": {
+            "dumpGuid": "0x8",
+            "success": true
+          }
+        },
+        {
+          "label": "afterDestroyGC",
+          "heap": {
+            "usedSize": 1643908,
+            "totalSize": 2097152,
+            "embedderHeapUsedSize": 1275400,
+            "backingStorageSize": 480572
+          },
+          "dom": {
+            "documents": 6,
+            "nodes": 46,
+            "jsEventListeners": 3
+          },
+          "dump": {
+            "dumpGuid": "0x9",
+            "success": true
+          }
+        }
+      ],
+      "processSamples": [
+        {
+          "pid": 32632,
+          "ts": 25685041377,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1697000"
+        },
+        {
+          "pid": 24900,
+          "ts": 25685041377,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1ad7000"
+        },
+        {
+          "pid": 10732,
+          "ts": 25685041377,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1afc000"
+        },
+        {
+          "pid": 6612,
+          "ts": 25685041377,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "12e7000"
+        },
+        {
+          "pid": 27816,
+          "ts": 25685041377,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "e07000"
+        },
+        {
+          "pid": 32632,
+          "ts": 25686224276,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "16fa000"
+        },
+        {
+          "pid": 24900,
+          "ts": 25686224276,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "4ccb000"
+        },
+        {
+          "pid": 10732,
+          "ts": 25686224276,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "220e000"
+        },
+        {
+          "pid": 6612,
+          "ts": 25686224276,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "130e000"
+        },
+        {
+          "pid": 27816,
+          "ts": 25686224276,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "f39000"
+        },
+        {
+          "pid": 32632,
+          "ts": 25686263200,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "16f9000"
+        },
+        {
+          "pid": 24900,
+          "ts": 25686263200,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "27ea000"
+        },
+        {
+          "pid": 10732,
+          "ts": 25686263200,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "2242000"
+        },
+        {
+          "pid": 6612,
+          "ts": 25686263200,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "12ef000"
+        },
+        {
+          "pid": 27816,
+          "ts": 25686263200,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "f3c000"
+        }
+      ],
+      "limitations": "Headless animation-frame intervals are scheduling cadence, not presented FPS. Heap/process totals are explicit sampled checkpoints, not true transient peak. Trace fields use hexadecimal byte strings; private footprint is not RSS and zero peak RSS does not establish zero usage. Canvas RGBA bytes are a dimension-based estimate, not measured GPU allocation. Explicit GC differs from production. No timing threshold."
+    },
+    {
+      "dpr": 1,
+      "intervals": [
+        16.700000000000017,
+        16.599999999999994,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.600000000000023,
+        16.799999999999955,
+        16.700000000000045,
+        16.600000000000023,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045,
+        16.699999999999932,
+        16.600000000000023,
+        16.600000000000023,
+        16.699999999999932,
+        16.800000000000068,
+        16.5,
+        16.699999999999932,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991,
+        16.800000000000068,
+        16.5,
+        16.799999999999955,
+        16.600000000000023,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045
+      ],
+      "readCounts": [
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44
+      ],
+      "canvases": [
+        {
+          "width": 584,
+          "height": 360,
+          "cssWidth": 584,
+          "cssHeight": 360,
+          "estimatedRgbaBytes": 840960
+        }
+      ],
+      "rows": 10000,
+      "columns": 2,
+      "dumps": [
+        {
+          "label": "baseline",
+          "heap": {
+            "usedSize": 1385756,
+            "totalSize": 2621440,
+            "embedderHeapUsedSize": 1503312,
+            "backingStorageSize": 332
+          },
+          "dom": {
+            "documents": 4,
+            "nodes": 29,
+            "jsEventListeners": 6
+          },
+          "dump": {
+            "dumpGuid": "0x1",
+            "success": true
+          }
+        },
+        {
+          "label": "mountedAfterScrollAndHistory",
+          "heap": {
+            "usedSize": 3943996,
+            "totalSize": 8912896,
+            "embedderHeapUsedSize": 26183792,
+            "backingStorageSize": 501540
+          },
+          "dom": {
+            "documents": 19,
+            "nodes": 5397,
+            "jsEventListeners": 935
+          },
+          "dump": {
+            "dumpGuid": "0x2",
+            "success": true
+          }
+        },
+        {
+          "label": "afterDestroyGC",
+          "heap": {
+            "usedSize": 1643908,
+            "totalSize": 2359296,
+            "embedderHeapUsedSize": 1273872,
+            "backingStorageSize": 480572
+          },
+          "dom": {
+            "documents": 6,
+            "nodes": 46,
+            "jsEventListeners": 3
+          },
+          "dump": {
+            "dumpGuid": "0x3",
+            "success": true
+          }
+        }
+      ],
+      "processSamples": [
+        {
+          "pid": 27432,
+          "ts": 25687994673,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "171c000"
+        },
+        {
+          "pid": 28112,
+          "ts": 25687994673,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "12f0000"
+        },
+        {
+          "pid": 14760,
+          "ts": 25687994673,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "20e0000"
+        },
+        {
+          "pid": 22560,
+          "ts": 25687994673,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "f6b000"
+        },
+        {
+          "pid": 29304,
+          "ts": 25687994673,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "d0a000"
+        },
+        {
+          "pid": 27432,
+          "ts": 25689173584,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "41ef000"
+        },
+        {
+          "pid": 28112,
+          "ts": 25689173584,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "13f0000"
+        },
+        {
+          "pid": 14760,
+          "ts": 25689173584,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "2221000"
+        },
+        {
+          "pid": 22560,
+          "ts": 25689173584,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "fb2000"
+        },
+        {
+          "pid": 29304,
+          "ts": 25689173584,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "ef5000"
+        },
+        {
+          "pid": 27432,
+          "ts": 25689209905,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "23db000"
+        },
+        {
+          "pid": 28112,
+          "ts": 25689209905,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1497000"
+        },
+        {
+          "pid": 14760,
+          "ts": 25689209905,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "222a000"
+        },
+        {
+          "pid": 22560,
+          "ts": 25689209905,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "fa4000"
+        },
+        {
+          "pid": 29304,
+          "ts": 25689209905,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "f09000"
+        }
+      ],
+      "limitations": "Headless animation-frame intervals are scheduling cadence, not presented FPS. Heap/process totals are explicit sampled checkpoints, not true transient peak. Trace fields use hexadecimal byte strings; private footprint is not RSS and zero peak RSS does not establish zero usage. Canvas RGBA bytes are a dimension-based estimate, not measured GPU allocation. Explicit GC differs from production. No timing threshold."
+    },
+    {
+      "dpr": 2,
+      "intervals": [
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.599999999999994,
+        16.69999999999999,
+        16.700000000000017,
+        16.599999999999994,
+        16.700000000000017,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.599999999999966,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.800000000000068,
+        16.5,
+        16.799999999999955,
+        16.600000000000023,
+        16.699999999999932,
+        16.600000000000023,
+        16.700000000000045,
+        16.699999999999932,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.600000000000023,
+        16.800000000000068,
+        16.59999999999991,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.600000000000023,
+        16.700000000000045,
+        16.699999999999932,
+        16.600000000000023,
+        16.700000000000045,
+        16.699999999999932,
+        16.600000000000023,
+        16.700000000000045,
+        16.600000000000023,
+        16.799999999999955,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.59999999999991,
+        16.600000000000136,
+        16.700000000000045,
+        16.699999999999818,
+        16.600000000000136
+      ],
+      "readCounts": [
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44
+      ],
+      "canvases": [
+        {
+          "width": 1168,
+          "height": 720,
+          "cssWidth": 584,
+          "cssHeight": 360,
+          "estimatedRgbaBytes": 3363840
+        }
+      ],
+      "rows": 10000,
+      "columns": 2,
+      "dumps": [
+        {
+          "label": "baseline",
+          "heap": {
+            "usedSize": 1385756,
+            "totalSize": 2621440,
+            "embedderHeapUsedSize": 1504600,
+            "backingStorageSize": 332
+          },
+          "dom": {
+            "documents": 4,
+            "nodes": 29,
+            "jsEventListeners": 6
+          },
+          "dump": {
+            "dumpGuid": "0x4",
+            "success": true
+          }
+        },
+        {
+          "label": "mountedAfterScrollAndHistory",
+          "heap": {
+            "usedSize": 3900756,
+            "totalSize": 8650752,
+            "embedderHeapUsedSize": 26216120,
+            "backingStorageSize": 501541
+          },
+          "dom": {
+            "documents": 19,
+            "nodes": 5398,
+            "jsEventListeners": 935
+          },
+          "dump": {
+            "dumpGuid": "0x5",
+            "success": true
+          }
+        },
+        {
+          "label": "afterDestroyGC",
+          "heap": {
+            "usedSize": 1643908,
+            "totalSize": 2359296,
+            "embedderHeapUsedSize": 1133456,
+            "backingStorageSize": 480572
+          },
+          "dom": {
+            "documents": 6,
+            "nodes": 46,
+            "jsEventListeners": 3
+          },
+          "dump": {
+            "dumpGuid": "0x6",
+            "success": true
+          }
+        }
+      ],
+      "processSamples": [
+        {
+          "pid": 30012,
+          "ts": 25690185747,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1811000"
+        },
+        {
+          "pid": 28112,
+          "ts": 25690185747,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1a5a000"
+        },
+        {
+          "pid": 14760,
+          "ts": 25690185747,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "2173000"
+        },
+        {
+          "pid": 22560,
+          "ts": 25690185747,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1255000"
+        },
+        {
+          "pid": 29304,
+          "ts": 25690185747,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "ded000"
+        },
+        {
+          "pid": 30012,
+          "ts": 25691388201,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "4554000"
+        },
+        {
+          "pid": 28112,
+          "ts": 25691388201,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "16fd000"
+        },
+        {
+          "pid": 14760,
+          "ts": 25691388201,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "2254000"
+        },
+        {
+          "pid": 22560,
+          "ts": 25691388201,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "125e000"
+        },
+        {
+          "pid": 29304,
+          "ts": 25691388201,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "f0b000"
+        },
+        {
+          "pid": 30012,
+          "ts": 25691422938,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "24f8000"
+        },
+        {
+          "pid": 28112,
+          "ts": 25691422938,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "17ec000"
+        },
+        {
+          "pid": 14760,
+          "ts": 25691422938,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "2281000"
+        },
+        {
+          "pid": 22560,
+          "ts": 25691422938,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1249000"
+        },
+        {
+          "pid": 29304,
+          "ts": 25691422938,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "f3d000"
+        }
+      ],
+      "limitations": "Headless animation-frame intervals are scheduling cadence, not presented FPS. Heap/process totals are explicit sampled checkpoints, not true transient peak. Trace fields use hexadecimal byte strings; private footprint is not RSS and zero peak RSS does not establish zero usage. Canvas RGBA bytes are a dimension-based estimate, not measured GPU allocation. Explicit GC differs from production. No timing threshold."
+    },
+    {
+      "dpr": 3,
+      "intervals": [
+        16.600000000000023,
+        16.799999999999983,
+        16.599999999999994,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.69999999999999,
+        16.700000000000045,
+        16.599999999999966,
+        16.600000000000023,
+        16.69999999999999,
+        16.69999999999999,
+        16.600000000000023,
+        16.69999999999999,
+        16.600000000000023,
+        16.799999999999955,
+        16.600000000000023,
+        16.69999999999999,
+        16.600000000000023,
+        16.80000000000001,
+        16.599999999999966,
+        16.69999999999999,
+        16.600000000000023,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045,
+        16.699999999999932,
+        16.600000000000023,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.600000000000023,
+        16.699999999999932,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991,
+        16.700000000000045,
+        16.700000000000045,
+        16.59999999999991,
+        16.600000000000136,
+        16.799999999999955
+      ],
+      "readCounts": [
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44
+      ],
+      "canvases": [
+        {
+          "width": 1752,
+          "height": 1080,
+          "cssWidth": 584,
+          "cssHeight": 360,
+          "estimatedRgbaBytes": 7568640
+        }
+      ],
+      "rows": 10000,
+      "columns": 2,
+      "dumps": [
+        {
+          "label": "baseline",
+          "heap": {
+            "usedSize": 1385756,
+            "totalSize": 2621440,
+            "embedderHeapUsedSize": 1504192,
+            "backingStorageSize": 332
+          },
+          "dom": {
+            "documents": 4,
+            "nodes": 29,
+            "jsEventListeners": 6
+          },
+          "dump": {
+            "dumpGuid": "0x7",
+            "success": true
+          }
+        },
+        {
+          "label": "mountedAfterScrollAndHistory",
+          "heap": {
+            "usedSize": 3897876,
+            "totalSize": 8650752,
+            "embedderHeapUsedSize": 26206600,
+            "backingStorageSize": 501542
+          },
+          "dom": {
+            "documents": 19,
+            "nodes": 5397,
+            "jsEventListeners": 935
+          },
+          "dump": {
+            "dumpGuid": "0x8",
+            "success": true
+          }
+        },
+        {
+          "label": "afterDestroyGC",
+          "heap": {
+            "usedSize": 1643908,
+            "totalSize": 2359296,
+            "embedderHeapUsedSize": 1275400,
+            "backingStorageSize": 480572
+          },
+          "dom": {
+            "documents": 6,
+            "nodes": 46,
+            "jsEventListeners": 3
+          },
+          "dump": {
+            "dumpGuid": "0x9",
+            "success": true
+          }
+        }
+      ],
+      "processSamples": [
+        {
+          "pid": 26868,
+          "ts": 25692528932,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1ad5000"
+        },
+        {
+          "pid": 28112,
+          "ts": 25692528932,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "17b6000"
+        },
+        {
+          "pid": 14760,
+          "ts": 25692528932,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1b16000"
+        },
+        {
+          "pid": 22560,
+          "ts": 25692528932,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "129e000"
+        },
+        {
+          "pid": 29304,
+          "ts": 25692528932,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "dfa000"
+        },
+        {
+          "pid": 26868,
+          "ts": 25693724606,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "4c6c000"
+        },
+        {
+          "pid": 28112,
+          "ts": 25693724606,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "17a5000"
+        },
+        {
+          "pid": 14760,
+          "ts": 25693724606,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "2216000"
+        },
+        {
+          "pid": 22560,
+          "ts": 25693724606,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "1297000"
+        },
+        {
+          "pid": 29304,
+          "ts": 25693724606,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "f5b000"
+        },
+        {
+          "pid": 26868,
+          "ts": 25693764192,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "27c6000"
+        },
+        {
+          "pid": 28112,
+          "ts": 25693764192,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "17e9000"
+        },
+        {
+          "pid": 14760,
+          "ts": 25693764192,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "2234000"
+        },
+        {
+          "pid": 22560,
+          "ts": 25693764192,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "127a000"
+        },
+        {
+          "pid": 29304,
+          "ts": 25693764192,
+          "is_peak_rss_resettable": false,
+          "peak_resident_set_size": "0",
+          "private_footprint_bytes": "f27000"
+        }
+      ],
+      "limitations": "Headless animation-frame intervals are scheduling cadence, not presented FPS. Heap/process totals are explicit sampled checkpoints, not true transient peak. Trace fields use hexadecimal byte strings; private footprint is not RSS and zero peak RSS does not establish zero usage. Canvas RGBA bytes are a dimension-based estimate, not measured GPU allocation. Explicit GC differs from production. No timing threshold."
+    }
+  ],
+  "note": "Allocator-level trace events remain in Playwright attachments; this report preserves raw process totals and heap/DOM checkpoints."
+}

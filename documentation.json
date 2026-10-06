@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "929b6ad72b3f344f8a68c3f5e87e5df73976f863",
+  "sourceRevision": "3a15e7b388e2be2a669b536557d6b27239cb413a",
   "release": {
     "version": "0.1.0",
     "tag": "v0.1.0",
@@ -286,9 +286,9 @@
     {
       "id": "support",
       "path": "SUPPORT.md",
-      "revision": 7,
+      "revision": 8,
       "updated": "2026-10-06",
-      "sha256": "673b43d648c9b99d41fd2a819504ef9e0c1717fa51dc61f2de44d56a1307d3b1",
+      "sha256": "fdd0c7992be44ff2599faf2e5da43e2a8a37b326eb537aac06b19747764cfa85",
       "history": [
         {
           "revision": 1,
@@ -317,6 +317,23 @@
         {
           "revision": 7,
           "summary": "Verified environments and practical limits."
+        },
+        {
+          "revision": 8,
+          "summary": "Verified environments and practical limits."
+        }
+      ]
+    },
+    {
+      "id": "manual-validation",
+      "path": "guides/manual-validation.md",
+      "revision": 1,
+      "updated": "2026-10-06",
+      "sha256": "b089863bacc93193c26dc896e9c88b7c47734b88f390be25a3544100311d9703",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Manual accessibility, device, clipboard and operational acceptance protocol."
         }
       ]
     }

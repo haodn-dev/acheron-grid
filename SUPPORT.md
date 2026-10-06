@@ -28,6 +28,8 @@ Release checks must pass on the exact release commit: clean install, typecheck, 
 
 ## Manual accessibility validation
 
+Use the [complete manual acceptance protocol](guides/manual-validation.md) for environment records, per-case PASS/FAIL/NOT RUN, native clipboard, physical touch/Safari and responsiveness/memory profiling. Timing budgets require representative host workloads and stable-runner baselines; existing automated resource-bound assertions remain the correctness gates.
+
 Atomic row-batch optimization was validated separately at `929b6ad`: [Node 22/24 and Firefox/WebKit CI](https://github.com/haodn-dev/acheron-grid/actions/runs/37428401875) passed, including 105 Node tests and the repeated multi-column batch/paste workload. [Raw batch measurements](BENCHMARKS.md#atomic-row-batches-2026-10-06) describe improvements and unchanged synchronous/manual-validation limits.
 
 Automated keyboard/ARIA checks are not screen-reader acceptance. Record OS, browser, screen-reader versions, source revision and pass/fail for each workload before expanding support claims:

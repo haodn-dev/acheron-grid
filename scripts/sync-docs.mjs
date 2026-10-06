@@ -88,6 +88,7 @@ const entries=[
  ...['core','canvas','react','vue','markdown','mcp','export','charts'].map(name=>[name,`packages/${name}/README.md`,2,name==='core'?'Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts.':'Align publication status, installation and current source contracts.']),
  ['security','SECURITY.md',1,'Host authorization and untrusted-data boundaries.'],
  ['support','SUPPORT.md',1,'Verified environments and practical limits.'],
+ ['manual-validation','guides/manual-validation.md',1,'Manual accessibility, device, clipboard and operational acceptance protocol.'],
 ];
 const documents=[];
 for(const [id,path,revision,summary] of entries){

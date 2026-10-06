@@ -66,6 +66,8 @@ jobs:
         run: npx playwright test --config benchmark.config.mjs --repeat-each=3 --reporter=json --output=benchmark-artifacts > benchmark-report.json
       - name: Headless benchmark correctness
         run: node --expose-gc tests/benchmark-core.mjs > benchmark-core-report.json
+      - name: Operational workload correctness
+        run: node tests/benchmark-operational.mjs > benchmark-operational-report.json
       - name: Live and chart benchmark correctness
         run: node tests/benchmark-live-charts.mjs > benchmark-live-charts-report.json
       - name: Benchmark evidence
@@ -76,6 +78,7 @@ jobs:
           path: |
             benchmark-report.json
             benchmark-core-report.json
+            benchmark-operational-report.json
             benchmark-live-charts-report.json
             benchmark-artifacts/
           retention-days: 7
