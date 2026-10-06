@@ -1618,7 +1618,8 @@ test('auto-fit measures visible content, handles multiline rows and shares resiz
   await viewport.press('F2'); await expect(page.getByRole('textbox')).toBeVisible(); await page.getByRole('textbox').press('Escape');
 });
 
-test('axis additive ranges preserve existing ranges and touch header drag keeps native body scrolling', async ({ browser }) => {
+test('axis additive ranges preserve existing ranges and touch header drag keeps native body scrolling', async ({ browser, browserName }) => {
+  test.skip(browserName !== 'chromium', 'This touch-drag test uses Chromium CDP; mouse and keyboard axis tests run on all engines.');
   const context = await browser.newContext({ hasTouch: true, baseURL: 'http://127.0.0.1:4179' }); const page = await context.newPage();
   await page.goto('/');
   await page.evaluate(async () => {
@@ -1834,8 +1835,12 @@ test('dragging selected rows/columns emits host requests and admin veto works', 
   await page.getByRole('button',{name:'Select row 2',exact:true}).click({modifiers:['Shift']});
   await page.getByRole('button',{name:'Select row 1',exact:true}).dragTo(page.getByRole('button',{name:'Select row 4',exact:true}));
   expect(await page.evaluate(()=>window.requests[0])).toMatchObject({axis:'row',indices:[0,1]});
+  // End the native drag's pointer stream before the next independent selection.
+  await page.mouse.move(0, 0); await page.mouse.down(); await page.mouse.up();
   await page.evaluate(()=>window.grid.selectColumn(0));
+  await expect(page.getByRole('columnheader',{name:'a',exact:true})).toHaveAttribute('draggable','true');
   await page.getByRole('columnheader',{name:'b',exact:true}).click({modifiers:['Shift']});
+  await expect.poll(() => page.evaluate(() => window.grid.getSelectionRange())).toEqual({ startRow: 0, endRow: 4, startColumn: 0, endColumn: 1 });
   await page.getByRole('columnheader',{name:'a',exact:true}).dragTo(page.getByRole('columnheader',{name:'c',exact:true}));
   expect(await page.evaluate(()=>window.requests[1])).toMatchObject({axis:'column',indices:[0,1]});
   await page.evaluate(()=>window.allowed=false);
@@ -2048,7 +2053,8 @@ test('dropdown arrows change single-choice drafts, skip disabled options and ret
 });
 
 
-test('touch moves selected rows and columns through shared preview, history and veto',async({page})=>{
+test('touch moves selected rows and columns through shared preview, history and veto',async({page,browserName})=>{
+  test.skip(browserName!=='chromium','This touch-drag test uses Chromium CDP; mouse reorder tests run on all engines.');
   await page.goto('/');await page.evaluate(async()=>{const {createGrid}=await import('/canvas/index.js');const {LocalDataSource}=await import('/core/index.js');window.requests=[];window.allowMove=true;window.source=new LocalDataSource(Array.from({length:100},(_,id)=>({id,a:'A'+id,b:'B'+id,c:'C'+id})),row=>row.id);window.grid=createGrid({container:document.querySelector('#grid'),dataSource:window.source,accessibility:'viewport',columns:['a','b','c'].map(key=>({key,title:key,editable:true})),onReorder:request=>{window.requests.push(request);request.axis==='row'?window.grid.moveRows(request.indices,request.beforeIndex):window.grid.moveColumns(request.indices,request.beforeIndex);},canReorder:()=>window.allowMove});window.grid.selectRow(1);});
   const session=await page.context().newCDPSession(page);
   const point = async locator => {

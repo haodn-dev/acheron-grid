@@ -1122,7 +1122,7 @@ export function createGrid(options: GridOptions): Grid {
     item('Resize column…', true, () => openSizeDialog('Column width', columnAxis.size(col), size => resizeAxis(columnAxis, col, size)));
     item('Resize row…', rowCount > 0, () => openSizeDialog('Row height', rowAxis.size(row), size => resizeAxis(rowAxis, row, size)));
     const mode = doc.createElement('button');mode.type='button';mode.setAttribute('role','menuitemcheckbox');mode.textContent='Suggested actions';mode.setAttribute('aria-checked',String(suggestionsEnabled));mode.setAttribute('aria-label','Suggested actions');mode.textContent='Suggested actions: '+(suggestionsEnabled?'On':'Off');
-    mode.addEventListener('click',()=>{suggestionsEnabled=!suggestionsEnabled;showAll=!suggestionsEnabled;mode.setAttribute('aria-checked',String(suggestionsEnabled));mode.textContent='Suggested actions: '+(suggestionsEnabled?'On':'Off');all.hidden=showAll;filterActions();});
+    mode.addEventListener('click',()=>{mode.focus();suggestionsEnabled=!suggestionsEnabled;showAll=!suggestionsEnabled;mode.setAttribute('aria-checked',String(suggestionsEnabled));mode.textContent='Suggested actions: '+(suggestionsEnabled?'On':'Off');all.hidden=showAll;filterActions();});
     const all = doc.createElement('button');all.type='button';all.textContent='Show all actions';all.setAttribute('role','menuitem');
     all.addEventListener('click',()=>{showAll=true;filterActions();all.hidden=true;});
     filter.before(mode);popup.append(all,empty);filterActions();all.hidden=showAll;
@@ -1528,6 +1528,8 @@ export function createGrid(options: GridOptions): Grid {
     if (editor instanceof win.HTMLTextAreaElement) editor.style.resize = 'none';
     if (editor instanceof win.HTMLInputElement && editor.type === 'checkbox') {
       editor.style.maxWidth = editor.style.maxHeight = '16px'; editor.style.margin = '8px'; editor.style.padding = '0'; editor.style.accentColor = 'var(--acheron-selection-color)';
+      // WebKit may blur a focused checkbox on mouse down before its click toggles the draft.
+      editor.addEventListener('mousedown', event => event.preventDefault());
     }
     const clearValidation = () => {
       editor?.setCustomValidity('');
@@ -3006,8 +3008,9 @@ export function createGrid(options: GridOptions): Grid {
   }
   const layoutMotion = new Set<HTMLElement>();
   const motionPreference = win.matchMedia('(prefers-reduced-motion: reduce)');
-  const motionEnabled = () => options.motion !== false && motionDuration > 0 && !motionPreference.matches;
-  const cancelMotion = () => { if (motionPreference.matches) { clearLayoutMotion(); root.getAnimations({ subtree: true }).forEach(animation => animation.cancel()); } };
+  const reducedMotion = () => win.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const motionEnabled = () => options.motion !== false && motionDuration > 0 && !reducedMotion();
+  const cancelMotion = () => { if (reducedMotion()) { clearLayoutMotion(); root.getAnimations({ subtree: true }).forEach(animation => animation.cancel()); } };
   motionPreference.addEventListener('change', cancelMotion);
   function clearLayoutMotion(): void { for (const node of layoutMotion) { node.getAnimations().forEach(animation => animation.cancel()); node.remove(); } layoutMotion.clear(); }
   function animateLayout<T>(run: () => T, axis: 'row' | 'column'): T {
