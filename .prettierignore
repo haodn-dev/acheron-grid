@@ -1,0 +1,17 @@
+node_modules/
+**/dist/
+coverage/
+test-results/
+playwright-report/
+playground-results/
+playground-report/
+benchmark-artifacts/
+benchmark-results/
+package-lock.json
+documentation.json
+guides/core-api.md
+guides/canvas-api.md
+packages/mcp/docs/
+AGENTS.md
+**/LICENSE*
+**/NOTICE

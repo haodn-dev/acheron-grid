@@ -6,6 +6,8 @@
     "packages/*"
   ],
   "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "release": "node scripts/release.mjs",
     "test:release": "node --test tests/release.node.mjs",
     "build": "npm run build --workspace @acheron-grid/core && npm run build --workspace @acheron-grid/canvas && npm run build --workspace @acheron-grid/markdown && npm run build --workspace @acheron-grid/react && npm run build --workspace @acheron-grid/vue && npm run build --workspace @acheron-grid/export && npm run build --workspace @acheron-grid/charts",
@@ -28,6 +30,7 @@
     "@playwright/test": "^1.63.0",
     "@types/react": "18.3.31",
     "esbuild": "0.28.2",
+    "prettier": "3.9.6",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "typescript": "~5.9.3",
