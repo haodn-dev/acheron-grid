@@ -265,8 +265,8 @@ test('batch commands repaint only dirty cells and undo/redo atomically', async (
   await page.evaluate(async () => {
     const { createGrid } = await import('/canvas/index.js');
     const { LocalDataSource } = await import('/core/index.js');
-    const NativeImage = window.Image, images = [];
-    window.Image = new Proxy(NativeImage, { construct(target, args) { const image = Reflect.construct(target, args); images.push(image); return image; } });
+    const createElement = document.createElement, images = [];
+    document.createElement = function (...args) { const element = createElement.apply(this, args); if (args[0] === 'img') images.push(element); return element; };
     window.source = new LocalDataSource(Array.from({ length: 100 }, (_, id) => ({ id, name: 'Ada', team: 'Design' })), row => row.id);
     const getValue = window.source.getValue.bind(window.source);
     window.reads = [];
@@ -274,7 +274,9 @@ test('batch commands repaint only dirty cells and undo/redo atomically', async (
     window.grid = createGrid({ container: document.querySelector('#grid'), dataSource: window.source,
       columns: [{ key: 'id', title: 'ID' }, { key: 'name', title: 'Name', editable: true }, { key: 'team', title: 'Team' }] });
     // Icon decode/font/resize repaint is separate from the dirty-cell command being measured.
-    await Promise.all(images.map(image => image.decode())); window.Image = NativeImage;
+    document.createElement = createElement;
+    if (!images.length) throw new Error('Image decode instrumentation captured no icons.');
+    await Promise.all(images.map(image => image.decode()));
     await document.fonts.ready;
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   });
