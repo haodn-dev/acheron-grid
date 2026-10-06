@@ -1,3 +1,4 @@
+import { createEditors } from './internal/editors.js';
 import { createMediaController } from './internal/media-controller.js';
 import { createClipboard } from './internal/clipboard.js';
 import { createSearch } from './internal/search.js';
@@ -427,7 +428,7 @@ export function createGrid(options: GridOptions): Grid {
         if (!searchBar.hidden) refreshSearch();
       } else if (change.type === 'layout' || change.type === 'structure') {
         if (change.type === 'structure') {
-          hoveredChoice = null;
+          editors.hoveredChoice = null;
           if (managesView) currentView = engine.view;
           if (axisAnchor) {
             const map = axisAnchor.axis === 'row' ? change.rowMap : change.columnMap,
@@ -570,11 +571,7 @@ export function createGrid(options: GridOptions): Grid {
     if (!column) throw new TypeError('Unknown editor column.');
     columnEditors.set(key, validateColumnEditor(column, config));
   }
-  function choiceOptionsFor(key: string): ChoiceEditorOptions | false | undefined {
-    const config = columnEditors.get(key),
-      local = config && config.type !== 'checkbox' ? config.choiceEditor : undefined;
-    return local === false ? false : local ? { ...(options.choiceEditor || {}), ...local } : options.choiceEditor;
-  }
+
   const viewportAccessibility = options.accessibility === 'viewport';
   if (options.accessibility !== undefined && !['active', 'viewport'].includes(options.accessibility))
     throw new TypeError('Invalid accessibility mode.');
@@ -721,10 +718,10 @@ export function createGrid(options: GridOptions): Grid {
       return doc;
     },
     get editor() {
-      return editor;
+      return editors.editor;
     },
     set editor(value) {
-      editor = value;
+      editors.editor = value;
     },
     get engine() {
       return engine;
@@ -829,14 +826,98 @@ export function createGrid(options: GridOptions): Grid {
     if (image.complete && image.naturalWidth) context!.drawImage(image, x, y, 16, 16);
   }
 
-  let hoveredChoice: { row: number; col: number } | null = null;
-  function clearChoiceHover(): void {
-    if (!hoveredChoice) return;
-    const old = hoveredChoice;
-    hoveredChoice = null;
-    if (old.row < rowCount && old.col < columns.length)
-      invalidate([{ rowIndex: old.row, columnKey: columns[old.col]!.key }]);
-  }
+  const editors = createEditors({
+    get actionError() {
+      return actionError;
+    },
+    get avatarColumns() {
+      return avatarColumns;
+    },
+    get columnEditors() {
+      return columnEditors;
+    },
+    get columns() {
+      return columns;
+    },
+    get context() {
+      return context;
+    },
+    get destroyed() {
+      return destroyed;
+    },
+    get doc() {
+      return doc;
+    },
+    get editorError() {
+      return editorError;
+    },
+    get editorLabel() {
+      return editorLabel;
+    },
+    get editorPane() {
+      return editorPane;
+    },
+    get engine() {
+      return engine;
+    },
+    get enterSurface() {
+      return enterSurface;
+    },
+    get exitSurface() {
+      return exitSurface;
+    },
+    get headerHeight() {
+      return headerHeight;
+    },
+    get indexWidth() {
+      return indexWidth;
+    },
+    get invalidate() {
+      return invalidate;
+    },
+    get mediaColumn() {
+      return mediaColumn;
+    },
+    get options() {
+      return options;
+    },
+    get overlay() {
+      return overlay;
+    },
+    get richText() {
+      return richText;
+    },
+    get richTextColumns() {
+      return richTextColumns;
+    },
+    get root() {
+      return root;
+    },
+    get rowCount() {
+      return rowCount;
+    },
+    get scroller() {
+      return scroller;
+    },
+    get select() {
+      return select;
+    },
+    get t() {
+      return t;
+    },
+    get theme() {
+      return theme;
+    },
+    get viewport() {
+      return viewport;
+    },
+    get win() {
+      return win;
+    },
+  });
+  const { clearChoiceHover, disposeEditorIntegration, guardEditNavigation, finishEdit, beginEdit, positionEditor } =
+    editors;
+
   let dragPointer: number | null = null;
   let axisAnchor: { axis: 'row' | 'column'; index: number } | null = null;
   let axisDrag: { axis: 'row' | 'column'; index: number } | null = null;
@@ -870,21 +951,7 @@ export function createGrid(options: GridOptions): Grid {
     return button;
   });
   let addNextSelection = false;
-  let editor: CellEditor | null = null;
-  let editorCleanup: (() => void) | undefined;
-  function disposeEditorIntegration(): void {
-    const cleanup = editorCleanup;
-    editorCleanup = undefined;
-    try {
-      cleanup?.();
-    } catch (error) {
-      try {
-        options.onObserverError?.(error);
-      } catch {}
-    }
-  }
-  let richEditor: HTMLDivElement | null = null;
-  let choices: HTMLElement | null = null;
+
   const editorPane = doc.createElement('div');
   editorPane.style.cssText = 'position:absolute;overflow:hidden;pointer-events:none;z-index:1';
   root.append(editorPane);
@@ -894,13 +961,6 @@ export function createGrid(options: GridOptions): Grid {
   editorLabel.style.cssText =
     'position:absolute;left:0;top:-25px;box-sizing:border-box;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:4px 8px;border:1px solid var(--acheron-grid-line-color);background:var(--acheron-header-background);color:var(--acheron-header-text-color);font:11px system-ui';
   editorPane.append(editorLabel);
-  let editorAnchor: { left: number; top: number; width: number; height: number } | null = null;
-  function guardEditNavigation(event: BeforeUnloadEvent): void {
-    if (editor) {
-      event.preventDefault();
-      event.returnValue = '';
-    }
-  }
 
   let fullDraw = true;
   const dirty = new Map<string, { rowIndex: number; columnKey: string }>();
@@ -1100,7 +1160,7 @@ export function createGrid(options: GridOptions): Grid {
     dialog.addEventListener('close', () => {
       dialog.remove();
       if (overlay.activeDialog === dialog) overlay.activeDialog = null;
-      if (!destroyed && !editor) scroller.focus({ preventScroll: true });
+      if (!destroyed && !editors.editor) scroller.focus({ preventScroll: true });
     });
     root.append(dialog);
     dialog.showModal();
@@ -1110,7 +1170,7 @@ export function createGrid(options: GridOptions): Grid {
 
   function format(targets: readonly CellFormatTarget[], patch: CellFormatPatch | null): void {
     if (destroyed) throw new Error('Grid is destroyed.');
-    if (editor) throw new Error('Finish editing before changing formatting.');
+    if (editors.editor) throw new Error('Finish editing before changing formatting.');
     engine.format(targets, patch);
   }
 
@@ -1228,7 +1288,7 @@ export function createGrid(options: GridOptions): Grid {
     dialog.addEventListener('close', () => {
       dialog.remove();
       if (overlay.activeDialog === dialog) overlay.activeDialog = null;
-      if (!destroyed && !editor) scroller.focus({ preventScroll: true });
+      if (!destroyed && !editors.editor) scroller.focus({ preventScroll: true });
     });
     const actions = doc.createElement('div');
     actions.dataset.dialogActions = '';
@@ -1243,7 +1303,7 @@ export function createGrid(options: GridOptions): Grid {
 
   function setLocked(target: CellLockTarget, locked: boolean): void {
     if (destroyed) throw new Error('Grid is destroyed.');
-    if (editor) throw new Error('Finish editing before changing locks.');
+    if (editors.editor) throw new Error('Finish editing before changing locks.');
     const wasLocked = engine.isLocked(target);
     engine.setLocked(target, locked);
     rowLockCache.clear();
@@ -1272,7 +1332,7 @@ export function createGrid(options: GridOptions): Grid {
 
   function setFrozen(rows: number, columns: number): void {
     if (destroyed) throw new Error('Grid is destroyed.');
-    if (editor) throw new Error('Finish editing before changing frozen panes.');
+    if (editors.editor) throw new Error('Finish editing before changing frozen panes.');
     const axis = rows !== engine.frozenRows ? 'row' : 'column';
     animateLayout(() => engine.setFrozen(rows, columns), axis);
     if (motionEnabled())
@@ -1294,7 +1354,7 @@ export function createGrid(options: GridOptions): Grid {
 
   function resizeAxis(axis: typeof rowAxis, index: number, size: number): void {
     if (destroyed) throw new Error('Grid is destroyed.');
-    if (editor) throw new Error('Finish editing before resizing cells.');
+    if (editors.editor) throw new Error('Finish editing before resizing cells.');
     if (axis === rowAxis) {
       engine.setRowHeight(index, size);
     } else {
@@ -1313,7 +1373,7 @@ export function createGrid(options: GridOptions): Grid {
   }
   function autoFitColumn(index: number): void {
     if (destroyed) throw new Error('Grid is destroyed.');
-    if (editor) throw new Error('Finish editing before resizing cells.');
+    if (editors.editor) throw new Error('Finish editing before resizing cells.');
     columnAxis.size(index);
     const column = columns[index]!;
     const ctx = context!;
@@ -1345,7 +1405,7 @@ export function createGrid(options: GridOptions): Grid {
   }
   function autoFitRow(index: number): void {
     if (destroyed) throw new Error('Grid is destroyed.');
-    if (editor) throw new Error('Finish editing before resizing cells.');
+    if (editors.editor) throw new Error('Finish editing before resizing cells.');
     rowAxis.size(index);
     resizeAxis(rowAxis, index, measureRowHeight(index));
   }
@@ -2261,14 +2321,14 @@ export function createGrid(options: GridOptions): Grid {
     dialog.addEventListener('close', () => {
       dialog.remove();
       if (overlay.activeDialog === dialog) overlay.activeDialog = null;
-      if (!destroyed && !editor) scroller.focus({ preventScroll: true });
+      if (!destroyed && !editors.editor) scroller.focus({ preventScroll: true });
     });
     dialog.showModal();
     (sort ? apply : input).focus();
   }
 
   function onContextMenu(event: MouseEvent): void {
-    if (event.target === editor) return;
+    if (event.target === editors.editor) return;
     const cell = pointerCell(event);
     if (!cell) {
       if (
@@ -2463,7 +2523,7 @@ export function createGrid(options: GridOptions): Grid {
       cell &&
       !event.buttons &&
       !resizing &&
-      !editor &&
+      !editors.editor &&
       !overlay.menu &&
       options.allowOpenLinks !== false &&
       cellLinks(cell.row, cell.col).length
@@ -2478,18 +2538,18 @@ export function createGrid(options: GridOptions): Grid {
           x = event.clientX,
           y = event.clientY + 12;
         overlay.linkHoverTimer = win.setTimeout(() => {
-          if (!destroyed && !editor && !overlay.menu) openLinks(row, col, x, y, false);
+          if (!destroyed && !editors.editor && !overlay.menu) openLinks(row, col, x, y, false);
         }, 450);
       }
     }
     const config = cell ? columnEditors.get(columns[cell.col]!.key) : undefined;
     const next =
-      cell && config && config.type !== 'checkbox' && !resizing && !editor && engine.canEdit(cell.row, cell.col)
+      cell && config && config.type !== 'checkbox' && !resizing && !editors.editor && engine.canEdit(cell.row, cell.col)
         ? cell
         : null;
-    if (next?.row !== hoveredChoice?.row || next?.col !== hoveredChoice?.col) {
+    if (next?.row !== editors.hoveredChoice?.row || next?.col !== editors.hoveredChoice?.col) {
       clearChoiceHover();
-      hoveredChoice = next;
+      editors.hoveredChoice = next;
       if (next) invalidate([{ rowIndex: next.row, columnKey: columns[next.col]!.key }]);
     }
     const bounds = root.getBoundingClientRect();
@@ -2526,7 +2586,7 @@ export function createGrid(options: GridOptions): Grid {
       root.style.cursor = 'pointer';
       root.title = t('Alt+click to open links');
     }
-    if (hoveredChoice && cell) {
+    if (editors.hoveredChoice && cell) {
       const rect = viewport().cellRect(cell.row, cell.col);
       if (event.clientX - scroller.getBoundingClientRect().left >= rect.x + rect.width - 24)
         root.style.cursor = 'pointer';
@@ -2591,398 +2651,13 @@ export function createGrid(options: GridOptions): Grid {
 
   function updateCells(updates: readonly CellUpdate[]): void {
     if (destroyed) throw new Error('Grid is destroyed.');
-    if (editor) throw new Error('Finish editing before updating cells.');
+    if (editors.editor) throw new Error('Finish editing before updating cells.');
     engine.updateCells(updates);
   }
 
   function replay(redo: boolean): boolean {
-    if (destroyed || editor) return false;
+    if (destroyed || editors.editor) return false;
     return redo ? engine.redo() : engine.undo();
-  }
-
-  function finishEdit(commit: boolean): boolean {
-    const selection = engine.getSelection();
-    if (!editor || !selection) return true;
-    if (commit) {
-      try {
-        if (!editor.checkValidity()) throw new Error(editor.validationMessage);
-        engine.editCell(
-          selection.rowIndex,
-          selection.columnIndex,
-          editor instanceof win.HTMLInputElement && editor.type === 'checkbox'
-            ? String(editor.checked)
-            : editor instanceof win.HTMLSelectElement && editor.multiple
-              ? choiceValue(editor)
-              : editor.value,
-        );
-      } catch (error) {
-        editorError.dataset.severity = 'error';
-        editor.setCustomValidity(error instanceof Error ? t(error.message) : t('Unable to save cell.'));
-        editor.setAttribute('aria-invalid', 'true');
-        editorError.textContent = error instanceof Error ? t(error.message) : t('Unable to save cell.');
-        editorError.style.display = 'block';
-        positionEditor();
-        (choices?.querySelector<HTMLInputElement>('input') ?? richEditor ?? editor).focus({ preventScroll: true });
-        return false;
-      }
-    }
-    const input = editor;
-    editor = null;
-    richEditor?.remove();
-    richEditor = null;
-    if (choices) {
-      disposeChoicePanel(choices);
-      exitSurface(choices);
-    }
-    choices = null;
-    disposeEditorIntegration();
-    input.remove();
-    editorAnchor = null;
-    editorLabel.hidden = true;
-    win.removeEventListener('beforeunload', guardEditNavigation);
-    editorError.style.position = 'absolute';
-    editorError.style.display = 'none';
-    editorError.textContent = '';
-    editorPane.style.width = editorPane.style.height = '0px';
-    select(selection.rowIndex, selection.columnIndex, true);
-    return true;
-  }
-
-  function beginEdit(): void {
-    const selection = engine.getSelection();
-    if (destroyed || editor || !selection || !engine.canEdit(selection.rowIndex, selection.columnIndex)) return;
-    const column = columns[selection.columnIndex]!;
-    const value = engine.getValue(selection.rowIndex, column.key);
-    const preview = richText(
-      value,
-      column.key,
-      engine.getFormat(selection.rowIndex, selection.columnIndex).contentFormat,
-    );
-    if (preview?.unavailable) {
-      actionError.textContent = t('Rich text cannot be edited until it can be displayed.');
-      actionError.style.display = 'block';
-      return;
-    }
-    try {
-      const custom = options.createEditor?.(Object.freeze({ ...selection, value }), doc) ?? null;
-      if (
-        custom &&
-        (custom.ownerDocument !== doc || custom.parentNode || !['INPUT', 'SELECT', 'TEXTAREA'].includes(custom.tagName))
-      ) {
-        throw new Error('Cell editor must be a detached input, select or textarea from the grid document.');
-      }
-      if (!custom && mediaColumn(column.key)) {
-        if (overlay.activeDialog?.open) return;
-        const dialog = createMediaEditor(
-          doc,
-          value,
-          avatarColumns.has(column.key),
-          (next) => {
-            if (
-              destroyed ||
-              engine.getRowId(selection.rowIndex) !== selection.rowId ||
-              columns[selection.columnIndex]?.key !== column.key ||
-              !Object.is(engine.getValue(selection.rowIndex, column.key), value)
-            )
-              throw new Error('This cell changed. Cancel and reopen the editor.');
-            engine.editCell(selection.rowIndex, selection.columnIndex, JSON.stringify(next));
-          },
-          t,
-        );
-        overlay.activeDialog = dialog;
-        root.append(dialog);
-        dialog.addEventListener('close', () => {
-          dialog.remove();
-          if (overlay.activeDialog === dialog) overlay.activeDialog = null;
-          if (!destroyed) scroller.focus({ preventScroll: true });
-        });
-        dialog.showModal();
-        return;
-      }
-      const configured = columnEditors.get(column.key);
-      if (!custom && (configured?.type === 'select' || configured?.type === 'multiselect')) {
-        const select = doc.createElement('select');
-        for (const value of configured.values) {
-          const definition = typeof value === 'string' ? { value } : value;
-          const option = doc.createElement('option');
-          option.value = definition.value;
-          option.textContent = definition.label ?? definition.value;
-          option.disabled = definition.disabled ?? false;
-          select.append(option);
-        }
-        select.dataset.gridChoiceEditor = '';
-        select.multiple = configured.type === 'multiselect';
-        select.size = select.multiple ? Math.min(8, configured.values.length) : 0;
-        select.required =
-          !select.multiple &&
-          !configured.values.some((value) => (typeof value === 'string' ? value : value.value) === '');
-        editor = select;
-      } else if (!custom && configured?.type === 'checkbox') {
-        if (typeof value !== 'boolean') throw new TypeError('Checkbox cells require boolean values.');
-        const checkbox = doc.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.checked = value;
-        editor = checkbox;
-      } else editor = custom ?? doc.createElement(options.multilineEditor ? 'textarea' : 'input');
-      if (!custom) {
-        if (editor instanceof win.HTMLSelectElement && editor.multiple) {
-          const original = String(value ?? '')
-            .split(',')
-            .map((item) => item.trim())
-            .filter(Boolean);
-          editor.dataset.choiceOriginalValues = JSON.stringify([...new Set(original)]);
-          const selected = new Set(original);
-          for (const option of Array.from(editor.options)) option.selected = selected.has(option.value);
-        } else
-          editor.value =
-            value == null
-              ? ''
-              : mediaColumn(column.key) && Array.isArray(value)
-                ? JSON.stringify(value)
-                : String(value);
-      }
-    } catch (error) {
-      actionError.textContent = error instanceof Error ? t(error.message) : t('Unable to create cell editor.');
-      actionError.style.display = 'block';
-      return;
-    }
-    actionError.style.display = 'none';
-    editor.setAttribute(
-      'aria-label',
-      t('Edit row {0}, {1}', engine.getRowSourceIndex(selection.rowIndex) + 1, column.title),
-    );
-    editor.setAttribute('aria-errormessage', editorError.id);
-    editor.style.cssText =
-      'position:absolute;box-sizing:border-box;pointer-events:auto;outline:none;border:1px solid var(--acheron-selection-color);background:var(--acheron-background);color:var(--acheron-text-color);font:var(--acheron-font);padding:0 8px';
-    const cellFormat = engine.getFormat(selection.rowIndex, selection.columnIndex);
-    if (cellFormat.background) editor.style.background = cellFormat.background;
-    if (cellFormat.textColor) editor.style.color = cellFormat.textColor;
-    if (cellFormat.fontWeight) editor.style.fontWeight = cellFormat.fontWeight;
-    if (cellFormat.fontStyle) editor.style.fontStyle = cellFormat.fontStyle;
-    if (editor instanceof win.HTMLTextAreaElement) editor.style.resize = 'none';
-    if (editor instanceof win.HTMLInputElement && editor.type === 'checkbox') {
-      editor.style.maxWidth = editor.style.maxHeight = '16px';
-      editor.style.margin = '8px';
-      editor.style.padding = '0';
-      editor.style.accentColor = 'var(--acheron-selection-color)';
-      // WebKit may blur a focused checkbox on mouse down before its click toggles the draft.
-      editor.addEventListener('mousedown', (event) => event.preventDefault());
-    }
-    const clearValidation = () => {
-      editor?.setCustomValidity('');
-      editor?.removeAttribute('aria-invalid');
-      editorError.style.display = 'none';
-      editorError.dataset.severity = column.invalidInput === 'allow' ? 'warning' : 'error';
-      if (editor) {
-        try {
-          const text =
-            editor instanceof win.HTMLInputElement && editor.type === 'checkbox'
-              ? String(editor.checked)
-              : editor instanceof win.HTMLSelectElement && editor.multiple
-                ? choiceValue(editor)
-                : editor.value;
-          const message = column.validate?.(column.parse ? column.parse(text) : text);
-          if (message) {
-            editor.setAttribute('aria-invalid', 'true');
-            editorError.textContent =
-              message +
-              (column.invalidInput === 'allow' ? ' You can save this value.' : ' Correct this before saving.');
-            editorError.style.display = 'block';
-          }
-        } catch (error) {
-          editorError.dataset.severity = 'error';
-          editor.setAttribute('aria-invalid', 'true');
-          editorError.textContent = error instanceof Error ? t(error.message) : t('Invalid value.');
-          editorError.style.display = 'block';
-        }
-      }
-      positionEditor();
-    };
-    editor.addEventListener('input', clearValidation);
-    editor.addEventListener('change', clearValidation);
-    clearValidation();
-    editor.addEventListener('keydown', (event) => {
-      if (!(event instanceof win.KeyboardEvent)) return;
-      event.stopPropagation();
-      if (event.isComposing || event.keyCode === 229) return;
-      if (
-        editor instanceof win.HTMLTextAreaElement &&
-        event.key === 'Enter' &&
-        (event.altKey || event.ctrlKey || event.metaKey)
-      ) {
-        event.preventDefault();
-        editor.setRangeText('\n', editor.selectionStart, editor.selectionEnd, 'end');
-        editor.dispatchEvent(new win.Event('input', { bubbles: true }));
-        return;
-      }
-      if (editor instanceof win.HTMLTextAreaElement && event.key === 'Tab') {
-        event.preventDefault();
-        const current = engine.getSelection()!;
-        if (finishEdit(true)) {
-          const position = Math.max(
-            0,
-            Math.min(
-              rowCount * columns.length - 1,
-              current.rowIndex * columns.length + current.columnIndex + (event.shiftKey ? -1 : 1),
-            ),
-          );
-          select(Math.floor(position / columns.length), position % columns.length);
-          scroller.focus({ preventScroll: true });
-        }
-        return;
-      }
-      if (event.key === 'Enter' || event.key === 'Escape') {
-        event.preventDefault();
-        if (finishEdit(event.key === 'Enter')) scroller.focus({ preventScroll: true });
-      } else if (event.key === 'Tab' && !finishEdit(true)) event.preventDefault();
-    });
-    editor.addEventListener('blur', () => {
-      if (
-        !options.editorOptions?.pinned &&
-        !choices &&
-        !(
-          editor instanceof win.HTMLSelectElement &&
-          editor.dataset.gridChoiceEditor !== undefined &&
-          choiceOptionsFor(column.key)
-        )
-      )
-        finishEdit(true);
-    });
-    editorPane.append(editor);
-    const contentFormat = cellFormat.contentFormat ?? richTextColumns.get(column.key);
-    if (contentFormat && contentFormat !== 'plain' && !options.createEditor && !columnEditors.has(column.key)) {
-      const backing = editor;
-      const surface = doc.createElement('div');
-      richEditor = surface;
-      surface.contentEditable = 'true';
-      surface.setAttribute('role', 'textbox');
-      surface.setAttribute('aria-multiline', 'true');
-      surface.setAttribute('aria-label', backing.getAttribute('aria-label')!);
-      surface.setAttribute('aria-errormessage', editorError.id);
-      surface.style.cssText =
-        backing.style.cssText +
-        ';white-space:pre-wrap;overflow:auto;overflow-wrap:anywhere;padding:4px 8px;line-height:normal';
-      surface.innerHTML = richTextHtml(
-        richText(value, column.key, contentFormat) ?? {
-          text: String(value ?? ''),
-          runs: [{ text: String(value ?? '') }],
-        },
-        doc,
-      );
-      backing.setAttribute('aria-hidden', 'true');
-      backing.tabIndex = -1;
-      backing.style.visibility = 'hidden';
-      backing.style.pointerEvents = 'none';
-      const sync = () => {
-        backing.value = richTextSource(readHtml(surface.innerHTML, doc, true), contentFormat, doc);
-        backing.dispatchEvent(new win.Event('input', { bubbles: true }));
-      };
-      const insert = (rich: RichText) => {
-        const selection = win.getSelection();
-        if (!selection?.rangeCount || !surface.contains(selection.anchorNode)) return;
-        const range = selection.getRangeAt(0);
-        range.deleteContents();
-        const template = doc.createElement('template');
-        template.innerHTML = richTextHtml(rich, doc);
-        const last = template.content.lastChild;
-        range.insertNode(template.content);
-        if (last) {
-          range.setStartAfter(last);
-          range.collapse(true);
-          selection.removeAllRanges();
-          selection.addRange(range);
-        }
-        sync();
-      };
-      surface.addEventListener('input', sync);
-      surface.addEventListener('paste', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        const html = event.clipboardData?.getData('text/html');
-        const text = event.clipboardData?.getData('text/plain') ?? '';
-        const rich = html ? readHtml(html, doc) : { text, runs: [{ text }] };
-        insert(
-          engine.getCellPermission(selection.rowIndex, selection.columnIndex).formatting
-            ? rich
-            : { text: rich.text, runs: [{ text: rich.text }] },
-        );
-      });
-      surface.addEventListener('drop', (event) => {
-        event.preventDefault();
-      });
-      surface.addEventListener('click', (event) => {
-        if ((event.target as Element).closest('a')) event.preventDefault();
-      });
-      surface.addEventListener('keydown', (event) => {
-        event.stopPropagation();
-        if (event.isComposing || event.keyCode === 229) return;
-        if ((event.ctrlKey || event.metaKey) && ['b', 'i', 'u'].includes(event.key.toLowerCase())) {
-          if (
-            !engine.getCellPermission(selection.rowIndex, selection.columnIndex).formatting ||
-            (contentFormat === 'markdown' && event.key.toLowerCase() === 'u')
-          )
-            event.preventDefault();
-          return;
-        }
-        if (event.key === 'Enter' && (event.altKey || event.ctrlKey || event.metaKey)) {
-          event.preventDefault();
-          insert({ text: '\n', runs: [{ text: '\n' }] });
-          return;
-        }
-        if (['Enter', 'Escape', 'Tab'].includes(event.key)) {
-          event.preventDefault();
-          backing.dispatchEvent(new win.KeyboardEvent('keydown', { key: event.key, shiftKey: event.shiftKey }));
-        }
-      });
-      surface.addEventListener('blur', () => {
-        if (!options.editorOptions?.pinned) finishEdit(true);
-      });
-      editorPane.append(surface);
-    }
-    if (options.editorOptions?.guardNavigation !== false) win.addEventListener('beforeunload', guardEditNavigation);
-    editorLabel.textContent = t(
-      '{0} · Row {1} · {2}',
-      column.title,
-      engine.getRowSourceIndex(selection.rowIndex) + 1,
-      String(engine.getRowId(selection.rowIndex)),
-    );
-    positionEditor();
-    (richEditor ?? editor).focus({ preventScroll: true });
-    if (richEditor) {
-      const range = doc.createRange();
-      range.selectNodeContents(richEditor);
-      const selection = win.getSelection();
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-    } else if (editor.tagName !== 'SELECT' && 'select' in editor) editor.select();
-    const choiceOptions = choiceOptionsFor(column.key);
-    if (editor instanceof win.HTMLSelectElement && editor.dataset.gridChoiceEditor !== undefined && choiceOptions) {
-      choices = choicePanel(
-        editor,
-        root,
-        choiceOptions,
-        (commit) => {
-          const done = finishEdit(commit);
-          if (done) scroller.focus({ preventScroll: true });
-          return done;
-        },
-        column.key,
-        t,
-      );
-      enterSurface(choices);
-      editor.style.opacity = '0';
-      editor.style.pointerEvents = 'none';
-      editor.tabIndex = -1;
-      editor.setAttribute('aria-hidden', 'true');
-    }
-    try {
-      const cleanup = options.onEditorMount?.(Object.freeze({ ...selection, value }), editor);
-      editorCleanup = typeof cleanup === 'function' ? cleanup : undefined;
-    } catch (error) {
-      finishEdit(false);
-      actionError.textContent = error instanceof Error ? t(error.message) : t('Unable to mount custom editor.');
-      actionError.style.display = 'block';
-    }
   }
 
   const getSelection = engine.getSelection;
@@ -3123,7 +2798,7 @@ export function createGrid(options: GridOptions): Grid {
   }
 
   function onLinkClick(event: MouseEvent): void {
-    if (!event.altKey || event.target === editor) return;
+    if (!event.altKey || event.target === editors.editor) return;
     const cell = pointerCell(event);
     if (cell && cellLinks(cell.row, cell.col).length && finishEdit(true)) {
       event.preventDefault();
@@ -3132,7 +2807,7 @@ export function createGrid(options: GridOptions): Grid {
     }
   }
   function onPointerDown(event: PointerEvent): void {
-    if (event.defaultPrevented || event.target === editor || event.button !== 0) return;
+    if (event.defaultPrevented || event.target === editors.editor || event.button !== 0) return;
     if (event.altKey) return;
     touchSelection = event.pointerType === 'touch';
     const cell = pointerCell(event);
@@ -3186,8 +2861,8 @@ export function createGrid(options: GridOptions): Grid {
       const y = event.clientY - bounds.top - rect.y;
       if (x >= 8 && x <= 28 && Math.abs(y - rect.height / 2) <= 10 && engine.canEdit(cell.row, cell.col)) {
         beginEdit();
-        if (editor instanceof win.HTMLInputElement && editor.type === 'checkbox') {
-          editor.checked = !editor.checked;
+        if (editors.editor instanceof win.HTMLInputElement && editors.editor.type === 'checkbox') {
+          editors.editor.checked = !editors.editor.checked;
           if (finishEdit(true)) scroller.focus({ preventScroll: true });
         }
         return;
@@ -3350,8 +3025,12 @@ export function createGrid(options: GridOptions): Grid {
     if (event.key === 'Enter' || event.key === 'F2') {
       event.preventDefault();
       beginEdit();
-      if (event.key === 'Enter' && editor instanceof win.HTMLInputElement && editor.type === 'checkbox') {
-        editor.checked = !editor.checked;
+      if (
+        event.key === 'Enter' &&
+        editors.editor instanceof win.HTMLInputElement &&
+        editors.editor.type === 'checkbox'
+      ) {
+        editors.editor.checked = !editors.editor.checked;
         if (finishEdit(true)) scroller.focus({ preventScroll: true });
       }
       return;
@@ -3589,8 +3268,8 @@ export function createGrid(options: GridOptions): Grid {
     }
     if (
       !header &&
-      hoveredChoice?.row === rowIndex &&
-      hoveredChoice.col === columnIndex &&
+      editors.hoveredChoice?.row === rowIndex &&
+      editors.hoveredChoice.col === columnIndex &&
       width >= 28 &&
       height >= 20 &&
       engine.canEdit(rowIndex, columnIndex)
@@ -3983,108 +3662,6 @@ export function createGrid(options: GridOptions): Grid {
     });
   }
 
-  function positionRichEditor(maxHeight: number): void {
-    if (!richEditor || !editor) return;
-    for (const property of ['left', 'top', 'width'] as const) richEditor.style[property] = editor.style[property];
-    richEditor.style.height = '0px';
-    richEditor.style.height = `${Math.min(maxHeight, Math.max(parseFloat(editor.style.height), richEditor.scrollHeight + 4))}px`;
-    editor.style.height = richEditor.style.height;
-    if (editor.hasAttribute('aria-invalid')) richEditor.setAttribute('aria-invalid', 'true');
-    else richEditor.removeAttribute('aria-invalid');
-  }
-  function positionEditor(): void {
-    const selection = engine.getSelection();
-    if (!editor || !selection) return;
-    const rect = viewport().cellRect(selection.rowIndex, selection.columnIndex);
-    if (options.editorOptions?.pinned) {
-      const bounds = root.getBoundingClientRect();
-      editorAnchor ??= {
-        left: bounds.left + indexWidth + rect.x,
-        top: bounds.top + headerHeight + rect.y,
-        width: rect.width,
-        height: rect.height,
-      };
-      const left = Math.max(
-        8,
-        Math.min(editorAnchor.left, win.innerWidth - Math.min(editorAnchor.width, win.innerWidth - 16) - 8),
-      );
-      const top = Math.max(
-        32,
-        Math.min(editorAnchor.top, win.innerHeight - Math.min(editorAnchor.height, win.innerHeight - 48) - 16),
-      );
-      editorPane.style.position = 'fixed';
-      editorPane.style.overflow = 'visible';
-      editorPane.style.zIndex = '9';
-      editorPane.style.clipPath = '';
-      editorPane.style.left = `${left}px`;
-      editorPane.style.top = `${top}px`;
-      editorPane.style.width = `${Math.min(editorAnchor.width, win.innerWidth - left - 8)}px`;
-      editorPane.style.height = `${Math.min(editorAnchor.height, win.innerHeight - top - 16)}px`;
-      editor.style.left = '0px';
-      editor.style.top = '0px';
-      editor.style.width = editorPane.style.width;
-      editor.style.height = editorPane.style.height;
-      if (editor instanceof win.HTMLTextAreaElement && !richEditor) {
-        editor.style.height = '0px';
-        editor.style.height = `${Math.min(Math.max(editorAnchor.height, editor.scrollHeight + 4), win.innerHeight - top - 16)}px`;
-      }
-      positionRichEditor(win.innerHeight - top - 16);
-      const displaced =
-        Math.abs(bounds.left + indexWidth + rect.x - editorAnchor.left) > 0.5 ||
-        Math.abs(bounds.top + headerHeight + rect.y - editorAnchor.top) > 0.5;
-      editorLabel.hidden =
-        options.editorOptions.showLabel === false || (options.editorOptions.showLabel === 'scroll' && !displaced);
-      if (choices && editor instanceof win.HTMLSelectElement) {
-        choices.hidden = false;
-        positionChoicePanel(choices, editor);
-      }
-      if (editorError.style.display !== 'none') {
-        editorError.style.position = 'fixed';
-        editorError.style.left = `${left}px`;
-        editorError.style.top = `${Math.min(top + editor.offsetHeight + 4, win.innerHeight - editorError.offsetHeight - 8)}px`;
-        editorError.style.maxWidth = `${win.innerWidth - left - 8}px`;
-        editorError.style.visibility = 'visible';
-      }
-      return;
-    }
-    const clip = rect.clip;
-    editorPane.style.left = `${indexWidth + clip.x}px`;
-    editorPane.style.top = `${headerHeight + clip.y}px`;
-    editorPane.style.width = `${clip.width}px`;
-    editorPane.style.height = `${clip.height}px`;
-    editor.style.left = `${rect.x - clip.x}px`;
-    editor.style.top = `${rect.y - clip.y}px`;
-    editor.style.width = `${rect.width}px`;
-    editor.style.height = `${editor instanceof win.HTMLSelectElement && editor.multiple && !options.choiceEditor ? Math.min(220, Math.max(rect.height, editor.size * 24 + 8), Math.max(1, clip.height - Math.max(0, rect.y - clip.y))) : rect.height}px`;
-    const hidden =
-      rect.x + rect.width <= clip.x ||
-      rect.x >= clip.x + clip.width ||
-      rect.y + rect.height <= clip.y ||
-      rect.y >= clip.y + clip.height;
-    editorPane.style.clipPath = hidden ? 'inset(100%)' : '';
-    if (choices && editor instanceof win.HTMLSelectElement) {
-      choices.hidden = hidden;
-      positionChoicePanel(choices, editor);
-    }
-    if (editor instanceof win.HTMLTextAreaElement && !richEditor) {
-      context!.save();
-      context!.font = theme.font;
-      let width = rect.width;
-      for (const line of editor.value.split('\n')) width = Math.max(width, context!.measureText(line).width + 24);
-      context!.restore();
-      editor.style.width = `${Math.min(width, Math.max(1, clip.width - Math.max(0, rect.x - clip.x)))}px`;
-      editor.style.height = '0px';
-      editor.style.height = `${Math.min(Math.max(rect.height, editor.scrollHeight + 4), Math.max(1, clip.height - Math.max(0, rect.y - clip.y)))}px`;
-    }
-    positionRichEditor(Math.max(1, clip.height - Math.max(0, rect.y - clip.y)));
-    if (editorError.style.display !== 'none') {
-      editorError.style.maxWidth = `${clip.width}px`;
-      editorError.style.visibility = hidden ? 'hidden' : 'visible';
-      editorError.style.left = `${indexWidth + Math.max(clip.x, Math.min(rect.x, clip.x + clip.width - editorError.offsetWidth))}px`;
-      editorError.style.top = `${headerHeight + Math.max(clip.y, Math.min(rect.y + editor.offsetHeight + 4, clip.y + clip.height - editorError.offsetHeight))}px`;
-    }
-  }
-
   function clipRegion(region: ViewportRegion): void {
     const clip = region.clip;
     context!.beginPath();
@@ -4157,7 +3734,7 @@ export function createGrid(options: GridOptions): Grid {
     rowLockCache.clear();
     frame = undefined;
     if (destroyed) return;
-    if (options.autoRowHeight && !editor && !resizing)
+    if (options.autoRowHeight && !editors.editor && !resizing)
       for (const row of visibleIndices('row')) {
         if (engine.isRowHeightManual(row) || measuredRows.has(row)) continue;
         const height = measureRowHeight(row, true);
@@ -5092,7 +4669,7 @@ export function createGrid(options: GridOptions): Grid {
     positionEditor();
     const range = getSelectionRange();
     selectionHandles.forEach((button, i) => {
-      button.hidden = (!touchSelection && i === 0) || !range || !!editor;
+      button.hidden = (!touchSelection && i === 0) || !range || !!editors.editor;
       if (button.hidden || !range) return;
       const size = touchSelection ? 20 : 10;
       const half = size / 2;
@@ -5169,7 +4746,7 @@ export function createGrid(options: GridOptions): Grid {
     const selection = engine.getSelection();
     if (cell && columnEditors.get(columns[cell.col]!.key)?.type === 'checkbox') return;
     if (
-      event.target !== editor &&
+      event.target !== editors.editor &&
       cell &&
       selection?.rowIndex === cell.row &&
       selection.columnIndex === cell.col &&
@@ -5224,7 +4801,7 @@ export function createGrid(options: GridOptions): Grid {
     });
   }
   function structureAction<T>(run: () => T, axis?: 'row' | 'column'): T {
-    if (editor || destroyed) throw new Error('Save or cancel the editor before changing structure.');
+    if (editors.editor || destroyed) throw new Error('Save or cancel the editor before changing structure.');
     return axis ? animateLayout(run, axis) : run();
   }
   return {
@@ -5245,7 +4822,7 @@ export function createGrid(options: GridOptions): Grid {
     },
     exportState: engine.exportState,
     restoreState: (state: unknown) => {
-      if (editor) throw new Error('Finish editing before restoring state.');
+      if (editors.editor) throw new Error('Finish editing before restoring state.');
       if (!state || typeof state !== 'object' || !('configuration' in state))
         throw new TypeError('Invalid grid state.');
       const restored = restoreGridConfiguration(state.configuration, columns, engine.sourceRowCount);
@@ -5257,7 +4834,7 @@ export function createGrid(options: GridOptions): Grid {
       const column = columns.find((column) => column.key === key);
       if (!column) throw new Error('Unknown editor column.');
       const valid = config === null ? null : validateColumnEditor(column, config);
-      if (editor && engine.getSelection()?.columnKey === key) finishEdit(false);
+      if (editors.editor && engine.getSelection()?.columnKey === key) finishEdit(false);
       if (valid) columnEditors.set(key, valid);
       else columnEditors.delete(key);
       clearChoiceHover();
@@ -5381,11 +4958,11 @@ export function createGrid(options: GridOptions): Grid {
       clearCopyFeedback();
       clearLayoutMotion();
       removeMotionListener();
-      if (choices) {
-        disposeChoicePanel(choices);
-        choices.remove();
+      if (editors.choices) {
+        disposeChoicePanel(editors.choices);
+        editors.choices.remove();
       }
-      choices = null;
+      editors.choices = null;
       disposeEditorIntegration();
       win.removeEventListener('beforeunload', guardEditNavigation);
       clearReorder();
@@ -5414,10 +4991,10 @@ export function createGrid(options: GridOptions): Grid {
       root.removeEventListener('lostpointercapture', endResize);
       scroller.removeEventListener('contextmenu', onContextMenu);
       dirty.clear();
-      const input = editor;
-      editor = null;
-      richEditor?.remove();
-      richEditor = null;
+      const input = editors.editor;
+      editors.editor = null;
+      editors.richEditor?.remove();
+      editors.richEditor = null;
       input?.remove();
       onPointerEnd();
       removeTooltips();
