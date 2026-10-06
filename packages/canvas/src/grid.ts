@@ -157,6 +157,8 @@ export interface Grid {
   readonly frozenColumns: number;
   setRowsHidden: GridEngine['setRowsHidden'];
   setColumnsHidden: GridEngine['setColumnsHidden'];
+  getHiddenRows: GridEngine['getHiddenRows'];
+  getHiddenColumns: GridEngine['getHiddenColumns'];
   isRowHidden: GridEngine['isRowHidden'];
   isColumnHidden: GridEngine['isColumnHidden'];
   setFrozen(rows: number, columns: number): void;
@@ -1094,7 +1096,7 @@ export function createGrid(options: GridOptions): Grid {
       const request={axis:'column' as const,kind:'insert' as const,indices:[],beforeIndex:indices[0]!,count:1};
       item('Insert column left…',engine.canChangeStructure(request),()=>openColumnDialog(indices[0]!));
       item('Insert column right…',engine.canChangeStructure({...request,beforeIndex:indices.at(-1)!+1}),()=>openColumnDialog(indices.at(-1)!+1));
-      item(indices.length>1 ? t('Delete {0} selected columns',indices.length):'Delete column',indices.length<columns.length&&engine.canChangeStructure({axis:'column',kind:'delete',indices,beforeIndex:indices[0]!,count:indices.length}),()=>engine.deleteColumns(indices));
+      item(indices.length>1 ? 'Delete '+indices.length+' selected columns':'Delete column',indices.length<columns.length&&engine.canChangeStructure({axis:'column',kind:'delete',indices,beforeIndex:indices[0]!,count:indices.length}),()=>engine.deleteColumns(indices));
     }
     if (options.onReorder) item(header ? 'Move columns to…' : 'Move rows to…', (header || rowCount > 0) && options.canReorder?.({ axis: header ? 'column' : 'row', indices, beforeIndex: indices[0]! }) !== false, () => {
       const axis = header ? 'column' : 'row'; const count = header ? columns.length : rowCount;
@@ -1125,7 +1127,7 @@ export function createGrid(options: GridOptions): Grid {
     for (const [label, targets] of lockTargets) {
       if (!targets.length || (!rowCount && (label === 'row' || label.includes('cell')))) continue;
       const locked = label.includes('cell') ? selectedCellsLocked : targets.every(target => engine.isLocked(target));
-      const name = targets.length > 1 && (label === 'row' || label === 'column') ? t("{0} selected {1}s",targets.length,label) : label;
+      const name = targets.length > 1 && (label === 'row' || label === 'column') ? t("{0} selected {1}s",targets.length,t(label)) : t(label);
       item(`${locked ? 'Unlock' : 'Lock'} ${name}`, engine.canManageLocks(), () => {
         if (label.includes('cell')) {
           for (const range of lockRanges) for (let r=range.startRow;r<=range.endRow;r++) for (let c=range.startColumn;c<=range.endColumn;c++) setLocked({scope:'cell',rowIndex:r,columnIndex:c},!locked);
@@ -1145,8 +1147,8 @@ export function createGrid(options: GridOptions): Grid {
     item('Auto-fit row', rowCount > 0, () => autoFitRow(row));
     item('Resize column…', true, () => openSizeDialog(t("Column width"), columnAxis.size(col), size => resizeAxis(columnAxis, col, size)));
     item('Resize row…', rowCount > 0, () => openSizeDialog(t("Row height"), rowAxis.size(row), size => resizeAxis(rowAxis, row, size)));
-    const mode = doc.createElement('button');mode.type='button';mode.setAttribute('role','menuitemcheckbox');mode.textContent=t("Suggested actions");mode.setAttribute('aria-checked',String(suggestionsEnabled));mode.setAttribute('aria-label',t("Suggested actions"));mode.textContent=t("Suggested actions: ")+(suggestionsEnabled?'On':'Off');
-    mode.addEventListener('click',()=>{mode.focus();suggestionsEnabled=!suggestionsEnabled;showAll=!suggestionsEnabled;mode.setAttribute('aria-checked',String(suggestionsEnabled));mode.textContent=t("Suggested actions: ")+(suggestionsEnabled?'On':'Off');all.hidden=showAll;filterActions();});
+    const mode = doc.createElement('button');mode.type='button';mode.setAttribute('role','menuitemcheckbox');mode.textContent=t("Suggested actions");mode.setAttribute('aria-checked',String(suggestionsEnabled));mode.setAttribute('aria-label',t("Suggested actions"));mode.textContent=t("Suggested actions: ")+(suggestionsEnabled?t('On'):t('Off'));
+    mode.addEventListener('click',()=>{mode.focus();suggestionsEnabled=!suggestionsEnabled;showAll=!suggestionsEnabled;mode.setAttribute('aria-checked',String(suggestionsEnabled));mode.textContent=t("Suggested actions: ")+(suggestionsEnabled?t('On'):t('Off'));all.hidden=showAll;filterActions();});
     const all = doc.createElement('button');all.type='button';all.textContent=t("Show all actions");all.setAttribute('role','menuitem');
     all.addEventListener('click',()=>{showAll=true;filterActions();all.hidden=true;});
     filter.before(mode);popup.append(all,empty);filterActions();all.hidden=showAll;
@@ -2788,7 +2790,7 @@ export function createGrid(options: GridOptions): Grid {
       reorderGuide.style.top = axis === 'column' ? '0px' : `${Math.max(0, Math.min(root.clientHeight - 2, edge - 1))}px`;
       reorderGuide.style.width = axis === 'row' ? `${root.clientWidth}px` : '2px';
       reorderGuide.style.height = axis === 'column' ? `${root.clientHeight}px` : '2px';
-      reorderBadge.textContent = allowed ? t("Move {0} {1}{2} · {3} {4}",reorderDrag!.indices.length,axis,reorderDrag!.indices.length > 1 ? 's' : '',after ? t('after') : t('before'),last === first ? first + 1 : `${first + 1}–${last + 1}`) : t("Moving here is disabled");
+      reorderBadge.textContent = allowed ? t("Move {0} {1}{2} · {3} {4}",reorderDrag!.indices.length,t(axis),reorderDrag!.indices.length > 1 ? 's' : '',after ? t('after') : t('before'),last === first ? first + 1 : `${first + 1}–${last + 1}`) : t("Moving here is disabled");
       reorderBadge.style.left = `${Math.max(4, Math.min(root.clientWidth - reorderBadge.offsetWidth - 4, event.clientX - origin.left + 14))}px`;
       reorderBadge.style.top = `${Math.max(4, Math.min(root.clientHeight - reorderBadge.offsetHeight - 4, event.clientY - origin.top + 14))}px`;
     reorderBadge.style.display='block';return {beforeIndex,allowed};
@@ -2834,11 +2836,11 @@ export function createGrid(options: GridOptions): Grid {
       if (!selectedAxis || !finishEdit(true)) { event.preventDefault(); return; }
       const indices = first === last ? selectedAxisIndices(axis, first) : Array.from({ length: last - first + 1 }, (_, i) => first + i);
       reorderDrag = { axis, indices };
-      reorderBadge.textContent = t("Move {0} {1}{2}",indices.length,axis,indices.length > 1 ? 's' : '');
+      reorderBadge.textContent = t("Move {0} {1}{2}",indices.length,t(axis),indices.length > 1 ? 's' : '');
       reorderBadge.style.display = 'block'; reorderBadge.style.left = '8px'; reorderBadge.style.top = '8px';
       root.style.cursor = 'grabbing';
       if (event.dataTransfer) {
-        event.dataTransfer.setData('text/plain', t("Move {0}",axis)); event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', t("Move {0}",t(axis))); event.dataTransfer.effectAllowed = 'move';
         event.dataTransfer.setDragImage(reorderBadge, 16, 14);
       }
     });
@@ -3146,6 +3148,7 @@ export function createGrid(options: GridOptions): Grid {
     setFrozen,
     setRowsHidden:(indices,hidden)=>{if(finishEdit(true)){cancelCut();engine.setRowsHidden(indices,hidden);}},
     setColumnsHidden:(indices,hidden)=>{if(finishEdit(true)){cancelCut();engine.setColumnsHidden(indices,hidden);}},
+    getHiddenRows:engine.getHiddenRows,getHiddenColumns:engine.getHiddenColumns,
     isRowHidden:engine.isRowHidden,isColumnHidden:engine.isColumnHidden,
     isLocked: engine.isLocked,
     canManageLocks: engine.canManageLocks,

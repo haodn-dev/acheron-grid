@@ -8,6 +8,7 @@ test('hidden axes skip paint/ARIA and keyboard, retain data and recover when all
   grid.setRowsHidden([1],true);grid.setColumnsHidden([1],true);grid.selectRow(0);
  });
  await expect(page.locator('[data-grid-header-cell="1"]')).toHaveCount(0);
+ expect(await page.evaluate(()=>({rows:grid.getHiddenRows(),columns:grid.getHiddenColumns()}))).toEqual({rows:[1],columns:[1]});
  await expect(page.getByRole('gridcell').filter({hasText:'B'})).toHaveCount(0);
  await page.locator('[role=grid]').focus();await page.keyboard.press('ArrowRight');expect(await page.evaluate(()=>grid.getSelection().columnIndex)).toBe(2);
  await page.keyboard.press('ArrowDown');expect(await page.evaluate(()=>grid.getSelection().rowIndex)).toBe(2);
@@ -27,7 +28,7 @@ test('locale and number formats cover menu, editor, numeric ARIA without transla
  await expect(page.getByRole('gridcell').filter({hasText:'Amount: 1.234,5'})).toHaveCount(1);
  await expect(page.getByRole('gridcell').filter({hasText:'Label: Copy'})).toHaveCount(1);
  await page.locator('[role=grid]').focus();await page.keyboard.press('Shift+F10');
- await expect(page.getByRole('menuitem',{name:'Chép dữ liệu',exact:true})).toBeVisible();await expect(page.getByRole('menuitem',{name:'Ẩn các hàng đã chọn',exact:true})).toBeVisible();
+ await expect(page.getByRole('menuitem',{name:'Chép dữ liệu',exact:true})).toBeVisible();await expect(page.getByRole('menuitem',{name:'Ẩn các hàng đã chọn',exact:true})).toBeVisible();await expect(page.getByRole('menuitem',{name:'Khóa hàng',exact:true})).toBeVisible();
  await page.getByRole('menuitem',{name:'Định dạng ô…',exact:true}).click();await expect(page.getByRole('dialog',{name:'Định dạng ô'})).toBeVisible();await expect(page.getByLabel('Định dạng số',{exact:true})).toBeVisible();
  await expect(page.getByRole('dialog')).toContainText('Đổi định dạng số');await page.screenshot({path:'../.verification/canvas-localized-format.png'});
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:'../.verification/canvas-localized-format-mobile.png'});expect(await page.getByRole('dialog').evaluate(el=>{const box=el.getBoundingClientRect();return box.left>=0&&box.right<=innerWidth;})).toBe(true);

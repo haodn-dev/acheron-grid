@@ -506,6 +506,22 @@ setColumnsHidden: (indices: readonly number[], hidden: boolean) => void
 
 
 
+### getHiddenRows
+
+```ts
+getHiddenRows: () => readonly number[]
+```
+
+
+
+### getHiddenColumns
+
+```ts
+getHiddenColumns: () => readonly number[]
+```
+
+
+
 ### isRowHidden
 
 ```ts
