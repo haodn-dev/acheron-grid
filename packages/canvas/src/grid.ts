@@ -1,3 +1,4 @@
+import { createInteraction } from './internal/interaction.js';
 import { createEditors } from './internal/editors.js';
 import { createMediaController } from './internal/media-controller.js';
 import { createClipboard } from './internal/clipboard.js';
@@ -430,10 +431,11 @@ export function createGrid(options: GridOptions): Grid {
         if (change.type === 'structure') {
           editors.hoveredChoice = null;
           if (managesView) currentView = engine.view;
-          if (axisAnchor) {
-            const map = axisAnchor.axis === 'row' ? change.rowMap : change.columnMap,
-              next = map[axisAnchor.index];
-            axisAnchor = next !== undefined && next >= 0 ? { ...axisAnchor, index: next } : null;
+          if (interaction.axisAnchor) {
+            const map = interaction.axisAnchor.axis === 'row' ? change.rowMap : change.columnMap,
+              next = map[interaction.axisAnchor.index];
+            interaction.axisAnchor =
+              next !== undefined && next >= 0 ? { ...interaction.axisAnchor, index: next } : null;
           }
           onPointerEnd();
           columns = engine.columns;
@@ -918,13 +920,201 @@ export function createGrid(options: GridOptions): Grid {
   const { clearChoiceHover, disposeEditorIntegration, guardEditNavigation, finishEdit, beginEdit, positionEditor } =
     editors;
 
-  let dragPointer: number | null = null;
-  let axisAnchor: { axis: 'row' | 'column'; index: number } | null = null;
-  let axisDrag: { axis: 'row' | 'column'; index: number } | null = null;
-  let dragPosition: { clientX: number; clientY: number } | null = null;
-  let dragFrame: number | undefined;
-  let handleAnchor: { row: number; col: number } | null = null;
-  let touchSelection = false;
+  const interaction = createInteraction({
+    get actionError() {
+      return actionError;
+    },
+    get announceSelection() {
+      return announceSelection;
+    },
+    get beginEdit() {
+      return beginEdit;
+    },
+    get cancelCut() {
+      return cancelCut;
+    },
+    get cancelLinkPreviewHover() {
+      return cancelLinkPreviewHover;
+    },
+    get cellLinks() {
+      return cellLinks;
+    },
+    get clearChoiceHover() {
+      return clearChoiceHover;
+    },
+    get closeMenu() {
+      return closeMenu;
+    },
+    get columnAxis() {
+      return columnAxis;
+    },
+    get columnEditors() {
+      return columnEditors;
+    },
+    get columns() {
+      return columns;
+    },
+    get context() {
+      return context;
+    },
+    get destroyed() {
+      return destroyed;
+    },
+    get editors() {
+      return editors;
+    },
+    get engine() {
+      return engine;
+    },
+    get finishEdit() {
+      return finishEdit;
+    },
+    get format() {
+      return format;
+    },
+    get getSelection() {
+      return getSelection;
+    },
+    get getSelectionRange() {
+      return getSelectionRange;
+    },
+    get getSelectionRanges() {
+      return getSelectionRanges;
+    },
+    get headerHeight() {
+      return headerHeight;
+    },
+    get headerRowHeight() {
+      return headerRowHeight;
+    },
+    get headerSurface() {
+      return headerSurface;
+    },
+    get indexGutter() {
+      return indexGutter;
+    },
+    get indexWidth() {
+      return indexWidth;
+    },
+    get invalidate() {
+      return invalidate;
+    },
+    get leafHeaders() {
+      return leafHeaders;
+    },
+    get measuredRows() {
+      return measuredRows;
+    },
+    get mediaColumn() {
+      return mediaColumn;
+    },
+    get mediaSize() {
+      return mediaSize;
+    },
+    get numberText() {
+      return numberText;
+    },
+    get openLinks() {
+      return openLinks;
+    },
+    get openMedia() {
+      return openMedia;
+    },
+    get openMenu() {
+      return openMenu;
+    },
+    get options() {
+      return options;
+    },
+    get overlay() {
+      return overlay;
+    },
+    get reorderBadge() {
+      return reorderBadge;
+    },
+    get reorderGuide() {
+      return reorderGuide;
+    },
+    get replay() {
+      return replay;
+    },
+    get resizeGuide() {
+      return resizeGuide;
+    },
+    get richText() {
+      return richText;
+    },
+    get root() {
+      return root;
+    },
+    get rowAxis() {
+      return rowAxis;
+    },
+    get rowCount() {
+      return rowCount;
+    },
+    get rowValueLocked() {
+      return rowValueLocked;
+    },
+    get scroller() {
+      return scroller;
+    },
+    get stateLabels() {
+      return stateLabels;
+    },
+    get t() {
+      return t;
+    },
+    get theme() {
+      return theme;
+    },
+    get validationMessage() {
+      return validationMessage;
+    },
+    get viewport() {
+      return viewport;
+    },
+    get viewportLabel() {
+      return viewportLabel;
+    },
+    get win() {
+      return win;
+    },
+  });
+  const {
+    resizeAxis,
+    visibleIndices,
+    autoFitColumn,
+    autoFitRow,
+    measureRowHeight,
+    onAxisDoubleClick,
+    selectedAxisIndices,
+    headerColumn,
+    selectHeaderGroup,
+    onHeaderPointerDown,
+    onHeaderPointerMove,
+    endResize,
+    commitResize,
+    cancelResizeKey,
+    select,
+    selectColumn,
+    selectRow,
+    selectAll,
+    startAxisSelection,
+    pointerCell,
+    onLinkClick,
+    onPointerDown,
+    onPointerMove,
+    onPointerEnd,
+    onKeyDown,
+    indexRow,
+    rowLabels,
+    clearReorder,
+    commitTouchReorder,
+    reorderHandle,
+    onDoubleClick,
+  } = interaction;
+
   const selectionHandles = (['start', 'end'] as const).map((endpoint) => {
     const button = doc.createElement('button');
     button.type = 'button';
@@ -938,19 +1128,18 @@ export function createGrid(options: GridOptions): Grid {
       if (event.button !== 0 || !range || !finishEdit(true)) return;
       event.preventDefault();
       event.stopPropagation();
-      handleAnchor =
+      interaction.handleAnchor =
         endpoint === 'start'
           ? { row: range.endRow, col: range.endColumn }
           : { row: range.startRow, col: range.startColumn };
-      axisDrag = null;
-      dragPointer = event.pointerId;
-      dragPosition = event;
+      interaction.axisDrag = null;
+      interaction.dragPointer = event.pointerId;
+      interaction.dragPosition = event;
       root.setPointerCapture(event.pointerId);
     });
     root.append(button);
     return button;
   });
-  let addNextSelection = false;
 
   const editorPane = doc.createElement('div');
   editorPane.style.cssText = 'position:absolute;overflow:hidden;pointer-events:none;z-index:1';
@@ -983,15 +1172,6 @@ export function createGrid(options: GridOptions): Grid {
 
   let suggestionsEnabled = options.contextMenuSuggestions ?? false;
 
-  let resizing: {
-    pointerId: number;
-    axis: 'column' | 'row';
-    index: number;
-    start: number;
-    size: number;
-    proposed: number;
-    edge: number;
-  } | null = null;
   const resizeGuide = doc.createElement('div');
   resizeGuide.setAttribute('aria-hidden', 'true');
   resizeGuide.setAttribute('data-grid-resize-guide', '');
@@ -1108,7 +1288,7 @@ export function createGrid(options: GridOptions): Grid {
 
   function announceSelection(): void {
     const selection = engine.getSelection();
-    selectionStatus.textContent = `${selection ? t('Row {0}, {1}. {2} selected range(s).', selection.rowIndex + 1, columns[selection.columnIndex]!.title, getSelectionRanges().length) : t('Selection cleared.')}${addNextSelection ? t(' Next click or navigation adds a range.') : ''}`;
+    selectionStatus.textContent = `${selection ? t('Row {0}, {1}. {2} selected range(s).', selection.rowIndex + 1, columns[selection.columnIndex]!.title, getSelectionRanges().length) : t('Selection cleared.')}${interaction.addNextSelection ? t(' Next click or navigation adds a range.') : ''}`;
   }
 
   function openSizeDialog(
@@ -1352,174 +1532,6 @@ export function createGrid(options: GridOptions): Grid {
         }
   }
 
-  function resizeAxis(axis: typeof rowAxis, index: number, size: number): void {
-    if (destroyed) throw new Error('Grid is destroyed.');
-    if (editors.editor) throw new Error('Finish editing before resizing cells.');
-    if (axis === rowAxis) {
-      engine.setRowHeight(index, size);
-    } else {
-      engine.setColumnWidth(index, size);
-      measuredRows.clear();
-    }
-  }
-
-  function visibleIndices(axis: 'row' | 'column'): Set<number> {
-    const indices = new Set<number>();
-    for (const region of viewport().regions) {
-      const range = axis === 'row' ? region.rows : region.columns;
-      for (let index = range.start; index < range.end; index++) indices.add(index);
-    }
-    return indices;
-  }
-  function autoFitColumn(index: number): void {
-    if (destroyed) throw new Error('Grid is destroyed.');
-    if (editors.editor) throw new Error('Finish editing before resizing cells.');
-    columnAxis.size(index);
-    const column = columns[index]!;
-    const ctx = context!;
-    ctx.save();
-    let width: number;
-    try {
-      ctx.font = theme.headerFont;
-      width = ctx.measureText(column.title).width + 56;
-      ctx.font = theme.font;
-      for (const row of visibleIndices('row')) {
-        const value = engine.getValue(row, column.key);
-        if (mediaColumn(column.key)) {
-          width = Math.max(width, mediaSize * 2 + 16);
-          continue;
-        } else if (columnEditors.get(column.key)?.type === 'checkbox') width = Math.max(width, 36);
-        else {
-          const rich = richText(value, column.key, engine.getFormat(row, index).contentFormat);
-          if (rich) width = Math.max(width, layoutRichText(ctx, rich, theme.font, Infinity, false).width + 20);
-          else
-            for (const line of numberText(value, engine.getFormat(row, index).numberFormat).split('\n'))
-              width = Math.max(width, ctx.measureText(line).width + 20);
-          ctx.font = theme.font;
-        }
-      }
-    } finally {
-      ctx.restore();
-    }
-    resizeAxis(columnAxis, index, Math.max(24, Math.min(1000, Math.ceil(width))));
-  }
-  function autoFitRow(index: number): void {
-    if (destroyed) throw new Error('Grid is destroyed.');
-    if (editors.editor) throw new Error('Finish editing before resizing cells.');
-    rowAxis.size(index);
-    resizeAxis(rowAxis, index, measureRowHeight(index));
-  }
-  function measureRowHeight(index: number, allColumns = false): number {
-    const ctx = context!;
-    ctx.save();
-    let height = options.rowHeight ?? 24;
-    try {
-      ctx.font = theme.font;
-      const metrics = ctx.measureText('M');
-      const lineHeight = Math.ceil(metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent) || 18;
-      for (const col of allColumns ? columns.keys() : visibleIndices('column')) {
-        const key = columns[col]!.key;
-        const value = engine.getValue(index, key);
-        const custom = options.measureCellHeight?.(value, key, columnAxis.size(col));
-        if (custom !== undefined) {
-          if (!Number.isFinite(custom) || custom <= 0)
-            throw new RangeError('Measured cell height must be positive and finite.');
-          height = Math.max(height, custom);
-          continue;
-        }
-        if (mediaColumn(key)) {
-          height = Math.max(height, mediaSize + 8);
-          continue;
-        }
-        const rich = richText(value, key, engine.getFormat(index, col).contentFormat);
-        if (rich) {
-          const layout = layoutRichText(
-            ctx,
-            rich,
-            theme.font,
-            Math.max(0, columnAxis.size(col) - 20),
-            !!options.wrapText,
-            Math.ceil(1000 / lineHeight),
-          );
-          height = Math.max(height, Math.min(1000, layout.lines * layout.lineHeight + 12));
-          ctx.font = theme.font;
-          continue;
-        }
-        let lines = 1;
-        let line = '';
-        if (options.wrapText)
-          for (const character of numberText(value, engine.getFormat(index, col).numberFormat)) {
-            if (
-              character === '\n' ||
-              (line && ctx.measureText(line + character).width > Math.max(0, columnAxis.size(col) - 20))
-            ) {
-              lines++;
-              line = '';
-              if (lines * lineHeight >= 1000) break;
-            }
-            if (character !== '\n') line += character;
-          }
-        height = Math.max(height, lines * lineHeight + 12);
-      }
-    } finally {
-      ctx.restore();
-    }
-    return Math.min(1000, height);
-  }
-  function onAxisDoubleClick(event: MouseEvent): void {
-    if (
-      event.ctrlKey ||
-      event.metaKey ||
-      event.altKey ||
-      event.shiftKey ||
-      !(event.target instanceof win.Node) ||
-      (event.target !== root &&
-        !scroller.contains(event.target) &&
-        !indexGutter.contains(event.target) &&
-        !headerSurface.contains(event.target))
-    )
-      return;
-    const column = columnEdge(event);
-    const row = column === null ? rowEdge(event) : null;
-    if (column === null && row === null) return;
-    event.preventDefault();
-    event.stopPropagation();
-    endResize();
-    onPointerEnd();
-    if (!finishEdit(true)) return;
-    try {
-      if (column !== null) autoFitColumn(column);
-      else autoFitRow(row!);
-    } catch (error) {
-      actionError.textContent = error instanceof Error ? t(error.message) : t('Unable to fit size.');
-      actionError.style.display = 'block';
-    }
-  }
-
-  function selectedAxisIndices(axis: 'row' | 'column', index: number): number[] {
-    const ranges = getSelectionRanges().filter((range) =>
-      axis === 'row'
-        ? range.startColumn === 0 && range.endColumn === columns.length - 1
-        : range.startRow === 0 && range.endRow === rowCount - 1,
-    );
-    if (
-      !ranges.some((range) =>
-        axis === 'row'
-          ? index >= range.startRow && index <= range.endRow
-          : index >= range.startColumn && index <= range.endColumn,
-      )
-    )
-      return [index];
-    const indices = new Set<number>();
-    for (const range of ranges)
-      for (
-        let i = axis === 'row' ? range.startRow : range.startColumn;
-        i <= (axis === 'row' ? range.endRow : range.endColumn);
-        i++
-      )
-        indices.add(i);
-    return [...indices].sort((a, b) => a - b);
-  }
   function changeRows(request: Readonly<RowChangeRequest>): void {
     if (!finishEdit(true)) return;
     if (options.canRowChange?.(request) === false) throw new Error('Changing rows is disabled.');
@@ -1537,7 +1549,7 @@ export function createGrid(options: GridOptions): Grid {
       select(row, col, false, false);
     if (destroyed || (rowCount > 0 && !engine.getCellPermission(row, col).selectable)) return;
     header ||=
-      axisAnchor?.axis === 'column' &&
+      interaction.axisAnchor?.axis === 'column' &&
       getSelectionRanges().some(
         (range) =>
           range.startRow === 0 && range.endRow === rowCount - 1 && col >= range.startColumn && col <= range.endColumn,
@@ -1585,7 +1597,7 @@ export function createGrid(options: GridOptions): Grid {
         ? /^(Sort|Filter|Resize column|Auto-fit column|Move columns|Freeze columns|Lock.*column|Unlock.*column)/.test(
             label,
           )
-        : axisAnchor?.axis === 'row'
+        : interaction.axisAnchor?.axis === 'row'
           ? /^(Group|Ungroup|Collapse|Expand|Move rows|Insert row|Delete.*row|Lock.*row|Unlock.*row)/.test(label)
           : /^(Merge|Unmerge|Format cells|Lock.*cell|Unlock.*cell)/.test(label));
     function filterActions(): void {
@@ -2047,15 +2059,6 @@ export function createGrid(options: GridOptions): Grid {
     popup.querySelector<HTMLButtonElement>('button[data-action]:not(:disabled):not([hidden])')?.focus();
   }
 
-  function headerColumn(event: MouseEvent): number | null {
-    const bounds = root.getBoundingClientRect();
-    const x = event.clientX - bounds.left - indexWidth;
-    const y = event.clientY - bounds.top;
-    if (x < 0 || x >= scroller.clientWidth || y < 0 || y >= headerHeight || !columns.length) return null;
-    const col = columnAxis.indexAt(x + (x < viewport().frozenWidth ? 0 : scroller.scrollLeft));
-    return col < columns.length && y >= leafHeaders[col]!.level * headerRowHeight ? col : null;
-  }
-
   function onHeaderContextMenu(event: MouseEvent): void {
     if (event.target instanceof win.Node && overlay.menu?.contains(event.target)) {
       event.preventDefault();
@@ -2345,296 +2348,6 @@ export function createGrid(options: GridOptions): Grid {
     openMenu(cell.row, cell.col, event.clientX, event.clientY);
   }
 
-  function columnEdge(event: MouseEvent): number | null {
-    const bounds = root.getBoundingClientRect();
-    const x = event.clientX - bounds.left - indexWidth;
-    const y = event.clientY - bounds.top;
-    if (x < 0 || x >= scroller.clientWidth || y < 0 || y >= headerHeight || !columns.length) return null;
-    const view = viewport();
-    if (engine.frozenColumns > 0 && Math.abs(columnAxis.position(engine.frozenColumns) - x) <= 8 && x <= view.width)
-      return engine.frozenColumns - 1;
-    const offset = x + (x < view.frozenWidth ? 0 : view.scrollLeft);
-    const col = columnAxis.indexAt(offset);
-    if (col < columns.length && y < leafHeaders[col]!.level * headerRowHeight) return null;
-    const first = x < view.frozenWidth ? 0 : engine.frozenColumns;
-    const limit = x < view.frozenWidth ? engine.frozenColumns : columns.length;
-    if (col < limit && col >= first && Math.abs(columnAxis.position(col + 1) - offset) <= 8) return col;
-    if (col > first && Math.abs(columnAxis.position(col) - offset) <= 8) return col - 1;
-    return null;
-  }
-
-  function rowEdge(event: MouseEvent): number | null {
-    const bounds = scroller.getBoundingClientRect();
-    const x = event.clientX - bounds.left;
-    const y = event.clientY - bounds.top;
-    if (
-      x < -indexWidth ||
-      x > (engine.frozenColumns ? Math.min(columnAxis.size(0), scroller.clientWidth) : 10) ||
-      y < 0 ||
-      y >= scroller.clientHeight ||
-      !rowCount ||
-      !columns.length
-    )
-      return null;
-    const tolerance = x <= 10 ? 8 : 3;
-    const view = viewport();
-    if (engine.frozenRows > 0 && Math.abs(rowAxis.position(engine.frozenRows) - y) <= tolerance)
-      return engine.frozenRows - 1;
-    const offset = y + (y < view.frozenHeight ? 0 : view.scrollTop);
-    const row = rowAxis.indexAt(offset);
-    const first = y < view.frozenHeight ? 0 : engine.frozenRows;
-    const limit = y < view.frozenHeight ? engine.frozenRows : rowCount;
-    if (row < limit && row >= first && Math.abs(rowAxis.position(row + 1) - offset) <= tolerance) return row;
-    if (row > first && Math.abs(rowAxis.position(row) - offset) <= tolerance) return row - 1;
-    return null;
-  }
-
-  function showResizeGuide(): void {
-    if (!resizing) return;
-    const view = viewport();
-    const position = resizing.edge + resizing.proposed - resizing.size;
-    resizeGuide.dataset.axis = resizing.axis;
-    resizeGuide.style.display = 'block';
-    resizeGuide.style.left =
-      resizing.axis === 'column' ? `${indexWidth + Math.max(0, Math.min(view.width - 2, position))}px` : '0px';
-    resizeGuide.style.top =
-      resizing.axis === 'row'
-        ? `${Math.max(headerHeight, Math.min(headerHeight + view.height - 2, position))}px`
-        : '0px';
-    resizeGuide.style.width = resizing.axis === 'column' ? '2px' : `${indexWidth + view.width}px`;
-    resizeGuide.style.height = resizing.axis === 'row' ? '2px' : `${headerHeight + view.height}px`;
-  }
-
-  function selectHeaderGroup(first: number, last: number, event: PointerEvent | KeyboardEvent): void {
-    if (!rowCount || !finishEdit(true)) return;
-    const anchor = event.shiftKey
-      ? axisAnchor?.axis === 'column'
-        ? axisAnchor.index
-        : (engine.getSelection()?.columnIndex ?? first)
-      : first;
-    selectScope(
-      axisRange('column', anchor, anchor > last ? first : last),
-      event.shiftKey ? 'extend' : event.ctrlKey || event.metaKey ? 'add' : 'replace',
-    );
-    axisAnchor = { axis: 'column', index: anchor };
-    scroller.focus({ preventScroll: true });
-  }
-  function onHeaderPointerDown(event: PointerEvent): void {
-    if (event.target instanceof win.Element && event.target.closest('[data-grid-row-group]')) return;
-    const moveTarget =
-      event.target instanceof win.Element ? event.target.closest<HTMLElement>('[data-grid-reorder]') : null;
-    if (
-      moveTarget?.draggable &&
-      !event.shiftKey &&
-      !event.ctrlKey &&
-      !event.metaKey &&
-      columnEdge(event) === null &&
-      rowEdge(event) === null
-    ) {
-      if (event.pointerType === 'touch') startTouchReorder(event, moveTarget);
-      return;
-    }
-    if (resizing) {
-      event.preventDefault();
-      return;
-    }
-    if (
-      event.button !== 0 ||
-      event.altKey ||
-      (event.target !== root &&
-        !(
-          event.target instanceof win.Node &&
-          (scroller.contains(event.target) ||
-            indexGutter.contains(event.target) ||
-            headerSurface.contains(event.target))
-        ))
-    )
-      return;
-    const bounds = root.getBoundingClientRect();
-    if (indexWidth && event.clientX < bounds.left + indexWidth && event.clientY < bounds.top + headerHeight) {
-      event.preventDefault();
-      selectAll();
-      scroller.focus({ preventScroll: true });
-      return;
-    }
-    const column = columnEdge(event);
-    const row = column === null ? rowEdge(event) : null;
-    if (column === null && row === null) {
-      const group =
-        event.target instanceof win.Element ? event.target.closest<HTMLElement>('[data-grid-header-group]') : null;
-      if (group) {
-        event.preventDefault();
-        selectHeaderGroup(Number(group.dataset.groupStart), Number(group.dataset.groupEnd), event);
-        return;
-      }
-      const row = indexRow(event);
-      if (row !== null && finishEdit(true)) {
-        event.preventDefault();
-        startAxisSelection('row', row, event);
-        return;
-      }
-      const col = headerColumn(event);
-      if (col !== null && rowCount && finishEdit(true)) {
-        event.preventDefault();
-        startAxisSelection('column', col, event);
-      }
-      return;
-    }
-    event.preventDefault();
-    if (!finishEdit(true)) return;
-    closeMenu();
-    const axis = column === null ? 'row' : 'column';
-    const index = column ?? row!;
-    const size = axis === 'column' ? columnAxis.size(index) : rowAxis.size(index);
-    const view = viewport();
-    const edge =
-      axis === 'column'
-        ? columnAxis.position(index + 1) - (index < engine.frozenColumns ? 0 : view.scrollLeft)
-        : headerHeight + rowAxis.position(index + 1) - (index < engine.frozenRows ? 0 : view.scrollTop);
-    resizing = {
-      pointerId: event.pointerId,
-      axis,
-      index,
-      size,
-      proposed: size,
-      start: axis === 'column' ? event.clientX : event.clientY,
-      edge,
-    };
-    scroller.focus({ preventScroll: true });
-    root.setPointerCapture(event.pointerId);
-    root.style.cursor = axis === 'column' ? 'col-resize' : 'row-resize';
-    showResizeGuide();
-  }
-
-  function onHeaderPointerMove(event: PointerEvent): void {
-    if (touchReorder) return;
-    root.style.cursor = resizing
-      ? resizing.axis === 'column'
-        ? 'col-resize'
-        : 'row-resize'
-      : columnEdge(event) !== null
-        ? 'col-resize'
-        : rowEdge(event) !== null
-          ? 'row-resize'
-          : '';
-    const column = columnEdge(event);
-    const cell = pointerCell(event);
-    const key =
-      cell &&
-      !event.buttons &&
-      !resizing &&
-      !editors.editor &&
-      !overlay.menu &&
-      options.allowOpenLinks !== false &&
-      cellLinks(cell.row, cell.col).length
-        ? `${cell.row}:${cell.col}`
-        : '';
-    if (key !== overlay.linkHoverKey) {
-      cancelLinkPreviewHover();
-      overlay.linkHoverKey = key;
-      if (key && cell) {
-        const row = cell.row,
-          col = cell.col,
-          x = event.clientX,
-          y = event.clientY + 12;
-        overlay.linkHoverTimer = win.setTimeout(() => {
-          if (!destroyed && !editors.editor && !overlay.menu) openLinks(row, col, x, y, false);
-        }, 450);
-      }
-    }
-    const config = cell ? columnEditors.get(columns[cell.col]!.key) : undefined;
-    const next =
-      cell && config && config.type !== 'checkbox' && !resizing && !editors.editor && engine.canEdit(cell.row, cell.col)
-        ? cell
-        : null;
-    if (next?.row !== editors.hoveredChoice?.row || next?.col !== editors.hoveredChoice?.col) {
-      clearChoiceHover();
-      editors.hoveredChoice = next;
-      if (next) invalidate([{ rowIndex: next.row, columnKey: columns[next.col]!.key }]);
-    }
-    const bounds = root.getBoundingClientRect();
-    const headerColumn = columnAxis.indexAt(
-      event.clientX -
-        bounds.left -
-        indexWidth +
-        (event.clientX - bounds.left - indexWidth < viewport().frozenWidth ? 0 : scroller.scrollLeft),
-    );
-    root.title =
-      root.style.cursor === 'row-resize'
-        ? t('Drag the row boundary to resize height')
-        : column !== null
-          ? t('Drag the column boundary to resize width')
-          : event.clientY - bounds.top < headerHeight &&
-              event.clientX >= bounds.left + indexWidth &&
-              headerColumn >= 0 &&
-              headerColumn < columns.length
-            ? stateLabels(null, headerColumn)
-                .map((label) => t(label))
-                .join('; ')
-            : indexRow(event) !== null
-              ? [t('Select row {0}', indexRow(event)! + 1), ...rowLabels(indexRow(event)!)].join('; ')
-              : cell
-                ? stateLabels(cell.row, cell.col)
-                    .map((label) => t(label))
-                    .join('; ')
-                : '';
-    if (cell && !resizing) {
-      const message = validationMessage(engine.getValue(cell.row, columns[cell.col]!.key), cell.col);
-      if (message) root.title = message;
-    }
-    if (!resizing && cell && event.altKey && options.allowOpenLinks !== false && cellLinks(cell.row, cell.col).length) {
-      root.style.cursor = 'pointer';
-      root.title = t('Alt+click to open links');
-    }
-    if (editors.hoveredChoice && cell) {
-      const rect = viewport().cellRect(cell.row, cell.col);
-      if (event.clientX - scroller.getBoundingClientRect().left >= rect.x + rect.width - 24)
-        root.style.cursor = 'pointer';
-    }
-    if (resizing?.pointerId === event.pointerId) {
-      resizing.proposed = Math.max(
-        24,
-        Math.min(1000, resizing.size + (resizing.axis === 'column' ? event.clientX : event.clientY) - resizing.start),
-      );
-      showResizeGuide();
-    }
-  }
-
-  function endResize(): void {
-    const pointerId = resizing?.pointerId;
-    resizing = null;
-    resizeGuide.style.display = 'none';
-    root.style.cursor = '';
-    root.title = '';
-    if (pointerId !== undefined && root.hasPointerCapture(pointerId)) root.releasePointerCapture(pointerId);
-  }
-
-  function commitResize(event: PointerEvent): void {
-    if (resizing?.pointerId !== event.pointerId) return;
-    const draft = resizing;
-    endResize();
-    try {
-      resizeAxis(draft.axis === 'column' ? columnAxis : rowAxis, draft.index, draft.proposed);
-    } catch (error) {
-      actionError.textContent = error instanceof Error ? t(error.message) : t('Unable to resize.');
-      actionError.style.display = 'block';
-    }
-  }
-
-  function cancelResizeKey(event: KeyboardEvent): void {
-    if (touchReorder && event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      clearReorder();
-      return;
-    }
-    if (resizing && event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      endResize();
-    }
-  }
-
   function invalidate(changes: readonly { rowIndex: number; columnKey: string }[]): void {
     const selection = engine.getSelection();
     for (const change of changes) {
@@ -2663,443 +2376,6 @@ export function createGrid(options: GridOptions): Grid {
   const getSelection = engine.getSelection;
   const getSelectionRange = engine.getSelectionRange;
   const getSelectionRanges = engine.getSelectionRanges;
-
-  function select(rowIndex: number, columnIndex: number, extend = false, reveal = true, add = false): void {
-    if (destroyed || rowCount === 0 || columns.length === 0) return;
-    axisAnchor = null;
-    const previous = engine.getSelection();
-    const changed = previous?.rowIndex !== rowIndex || previous?.columnIndex !== columnIndex;
-    const previousRange = JSON.stringify(getSelectionRange());
-    const previousRanges = JSON.stringify(getSelectionRanges());
-    if (!(add ? engine.addSelection(rowIndex, columnIndex) : engine.select(rowIndex, columnIndex, extend))) return;
-    const selection = engine.getSelection()!;
-    if (add) addNextSelection = false;
-    announceSelection();
-    const rangeChanged = previousRange !== JSON.stringify(getSelectionRange());
-    if (reveal) {
-      const view = viewport();
-      const left = columnAxis.position(columnIndex);
-      const top = rowAxis.position(rowIndex);
-      if (columnIndex >= engine.frozenColumns && view.width > view.frozenWidth) {
-        if (left < view.scrollLeft + view.frozenWidth || columnAxis.size(columnIndex) > view.width - view.frozenWidth)
-          scroller.scrollLeft = left - view.frozenWidth;
-        else if (left + columnAxis.size(columnIndex) > view.scrollLeft + view.width)
-          scroller.scrollLeft = left + columnAxis.size(columnIndex) - view.width;
-      }
-      if (rowIndex >= engine.frozenRows && view.height > view.frozenHeight) {
-        if (top < view.scrollTop + view.frozenHeight || rowAxis.size(rowIndex) > view.height - view.frozenHeight)
-          scroller.scrollTop = top - view.frozenHeight;
-        else if (top + rowAxis.size(rowIndex) > view.scrollTop + view.height)
-          scroller.scrollTop = top + rowAxis.size(rowIndex) - view.height;
-      }
-    }
-    if (changed) options.onSelectionChange?.(getSelection());
-    if (rangeChanged) options.onSelectionRangeChange?.(getSelectionRange());
-    if (previousRanges !== JSON.stringify(getSelectionRanges()))
-      options.onSelectionRangesChange?.(getSelectionRanges());
-  }
-
-  function selectScope(range: SelectionRange, mode: 'replace' | 'add' | 'extend' = 'replace'): void {
-    if (destroyed) throw new Error('Grid is destroyed.');
-    if (!finishEdit(true)) return;
-    const previous = engine.getSelection();
-    if (!engine.selectRange(range, mode)) return;
-    addNextSelection = false;
-    announceSelection();
-    const selection = engine.getSelection();
-    if (previous?.rowIndex !== selection?.rowIndex || previous?.columnIndex !== selection?.columnIndex)
-      options.onSelectionChange?.(selection);
-    options.onSelectionRangeChange?.(getSelectionRange());
-    options.onSelectionRangesChange?.(getSelectionRanges());
-  }
-  function selectColumn(index: number): void {
-    if (!Number.isSafeInteger(index) || index < 0 || index >= columns.length)
-      throw new RangeError('Invalid column index.');
-    axisAnchor = { axis: 'column', index };
-    if (rowCount) selectScope({ startRow: 0, endRow: rowCount - 1, startColumn: index, endColumn: index });
-  }
-  function selectRow(index: number): void {
-    if (!Number.isSafeInteger(index) || index < 0 || index >= rowCount) throw new RangeError('Invalid row index.');
-    axisAnchor = { axis: 'row', index };
-    if (columns.length) selectScope({ startRow: index, endRow: index, startColumn: 0, endColumn: columns.length - 1 });
-  }
-
-  function selectAll(): void {
-    if (destroyed) throw new Error('Grid is destroyed.');
-    axisAnchor = null;
-    if (rowCount && columns.length)
-      selectScope({ startRow: 0, endRow: rowCount - 1, startColumn: 0, endColumn: columns.length - 1 });
-  }
-  function axisRange(axis: 'row' | 'column', anchor: number, end: number): SelectionRange {
-    return axis === 'row'
-      ? {
-          startRow: Math.min(anchor, end),
-          endRow: Math.max(anchor, end),
-          startColumn: 0,
-          endColumn: columns.length - 1,
-        }
-      : { startRow: 0, endRow: rowCount - 1, startColumn: Math.min(anchor, end), endColumn: Math.max(anchor, end) };
-  }
-  function startAxisSelection(axis: 'row' | 'column', index: number, event: PointerEvent | KeyboardEvent): void {
-    if (!rowCount || !columns.length) return;
-    const active = engine.getSelection();
-    const anchor = event.shiftKey
-      ? axisAnchor?.axis === axis
-        ? axisAnchor.index
-        : axis === 'row'
-          ? (active?.rowIndex ?? index)
-          : (active?.columnIndex ?? index)
-      : index;
-    const range = axisRange(axis, anchor, index);
-    if (
-      !engine.getCellPermission(range.startRow, range.startColumn).selectable ||
-      !engine.getCellPermission(range.endRow, range.endColumn).selectable
-    )
-      return;
-    try {
-      selectScope(
-        range,
-        event.shiftKey ? 'extend' : event.ctrlKey || event.metaKey || addNextSelection ? 'add' : 'replace',
-      );
-    } catch (error) {
-      actionError.textContent = error instanceof Error ? t(error.message) : t('Unable to add selection.');
-      actionError.style.display = 'block';
-      return;
-    }
-    axisAnchor = { axis, index: anchor };
-    scroller.focus({ preventScroll: true });
-    if (event instanceof win.PointerEvent) {
-      axisDrag = axisAnchor;
-      dragPointer = event.pointerId;
-      dragPosition = event;
-      root.setPointerCapture(event.pointerId);
-    }
-  }
-
-  function pointerCell(
-    event: Pick<MouseEvent, 'clientX' | 'clientY'>,
-    clamp = false,
-  ): { row: number; col: number } | null {
-    if (!rowCount || !columns.length) return null;
-    const bounds = scroller.getBoundingClientRect();
-    let x = event.clientX - bounds.left;
-    let y = event.clientY - bounds.top;
-    if (clamp) {
-      x = Math.max(0, Math.min(scroller.clientWidth - 1, x));
-      y = Math.max(0, Math.min(scroller.clientHeight - 1, y));
-    }
-    if (x < 0 || y < 0 || x >= scroller.clientWidth || y >= scroller.clientHeight) return null;
-    const hit = viewport().hitTest(x, y);
-    if (hit || !clamp) return hit;
-    const view = viewport();
-    const row = Math.min(rowCount - 1, rowAxis.indexAt(y + (y < view.frozenHeight ? 0 : view.scrollTop)));
-    const col = Math.min(columns.length - 1, columnAxis.indexAt(x + (x < view.frozenWidth ? 0 : view.scrollLeft)));
-    return { row, col };
-  }
-
-  function onLinkClick(event: MouseEvent): void {
-    if (!event.altKey || event.target === editors.editor) return;
-    const cell = pointerCell(event);
-    if (cell && cellLinks(cell.row, cell.col).length && finishEdit(true)) {
-      event.preventDefault();
-      select(cell.row, cell.col, false, false);
-      openLinks(cell.row, cell.col, event.clientX, event.clientY);
-    }
-  }
-  function onPointerDown(event: PointerEvent): void {
-    if (event.defaultPrevented || event.target === editors.editor || event.button !== 0) return;
-    if (event.altKey) return;
-    touchSelection = event.pointerType === 'touch';
-    const cell = pointerCell(event);
-    if (!cell) return;
-    event.preventDefault();
-    if (!finishEdit(true)) return;
-    if (!engine.getCellPermission(cell.row, cell.col).selectable) return;
-    scroller.focus({ preventScroll: true });
-    if (event.clientX - scroller.getBoundingClientRect().left < 10) {
-      selectRow(cell.row);
-      return;
-    }
-    try {
-      select(
-        cell.row,
-        cell.col,
-        event.shiftKey,
-        true,
-        !event.shiftKey && (event.ctrlKey || event.metaKey || addNextSelection),
-      );
-    } catch (error) {
-      actionError.textContent = error instanceof Error ? t(error.message) : t('Unable to add selection.');
-      actionError.style.display = 'block';
-      return;
-    }
-    const choice = columnEditors.get(columns[cell.col]!.key);
-    if (
-      !event.ctrlKey &&
-      !event.metaKey &&
-      !event.shiftKey &&
-      choice &&
-      choice.type !== 'checkbox' &&
-      engine.canEdit(cell.row, cell.col)
-    ) {
-      const rect = viewport().cellRect(cell.row, cell.col);
-      if (event.clientX - scroller.getBoundingClientRect().left >= rect.x + rect.width - 24) {
-        clearChoiceHover();
-        beginEdit();
-        return;
-      }
-    }
-    if (
-      !event.ctrlKey &&
-      !event.metaKey &&
-      !event.shiftKey &&
-      columnEditors.get(columns[cell.col]!.key)?.type === 'checkbox'
-    ) {
-      const rect = viewport().cellRect(cell.row, cell.col);
-      const bounds = scroller.getBoundingClientRect();
-      const x = event.clientX - bounds.left - rect.x;
-      const y = event.clientY - bounds.top - rect.y;
-      if (x >= 8 && x <= 28 && Math.abs(y - rect.height / 2) <= 10 && engine.canEdit(cell.row, cell.col)) {
-        beginEdit();
-        if (editors.editor instanceof win.HTMLInputElement && editors.editor.type === 'checkbox') {
-          editors.editor.checked = !editors.editor.checked;
-          if (finishEdit(true)) scroller.focus({ preventScroll: true });
-        }
-        return;
-      }
-    }
-    if (event.pointerType !== 'touch') {
-      dragPointer = event.pointerId;
-      scroller.setPointerCapture(event.pointerId);
-    }
-  }
-
-  function extendDrag(): void {
-    if (!dragPosition) return;
-    if (touchReorder) {
-      updateTouchReorder(dragPosition);
-      return;
-    }
-    const cell = pointerCell(dragPosition, true);
-    if (!cell) return;
-    if (handleAnchor)
-      selectScope(
-        {
-          startRow: Math.min(handleAnchor.row, cell.row),
-          endRow: Math.max(handleAnchor.row, cell.row),
-          startColumn: Math.min(handleAnchor.col, cell.col),
-          endColumn: Math.max(handleAnchor.col, cell.col),
-        },
-        'extend',
-      );
-    else if (axisDrag)
-      selectScope(axisRange(axisDrag.axis, axisDrag.index, axisDrag.axis === 'row' ? cell.row : cell.col), 'extend');
-    else select(cell.row, cell.col, true, false);
-  }
-  function dragScroll(): void {
-    dragFrame = undefined;
-    if (dragPointer === null || !dragPosition || destroyed) return;
-    const bounds = scroller.getBoundingClientRect();
-    const view = viewport();
-    const step = (position: number, start: number, size: number) =>
-      position < start + 24 ? -16 : position > start + size - 24 ? 16 : 0;
-    const activeAxis = touchReorder ? reorderDrag?.axis : axisDrag?.axis;
-    const dx =
-      activeAxis === 'row' || view.width <= view.frozenWidth
-        ? 0
-        : step(dragPosition.clientX, bounds.left + view.frozenWidth, view.width - view.frozenWidth);
-    const dy =
-      activeAxis === 'column' || view.height <= view.frozenHeight
-        ? 0
-        : step(dragPosition.clientY, bounds.top + view.frozenHeight, view.height - view.frozenHeight);
-    const previousLeft = scroller.scrollLeft;
-    const previousTop = scroller.scrollTop;
-    scroller.scrollLeft += dx;
-    scroller.scrollTop += dy;
-    if (scroller.scrollLeft !== previousLeft || scroller.scrollTop !== previousTop) {
-      extendDrag();
-      dragFrame = win.requestAnimationFrame(dragScroll);
-    }
-  }
-  function onPointerMove(event: PointerEvent): void {
-    if (event.pointerId !== dragPointer) return;
-    dragPosition = event;
-    extendDrag();
-    if (dragFrame === undefined) dragFrame = win.requestAnimationFrame(dragScroll);
-  }
-  function onPointerEnd(): void {
-    if (touchReorder) clearReorder();
-    const pointer = dragPointer;
-    dragPointer = null;
-    axisDrag = null;
-    handleAnchor = null;
-    dragPosition = null;
-    if (dragFrame !== undefined) win.cancelAnimationFrame(dragFrame);
-    dragFrame = undefined;
-    if (pointer !== null)
-      for (const target of [root, scroller])
-        if (target.hasPointerCapture(pointer)) target.releasePointerCapture(pointer);
-  }
-
-  function onKeyDown(event: KeyboardEvent): void {
-    const selection = engine.getSelection();
-    if (
-      (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) &&
-      !selection &&
-      rowCount &&
-      columns.length &&
-      (engine.getHiddenRows().length || engine.getHiddenColumns().length)
-    ) {
-      event.preventDefault();
-      const bounds = scroller.getBoundingClientRect();
-      openMenu(0, 0, bounds.left + 8, bounds.top + 8);
-      return;
-    }
-    if ((event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) && selection) {
-      event.preventDefault();
-      const bounds = scroller.getBoundingClientRect();
-      const rect = viewport().cellRect(selection.rowIndex, selection.columnIndex);
-      openMenu(
-        selection.rowIndex,
-        selection.columnIndex,
-        bounds.left + Math.max(rect.clip.x, rect.x),
-        bounds.top + Math.min(rect.clip.y + rect.clip.height, rect.y + rect.height),
-      );
-      return;
-    }
-    if (event.altKey && event.key === 'Enter' && selection) {
-      event.preventDefault();
-      if (openMedia(selection.rowIndex, selection.columnIndex)) return;
-      const rect = viewport().cellRect(selection.rowIndex, selection.columnIndex);
-      const bounds = scroller.getBoundingClientRect();
-      openLinks(selection.rowIndex, selection.columnIndex, bounds.left + rect.x, bounds.top + rect.y + rect.height);
-      return;
-    }
-    if (event.isComposing || event.altKey) return;
-    const control = event.ctrlKey || event.metaKey;
-    if (control && selection && ['b', 'i'].includes(event.key.toLowerCase())) {
-      event.preventDefault();
-      const key = event.key.toLowerCase() === 'b' ? 'fontWeight' : 'fontStyle';
-      const current = engine.getFormat(selection.rowIndex, selection.columnIndex);
-      const value = current[key] && current[key] !== 'normal' ? 'normal' : key === 'fontWeight' ? 'bold' : 'italic';
-      try {
-        format(
-          getSelectionRanges().map((range) => ({ scope: 'range', range })),
-          { [key]: value },
-        );
-      } catch (error) {
-        actionError.textContent = error instanceof Error ? t(error.message) : t('Unable to format selection.');
-        actionError.style.display = 'block';
-      }
-      return;
-    }
-    if (control && event.key.toLowerCase() === 'a') {
-      event.preventDefault();
-      onPointerEnd();
-      selectAll();
-      return;
-    }
-    if (event.key === ' ' && selection && (control || event.shiftKey)) {
-      event.preventDefault();
-      control ? selectColumn(selection.columnIndex) : selectRow(selection.rowIndex);
-      return;
-    }
-    if (event.key === 'F8' && event.shiftKey && !control) {
-      event.preventDefault();
-      addNextSelection = !addNextSelection;
-      announceSelection();
-      return;
-    }
-    if (control && (event.key.toLowerCase() === 'z' || (event.key.toLowerCase() === 'y' && !event.shiftKey))) {
-      event.preventDefault();
-      try {
-        replay(event.shiftKey || event.key.toLowerCase() === 'y');
-      } catch (error) {
-        win.alert(error instanceof Error ? t(error.message) : t('Unable to replay history.'));
-      }
-      return;
-    }
-    if (event.shiftKey && !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key))
-      return;
-    if (control && event.key !== 'Home' && event.key !== 'End') return;
-    if (event.key === 'Enter' || event.key === 'F2') {
-      event.preventDefault();
-      beginEdit();
-      if (
-        event.key === 'Enter' &&
-        editors.editor instanceof win.HTMLInputElement &&
-        editors.editor.type === 'checkbox'
-      ) {
-        editors.editor.checked = !editors.editor.checked;
-        if (finishEdit(true)) scroller.focus({ preventScroll: true });
-      }
-      return;
-    }
-    if (event.key === 'Escape') {
-      cancelCut();
-      onPointerEnd();
-      axisAnchor = null;
-      addNextSelection = false;
-      if (selection) {
-        event.preventDefault();
-        engine.clearSelection();
-        scroller.setAttribute('aria-label', viewportLabel);
-        options.onSelectionChange?.(null);
-        options.onSelectionRangeChange?.(null);
-        options.onSelectionRangesChange?.([]);
-      }
-      announceSelection();
-      return;
-    }
-    if (
-      !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key) ||
-      !rowCount ||
-      !columns.length
-    )
-      return;
-    event.preventDefault();
-    let row = selection?.rowIndex ?? 0;
-    let col = selection?.columnIndex ?? 0;
-    if (selection) {
-      if (event.key === 'ArrowUp') row--;
-      if (event.key === 'ArrowDown') row = (engine.getMerge(row, col)?.endRow ?? row) + 1;
-      if (event.key === 'ArrowLeft') col--;
-      if (event.key === 'ArrowRight') col = (engine.getMerge(row, col)?.endColumn ?? col) + 1;
-      if (event.key === 'Home') {
-        col = 0;
-        if (control) row = 0;
-      }
-      if (event.key === 'End') {
-        col = columns.length - 1;
-        if (control) row = rowCount - 1;
-      }
-    }
-    if (!selection && event.key === 'End') {
-      col = columns.length - 1;
-      if (control) row = rowCount - 1;
-    }
-    row = Math.max(0, Math.min(rowCount - 1, row));
-    col = Math.max(0, Math.min(columns.length - 1, col));
-    if (rowAxis.size(row) === 0)
-      row = rowAxis.indexAt(rowAxis.position(row) + (event.key === 'ArrowUp' || event.key === 'End' ? -0.001 : 0));
-    if (columnAxis.size(col) === 0)
-      col = columnAxis.indexAt(
-        columnAxis.position(col) + (event.key === 'ArrowLeft' || event.key === 'End' ? -0.001 : 0),
-      );
-    if (row >= rowCount || col >= columns.length || rowAxis.size(row) === 0 || columnAxis.size(col) === 0) return;
-    try {
-      select(
-        Math.max(0, Math.min(rowCount - 1, row)),
-        Math.max(0, Math.min(columns.length - 1, col)),
-        event.shiftKey,
-        true,
-        addNextSelection && !event.shiftKey,
-      );
-    } catch (error) {
-      actionError.textContent = error instanceof Error ? t(error.message) : t('Unable to add selection.');
-      actionError.style.display = 'block';
-    }
-  }
 
   function stateLabels(row: number | null, col: number): string[] {
     const labels: string[] = [];
@@ -3734,7 +3010,7 @@ export function createGrid(options: GridOptions): Grid {
     rowLockCache.clear();
     frame = undefined;
     if (destroyed) return;
-    if (options.autoRowHeight && !editors.editor && !resizing)
+    if (options.autoRowHeight && !editors.editor && !interaction.resizing)
       for (const row of visibleIndices('row')) {
         if (engine.isRowHeightManual(row) || measuredRows.has(row)) continue;
         const height = measureRowHeight(row, true);
@@ -4024,25 +3300,6 @@ export function createGrid(options: GridOptions): Grid {
     releaseUnusedImages();
   }
 
-  function indexRow(event: MouseEvent): number | null {
-    if (!indexWidth || !columns.length) return null;
-    const bounds = root.getBoundingClientRect();
-    const x = event.clientX - bounds.left;
-    const y = event.clientY - bounds.top - headerHeight;
-    const view = viewport();
-    if (x < 0 || x >= indexWidth || y < 0 || y >= view.height) return null;
-    const row = rowAxis.indexAt(y + (y < view.frozenHeight ? 0 : view.scrollTop));
-    return row < rowCount ? row : null;
-  }
-
-  function rowLabels(row: number): string[] {
-    const labels: string[] = [];
-    if (engine.isLocked({ scope: 'table' })) labels.push(t('Table locked'));
-    if (rowValueLocked(row)) labels.push(t('Row locked'));
-    if (row < engine.frozenRows) labels.push(t('Row frozen'));
-    return labels;
-  }
-
   function drawIndex(): void {
     if (!indexWidth) return;
     const outline = engine.getRowGroups();
@@ -4219,9 +3476,6 @@ export function createGrid(options: GridOptions): Grid {
     enteringGroups.clear();
   }
 
-  let reorderDrag: { axis: 'row' | 'column'; indices: number[] } | null = null;
-  let touchReorder: { pointerId: number; startX: number; startY: number; moved: boolean; beforeIndex: number } | null =
-    null;
   const reorderGuide = doc.createElement('div');
   reorderGuide.dataset.gridReorderGuide = '';
   reorderGuide.setAttribute('aria-hidden', 'true');
@@ -4233,241 +3487,6 @@ export function createGrid(options: GridOptions): Grid {
   reorderBadge.style.cssText =
     'display:none;position:absolute;pointer-events:none;z-index:9;padding:6px 10px;border:1px solid var(--acheron-grid-line-color);border-radius:5px;background:var(--acheron-background);color:var(--acheron-text-color);box-shadow:0 3px 10px #0002;font:12px system-ui;white-space:nowrap';
   root.append(reorderGuide, reorderBadge);
-  function clearReorder(): void {
-    const pointer = touchReorder?.pointerId;
-    touchReorder = null;
-    if (pointer !== undefined) {
-      dragPointer = null;
-      dragPosition = null;
-      if (dragFrame !== undefined) win.cancelAnimationFrame(dragFrame);
-      dragFrame = undefined;
-      if (root.hasPointerCapture(pointer)) root.releasePointerCapture(pointer);
-    }
-    reorderDrag = null;
-    reorderGuide.style.display = reorderBadge.style.display = 'none';
-    root.style.cursor = '';
-  }
-  function reorderTarget(
-    event: DragEvent,
-    node: HTMLElement,
-    axis: 'row' | 'column',
-    first: number,
-    last: number,
-  ): number {
-    const bounds = node.getBoundingClientRect();
-    return reorderInsertionIndex(event, bounds, axis, first, last);
-  }
-
-  function previewReorder(
-    event: Pick<MouseEvent, 'clientX' | 'clientY'>,
-    axis: 'row' | 'column',
-    first: number,
-    last: number,
-    bounds: DOMRect,
-  ): { beforeIndex: number; allowed: boolean } {
-    const beforeIndex = reorderInsertionIndex(event, bounds, axis, first, last);
-    reorderBadge.style.display = 'block';
-    const request = Object.freeze({ axis, indices: Object.freeze([...reorderDrag!.indices]), beforeIndex });
-    let allowed = false;
-    try {
-      allowed = options.canReorder?.(request) !== false;
-    } catch {
-      allowed = false;
-    }
-    const origin = root.getBoundingClientRect();
-    const after = beforeIndex === last + 1;
-    const edge =
-      axis === 'row'
-        ? (after ? bounds.bottom : bounds.top) - origin.top
-        : (after ? bounds.right : bounds.left) - origin.left;
-    reorderGuide.style.display = allowed ? 'block' : 'none';
-    reorderGuide.style.left = axis === 'row' ? '0px' : `${Math.max(0, Math.min(root.clientWidth - 2, edge - 1))}px`;
-    reorderGuide.style.top = axis === 'column' ? '0px' : `${Math.max(0, Math.min(root.clientHeight - 2, edge - 1))}px`;
-    reorderGuide.style.width = axis === 'row' ? `${root.clientWidth}px` : '2px';
-    reorderGuide.style.height = axis === 'column' ? `${root.clientHeight}px` : '2px';
-    reorderBadge.textContent = allowed
-      ? t(
-          'Move {0} {1}{2} · {3} {4}',
-          reorderDrag!.indices.length,
-          t(axis),
-          reorderDrag!.indices.length > 1 ? 's' : '',
-          after ? t('after') : t('before'),
-          last === first ? first + 1 : `${first + 1}–${last + 1}`,
-        )
-      : t('Moving here is disabled');
-    reorderBadge.style.left = `${Math.max(4, Math.min(root.clientWidth - reorderBadge.offsetWidth - 4, event.clientX - origin.left + 14))}px`;
-    reorderBadge.style.top = `${Math.max(4, Math.min(root.clientHeight - reorderBadge.offsetHeight - 4, event.clientY - origin.top + 14))}px`;
-    reorderBadge.style.display = 'block';
-    return { beforeIndex, allowed };
-  }
-  function startTouchReorder(event: PointerEvent, node: HTMLElement): void {
-    if (!finishEdit(true)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    onPointerEnd();
-    closeMenu();
-    clearChoiceHover();
-    const axis = node.dataset.gridReorder as 'row' | 'column',
-      first = Number(node.dataset.reorderFirst),
-      last = Number(node.dataset.reorderLast);
-    const indices =
-      first === last ? selectedAxisIndices(axis, first) : Array.from({ length: last - first + 1 }, (_, i) => first + i);
-    reorderDrag = { axis, indices };
-    touchReorder = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      moved: false,
-      beforeIndex: first,
-    };
-    dragPointer = event.pointerId;
-    dragPosition = event;
-    root.setPointerCapture(event.pointerId);
-    scroller.focus({ preventScroll: true });
-    root.style.cursor = 'grabbing';
-  }
-  function updateTouchReorder(position: Pick<MouseEvent, 'clientX' | 'clientY'>): void {
-    if (!touchReorder || !reorderDrag) return;
-    if (
-      !touchReorder.moved &&
-      Math.hypot(position.clientX - touchReorder.startX, position.clientY - touchReorder.startY) < 6
-    )
-      return;
-    touchReorder.moved = true;
-    const bounds = scroller.getBoundingClientRect(),
-      view = viewport();
-    const hit = view.hitTest(
-      Math.max(0, Math.min(view.width - 0.1, position.clientX - bounds.left)),
-      Math.max(0, Math.min(view.height - 0.1, position.clientY - bounds.top)),
-    );
-    if (!hit) return;
-    const rect = view.cellRect(hit.row, hit.col),
-      index = reorderDrag.axis === 'row' ? hit.row : hit.col;
-    touchReorder.beforeIndex = previewReorder(
-      position,
-      reorderDrag.axis,
-      index,
-      index,
-      new win.DOMRect(bounds.left + rect.x, bounds.top + rect.y, rect.width, rect.height),
-    ).beforeIndex;
-  }
-  function commitTouchReorder(event: PointerEvent): void {
-    if (event.pointerId !== touchReorder?.pointerId || !reorderDrag) return;
-    event.preventDefault();
-    event.stopPropagation();
-    updateTouchReorder(event);
-    const request = Object.freeze({
-        axis: reorderDrag.axis,
-        indices: Object.freeze([...reorderDrag.indices]),
-        beforeIndex: touchReorder.beforeIndex,
-      }),
-      moved = touchReorder.moved;
-    clearReorder();
-    if (!moved) return;
-    try {
-      if (options.canReorder?.(request) !== false) options.onReorder?.(request);
-    } catch (error) {
-      actionError.textContent = error instanceof Error ? t(error.message) : t('Unable to move items.');
-      actionError.style.display = 'block';
-    }
-  }
-
-  function reorderHandle(node: HTMLElement, axis: 'row' | 'column', first: number, last = first): void {
-    if (!options.onReorder) return;
-    const handle = node;
-    handle.dataset.gridReorder = axis;
-    handle.dataset.reorderFirst = String(first);
-    handle.dataset.reorderLast = String(last);
-    const selectedAxis = getSelectionRanges().some((range) =>
-      axis === 'row'
-        ? range.startColumn === 0 &&
-          range.endColumn === columns.length - 1 &&
-          first >= range.startRow &&
-          last <= range.endRow
-        : range.startRow === 0 &&
-          range.endRow === rowCount - 1 &&
-          first >= range.startColumn &&
-          last <= range.endColumn,
-    );
-    handle.draggable = selectedAxis;
-    if (selectedAxis) {
-      handle.style.cursor = 'grab';
-      handle.title = 'Drag selected items to move; Alt+arrow moves one position';
-    }
-    handle.addEventListener('dragstart', (event) => {
-      if (!selectedAxis || !finishEdit(true)) {
-        event.preventDefault();
-        return;
-      }
-      const indices =
-        first === last
-          ? selectedAxisIndices(axis, first)
-          : Array.from({ length: last - first + 1 }, (_, i) => first + i);
-      reorderDrag = { axis, indices };
-      reorderBadge.textContent = t('Move {0} {1}{2}', indices.length, t(axis), indices.length > 1 ? 's' : '');
-      reorderBadge.style.display = 'block';
-      reorderBadge.style.left = '8px';
-      reorderBadge.style.top = '8px';
-      root.style.cursor = 'grabbing';
-      if (event.dataTransfer) {
-        event.dataTransfer.setData('text/plain', t('Move {0}', t(axis)));
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setDragImage(reorderBadge, 16, 14);
-      }
-    });
-    handle.addEventListener('keydown', (event) => {
-      const backward = axis === 'row' ? 'ArrowUp' : 'ArrowLeft';
-      const forward = axis === 'row' ? 'ArrowDown' : 'ArrowRight';
-      if (!selectedAxis || !event.altKey || (event.key !== backward && event.key !== forward)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      if (!finishEdit(true)) return;
-      const beforeIndex =
-        event.key === backward
-          ? Math.max(0, first - 1)
-          : Math.min(axis === 'row' ? rowCount : columns.length, last + 2);
-      const request = Object.freeze({
-        axis,
-        indices: Object.freeze(Array.from({ length: last - first + 1 }, (_, i) => first + i)),
-        beforeIndex,
-      });
-      try {
-        if (options.canReorder?.(request) !== false) options.onReorder?.(request);
-      } catch (error) {
-        actionError.textContent = error instanceof Error ? t(error.message) : t('Unable to move items.');
-        actionError.style.display = 'block';
-      }
-    });
-    handle.addEventListener('dragend', clearReorder);
-    node.addEventListener('dragover', (event) => {
-      if (reorderDrag?.axis !== axis) return;
-      event.preventDefault();
-      const preview = previewReorder(event, axis, first, last, node.getBoundingClientRect());
-      if (event.dataTransfer) event.dataTransfer.dropEffect = preview.allowed ? 'move' : 'none';
-    });
-    node.addEventListener('dragleave', (event) => {
-      if (!(event.relatedTarget instanceof win.Node) || !node.contains(event.relatedTarget))
-        reorderGuide.style.display = 'none';
-    });
-    node.addEventListener('drop', (event) => {
-      if (reorderDrag?.axis !== axis) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const request = Object.freeze({
-        axis,
-        indices: Object.freeze([...reorderDrag.indices]),
-        beforeIndex: reorderTarget(event, node, axis, first, last),
-      });
-      clearReorder();
-      try {
-        if (options.canReorder?.(request) === false) return;
-        options.onReorder?.(request);
-      } catch (error) {
-        actionError.textContent = error instanceof Error ? t(error.message) : t('Unable to move items.');
-        actionError.style.display = 'block';
-      }
-    });
-  }
 
   function drawSelection(regions: readonly ViewportRegion[]): void {
     const selection = engine.getSelection();
@@ -4669,13 +3688,13 @@ export function createGrid(options: GridOptions): Grid {
     positionEditor();
     const range = getSelectionRange();
     selectionHandles.forEach((button, i) => {
-      button.hidden = (!touchSelection && i === 0) || !range || !!editors.editor;
+      button.hidden = (!interaction.touchSelection && i === 0) || !range || !!editors.editor;
       if (button.hidden || !range) return;
-      const size = touchSelection ? 20 : 10;
+      const size = interaction.touchSelection ? 20 : 10;
       const half = size / 2;
       button.style.width = button.style.height = `${size}px`;
-      button.style.borderRadius = touchSelection ? '50%' : '0';
-      button.style.borderWidth = touchSelection ? '3px' : '2px';
+      button.style.borderRadius = interaction.touchSelection ? '50%' : '0';
+      button.style.borderWidth = interaction.touchSelection ? '3px' : '2px';
       const rect = view.cellRect(
         i === 0 ? range.startRow : range.endRow,
         i === 0 ? range.startColumn : range.endColumn,
@@ -4740,23 +3759,7 @@ export function createGrid(options: GridOptions): Grid {
   win.addEventListener('resize', render);
   win.addEventListener('scroll', positionEditor, { capture: true, passive: true });
   render();
-  function onDoubleClick(event: MouseEvent): void {
-    const cell = pointerCell(event);
-    if (cell && openMedia(cell.row, cell.col)) return;
-    const selection = engine.getSelection();
-    if (cell && columnEditors.get(columns[cell.col]!.key)?.type === 'checkbox') return;
-    if (
-      event.target !== editors.editor &&
-      cell &&
-      selection?.rowIndex === cell.row &&
-      selection.columnIndex === cell.col &&
-      !event.ctrlKey &&
-      !event.metaKey &&
-      !event.altKey &&
-      !event.shiftKey
-    )
-      beginEdit();
-  }
+
   function clearLayoutMotion(): void {
     motion.clearLayoutMotion();
   }
