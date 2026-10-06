@@ -1,5 +1,21 @@
 # Benchmark evidence
 
+## Atomic row batches: 2026-10-06
+
+`tests/benchmark-batch.mjs` measures 100,000 cells arranged as 100k rows × 1 column, 10k × 10 and 1k × 100. Three sequential Chromium trials per shape check every value after direct source writes, API batches, paste, undo and redo. Permission veto and a final invalid cell must leave values, events and history unchanged. This workload now runs in the existing benchmark CI job.
+
+[Before/after raw evidence](benchmark-results/2026-10-06-atomic-batch.json) compares runtime `9095449` with `929b6ad` on the same local Windows Chromium setup. Median CPU wall time in ms:
+
+| Shape, 100k cells | setValues before / after | updateCells before / after | Paste before / after | Undo paste before / after |
+| --- | ---: | ---: | ---: | ---: |
+| 100k × 1 | 16.5 / 15.3 | 81.5 / 83.7 | 156.6 / 148.5 | 54.3 / 54.4 |
+| 10k × 10 | 8.5 / 8.1 | 78.2 / 72.3 | 142.8 / 130.7 | 48.5 / 44.1 |
+| 1k × 100 | 24.3 / 10.1 | 94.8 / 76.5 | 159.7 / 123.6 | 67.4 / 52.6 |
+
+LocalDataSource stages one shallow draft per touched row, updates its fields in encounter order and freezes the completed rows only after the entire batch validates. Old snapshots remain frozen and unchanged; duplicate cells retain their last value. Existing own keys such as `__proto__` remain data properties. Batch/paste/cut deduplication uses an integer row prefix and separator followed by the complete column key, avoiding JSON array serialization without conflating keys containing colons or quotes. Permissions, parsing, validation and history continue through the same mutation pipeline.
+
+These are three local samples per shape, without dedicated warmup, fixed system load or timing thresholds. Shapes differ in row count; they do not isolate column-width scaling. The single-column API batch did not improve in this run. Commands remain synchronous; no presented FPS, peak-memory or universal speedup claim is made. [CI at 929b6ad](https://github.com/haodn-dev/acheron-grid/actions/runs/37428401875) passed Node 22/24 and full portable Firefox/WebKit, including 105 Node tests, browser integration, repeated benchmark correctness and packed consumers.
+
 ## Local projection optimization: 2026-10-06
 
 [Before/after raw trials](benchmark-results/2026-10-06-local-view-comparison.json) compare the unchanged Node runner at runtime baseline `fcab797` and optimization `53835be`. Both use Node 24.13.0 on the same Windows i5-12400F machine, three trials each at 10k/100k allocated rows, with full identity/value/history assertions. Runtime/runner SHA-256 hashes are included. Documentation changes present during the baseline run do not change the measured runtime.
