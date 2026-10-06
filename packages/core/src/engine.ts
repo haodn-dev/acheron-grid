@@ -1,3 +1,4 @@
+import { createPersistence } from './internal/persistence.js';
 import { createClipboard } from './internal/clipboard.js';
 import { createSelection } from './internal/selection.js';
 import { createProjection } from './internal/projection.js';
@@ -447,397 +448,6 @@ export function createGridEngine(options: GridEngineOptions) {
     }
   }
 
-  function refreshData(previousRowIds?: readonly RowId[] | 'values'): void {
-    assertAlive();
-    const count = dataSource.getRowCount();
-    if (!Number.isSafeInteger(count) || count < 0 || !Number.isFinite(count * rowHeight))
-      throw new RangeError('Invalid refreshed row count.');
-    if (previousRowIds === 'values') {
-      if (count !== rowCount || (selection && !Object.is(selection.rowId, dataSource.getRowId(selection.rowIndex))))
-        throw new Error('Values-only refresh requires unchanged row identities and count.');
-      const old = projection ?? Array.from({ length: rowCount }, (_, i) => i),
-        next = buildProjection(view);
-      installProjection(next);
-      past.length = future.length = 0;
-      pendingCut = undefined;
-      notify(
-        { type: 'structure', rowMap: old.map(displayRow), columnMap: columns.map((_, i) => i) },
-        Object.freeze({ type: 'data:refresh', previousRowCount: rowCount, rowCount, identitiesReconciled: true }),
-      );
-      return;
-    }
-    const ids = Array.from({ length: count }, (_, i) => dataSource.getRowId(i));
-    const validIds = (values: readonly RowId[]) =>
-      values.every((id) => typeof id === 'string' || (typeof id === 'number' && Number.isFinite(id))) &&
-      new Set(values).size === values.length;
-    if (!validIds(ids) || (previousRowIds && (previousRowIds.length !== rowCount || !validIds(previousRowIds))))
-      throw new TypeError('Invalid refresh row identities.');
-    const lookup = new Map(ids.map((id, i) => [id, i])),
-      oldIds = previousRowIds ?? Array.from({ length: rowCount }, (_, i) => i);
-    const rowMap = oldIds.map((id) => (previousRowIds ? (lookup.get(id) ?? -1) : -1)),
-      columnsMap = columns.map((_, i) => i);
-    const previousLookup = new Map(previousRowIds?.map((id, i) => [id, i]) ?? []),
-      order = ids.map((id) => previousLookup.get(id) ?? -1);
-    const before = snapshotStructure(oldIds),
-      contiguous = (start: number, end: number) =>
-        rowMap.slice(start, end + 1).every((row, i, rows) => row >= 0 && row === rows[0]! + i);
-    before.merges = before.merges.filter(
-      (span) =>
-        contiguous(span.startRow, span.endRow) &&
-        !(rowMap[span.startRow]! < Math.min(frozenRows, count) && rowMap[span.endRow]! >= Math.min(frozenRows, count)),
-    );
-    before.groups = before.groups.filter(
-      (group) =>
-        contiguous(group.startRow, group.endRow) &&
-        !(
-          group.collapsed &&
-          rowMap[group.startRow]! < Math.min(frozenRows, count) &&
-          rowMap[group.endRow]! >= Math.min(frozenRows, count)
-        ),
-    );
-    const oldDisplay = projection ?? Array.from({ length: rowCount }, (_, i) => i),
-      next = mappedState(before, order, 'row', rowMap, columnsMap, [], ids);
-    next.rowIds = ids;
-    for (const cell of [next.selection, next.anchor]) if (cell) cell.rowId = ids[cell.rowIndex]!;
-    const oldCount = rowCount;
-    const nextProjection = buildProjection(view, count, next.merges, next.groups);
-    restoreStructure(next);
-    installProjection(nextProjection);
-    past.length = future.length = 0;
-    pendingCut = undefined;
-    notify(
-      {
-        type: 'structure',
-        rowMap: oldDisplay.map((row) => (rowMap[row]! < 0 ? -1 : displayRow(rowMap[row]!))),
-        columnMap: columnsMap,
-      },
-      Object.freeze({
-        type: 'data:refresh',
-        previousRowCount: oldCount,
-        rowCount: count,
-        identitiesReconciled: previousRowIds !== undefined,
-      }),
-    );
-  }
-
-  function exportConfiguration(): GridConfiguration {
-    assertAlive();
-    return {
-      version: 1,
-      columns: columns.map((column, index) => ({ key: column.key, width: columnAxis.storedSize(index) })),
-      frozenRows,
-      frozenColumns,
-      view: {
-        ...view,
-        ...(view.sort ? { sort: { ...view.sort } } : {}),
-        ...(view.sorts ? { sorts: view.sorts.map((sort) => ({ ...sort })) } : {}),
-        ...(view.filters ? { filters: view.filters.map((filter) => ({ ...filter })) } : {}),
-      },
-    };
-  }
-  function exportState(): GridState {
-    assertAlive();
-    const layers = [...formats.values()]
-      .flatMap((entry) =>
-        Object.entries(entry.orders).map(([property, order]) => ({
-          order: order!,
-          target: entry.target,
-          patch: { [property]: entry.patch[property as keyof CellFormatPatch] },
-        })),
-      )
-      .sort((a, b) => a.order - b.order);
-    return {
-      version: 1,
-      configuration: exportConfiguration(),
-      rowIds: Array.from({ length: rowCount }, (_, i) => dataSource.getRowId(i)),
-      rowHeights: rowAxis.snapshot(),
-      manualRows: [...manualRows],
-      hiddenRows: rowAxis.hiddenIndices(),
-      hiddenColumns: columnAxis.hiddenIndices(),
-      activeParts,
-      displayAnchor: displayAnchor ? { ...displayAnchor } : null,
-      ranges: getSelectionRanges().map((range) => ({ ...range })),
-      selection: selection ? { ...selection } : null,
-      anchor: anchor ? { ...anchor } : null,
-      merges: merges.map((span) => ({ ...span })),
-      groups: groups.map((group) => ({ ...group })),
-      locks: [
-        ...(tableLocked ? [{ scope: 'table' as const }] : []),
-        ...[...lockedRows].map((rowIndex) => ({ scope: 'row' as const, rowIndex })),
-        ...[...lockedColumns].map((columnIndex) => ({ scope: 'column' as const, columnIndex })),
-        ...[...lockedCells].map((key) => {
-          const [rowIndex, columnIndex] = key.split(':').map(Number);
-          return { scope: 'cell' as const, rowIndex: rowIndex!, columnIndex: columnIndex! };
-        }),
-      ],
-      formats: layers.map(({ target, patch }) => ({
-        target: JSON.parse(JSON.stringify(target)) as CellFormatTarget,
-        patch,
-      })),
-    };
-  }
-  function restoreState(input: unknown): void {
-    assertAlive();
-    const saved = readGridState(input);
-    if (tableLocked) throw new Error('Unlock the table before restoring state.');
-    if (saved.rowIds.length !== rowCount || saved.rowIds.some((id, i) => !Object.is(id, dataSource.getRowId(i))))
-      throw new Error('State row identities do not match the current source.');
-    const configuration = restoreGridConfiguration(saved.configuration, columns, rowCount);
-    const restoredOrder = configuration.columns.map((column) => columnIndices.get(column.key)!);
-    if (restoredOrder.some((index, i) => index !== i)) {
-      const request = Object.freeze({
-        ...structureRequest(
-          'column',
-          'move',
-          restoredOrder.map((_, i) => i),
-          0,
-          restoredOrder.length,
-        ),
-        order: Object.freeze(restoredOrder),
-        columns: Object.freeze(configuration.columns),
-      });
-      if (!structureAllowed(request)) throw new Error('Structural change is disabled.');
-    }
-    const staged = createGridEngine({
-      ...options,
-      ...configuration,
-      view: {},
-      onEvent: () => {},
-      onInvalidate: () => {},
-      onObserverError: () => {},
-    });
-    try {
-      for (const size of saved.rowHeights) {
-        if (!Array.isArray(size) || size.length !== 2) throw new TypeError('Invalid row height.');
-        staged.setRowHeight(size[0], size[1]);
-      }
-      const manual = new Set(saved.manualRows);
-      if (
-        manual.size !== saved.manualRows.length ||
-        saved.manualRows.some((row) => !Number.isSafeInteger(row) || row < 0 || row >= rowCount)
-      )
-        throw new RangeError('Invalid manual rows.');
-      for (const entry of saved.formats) {
-        if (!entry || !entry.target || !entry.patch) throw new TypeError('Invalid state format.');
-        staged.format([entry.target], entry.patch);
-      }
-      for (const span of saved.merges) staged.mergeCells(span);
-      const ids = new Set<string>();
-      for (const group of saved.groups) {
-        if (
-          !group ||
-          typeof group.id !== 'string' ||
-          !group.id ||
-          ids.has(group.id) ||
-          typeof group.collapsed !== 'boolean'
-        )
-          throw new TypeError('Invalid state group.');
-        ids.add(group.id);
-        const stagedGroup = staged.groupRows(group.startRow, group.endRow);
-        if (group.collapsed) {
-          staged.setGroupCollapsed(stagedGroup, true);
-          staged.setGroupCollapsed(stagedGroup, false);
-        }
-      }
-      const hiddenRows = saved.hiddenRows ?? [],
-        hiddenColumns = saved.hiddenColumns ?? [];
-      if (!Array.isArray(hiddenRows) || !Array.isArray(hiddenColumns)) throw new TypeError('Invalid saved visibility.');
-      if (hiddenRows.length) staged.setRowsHidden(hiddenRows, true);
-      if (hiddenColumns.length) staged.setColumnsHidden(hiddenColumns, true);
-      // Restore selection in source coordinates before installing a sorted/filtered projection.
-      for (const range of saved.ranges)
-        if (!staged.selectRange(range, 'add')) throw new Error('State selection is not selectable.');
-      for (const cell of [saved.selection, saved.anchor])
-        if (cell !== null) {
-          if (
-            !cell ||
-            !Number.isSafeInteger(cell.rowIndex) ||
-            !Number.isSafeInteger(cell.columnIndex) ||
-            cell.rowIndex < 0 ||
-            cell.rowIndex >= rowCount ||
-            cell.columnIndex < 0 ||
-            cell.columnIndex >= columns.length ||
-            cell.columnKey !== configuration.columns[cell.columnIndex]!.key ||
-            !Object.is(cell.rowId, saved.rowIds[cell.rowIndex]) ||
-            !staged.getCellPermission(cell.rowIndex, cell.columnIndex).selectable ||
-            !saved.ranges.some(
-              (range) =>
-                cell.rowIndex >= range.startRow &&
-                cell.rowIndex <= range.endRow &&
-                cell.columnIndex >= range.startColumn &&
-                cell.columnIndex <= range.endColumn,
-            )
-          )
-            throw new TypeError('Invalid state selection endpoint.');
-        }
-      if ((saved.selection === null) !== (saved.anchor === null) || (!saved.selection && saved.ranges.length))
-        throw new TypeError('Invalid state selection.');
-      for (const target of saved.locks) staged.setLocked(target, true);
-      staged.setView(configuration.view);
-      const valid = staged.exportState();
-      const nextProjection = buildProjection(
-        configuration.view,
-        rowCount,
-        valid.merges,
-        saved.groups,
-        configuration.frozenRows,
-      );
-      const restoredParts = saved.activeParts ?? 1,
-        restoredAnchor = saved.displayAnchor ?? null;
-      if (!Number.isSafeInteger(restoredParts) || restoredParts < 1 || restoredParts > Math.max(1, valid.ranges.length))
-        throw new TypeError('Invalid active selection parts.');
-      if (
-        restoredAnchor &&
-        (!Number.isSafeInteger(restoredAnchor.row) ||
-          !Number.isSafeInteger(restoredAnchor.col) ||
-          restoredAnchor.row < 0 ||
-          restoredAnchor.row >= (nextProjection?.length ?? rowCount) ||
-          restoredAnchor.col < 0 ||
-          restoredAnchor.col >= columns.length)
-      )
-        throw new TypeError('Invalid display anchor.');
-      for (const span of merges)
-        if (
-          !saved.merges.some((next) => JSON.stringify(next) === JSON.stringify(span)) &&
-          !layoutAllowed({ kind: 'unmerge', range: span })
-        )
-          throw new Error('Removing merged cells is disabled.');
-      for (const group of groups) {
-        const next = saved.groups.find(
-          (item) => item.id === group.id && item.startRow === group.startRow && item.endRow === group.endRow,
-        );
-        if (
-          (!next && !layoutAllowed({ kind: 'ungroup', group })) ||
-          (next &&
-            next.collapsed !== group.collapsed &&
-            !layoutAllowed({ kind: next.collapsed ? 'collapse' : 'expand', group }))
-        )
-          throw new Error('Changing row groups is disabled.');
-      }
-      for (const span of valid.merges)
-        for (let row = span.startRow; row <= span.endRow; row++)
-          for (let col = span.startColumn; col <= span.endColumn; col++)
-            requirePermission(row, restoredOrder[col]!, 'writable');
-      for (const group of valid.groups)
-        for (let row = group.startRow; row <= group.endRow; row++)
-          if (lockedRows.has(row)) throw new Error('Changing locked row groups is disabled.');
-      if (JSON.stringify(exportState().formats) !== JSON.stringify(valid.formats))
-        for (const entry of formats.values()) requireFormatPermission(entry.bounds);
-      const shownRows = rowAxis.hiddenIndices().filter((index) => !hiddenRows.includes(index));
-      const hiddenKeys = new Set(hiddenColumns.map((index) => configuration.columns[index]!.key));
-      const shownColumns = columnAxis.hiddenIndices().filter((index) => !hiddenKeys.has(columns[index]!.key));
-      if (shownRows.length) requireVisibilityPolicy('row', shownRows, false);
-      if (shownColumns.length) requireVisibilityPolicy('column', shownColumns, false);
-      const nextFormats = new Map<string, FormatEntry>();
-      let order = 0;
-      for (const entry of valid.formats) {
-        const target = entry.target,
-          bounds: SelectionRange =
-            target.scope === 'range'
-              ? { ...target.range }
-              : {
-                  startRow: target.scope === 'row' || target.scope === 'cell' ? target.rowIndex : 0,
-                  endRow: target.scope === 'row' || target.scope === 'cell' ? target.rowIndex : rowCount - 1,
-                  startColumn: target.scope === 'column' || target.scope === 'cell' ? target.columnIndex : 0,
-                  endColumn:
-                    target.scope === 'column' || target.scope === 'cell' ? target.columnIndex : columns.length - 1,
-                };
-        const key = JSON.stringify([
-            target.scope,
-            bounds.startRow,
-            bounds.endRow,
-            bounds.startColumn,
-            bounds.endColumn,
-          ]),
-          previous = nextFormats.get(key),
-          orders = { ...previous?.orders };
-        for (const property of Object.keys(entry.patch) as (keyof CellFormatPatch)[]) orders[property] = ++order;
-        nextFormats.set(key, {
-          target: Object.freeze(target),
-          bounds: Object.freeze(bounds),
-          patch: Object.freeze({ ...previous?.patch, ...entry.patch }),
-          orders: Object.freeze(orders),
-          order,
-        });
-      }
-      const old = projection ?? Array.from({ length: rowCount }, (_, i) => i),
-        oldColumns = columns;
-      columns = Object.freeze([...configuration.columns]);
-      columnIndices.clear();
-      columns.forEach((column, i) => columnIndices.set(column.key, i));
-      columnAxis.replace(
-        columns.length,
-        configuration.columns.map((column, i) => [i, configuration.columnWidths[column.key]!] as const),
-      );
-      rowAxis.replace(rowCount, valid.rowHeights);
-      rowAxis.replaceHidden(valid.hiddenRows ?? []);
-      columnAxis.replaceHidden(valid.hiddenColumns ?? []);
-      manualRows.clear();
-      for (const row of manual) manualRows.add(row);
-      merges = valid.merges.map((span) => Object.freeze({ ...span }));
-      groups = valid.groups.map((group, i) =>
-        Object.freeze({ ...group, id: saved.groups[i]!.id, collapsed: saved.groups[i]!.collapsed }),
-      );
-      groupId = 0;
-      lockedRows.clear();
-      lockedColumns.clear();
-      lockedCells.clear();
-      tableLocked = false;
-      for (const target of valid.locks) {
-        if (target.scope === 'table') tableLocked = true;
-        else if (target.scope === 'row') lockedRows.add(target.rowIndex);
-        else if (target.scope === 'column') lockedColumns.add(target.columnIndex);
-        else lockedCells.add(`${target.rowIndex}:${target.columnIndex}`);
-      }
-      formats.clear();
-      for (const [key, entry] of nextFormats) formats.set(key, entry);
-      orderedFormats = [...formats.values()].sort((a, b) => a.order - b.order);
-      formatOrder = order;
-      frozenRows = configuration.frozenRows;
-      frozenColumns = configuration.frozenColumns;
-      selection = anchor = null;
-      retainedRanges.length = 0;
-      activeParts = 1;
-      displayAnchor = null;
-      for (const range of valid.ranges) retainedRanges.push({ ...range });
-      const active = retainedRanges.pop();
-      if (active && rowCount && columns.length) {
-        selection = {
-          rowIndex: active.startRow,
-          columnIndex: active.startColumn,
-          columnKey: columns[active.startColumn]!.key,
-          rowId: dataSource.getRowId(active.startRow),
-        };
-        anchor = {
-          rowIndex: active.endRow,
-          columnIndex: active.endColumn,
-          columnKey: columns[active.endColumn]!.key,
-          rowId: dataSource.getRowId(active.endRow),
-        };
-      }
-      if (saved.selection && saved.anchor) {
-        selection = { ...saved.selection };
-        anchor = { ...saved.anchor };
-      }
-      view = snapshotView(configuration.view);
-      installProjection(nextProjection);
-      past.length = future.length = 0;
-      pendingCut = undefined;
-      activeParts = restoredParts;
-      displayAnchor = restoredAnchor ? { ...restoredAnchor } : null;
-      notify(
-        {
-          type: 'structure',
-          rowMap: old.map(displayRow),
-          columnMap: oldColumns.map((column) => columnIndices.get(column.key) ?? -1),
-        },
-        Object.freeze({ type: 'state:restore' }),
-      );
-    } finally {
-      staged.destroy();
-    }
-  }
-
   const { replay } = createHistory(context, {
     get changeVisibility() {
       return changeVisibility;
@@ -1169,6 +779,57 @@ export function createGridEngine(options: GridEngineOptions) {
       },
     },
   );
+
+  const { refreshData, exportConfiguration, exportState, restoreState } = createPersistence(context, {
+    get assertAlive() {
+      return assertAlive;
+    },
+    get buildProjection() {
+      return buildProjection;
+    },
+    get installProjection() {
+      return installProjection;
+    },
+    get notify() {
+      return notify;
+    },
+    get displayRow() {
+      return displayRow;
+    },
+    get snapshotStructure() {
+      return snapshotStructure;
+    },
+    get mappedState() {
+      return mappedState;
+    },
+    get restoreStructure() {
+      return restoreStructure;
+    },
+    get getSelectionRanges() {
+      return getSelectionRanges;
+    },
+    get structureRequest() {
+      return structureRequest;
+    },
+    get structureAllowed() {
+      return structureAllowed;
+    },
+    get createGridEngine() {
+      return createGridEngine;
+    },
+    get layoutAllowed() {
+      return layoutAllowed;
+    },
+    get requirePermission() {
+      return requirePermission;
+    },
+    get requireFormatPermission() {
+      return requireFormatPermission;
+    },
+    get requireVisibilityPolicy() {
+      return requireVisibilityPolicy;
+    },
+  });
   if (options.view) {
     view = snapshotView(options.view);
     installProjection(buildProjection(view));
