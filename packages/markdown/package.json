@@ -6,7 +6,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "exports": {
     ".": {
@@ -18,7 +19,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "Hao Duong",
   "dependencies": {
     "marked": "^18.0.5"

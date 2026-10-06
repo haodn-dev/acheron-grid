@@ -346,7 +346,7 @@ Filter/sort, resize and formatting dialogs use native `showModal()` with grid-sc
 
 ## License
 
-Original Acheron Grid code is licensed under [MIT](LICENSE). Copyright (c) 2026 Hao Duong. Embedded Lucide icons retain their ISC/MIT attribution in [LICENSE.lucide](LICENSE.lucide), included in this package's file list. Keep those notices when redistributing the assets or a bundle containing them.
+Original Acheron Grid code is licensed under [Apache 2.0](LICENSE). Copyright (c) 2026 Hao Duong. Embedded Lucide icons retain their ISC/MIT attribution in [LICENSE.lucide](LICENSE.lucide), included in this package's file list. Keep those notices when redistributing the assets or a bundle containing them.
 
 ## Auto-fit visible content
 

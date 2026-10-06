@@ -6,7 +6,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "exports": {
     ".": {
@@ -23,7 +24,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.headless.json",
     "dev": "tsc -p tsconfig.json --watch"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/haodn-dev/acheron-grid.git",

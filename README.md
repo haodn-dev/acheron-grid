@@ -16,7 +16,7 @@ Every Acheron feature and optional module is intended to remain open source and 
 
 ## Status
 
-The original six packages are published on npm at 0.1.0 as development previews. APIs may change before 1.0. Changes under Unreleased and the new export/charts modules are source previews; build from source or install packed artifacts to try them. The project is licensed under [MIT](LICENSE).
+The original six packages are published on npm at 0.1.0 as development previews. APIs may change before 1.0. Changes under Unreleased and the new export/charts modules are source previews; build from source or install packed artifacts to try them. The project is licensed under [Apache 2.0](LICENSE).
 
 | Package | Purpose | Runtime dependencies |
 | --- | --- | --- |
@@ -175,7 +175,7 @@ Formula evaluation, charts, pivot tables, multi-sheet workbooks, Excel calculati
 
 ## License
 
-Acheron Grid is available under the [MIT License](LICENSE). Copyright (c) 2026 Hao Duong. You may use, modify and redistribute it, including in commercial applications, subject to the license terms and preservation of the required notices.
+Acheron Grid is available under the [Apache 2.0 License](LICENSE). Copyright (c) 2026 Hao Duong. You may use, modify and redistribute it, including in commercial applications, subject to the license terms and preservation of the required notices.
 
 The Canvas package embeds Lucide SVG assets under their existing ISC/MIT terms. Their attribution and license text are included in [LICENSE.lucide](packages/canvas/LICENSE.lucide); these terms cover those assets, not the entire project.
 
@@ -188,3 +188,5 @@ See [@acheron-grid/mcp](packages/mcp/README.md) for a stdio documentation server
 Created by [Hao Duong](https://haoduong.dev/). See [Contributing](CONTRIBUTING.md) for bug reports and contributions. The public demo and documentation are available at [acheron-grid.haoduong.dev](https://acheron-grid.haoduong.dev/).
 
 First release preparation: [0.1.0 release notes](RELEASE-0.1.0.md).
+
+Current source and future distributions use Apache-2.0. Previously published npm 0.1.0 and tag v0.1.0 retain their original MIT license. Third-party licenses are unchanged; package LICENSE and NOTICE files accompany distributions.

@@ -69,4 +69,4 @@ No browser bridge, HTTP transport setup, remote data, collaborative revisioning,
 
 `npm run test --workspace @acheron-grid/mcp` checks an SDK client/server handshake, resources, reads, conflict-safe atomic updates and core history. Uses SDK transports rather than implementing JSON-RPC.
 
-MIT © 2026 Hao Duong.
+Apache 2.0 © 2026 Hao Duong.

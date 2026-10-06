@@ -30,7 +30,7 @@ The adapter uses a private Marked instance with GFM disabled and raw HTML tokens
 
 Applications may provide their own synchronous `markdownToHtml` callback instead. Canvas still applies its restricted text projection and URL validation. The standalone default playground does not import this adapter; direct browser users need an import map for the adapter and its `marked` dependency.
 
-Licensed under MIT. Marked retains its own MIT license.
+Licensed under Apache 2.0. Marked retains its own MIT license.
 ## Installation
 
 ```sh

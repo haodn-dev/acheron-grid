@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Change original Acheron source and future package distributions from MIT to Apache-2.0; ship LICENSE/NOTICE in every package. Preserve third-party notices and the license of already published 0.1.0 artifacts.
+
 - Add atomic paste special (values/formats/transpose/skip-empty), undoable hidden axes, numeric display formats and complete English/Vietnamese Canvas message packs with host overrides.
 - Add a bounded optimistic remote snapshot source with validated JSON writes, durable-server-idempotency contract, exact uncertain retry, explicit reconnect/resync and conflict adoption. Existing async paging remains read-only.
 

@@ -22,3 +22,8 @@ The website displays the channel, document revision, updated date and source rev
 Package README files and the guides in this repository are canonical consumer documentation. Refresh MCP copies with `npm run docs:sync`; the site imports the same files and checks their hashes. Do not fix only the site's downloaded Markdown or an MCP snapshot.
 
 When changing an API: update its owning guide/README, record its release availability, update the affected document's revision/history, regenerate signatures and copies, compile the runnable examples, then deploy the site. Keep frozen 0.1.0 docs free of newer APIs. For breaking changes, provide a before/after migration example in release notes; documentation revision numbers are not a substitute for package SemVer.
+
+
+## License transition
+
+Current source and future distributions use Apache-2.0, with copyright attribution in NOTICE. Published npm 0.1.0 and tag v0.1.0 retain MIT; the source license decision does not retroactively change those artifacts. Embedded Lucide assets (ISC/MIT), fflate/Marked and other dependencies retain their own licenses and required notices.

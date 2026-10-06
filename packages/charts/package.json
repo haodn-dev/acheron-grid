@@ -1,11 +1,36 @@
 {
-  "name": "@acheron-grid/charts", "version": "0.1.0", "type": "module",
+  "name": "@acheron-grid/charts",
+  "version": "0.1.0",
+  "type": "module",
   "description": "Optional inline line and column charts for Acheron Grid Canvas",
-  "license": "MIT", "author": "Hao Duong",
-  "files": ["dist", "README.md", "LICENSE"],
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "dependencies": { "@acheron-grid/canvas": "0.1.0" },
-  "scripts": { "build": "tsc -p tsconfig.json", "typecheck": "tsc -p tsconfig.json --noEmit" },
-  "publishConfig": { "access": "public" }, "homepage": "https://acheron-grid.haoduong.dev/",
-  "repository": {"type":"git","url":"git+https://github.com/haodn-dev/acheron-grid.git","directory":"packages/charts"}
+  "license": "Apache-2.0",
+  "author": "Hao Duong",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@acheron-grid/canvas": "0.1.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://acheron-grid.haoduong.dev/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/haodn-dev/acheron-grid.git",
+    "directory": "packages/charts"
+  }
 }

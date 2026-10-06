@@ -423,7 +423,7 @@ The createGrid methods and behavior remain the same; see the [Canvas guide](http
 
 ## License
 
-Licensed under [MIT](LICENSE). Copyright (c) 2026 Hao Duong. Lucide assets belong to the separate Canvas package and are not dependencies of this headless core.
+Licensed under [Apache 2.0](LICENSE). Copyright (c) 2026 Hao Duong. Lucide assets belong to the separate Canvas package and are not dependencies of this headless core.
 
 
 ## Editing and remote writes (source preview)
