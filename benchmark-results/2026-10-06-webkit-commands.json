@@ -1,0 +1,76 @@
+{
+  "revision": "72e4dee51bf561e0832bcaeda1a7549f483fea73",
+  "browserName": "webkit",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Safari/605.1.15",
+  "devicePixelRatio": 1,
+  "rows": 100000,
+  "trials": 3,
+  "supportsLongTasks": false,
+  "samples": [
+    {
+      "name": "multiSort100k",
+      "start": 80,
+      "end": 339,
+      "ms": 259,
+      "timerDelayMs": 263
+    },
+    {
+      "name": "paste100k",
+      "start": 451,
+      "end": 653,
+      "ms": 202,
+      "timerDelayMs": 215
+    },
+    {
+      "name": "undoPaste100k",
+      "start": 681,
+      "end": 783,
+      "ms": 102,
+      "timerDelayMs": 108
+    },
+    {
+      "name": "multiSort100k",
+      "start": 805,
+      "end": 1119,
+      "ms": 314,
+      "timerDelayMs": 324
+    },
+    {
+      "name": "paste100k",
+      "start": 1236,
+      "end": 1425,
+      "ms": 189,
+      "timerDelayMs": 200
+    },
+    {
+      "name": "undoPaste100k",
+      "start": 1451,
+      "end": 1540,
+      "ms": 89,
+      "timerDelayMs": 93
+    },
+    {
+      "name": "multiSort100k",
+      "start": 1559,
+      "end": 1857,
+      "ms": 298,
+      "timerDelayMs": 312
+    },
+    {
+      "name": "paste100k",
+      "start": 1975,
+      "end": 2141,
+      "ms": 166,
+      "timerDelayMs": 171
+    },
+    {
+      "name": "undoPaste100k",
+      "start": 2160,
+      "end": 2240,
+      "ms": 80,
+      "timerDelayMs": 92
+    }
+  ],
+  "operationLongTasks": [],
+  "limitations": "Headless CPU wall time and zero-delay timer latency, including scheduling overhead. Long-task entries may include work outside an operation. No Canvas, FPS, GPU or peak memory; no warmup or timing threshold."
+}

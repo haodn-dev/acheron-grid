@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserve native checkbox drafts and context-menu keyboard focus in WebKit; read the current reduced-motion preference before layout animation. Extend browser CI beyond smoke coverage, keeping Chromium-only clipboard permission and CDP touch checks explicit. Add browser command task-delay benchmark evidence.
+
 - Complete the headless API behavior/export/type catalog and prevent undocumented new engine members during documentation sync. Clarify source/view coordinates, capability probes and disposal ownership; add regression checks for source write support and permission-sensitive replay.
 
 - Add verified npm develop/stable release workflows, aligned workspace version tooling, registry consumer checks, and trusted publishing setup instructions.

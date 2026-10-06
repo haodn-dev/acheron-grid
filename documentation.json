@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "c89101973e61f4aca02099900846a7d6d1685b50",
+  "sourceRevision": "bfdf60b4a3f7dc737e0b52e7cdf4292861597691",
   "release": {
     "version": "0.1.0",
     "tag": "v0.1.0",
@@ -23,9 +23,9 @@
     {
       "id": "integration",
       "path": "guides/integration.md",
-      "revision": 3,
+      "revision": 4,
       "updated": "2026-10-06",
-      "sha256": "d27b09c55c0148b4d3503266458bec5f7d3eda1b0fdb1e1b8065c59ce3215459",
+      "sha256": "3a31856ab9d13f17d5bb4a0b6a4ff9cd0ca02384bc81df46345f4e62f595afec",
       "history": [
         {
           "revision": 1,
@@ -37,6 +37,10 @@
         },
         {
           "revision": 3,
+          "summary": "Clarify async request limits, positional page invalidation and dataset revision ownership."
+        },
+        {
+          "revision": 4,
           "summary": "Clarify async request limits, positional page invalidation and dataset revision ownership."
         }
       ]
@@ -282,12 +286,20 @@
     {
       "id": "support",
       "path": "SUPPORT.md",
-      "revision": 1,
-      "updated": "2026-10-05",
-      "sha256": "aebf2974eb230347ef796f261c3883a1a7756b6d60a2ace80cd6a52f41646355",
+      "revision": 3,
+      "updated": "2026-10-06",
+      "sha256": "e8401fe0bd6c6fffff733d6e57b6dbdb973e6437b06475d8ef66f7b1c86d24e7",
       "history": [
         {
           "revision": 1,
+          "summary": "Verified environments and practical limits."
+        },
+        {
+          "revision": 2,
+          "summary": "Verified environments and practical limits."
+        },
+        {
+          "revision": 3,
           "summary": "Verified environments and practical limits."
         }
       ]

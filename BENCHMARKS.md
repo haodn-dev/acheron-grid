@@ -1,5 +1,11 @@
 # Benchmark evidence
 
+## Browser command task evidence
+
+The benchmark configuration also runs `tests/benchmark-commands.mjs`: three trials of multi-sort, paste and undo on 100,000 allocated rows. Full row identity/value assertions follow each operation. Raw attachments include synchronous operation duration, zero-delay timer latency and overlapping Long Tasks API entries when supported. Timer latency includes scheduling overhead; overlapping tasks can include fixture/assertion work outside the measured operation. This measures browser main-thread blocking, without Canvas rendering, GPU time, presented FPS or peak memory. There is no warmup or timing pass/fail threshold. Set `ACHERON_TEST_BROWSER` to select Firefox or WebKit; unsupported long-task collection is explicitly recorded.
+
+Local Windows run on 2026-10-06 at source `72e4dee` ([Chromium raw samples](benchmark-results/2026-10-06-chromium-commands.json), [WebKit raw samples](benchmark-results/2026-10-06-webkit-commands.json)): median operation/timer latency in ms for 100k multi-sort was 244.8/245.0 in Chromium and 298/312 in WebKit; paste 138.4/138.5 and 189/200; undo 49.6/49.7 and 89/93. Chromium recorded seven overlapping long-task entries; WebKit did not expose that API. All correctness assertions passed. These three-trial results expose synchronous main-thread blocking, not a cross-browser speed ranking or p95 target. OS/runtime/JIT, locale and timing precision differ. Large local commands should be measured against the host's responsiveness needs before choosing an async or worker integration.
+
 Run `npm run benchmark -- --repeat-each=3 --reporter=json` after installing development dependencies and Playwright Chromium. The existing runner builds the packages and uses one worker with the browser fixture. Assertions check viewport-bounded reads and single-cell partial updates; timing is informational.
 
 ## Local baseline: 2026-10-05
