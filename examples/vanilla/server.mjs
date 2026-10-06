@@ -7,7 +7,7 @@ createServer(async (request, response) => {
     return;
   }
   const path = new URL(request.url, 'http://127.0.0.1').pathname;
-  const module = /^\/(core|canvas)\/([a-z-]+\.js)$/.exec(path);
+  const module = /^\/(core|canvas)\/((?:internal\/)?[a-z-]+\.js)$/.exec(path);
   const file =
     path === '/'
       ? new URL('./index.html', import.meta.url)
