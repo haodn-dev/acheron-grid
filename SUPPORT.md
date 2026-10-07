@@ -21,13 +21,16 @@ Browser suites normalize explicit synthetic clipboard payloads in Firefox; they 
 The later `d3daa37` source baseline passed locally with 150 Node tests, 15 MCP tests, 110 Chromium tests,
 106 WebKit tests with four Chromium-only exclusions, six standalone playground tests on each browser,
 eight independent packed consumers and eight default benchmark tests. Two timing profiles are opt-in;
-the new cooperative profile was run separately. Firefox remains blocked on this Windows host. See the
+the new cooperative profile was run separately. Firefox cannot launch on this Windows host; the exact
+`5df3eeb` candidate subsequently passed [Linux CI on Node 22/24, Firefox and WebKit](https://github.com/haodn-dev/acheron-grid/actions/runs/37572593956),
+including portable standalone playground tests. This is automated candidate evidence, not physical-device
+or screen-reader acceptance. See the
 [1.0 contract and acceptance policy](guides/v1-readiness.md) for the selected compatibility contract,
 package scope and remaining gates. Counts in older paragraphs below are historical evidence.
 
 The 2026-10-07 readiness candidate was checked locally with 135 Node tests, 15 MCP tests, 109 Chromium integration tests, four playground tests and eight independent packed consumers. WebKit passed 105 tests with four existing Chromium-only exclusions. Firefox could not launch on this Windows host (`spawn UNKNOWN`); earlier Linux results do not validate this candidate. The remote playground also passes axe checks for serious/critical WCAG 2/2.1 A/AA findings at desktop and mobile viewport sizes. This is automated coverage of that example, not screen-reader or physical-device acceptance. Release remains postponed and required CI must pass on the eventual release commit.
 
-The tested baseline is ready for integration evaluation within its documented contracts. This acceptance does not change package versions or establish stable 1.0 support. API documentation covers 73 GridEngine members and 46 root exports, with executable examples and document-hash checks. Later runtime changes require their own regression checks; an earlier green CI run does not validate a later commit.
+The tested baseline is ready for integration evaluation within its documented contracts. This acceptance does not change package versions or establish stable 1.0 support. The earlier API inventory covered 73 GridEngine members and 46 root exports; those are historical counts. The `5df3eeb` built declaration inventory contains 62 named core root exports, including types, with an identical headless alias. Current API references include cooperative bulk commands and writable paged sources, with executable examples and document-hash checks. Later runtime changes require their own regression checks; an earlier green CI run does not validate a later commit.
 
 Open validation work includes manual assistive-technology announcements, real-device touch, operating-system clipboard interoperability, true peak browser memory and representative host responsiveness. Source-preview cooperative bulk APIs divide preparation into scheduled tasks; final atomic commits, structural history and active-view reprojection can still block. Measurements are workload evidence, not universal performance budgets. Both bounded snapshot and writable paged remote sources have local HTTP examples; production backend acceptance, reload-persistent drafts and editing during commit remain open. See [bulk limits](guides/bulk-commands.md) and [paged writes](guides/paged-remote.md). Formula/workbook execution, pivot and collaborative editing are outside the current core acceptance scope.
 

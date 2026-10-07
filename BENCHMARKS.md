@@ -1,5 +1,62 @@
 # Benchmark evidence
 
+## Candidate recheck — 2026-10-07
+
+Runtime `5df3eeb` was measured again using the existing responsiveness tests, sequentially with one
+worker and no concurrent local build. Environment: Windows 11 build 26200, Intel i5-12400F, 12 logical
+CPUs, approximately 32 GiB RAM, Node 24.13.0 and headless Chromium 153.0.8010.12. The host's background
+load is uncontrolled. Both opt-in tests passed their correctness assertions; timings are informational.
+
+The desktop local-command fixture uses two warmups and 30 measured samples per operation and size.
+The p95 is the nearest-rank statistic. Values below are milliseconds; timer delay includes scheduling.
+This is core command work, excluding Canvas rendering and physical clipboard access.
+
+| Rows / paste cells | Operation  |   p50 |   p95 | Timer delay p95 |
+| -----------------: | ---------- | ----: | ----: | --------------: |
+|             10,000 | Multi-sort |  14.0 |  18.6 |            18.6 |
+|             10,000 | Filter     |   1.0 |   1.4 |             5.5 |
+|             10,000 | Paste      |  12.2 |  17.4 |            17.5 |
+|             10,000 | Undo       |   4.8 |   9.2 |             9.2 |
+|            100,000 | Multi-sort | 164.4 | 194.3 |           194.5 |
+|            100,000 | Filter     |   9.6 |  11.8 |            12.0 |
+|            100,000 | Paste      | 149.0 | 180.8 |           180.9 |
+|            100,000 | Undo       |  59.1 |  82.8 |            82.9 |
+
+The separate cooperative fixture uses 100,000 numeric cells, two warmups and four measured samples
+per mode. Each number below is the upper median of four samples. Sort here is a favorable monotonic
+single-key fixture; it is not the multi-sort workload above.
+
+| Profile                 | Operation | Sync total | Guarded async total | Guarded longest JS slice |
+| ----------------------- | --------- | ---------: | ------------------: | -----------------------: |
+| Desktop                 | Paste     |      147.1 |               266.2 |                     18.1 |
+| Desktop                 | Undo      |       57.3 |               102.8 |                     16.7 |
+| Desktop                 | Redo      |       55.0 |                99.8 |                     15.4 |
+| Desktop                 | Sort      |       22.7 |                43.3 |                     15.8 |
+| Mobile viewport, 4× CPU | Paste     |      733.3 |             1,316.0 |                     73.4 |
+| Mobile viewport, 4× CPU | Undo      |      307.3 |               529.1 |                     70.2 |
+| Mobile viewport, 4× CPU | Redo      |      273.8 |               539.7 |                     72.2 |
+| Mobile viewport, 4× CPU | Sort      |      110.1 |               216.3 |                     65.0 |
+
+The worst measured guarded mobile paste slice was 98.8 ms. Without a host revision guard covering
+external data and policy changes, mobile paste's upper-median longest slice was 410.9 ms. Cooperative
+preparation adds elapsed time; the final atomic commit and arbitrary host callbacks can still block.
+Native paste remains synchronous. These results do not establish a speedup over earlier runs, an FPS
+target or a host SLA. Although desktop p95 values fit the fixture's 50/250 ms reference budgets, 100k
+sort, paste and undo exceed 50 ms, as does guarded mobile preparation. Physical-device and peak
+browser/GPU memory acceptance remain open; this recheck does not measure memory.
+
+Repeat both profiles after building, without another build or test workload running concurrently:
+
+```powershell
+npm run build
+$env:ACHERON_RESPONSIVENESS='1'
+npx playwright test --config benchmark.config.mjs tests/benchmark-responsiveness.mjs --workers=1 --reporter=json > responsiveness-report.json
+```
+
+The JSON report retains all measured samples in the `responsiveness-cost.json` and
+`cooperative-bulk-profile` attachments, including slower samples. Save the report as a CI artifact or
+local evidence rather than interpreting a single timing as an acceptance guarantee.
+
 ## Cooperative bulk preparation — 2026-10-07
 
 A warmed Chromium 153 headless comparison used 100,000 allocated numeric cells, two warmups and four
