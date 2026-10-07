@@ -64,7 +64,7 @@ English and Vietnamese UI packs are bundled. `locale` selects native number form
 
 For pending/rejected/retry/conflict UI and a real loopback HTTP integration, run the [remote editing example](../examples/remote/README.md). It is not production backend acceptance.
 
-`createRemoteDataSource` adds synchronous atomic drafts backed by explicit asynchronous transport. It complements the read-only async page and live stream sources; it is a **full snapshot cache**, not a paged write adapter or a collaborative server.
+`createRemoteDataSource` adds synchronous atomic drafts backed by explicit asynchronous transport. It complements the read-only async page and live stream sources. It initially loads a **bounded full snapshot**, then accepts either canonical cell deltas or replacement snapshots after writes; it is not a paged write adapter or a collaborative server.
 
 ```ts
 import {createRemoteDataSource, createGridEngine} from '@acheron-grid/core';
@@ -103,9 +103,12 @@ Mutation shape: `{datasetId, mutationId, expectedRevision, changes:[{rowId,colum
 
 ```ts
 {mutationId, status:'accepted', snapshot} // matching dataset; revision must advance
+{mutationId, status:'accepted', delta:{datasetId, baseRevision, revision, cells:[{rowId,columnKey,value}]}}
 {mutationId, status:'conflict', snapshot} // authoritative matching dataset snapshot
 {datasetId, mutationId, status:'rejected', message:'Validation failed'}
 ```
+
+Accepted deltas preserve row identity/order and update only the supplied cells. `baseRevision` must match the submitted and cached revision; the new revision must advance. Include the canonical value of every submitted cell, plus all server-side effects needed to bring this cache from that base revision to the new revision. Duplicate/unknown cells, incomplete acknowledgement and malformed values reject the receipt without modifying the cache or discarding drafts; retry retains the exact mutation. A delta is not a partial snapshot: structural/order changes require the snapshot response. Server authorization, atomic compare-and-swap and durable idempotency remain mandatory. The [HTTP playground](../examples/remote/README.md) returns deltas for ordinary successful writes.
 
 | State/action                   | Result                                                                                                                                               |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |

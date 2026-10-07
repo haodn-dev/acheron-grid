@@ -121,7 +121,20 @@ export function createRemoteDemoHandler() {
         for (const change of input.changes) next.find((row) => row.id === change.rowId).values.title = change.value;
         rows = next;
         revision++;
-        result = { mutationId: input.mutationId, status: 'accepted', snapshot: snapshot() };
+        result = {
+          mutationId: input.mutationId,
+          status: 'accepted',
+          delta: {
+            datasetId: 'demo',
+            baseRevision: input.expectedRevision,
+            revision: String(revision),
+            cells: input.changes.map((change) => ({
+              rowId: change.rowId,
+              columnKey: change.columnKey,
+              value: rows.find((row) => row.id === change.rowId).values[change.columnKey],
+            })),
+          },
+        };
       }
       receipts.set(input.mutationId, { fingerprint, result });
       if (mode === 'drop' && result.status === 'accepted') {

@@ -7,6 +7,7 @@ export { createRemoteDataSource } from './remote-data-source.js';
 export type {
   RemoteDataSourceOptions,
   RemoteSnapshot,
+  RemoteDelta,
   RemoteChange,
   RemoteMutation,
   RemoteWriteResult,
