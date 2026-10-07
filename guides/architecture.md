@@ -16,6 +16,19 @@ Acheron separates headless data semantics from browser presentation. Application
 
 ## Design decisions
 
+### Engine module map
+
+`engine.ts` assembles internal controllers for values, clipboard, history, projection, selection,
+permissions, formatting, layout, outlines, structure and persistence. `internal/bulk.ts` drives the same
+preparation generators synchronously or with an injected task scheduler. `internal/local-view-steps.ts`
+provides cooperative stable sorting; `internal/history-budget.ts` centralizes retention limits.
+These helpers are not package entry points.
+
+`async-data-source.ts` owns bounded read queues/cache, `remote-data-source.ts` owns bounded optimistic
+snapshots/deltas and immutable write retries, and `paged-remote-data-source.ts` composes those lifecycles
+with an independent dirty-row overlay. `internal/remote-json.ts` applies their shared transport value
+limits. Canvas assembles its browser controllers and uses only exported engine APIs.
+
 ### Headless core and public dependency direction
 
 Core computes numeric geometry and data semantics without accessing browser globals. Canvas interprets those results and submits commands through public APIs. Internal modules under `src/internal` are assembly details, not supported import paths. Consumers import package entry points; `core/headless` remains a compatibility entry.
@@ -38,7 +51,7 @@ Canvas paints visible panes and keeps DOM editors/menus and an accessibility mir
 
 ### Async, live and remote sources
 
-Async paging, bounded live updates and optimistic full-snapshot remote writes have distinct lifecycles. Cancellation/generation checks prevent stale results restoring a destroyed instance. Hosts supply transport, deadlines, connectivity/retry policy, server authorization and compare-and-swap. Uncertain writes retain their identity/payload; conflict resolution is explicit, never an automatic winner selection. See [editing and remote contracts](editing-and-remote.md) and the [HTTP example](../examples/remote/README.md).
+Read-only async paging, bounded live updates, snapshot/delta remote writes and writable paging have distinct lifecycles. Cancellation/generation checks prevent stale results restoring a destroyed instance. Hosts supply transport, deadlines, connectivity/retry policy, server authorization and compare-and-swap. Uncertain writes retain their identity/payload; conflict resolution is explicit, never an automatic winner selection. See [editing and remote contracts](editing-and-remote.md), [writable pages](paged-remote.md) and the [HTTP example](../examples/remote/README.md).
 
 ### Compatibility and evidence
 

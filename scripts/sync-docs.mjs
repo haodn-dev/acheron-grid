@@ -160,6 +160,12 @@ for (const [name, file, typeName, optionsName] of [
 }
 const entries = [
   [
+    'architecture',
+    'guides/architecture.md',
+    1,
+    'Headless package/module map, controlled mutations, source lifecycles and extension boundaries.',
+  ],
+  [
     'bulk-commands',
     'guides/bulk-commands.md',
     1,
