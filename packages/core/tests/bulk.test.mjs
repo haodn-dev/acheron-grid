@@ -21,6 +21,30 @@ function fixture(extra = {}, count = 1024) {
 }
 const scheduler = { yieldControl: async () => {} };
 
+test('bulk snapshots coordinates/options and rechecks paste authority after the last yield', async () => {
+  let pasteable = true;
+  const { engine, source } = fixture({ resolveCellPermission: () => ({ pasteable }) });
+  const updates = [{ rowIndex: 0, columnKey: 'value', value: 'captured' }];
+  const job = engine.updateCellsAsync(updates, scheduler);
+  updates[0].value = 'changed';
+  await job;
+  assert.equal(source.getValue(0, 'value'), 'captured');
+  engine.undo();
+  engine.select(0, 0);
+  await assert.rejects(
+    engine.pasteAsync(Array(1024).fill('new').join('\n'), {
+      ...scheduler,
+      onProgress: (progress) => {
+        if (progress.phase === 'validate') pasteable = false;
+      },
+    }),
+    /paste/i,
+  );
+  assert.equal(source.getValue(0, 'value'), 'old');
+  assert.equal(engine.canUndo(), false);
+  engine.destroy();
+});
+
 test('bulk paste/update/history yield without exposing partial data and retain one command', async () => {
   const { source, engine, changes } = fixture();
   engine.select(0, 0);
