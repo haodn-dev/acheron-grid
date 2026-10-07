@@ -36,6 +36,23 @@ jobs:
       - run: npx playwright test --workers=1
         env:
           ACHERON_TEST_BROWSER: ${{ matrix.browser }}
+      - name: Portable standalone playground
+        run: npx playwright test --config playground.config.mjs --workers=1 --output=playground-results
+        env:
+          ACHERON_TEST_BROWSER: ${{ matrix.browser }}
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playground-report
+      - name: Portable failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: diagnostics-${{ matrix.browser }}
+          path: |
+            test-results/
+            playwright-report/
+            playground-results/
+            playground-report/
+          retention-days: 7
+          if-no-files-found: ignore
   verify:
     name: Node ${{ matrix.node }}
     runs-on: ubuntu-latest

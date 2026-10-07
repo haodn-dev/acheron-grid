@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — 1.0 acceptance policy
+
+- Record the selected public API compatibility/deprecation policy, package scope and evidence gates without changing runtime APIs or package versions.
+- Run standalone playground checks and retain failure diagnostics in the Firefox/WebKit CI jobs.
+- Correct outdated source capability/support descriptions; manual device, assistive-technology and production-host acceptance remain open.
+
 ## Unreleased — bounded data workflows
 
 - Add writable remote paging with bounded page/draft counts, server-owned queries, stable IDs, dirty-cohort receipts and exact uncertain retry. A successful write invalidates pages without fetching the complete dataset. Include a runnable HTTP playground with 10,000 server records.

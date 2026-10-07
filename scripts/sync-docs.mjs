@@ -160,6 +160,12 @@ for (const [name, file, typeName, optionsName] of [
 }
 const entries = [
   [
+    'v1-readiness',
+    'guides/v1-readiness.md',
+    1,
+    'Selected 1.0 contracts, compatibility policy and evidence gates; not a release announcement.',
+  ],
+  [
     'architecture',
     'guides/architecture.md',
     1,
