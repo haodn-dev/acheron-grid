@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "8b202758d13ce5a83723bd19b53a9e4cf15ba340",
+  "sourceRevision": "81db243914dfcbe3a21080e5bb6844f6f653865d",
   "release": {
     "version": "0.1.0",
     "tag": "v0.1.0",
@@ -8,14 +8,31 @@
   },
   "documents": [
     {
-      "id": "bulk-commands",
-      "path": "guides/bulk-commands.md",
+      "id": "architecture",
+      "path": "guides/architecture.md",
       "revision": 1,
       "updated": "2026-10-07",
-      "sha256": "f95d6a0adf1c3738010dee6571b2ac66b1c1c4db13331da9db6a715d39801752",
+      "sha256": "cefb38115d40de98ee009de7b0755b8adf911cc05a79b7edc954ebf43c6f59ed",
       "history": [
         {
           "revision": 1,
+          "summary": "Headless package/module map, controlled mutations, source lifecycles and extension boundaries."
+        }
+      ]
+    },
+    {
+      "id": "bulk-commands",
+      "path": "guides/bulk-commands.md",
+      "revision": 2,
+      "updated": "2026-10-07",
+      "sha256": "ffd67476d1ea76f371b75be06388b3d46d8fb8f0df498e6564b6e9d79a0f1684",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Cooperative bulk preparation, cancellation, atomic commit limits and retained history budgets."
+        },
+        {
+          "revision": 2,
           "summary": "Cooperative bulk preparation, cancellation, atomic commit limits and retained history budgets."
         }
       ]
@@ -23,12 +40,16 @@
     {
       "id": "paged-remote",
       "path": "guides/paged-remote.md",
-      "revision": 1,
+      "revision": 2,
       "updated": "2026-10-07",
-      "sha256": "52baa81c18e03fcf8d6363f95c6735915ecd2440962e428c3eb2ce8e0baf28d9",
+      "sha256": "87ef43a5b8aba44ee3da1c57e5d7d5e594615c860ea6e9184145a4e63f911f6c",
       "history": [
         {
           "revision": 1,
+          "summary": "Stable-ID writable paging, query/revision lifecycle, dirty-cohort receipts and runnable HTTP example."
+        },
+        {
+          "revision": 2,
           "summary": "Stable-ID writable paging, query/revision lifecycle, dirty-cohort receipts and runnable HTTP example."
         }
       ]
@@ -558,9 +579,9 @@
     {
       "id": "manual-validation",
       "path": "guides/manual-validation.md",
-      "revision": 7,
+      "revision": 8,
       "updated": "2026-10-07",
-      "sha256": "a64bfcaca9da96e4137a599d089870eba1f152527cfe7c194aa68203c6d22ccd",
+      "sha256": "19d215f5c7dc46fa4042242b8ea24494216b04ad6155f7630d20bcfb1d62d67b",
       "history": [
         {
           "revision": 1,
@@ -588,6 +609,10 @@
         },
         {
           "revision": 7,
+          "summary": "Manual accessibility, device, clipboard and operational acceptance protocol."
+        },
+        {
+          "revision": 8,
           "summary": "Manual accessibility, device, clipboard and operational acceptance protocol."
         }
       ]
