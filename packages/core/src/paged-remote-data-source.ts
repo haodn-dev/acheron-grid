@@ -5,6 +5,7 @@ import { LocalDataSource } from './data-source.js';
 import { createRemoteDataSource } from './remote-data-source.js';
 import type { RemoteMutation, RemoteSnapshot, RemoteWriteResult } from './remote-data-source.js';
 import { jsonSnapshot } from './internal/remote-json.js';
+import { clipboardCellLimit } from './tsv.js';
 
 export type PagedRemoteWriteResult = RemoteWriteResult & { readonly total: number };
 export interface PagedRemoteDataSourceOptions<S> extends Pick<
@@ -99,6 +100,13 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
         [...identities].filter(([offset]) => offset !== request.offset).flatMap(([, ids]) => ids),
       );
       if (result.rows.some((row) => existing.has(row.id))) throw new TypeError('Duplicate cached row ID.');
+      const draftPositions = new Map([...drafts].map(([index, row]) => [row.id, index]));
+      if (
+        result.rows.some(
+          (row, index) => draftPositions.has(row.id) && draftPositions.get(row.id) !== request.offset + index,
+        )
+      )
+        throw new Error('Draft row identity changed.');
       for (const [index, draft] of drafts) {
         if (
           index >= request.offset &&
@@ -134,9 +142,13 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
   }
   function setValues(updates: readonly CellUpdate[]): void {
     idle();
+    if (!Array.isArray(updates) || updates.length > clipboardCellLimit)
+      throw new RangeError('Invalid remote update batch.');
+    const captured = updates.map((update) => ({ ...update }));
+    jsonSnapshot(captured);
     const staged = new Map(drafts);
     const draftIndices = new Map([...staged].map(([index, row]) => [row.id, index]));
-    for (const update of jsonSnapshot(updates)) {
+    for (const update of captured) {
       const cachedId = cache.getRowId(update.rowIndex),
         prior = staged.get(update.rowIndex);
       if (!keys.includes(update.columnKey) || !Object.hasOwn(update, 'value'))
@@ -175,7 +187,10 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
     try {
       if (!writer) {
         if (revision === null) throw new Error('Load a page before committing.');
-        const rows: DataRow[] = [...drafts.values()].map((row) => ({ id: row.id, values: row.values }));
+        const captured = jsonSnapshot(
+          [...drafts.values()].map((row) => ({ id: row.id, values: row.values, edits: [...row.edits] })),
+        );
+        const rows: DataRow[] = captured.map((row) => ({ id: row.id, values: row.values }));
         const snapshot = { datasetId: options.datasetId, revision, rows };
         writer = createRemoteDataSource({
           datasetId: options.datasetId,
@@ -196,9 +211,7 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
         await writer.resync();
         if (token !== generation || destroyed) return;
         writer.setValues(
-          [...drafts.values()].flatMap((row, rowIndex) =>
-            [...row.edits].map(([columnKey, value]) => ({ rowIndex, columnKey, value })),
-          ),
+          captured.flatMap((row, rowIndex) => row.edits.map(([columnKey, value]) => ({ rowIndex, columnKey, value }))),
         );
       }
       await writer.commit();

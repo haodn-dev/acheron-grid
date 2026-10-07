@@ -1,6 +1,68 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPagedRemoteDataSource } from '../dist/index.js';
+import { createGridEngine, createPagedRemoteDataSource } from '../dist/index.js';
+
+test('paged object drafts preserve engine history references and freeze write intent at commit entry', async () => {
+  const requests = [];
+  const { source } = fixture({
+    write: async (mutation) => {
+      requests.push(mutation);
+      if (requests.length === 1) throw Error('Lost ACK');
+      return {
+        mutationId: mutation.mutationId,
+        status: 'accepted',
+        total: 10000,
+        delta: {
+          datasetId: 'tasks',
+          baseRevision: '1',
+          revision: '2',
+          cells: mutation.changes.map((change) => ({
+            rowId: change.rowId,
+            columnKey: change.columnKey,
+            value: change.value,
+          })),
+        },
+      };
+    },
+  });
+  await source.loadPage(0);
+  const engine = createGridEngine({ dataSource: source, columns: [{ key: 'title', title: 'Title', editable: true }] });
+  const value = { nested: { count: 1 } };
+  engine.updateCells([{ rowIndex: 0, columnKey: 'title', value }]);
+  assert.equal(source.getValue(0, 'title'), value);
+  assert.equal(engine.undo(), true);
+  assert.equal(source.pendingCellCount, 0);
+  assert.equal(engine.redo(), true);
+  const first = source.commit();
+  value.nested.count = 99;
+  await assert.rejects(first, /Lost ACK/);
+  assert.equal(requests[0].changes[0].value.nested.count, 1);
+  assert.ok(Object.isFrozen(requests[0].changes[0].value.nested));
+  await source.commit();
+  assert.equal(requests[0], requests[1]);
+  assert.equal(source.pendingCellCount, 0);
+  engine.destroy();
+  source.destroy();
+});
+
+test('paged identity validation includes dirty rows after their cache page was evicted', async () => {
+  const { source } = fixture({
+    load: async ({ offset }) => ({
+      datasetId: 'tasks',
+      revision: '1',
+      total: 10000,
+      rows: [offset === 4 ? 0 : offset, offset + 1].map((id) => ({ id, values: { title: String(id) } })),
+    }),
+  });
+  await source.loadPage(0);
+  source.setValue(0, 'title', 'draft');
+  await source.loadPage(2);
+  await assert.rejects(source.loadPage(4), /identity|ID/);
+  assert.equal(source.getRowId(0), 0);
+  assert.equal(source.getValue(0, 'title'), 'draft');
+  assert.equal(source.pendingCellCount, 1);
+  source.destroy();
+});
 
 function fixture(extra = {}) {
   const rows = Array.from({ length: 10000 }, (_, id) => ({ id, values: { title: String(id) } }));

@@ -35,6 +35,10 @@ the original values and stable IDs independently of page eviction, bounded by pe
 Direct source setters do not enforce engine permissions/history; user edits should flow through the
 engine. `pendingCellCount` and frozen `getPendingChanges()` expose review state.
 
+Object values retain their references while staged, so engine undo can recognize its own edits.
+Treat these host-owned objects as immutable during commands. `commit()` snapshots the dirty cohort
+before its first asynchronous wait; later host changes cannot alter the submitted intent or its retry.
+
 `commit()` calls `write(mutation, signal, query)` with the existing immutable `RemoteMutation` contract:
 dataset, unique mutation ID, expected dataset revision and cell previous/new values. The backend must
 authorize every cell, atomically compare revision/previous values, apply the whole batch and durably
