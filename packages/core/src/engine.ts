@@ -344,12 +344,13 @@ export function createGridEngine(options: GridEngineOptions) {
       busy = false;
     }
   }
-  async function bulkCommand<T>(create: () => BulkSteps<T>, options: GridBulkOptions): Promise<T> {
+  async function bulkCommand<T>(create: (guarded: boolean) => BulkSteps<T>, options: GridBulkOptions): Promise<T> {
     assertAlive();
     if (busy || bulkActive) throw new Error('Nested grid mutations are not allowed.');
     bulkActive = true;
     try {
-      const steps = create();
+      const captured = { ...options };
+      const steps = create(typeof captured.getRevision === 'function');
       const guarded: BulkSteps<T> = {
         next: () => {
           busy = true;
@@ -365,7 +366,7 @@ export function createGridEngine(options: GridEngineOptions) {
           return this;
         },
       };
-      return await runSteps(guarded, options, assertAlive);
+      return await runSteps(guarded, captured, assertAlive);
     } finally {
       bulkActive = false;
     }
@@ -771,7 +772,7 @@ export function createGridEngine(options: GridEngineOptions) {
     updateCells: (updates: readonly CellUpdate[]) =>
       command(() => applyUpdates(updates.map((update) => ({ ...update, rowIndex: sourceRow(update.rowIndex) })))),
     updateCellsAsync: (updates: readonly CellUpdate[], options: GridBulkOptions) =>
-      bulkCommand(() => {
+      bulkCommand((guarded) => {
         if (!Array.isArray(updates)) throw new TypeError('Invalid bulk updates.');
         const snapshot = updates.map((update) => ({ ...update }));
         return (function* () {
@@ -782,7 +783,7 @@ export function createGridEngine(options: GridEngineOptions) {
             if ((index + 1) % 256 === 0)
               yield { phase: 'prepare' as const, completed: index + 1, total: snapshot.length };
           }
-          yield* applyUpdatesSteps(mapped, 'api', [], true);
+          yield* applyUpdatesSteps(mapped, 'api', [], true, undefined, guarded);
         })();
       }, options),
     replaceText: (
@@ -802,11 +803,11 @@ export function createGridEngine(options: GridEngineOptions) {
     copySelection: () => query(copySelection),
     paste: (text: string, options?: PasteOptions) => command(() => paste(text, options)),
     pasteAsync: (text: string, bulk: GridBulkOptions, options?: PasteOptions) =>
-      bulkCommand(() => pasteSteps(text, options && { ...options }), bulk),
+      bulkCommand((guarded) => pasteSteps(text, options && { ...options }, guarded), bulk),
     undo: () => command(() => replay(false)),
     redo: () => command(() => replay(true)),
-    undoAsync: (options: GridBulkOptions) => bulkCommand(() => replaySteps(false, true), options),
-    redoAsync: (options: GridBulkOptions) => bulkCommand(() => replaySteps(true, true), options),
+    undoAsync: (options: GridBulkOptions) => bulkCommand((guarded) => replaySteps(false, true, guarded), options),
+    redoAsync: (options: GridBulkOptions) => bulkCommand((guarded) => replaySteps(true, true, guarded), options),
     canUndo: () => !destroyed && past.length > 0,
     canRedo: () => !destroyed && future.length > 0,
     getFormat: (row: number, col: number) => getFormat(sourceRow(row), col),

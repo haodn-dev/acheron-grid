@@ -5,6 +5,7 @@
 - Add writable remote paging with bounded page/draft counts, server-owned queries, stable IDs, dirty-cohort receipts and exact uncertain retry. A successful write invalidates pages without fetching the complete dataset. Include a runnable HTTP playground with 10,000 server records.
 - Accept canonical cell delta receipts in the bounded remote source without reloading or replacing unrelated rows. Validate base/new revisions, mutation coverage and the entire receipt before applying it.
 - Add explicit cooperative paste, typed update, value-history and local-view APIs with host scheduling, cancellation and revision guards. Preparation yields; the final atomic commit and structural history remain synchronous.
+- A host revision guard also permits chunked final identity/authority checks. Without it, final checks stay synchronous; callbacks/signal references are captured for the lifetime of the operation.
 - Add configurable retained command/value-change history budgets and Canvas busy/focus handling. These source-preview APIs do not guarantee a frame-time budget and are not included in npm 0.1.0.
 
 ## Unreleased — integration readiness

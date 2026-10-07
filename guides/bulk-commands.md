@@ -25,6 +25,8 @@ cannot interrupt a running callback or a write that has already started. Handle 
 
 Use `getRevision` when external data, schema, validation or permission policy can change while awaiting.
 It must change on every such change, including changes outside the edited cells. Callbacks must be pure.
+With this guard, final cell/permission revalidation also yields; a revision change aborts before commit.
+Without it, those final checks run together synchronously so changes between checkpoints cannot bypass them.
 Cell writes also recheck current identities, previous values and writable/pasteable permissions before
 commit. Update coordinates/options are snapshotted at entry; object values retain the normal reference
 semantics and must not be mutated in place. Do not mutate the source behind the engine without a revision
@@ -34,7 +36,7 @@ Canvas temporarily makes its root inert and sets `aria-busy` while these explici
 and cancel controls outside that root. Finish or cancel an active editor first. Focus returns to the
 viewport if it was inside the grid. Native clipboard events continue to use synchronous paste.
 
-The final atomic source write, authority checks, history installation, projection installation and
+The final atomic source write, history installation, projection installation and
 invalidation remain synchronous. Value history preflight yields; structural/layout history does not.
 Active local views can require synchronous reprojection after a write. Slow host callbacks, large
 structural snapshots and final commits can still block the main thread. These APIs are not workers and

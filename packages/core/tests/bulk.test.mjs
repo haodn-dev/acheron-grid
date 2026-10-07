@@ -21,8 +21,47 @@ function fixture(extra = {}, count = 1024) {
 }
 const scheduler = { yieldControl: async () => {} };
 
+test('revision-guarded final checks yield and reject late changes without losing data or history', async () => {
+  for (const operation of ['update', 'paste', 'undo', 'redo']) {
+    const { engine, source } = fixture();
+    const updates = Array.from({ length: 1024 }, (_, rowIndex) => ({ rowIndex, columnKey: 'value', value: 'new' }));
+    if (operation === 'undo' || operation === 'redo') engine.updateCells(updates);
+    if (operation === 'redo') engine.undo();
+    if (operation === 'paste') engine.select(0, 0);
+    let revision = '1',
+      passes = 0;
+    const options = {
+      ...scheduler,
+      getRevision: () => revision,
+      onProgress: (progress) => {
+        if (
+          progress.phase === 'validate' &&
+          progress.completed === 1024 &&
+          ++passes === (operation === 'paste' ? 5 : 3)
+        )
+          revision = '2';
+      },
+    };
+    const job =
+      operation === 'update'
+        ? engine.updateCellsAsync(updates, options)
+        : operation === 'paste'
+          ? engine.pasteAsync(Array(1024).fill('new').join('\n'), options)
+          : operation === 'undo'
+            ? engine.undoAsync(options)
+            : engine.redoAsync(options);
+    options.getRevision = undefined;
+    await assert.rejects(job, /revision changed/);
+    assert.equal(source.getValue(0, 'value'), operation === 'undo' ? 'new' : 'old');
+    assert.equal(engine.canUndo(), operation === 'undo');
+    assert.equal(engine.canRedo(), operation === 'redo');
+    engine.destroy();
+  }
+});
+
 test('bulk snapshots coordinates/options and rechecks paste authority after the last yield', async () => {
   let pasteable = true;
+  let validationPasses = 0;
   const { engine, source } = fixture({ resolveCellPermission: () => ({ pasteable }) });
   const updates = [{ rowIndex: 0, columnKey: 'value', value: 'captured' }];
   const job = engine.updateCellsAsync(updates, scheduler);
@@ -35,7 +74,7 @@ test('bulk snapshots coordinates/options and rechecks paste authority after the 
     engine.pasteAsync(Array(1024).fill('new').join('\n'), {
       ...scheduler,
       onProgress: (progress) => {
-        if (progress.phase === 'validate') pasteable = false;
+        if (progress.phase === 'validate' && progress.completed === 1024 && ++validationPasses === 3) pasteable = false;
       },
     }),
     /paste/i,

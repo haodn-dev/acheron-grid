@@ -37,7 +37,8 @@ export function createClipboard(
       source?: GridChangeSource,
       formatChanges?: FormatChange[],
       cooperative?: boolean,
-      finalCheck?: () => void,
+      finalCheck?: () => BulkSteps<void>,
+      guarded?: boolean,
     ) => BulkSteps<void>;
     selectRange: (range: SelectionRange, mode?: 'replace' | 'add' | 'extend') => boolean;
     selectDisplayRange: (range: SelectionRange, mode?: 'replace' | 'add' | 'extend') => boolean;
@@ -126,6 +127,7 @@ export function createClipboard(
     move = false,
     options: PasteOptions = {},
     cooperative = false,
+    guarded = false,
   ): BulkSteps<void> {
     dependencies.assertAlive();
     if (
@@ -291,11 +293,21 @@ export function createClipboard(
         });
       }
     if (cooperative) {
-      yield* dependencies.applyUpdatesSteps(updates, 'paste', formatChanges, true, () => {
-        // Paste authority can change while the host scheduler runs.
-        for (const cell of texts.values())
-          if (mode !== 'formats') dependencies.requirePermission(cell.rowIndex, cell.columnIndex, 'pasteable');
-      });
+      yield* dependencies.applyUpdatesSteps(
+        updates,
+        'paste',
+        formatChanges,
+        true,
+        function* () {
+          // Paste authority can change while the host scheduler runs.
+          let checked = 0;
+          for (const cell of texts.values()) {
+            if (mode !== 'formats') dependencies.requirePermission(cell.rowIndex, cell.columnIndex, 'pasteable');
+            if (guarded && ++checked % 256 === 0) yield { phase: 'validate', completed: checked, total: texts.size };
+          }
+        },
+        guarded,
+      );
     } else dependencies.applyUpdates(updates, 'paste', formatChanges);
     if (move) context.pendingCut = undefined;
     // Preserve selection when a live filter removes a pasted row from the visible view.
@@ -320,9 +332,9 @@ export function createClipboard(
   ): void {
     drain(pasteBlocksSteps(blocks, structured, move, options));
   }
-  function* pasteSteps(text: string, options?: PasteOptions): BulkSteps<void> {
+  function* pasteSteps(text: string, options?: PasteOptions, guarded = false): BulkSteps<void> {
     const values = yield* decodeTsvSteps(text, true);
-    yield* pasteBlocksSteps([{ row: 0, column: 0, values }], false, false, options, true);
+    yield* pasteBlocksSteps([{ row: 0, column: 0, values }], false, false, options, true, guarded);
   }
   function paste(text: string, options?: PasteOptions): void {
     pasteBlocks([{ row: 0, column: 0, values: decodeTsv(text) }], false, false, options);

@@ -48,7 +48,8 @@ export function createValues(
     source: GridChangeSource = 'api',
     formatChanges: FormatChange[] = [],
     cooperative = false,
-    finalCheck?: () => void,
+    finalCheck?: () => BulkSteps<void>,
+    guarded = false,
   ): BulkSteps<void> {
     dependencies.assertAlive();
     const unique = new Map<string | number, CellUpdate>();
@@ -76,8 +77,11 @@ export function createValues(
       if (cooperative && ++completed % 256 === 0) yield { phase: 'prepare', completed, total: unique.size };
     }
     if (!changes.length && !formatChanges.length) return;
-    for (const change of changes)
+    completed = 0;
+    for (const change of changes) {
       dependencies.requirePermission(change.rowIndex, context.columnIndices.get(change.columnKey)!, 'writable');
+      if (cooperative && ++completed % 256 === 0) yield { phase: 'validate', completed, total: changes.length };
+    }
     completed = 0;
     for (const change of changes) {
       const column = context.columns[context.columnIndices.get(change.columnKey)!]!;
@@ -86,6 +90,7 @@ export function createValues(
       if (cooperative && ++completed % 256 === 0) yield { phase: 'validate', completed, total: changes.length };
     }
     // Recheck identity, values and authority after preparation may have yielded to the host.
+    completed = 0;
     if (cooperative)
       for (const change of changes) {
         if (
@@ -94,8 +99,9 @@ export function createValues(
         )
           throw new Error('Bulk values conflict with external data changes.');
         dependencies.requirePermission(change.rowIndex, context.columnIndices.get(change.columnKey)!, 'writable');
+        if (guarded && ++completed % 256 === 0) yield { phase: 'validate', completed, total: changes.length };
       }
-    finalCheck?.();
+    if (finalCheck) yield* finalCheck();
     const entry = { kind: 'values' as const, changes, formats: formatChanges };
     assertHistoryCapacity(context, entry);
     if (changes.length) write(changes);

@@ -1,5 +1,44 @@
 # Benchmark evidence
 
+## Cooperative bulk preparation — 2026-10-07
+
+A warmed Chromium 153 headless comparison used 100,000 allocated numeric cells, two warmups and four
+measured samples per mode. The table reports the upper median of four samples in milliseconds. The
+baseline was `93b5a75`; the candidate adds cooperative preparation and revision-guarded final checks.
+The host uses MessageChannel task yields and a revision token covering all external data/policy changes.
+
+| Profile                 | Command | Baseline synchronous total | Candidate synchronous total | Candidate guarded async total | Guarded longest JS slice |
+| ----------------------- | ------- | -------------------------: | --------------------------: | ----------------------------: | -----------------------: |
+| Desktop                 | Paste   |                      129.1 |                       153.8 |                         285.0 |                     17.2 |
+| Desktop                 | Undo    |                       54.4 |                        55.6 |                         114.4 |                     17.1 |
+| Desktop                 | Redo    |                       51.0 |                        60.0 |                         110.4 |                     16.5 |
+| Desktop                 | Sort    |                       20.0 |                        21.1 |                          59.3 |                     12.5 |
+| Mobile viewport, 4× CPU | Paste   |                      635.3 |                       820.8 |                       1,383.7 |                     77.2 |
+| Mobile viewport, 4× CPU | Undo    |                      242.7 |                       270.8 |                         577.3 |                     70.8 |
+| Mobile viewport, 4× CPU | Redo    |                      227.7 |                       272.1 |                         567.7 |                     67.5 |
+| Mobile viewport, 4× CPU | Sort    |                       98.0 |                        99.3 |                         312.7 |                     57.9 |
+
+Without a host revision guard, the final authority/identity checks stay synchronous: candidate mobile
+paste's longest slice was 382.4 ms in this run. Async scheduling reduces uninterrupted work while adding
+elapsed time; the synchronous samples also show overhead. Throughput optimization remains open. This
+monotonic sort fixture is favorable, CPU/mobile throttling is emulation, and a JS slice is not presented
+frame time. Arbitrary parsers, policies, observers, active projections and source setters can cost more.
+
+OS-reported renderer lifetime working-set high-water was 455.1 MiB for the desktop profile and 385.9 MiB
+for the emulated profile. Each includes setup, warmups, all modes and correctness checks. These are
+resident process peaks, not per-command JavaScript heap peaks, simultaneous browser totals or GPU peaks.
+Raw samples and process records are retained separately; physical-device and production-host acceptance
+remain open. No timing acceptance gate or universal speedup is claimed.
+
+To repeat the current synchronous/async/guarded comparison and collect a JSON test attachment:
+
+```powershell
+$env:ACHERON_RESPONSIVENESS='1'
+npm run benchmark -- -g "cooperative bulk elapsed" --workers=1 --reporter=html
+```
+
+The default benchmark suite skips opt-in timing profiles while retaining correctness/resource checks.
+
 ## Readiness profiling — 2026-10-07
 
 Local Node 24.13.0 measurements on Windows compared batch preparation before/after numeric coordinate keys, with three warmups, ten interleaved trials, explicit GC and correctness checks outside the timer. For 100,000 updates, median controller/source work fell from 58.02 to 41.63 ms when all values changed, and 40.89 to 34.12 ms when half were unchanged. These measurements exclude clipboard parsing and Canvas rendering; they do not establish end-to-end paste latency.
