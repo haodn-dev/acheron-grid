@@ -1,5 +1,7 @@
 export { createGridEngine } from './engine.js';
 export type { GridEngine, GridEngineOptions, GridInvalidation } from './engine.js';
+export type { GridBulkOptions, GridBulkProgress } from './internal/bulk.js';
+export type { GridHistoryLimits } from './internal/history-budget.js';
 export { LocalDataSource, LocalDataView } from './data-source.js';
 export { createAsyncDataSource } from './async-data-source.js';
 export { createLiveDataSource } from './live-data-source.js';

@@ -3,7 +3,9 @@ import { blocksToTsv, encodeBlocks } from '../clipboard.js';
 import type { CellUpdate, RowId } from '../data-source.js';
 import type { GridChangeSource } from '../events.js';
 import type { CellPermission } from '../permissions.js';
-import { clipboardCellLimit, clipboardTextLimit, decodeTsv } from '../tsv.js';
+import { clipboardCellLimit, clipboardTextLimit, decodeTsv, decodeTsvSteps } from '../tsv.js';
+import { drain } from './bulk.js';
+import type { BulkSteps } from './bulk.js';
 import type { CellFormat, PasteOptions, SelectionRange } from '../types.js';
 import type { EngineContext, FormatChange } from './engine-context.js';
 export function createClipboard(
@@ -30,6 +32,13 @@ export function createClipboard(
     visibleRowCount: () => number;
     requireFormatPermission: (bounds: SelectionRange) => void;
     applyUpdates: (updates: readonly CellUpdate[], source?: GridChangeSource, formatChanges?: FormatChange[]) => void;
+    applyUpdatesSteps: (
+      updates: readonly CellUpdate[],
+      source?: GridChangeSource,
+      formatChanges?: FormatChange[],
+      cooperative?: boolean,
+      finalCheck?: () => void,
+    ) => BulkSteps<void>;
     selectRange: (range: SelectionRange, mode?: 'replace' | 'add' | 'extend') => boolean;
     selectDisplayRange: (range: SelectionRange, mode?: 'replace' | 'add' | 'extend') => boolean;
     getSelectionRange: () => SelectionRange | null;
@@ -111,12 +120,13 @@ export function createClipboard(
     };
     return text;
   }
-  function pasteBlocks(
+  function* pasteBlocksSteps(
     blocks: readonly ClipboardBlock[],
     structured: boolean,
     move = false,
     options: PasteOptions = {},
-  ): void {
+    cooperative = false,
+  ): BulkSteps<void> {
     dependencies.assertAlive();
     if (
       !options ||
@@ -189,6 +199,7 @@ export function createClipboard(
       string,
       { rowIndex: number; columnKey: string; columnIndex: number; text: string; format?: CellFormat }
     >();
+    let completed = 0;
     for (const place of placements) {
       const height = place.height ?? place.values.length,
         width = place.width ?? place.values[0]!.length;
@@ -217,8 +228,10 @@ export function createClipboard(
           if (previous && JSON.stringify(previous.format) !== JSON.stringify(format))
             throw new Error('Overlapping paste targets contain conflicting formats.');
           texts.set(key, { rowIndex, columnKey, columnIndex, text, ...(format ? { format } : {}) });
+          if (cooperative && ++completed % 256 === 0) yield { phase: 'prepare', completed, total: cells };
         }
     }
+    completed = 0;
     for (const cell of texts.values()) {
       if (mode !== 'formats') dependencies.requirePermission(cell.rowIndex, cell.columnIndex, 'pasteable');
       if (cell.format && Object.keys(cell.format).length)
@@ -228,21 +241,23 @@ export function createClipboard(
           startColumn: cell.columnIndex,
           endColumn: cell.columnIndex,
         });
+      if (cooperative && ++completed % 256 === 0) yield { phase: 'validate', completed, total: texts.size };
     }
-    const updates =
-      mode === 'formats'
-        ? []
-        : [...texts.values()].map((cell) => {
-            const column = context.columns[cell.columnIndex]!,
-              current = context.dataSource.getValue(cell.rowIndex, column.key);
-            if (!column.parse && current != null && typeof current !== 'string')
-              throw new Error('Column requires a parser: ' + column.key);
-            return {
-              rowIndex: cell.rowIndex,
-              columnKey: column.key,
-              value: column.parse ? column.parse(cell.text) : cell.text,
-            };
-          });
+    const updates: CellUpdate[] = [];
+    completed = 0;
+    if (mode !== 'formats')
+      for (const cell of texts.values()) {
+        const column = context.columns[cell.columnIndex]!,
+          current = context.dataSource.getValue(cell.rowIndex, column.key);
+        if (!column.parse && current != null && typeof current !== 'string')
+          throw new Error('Column requires a parser: ' + column.key);
+        updates.push({
+          rowIndex: cell.rowIndex,
+          columnKey: column.key,
+          value: column.parse ? column.parse(cell.text) : cell.text,
+        });
+        if (cooperative && ++completed % 256 === 0) yield { phase: 'prepare', completed, total: texts.size };
+      }
     if (cut)
       for (const cell of cut.cells)
         if (!texts.has(`${cell.rowIndex}:${cell.columnKey}`))
@@ -275,7 +290,13 @@ export function createClipboard(
           },
         });
       }
-    dependencies.applyUpdates(updates, 'paste', formatChanges);
+    if (cooperative) {
+      yield* dependencies.applyUpdatesSteps(updates, 'paste', formatChanges, true, () => {
+        // Paste authority can change while the host scheduler runs.
+        for (const cell of texts.values())
+          if (mode !== 'formats') dependencies.requirePermission(cell.rowIndex, cell.columnIndex, 'pasteable');
+      });
+    } else dependencies.applyUpdates(updates, 'paste', formatChanges);
     if (move) context.pendingCut = undefined;
     // Preserve selection when a live filter removes a pasted row from the visible view.
     const targets = placements.map((place) => ({
@@ -291,6 +312,18 @@ export function createClipboard(
           : dependencies.selectDisplayRange(range, index === 0 ? 'replace' : 'add'),
       );
   }
+  function pasteBlocks(
+    blocks: readonly ClipboardBlock[],
+    structured: boolean,
+    move = false,
+    options: PasteOptions = {},
+  ): void {
+    drain(pasteBlocksSteps(blocks, structured, move, options));
+  }
+  function* pasteSteps(text: string, options?: PasteOptions): BulkSteps<void> {
+    const values = yield* decodeTsvSteps(text, true);
+    yield* pasteBlocksSteps([{ row: 0, column: 0, values }], false, false, options, true);
+  }
   function paste(text: string, options?: PasteOptions): void {
     pasteBlocks([{ row: 0, column: 0, values: decodeTsv(text) }], false, false, options);
   }
@@ -303,5 +336,5 @@ export function createClipboard(
       dependencies.getCellPermission(range.startRow, range.startColumn).pasteable
     );
   }
-  return { clipboardBlocks, copySelection, cutSelectionBlocks, pasteBlocks, paste, canPaste };
+  return { clipboardBlocks, copySelection, cutSelectionBlocks, pasteBlocks, paste, pasteSteps, canPaste };
 }

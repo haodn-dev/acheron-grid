@@ -3,6 +3,9 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 const coreFiles = new Set([
+  'internal/bulk.js',
+  'internal/history-budget.js',
+  'internal/local-view-steps.js',
   'internal/persistence.js',
   'internal/clipboard.js',
   'internal/selection.js',

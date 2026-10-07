@@ -1,5 +1,15 @@
 // Behavioral notes for the generated public API catalog.
 export const coreContracts = {
+  updateCellsAsync:
+    'Cooperative typed batch preparation with host scheduling, cancellation and optional external revision guard. One final synchronous atomic write; other engine mutations are blocked while pending.',
+  pasteAsync:
+    'Cooperative TSV parsing/preflight with the same paste options, limits and permissions. One atomic commit/history entry. Structured clipboard operations remain synchronous.',
+  undoAsync:
+    'Cooperatively preflight value history, then replay atomically. Other history kinds and final commit remain synchronous; cancellation retains the entry.',
+  redoAsync:
+    'Cooperatively preflight value redo, then replay atomically. Current identity, values and authority are rechecked before commit.',
+  setViewAsync:
+    'Cooperative local filtering and stable merge sort with the same ordering as setView. Installs the completed projection once; server queries belong to the data source.',
   subscribe:
     'Register independent event/invalidation observers. Returns an unsubscribe function; callbacks observe committed state and cannot perform nested mutations. Registration requires a live engine.',
   takeObserverErrors:

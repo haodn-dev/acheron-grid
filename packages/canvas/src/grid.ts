@@ -134,6 +134,7 @@ export interface GridOptions extends Pick<
   | 'canChangeStructure'
   | 'columnWidths'
   | 'canChangeVisibility'
+  | 'historyLimits'
 > {
   allowMerging?: boolean;
   allowRowGrouping?: boolean;
@@ -220,6 +221,11 @@ export interface GridOptions extends Pick<
   indexColumn?: boolean;
 }
 export interface Grid {
+  updateCellsAsync: GridEngine['updateCellsAsync'];
+  pasteAsync: GridEngine['pasteAsync'];
+  undoAsync: GridEngine['undoAsync'];
+  redoAsync: GridEngine['redoAsync'];
+  setViewAsync: GridEngine['setViewAsync'];
   getValue(rowIndex: number, columnKey: string): unknown;
   replaceText(
     search: string,
@@ -706,6 +712,7 @@ export function createGrid(options: GridOptions): Grid {
         : column,
     ),
     dataSource,
+    ...(gridContext.options.historyLimits ? { historyLimits: gridContext.options.historyLimits } : {}),
     ...(gridContext.options.allowMerging === undefined ? {} : { allowMerging: gridContext.options.allowMerging }),
     ...(gridContext.options.allowRowGrouping === undefined
       ? {}
@@ -2048,7 +2055,37 @@ export function createGrid(options: GridOptions): Grid {
       throw new Error('Save or cancel the editor before changing structure.');
     return axis ? animateLayout(run, axis) : run();
   }
+  let canvasBulkActive = false;
+  async function bulkAction<T>(run: () => Promise<T>): Promise<T> {
+    if (gridContext.runtime.destroyed) throw new Error('Grid is destroyed.');
+    if (editors.editor) throw new Error('Finish editing before running bulk commands.');
+    if (canvasBulkActive) throw new Error('A bulk command is already running.');
+    canvasBulkActive = true;
+    const previousInert = root.inert,
+      previousBusy = root.getAttribute('aria-busy');
+    const restoreFocus = root.contains(doc.activeElement);
+    root.inert = true;
+    root.setAttribute('aria-busy', 'true');
+    try {
+      return await run();
+    } finally {
+      canvasBulkActive = false;
+      root.inert = previousInert;
+      if (previousBusy === null) root.removeAttribute('aria-busy');
+      else root.setAttribute('aria-busy', previousBusy);
+      if (restoreFocus && !gridContext.runtime.destroyed && !root.inert) scroller.focus({ preventScroll: true });
+    }
+  }
   return {
+    updateCellsAsync: (updates, options) => bulkAction(() => gridContext.engine.updateCellsAsync(updates, options)),
+    pasteAsync: (text, bulk, options) => bulkAction(() => gridContext.engine.pasteAsync(text, bulk, options)),
+    undoAsync: (options) => bulkAction(() => gridContext.engine.undoAsync(options)),
+    redoAsync: (options) => bulkAction(() => gridContext.engine.redoAsync(options)),
+    setViewAsync: (view, options) =>
+      bulkAction(async () => {
+        await gridContext.engine.setViewAsync(view, options);
+        gridContext.layout.currentView = gridContext.engine.view;
+      }),
     subscribe: gridContext.engine.subscribe,
     getValue: gridContext.engine.getValue,
     replaceText: (search: string, replacement: string, options?: Parameters<GridEngine['replaceText']>[2]) => {

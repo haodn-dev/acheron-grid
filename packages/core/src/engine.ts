@@ -33,6 +33,9 @@ import { GridAxis } from './axis.js';
 import type { ViewportOptions } from './panes.js';
 import type { EngineContext, FormatEntry, HistoryCommand } from './internal/engine-context.js';
 import { createHistory } from './internal/history.js';
+import { runSteps } from './internal/bulk.js';
+import type { BulkSteps, GridBulkOptions } from './internal/bulk.js';
+import type { GridHistoryLimits } from './internal/history-budget.js';
 
 export type GridInvalidation =
   | { readonly type: 'cells'; readonly cells: readonly { readonly rowIndex: number; readonly columnKey: string }[] }
@@ -41,6 +44,7 @@ export type GridInvalidation =
   | { readonly type: 'structure'; readonly rowMap: readonly number[]; readonly columnMap: readonly number[] };
 
 export interface GridEngineOptions {
+  historyLimits?: GridHistoryLimits;
   onObserverError?: (error: unknown) => void;
   allowMerging?: boolean;
   allowRowGrouping?: boolean;
@@ -119,6 +123,7 @@ export function createGridEngine(options: GridEngineOptions) {
   const lockedColumns = new Set<number>();
   const lockedCells = new Set<string>();
   let busy = false;
+  let bulkActive = false;
   let destroyed = false;
   let onInvalidate = options.onInvalidate;
   const subscribers = new Set<{
@@ -145,6 +150,9 @@ export function createGridEngine(options: GridEngineOptions) {
   const retainedRanges: SelectionRange[] = [];
 
   const past: HistoryCommand[] = [];
+  const historyLimits = options.historyLimits ? Object.freeze({ ...options.historyLimits }) : undefined;
+  if (historyLimits && Object.values(historyLimits).some((value) => !Number.isSafeInteger(value) || value < 1))
+    throw new RangeError('Invalid history limits.');
   const future: HistoryCommand[] = [];
   let pendingCut:
     | { cells: readonly (CellUpdate & { rowId: RowId })[]; columnKeys: readonly string[]; blockCount: number }
@@ -163,6 +171,7 @@ export function createGridEngine(options: GridEngineOptions) {
 
   const emptyFormat: Readonly<CellFormat> = Object.freeze({});
   const context: EngineContext = {
+    ...(historyLimits ? { historyLimits } : {}),
     options,
     dataSource,
     get columns() {
@@ -326,13 +335,39 @@ export function createGridEngine(options: GridEngineOptions) {
     if (destroyed) throw new Error('Grid is destroyed.');
   }
 
-  function command<T>(run: () => T): T {
-    if (busy) throw new Error('Nested grid mutations are not allowed.');
+  function command<T>(run: () => T, disposing = false): T {
+    if (busy || (bulkActive && !disposing)) throw new Error('Nested grid mutations are not allowed.');
     busy = true;
     try {
       return run();
     } finally {
       busy = false;
+    }
+  }
+  async function bulkCommand<T>(create: () => BulkSteps<T>, options: GridBulkOptions): Promise<T> {
+    assertAlive();
+    if (busy || bulkActive) throw new Error('Nested grid mutations are not allowed.');
+    bulkActive = true;
+    try {
+      const steps = create();
+      const guarded: BulkSteps<T> = {
+        next: () => {
+          busy = true;
+          try {
+            return steps.next();
+          } finally {
+            busy = false;
+          }
+        },
+        return: (value) => steps.return(value),
+        throw: (error) => steps.throw(error),
+        [Symbol.iterator]() {
+          return this;
+        },
+      };
+      return await runSteps(guarded, options, assertAlive);
+    } finally {
+      bulkActive = false;
     }
   }
 
@@ -373,7 +408,7 @@ export function createGridEngine(options: GridEngineOptions) {
     }
   }
 
-  const { replay } = createHistory(context, {
+  const { replay, replaySteps } = createHistory(context, {
     get changeVisibility() {
       return changeVisibility;
     },
@@ -462,26 +497,29 @@ export function createGridEngine(options: GridEngineOptions) {
     },
   );
 
-  const { notifyCells, write, applyUpdates, canEdit, editCell, replaceText } = createValues(context, {
-    notify,
-    assertAlive,
-    requirePermission,
-    writeFormats,
-    notifyFormats,
-    get mergeAt() {
-      return mergeAt;
+  const { notifyCells, write, applyUpdates, applyUpdatesSteps, canEdit, editCell, replaceText } = createValues(
+    context,
+    {
+      notify,
+      assertAlive,
+      requirePermission,
+      writeFormats,
+      notifyFormats,
+      get mergeAt() {
+        return mergeAt;
+      },
+      getCellPermission,
+      get displaySelectionRanges() {
+        return displaySelectionRanges;
+      },
+      get visibleRowCount() {
+        return visibleRowCount;
+      },
+      get sourceRow() {
+        return sourceRow;
+      },
     },
-    getCellPermission,
-    get displaySelectionRanges() {
-      return displaySelectionRanges;
-    },
-    get visibleRowCount() {
-      return visibleRowCount;
-    },
-    get sourceRow() {
-      return sourceRow;
-    },
-  });
+  );
 
   const { mergedViewport, resize, requireVisibilityPolicy, changeVisibility, setFrozen, axisView } = createLayout(
     context,
@@ -557,6 +595,7 @@ export function createGridEngine(options: GridEngineOptions) {
     displayRow,
     displaySelection,
     setView,
+    setViewSteps,
     sourceTarget,
     sourceRanges,
     sourceFormats,
@@ -591,9 +630,8 @@ export function createGridEngine(options: GridEngineOptions) {
     notify,
   });
 
-  const { clipboardBlocks, copySelection, cutSelectionBlocks, pasteBlocks, paste, canPaste } = createClipboard(
-    context,
-    {
+  const { clipboardBlocks, copySelection, cutSelectionBlocks, pasteBlocks, paste, pasteSteps, canPaste } =
+    createClipboard(context, {
       assertAlive,
       displaySelectionRanges,
       sourceRow,
@@ -603,12 +641,12 @@ export function createGridEngine(options: GridEngineOptions) {
       visibleRowCount,
       requireFormatPermission,
       applyUpdates,
+      applyUpdatesSteps,
       selectRange,
       selectDisplayRange,
       getSelectionRange,
       getCellPermission,
-    },
-  );
+    });
 
   const { refreshData, exportConfiguration, exportState, restoreState } = createPersistence(context, {
     assertAlive,
@@ -654,6 +692,8 @@ export function createGridEngine(options: GridEngineOptions) {
     exportState: (): GridState => query(exportState),
     restoreState: (state: unknown) => command(() => restoreState(state)),
     setView: (next: LocalViewOptions) => command(() => setView(next)),
+    setViewAsync: (next: LocalViewOptions, options: GridBulkOptions) =>
+      bulkCommand(() => setViewSteps(snapshotView(next), true), options),
     get view() {
       return view;
     },
@@ -730,6 +770,21 @@ export function createGridEngine(options: GridEngineOptions) {
     editCell: (row: number, col: number, text: string) => command(() => editCell(sourceRow(row), col, text)),
     updateCells: (updates: readonly CellUpdate[]) =>
       command(() => applyUpdates(updates.map((update) => ({ ...update, rowIndex: sourceRow(update.rowIndex) })))),
+    updateCellsAsync: (updates: readonly CellUpdate[], options: GridBulkOptions) =>
+      bulkCommand(() => {
+        if (!Array.isArray(updates)) throw new TypeError('Invalid bulk updates.');
+        const snapshot = updates.map((update) => ({ ...update }));
+        return (function* () {
+          const mapped: CellUpdate[] = [];
+          for (let index = 0; index < snapshot.length; index++) {
+            const update = snapshot[index]!;
+            mapped.push({ ...update, rowIndex: sourceRow(update.rowIndex) });
+            if ((index + 1) % 256 === 0)
+              yield { phase: 'prepare' as const, completed: index + 1, total: snapshot.length };
+          }
+          yield* applyUpdatesSteps(mapped, 'api', [], true);
+        })();
+      }, options),
     replaceText: (
       search: string,
       replacement: string,
@@ -746,8 +801,12 @@ export function createGridEngine(options: GridEngineOptions) {
       command(() => pasteBlocks(decodeBlocks(text), true, false, options)),
     copySelection: () => query(copySelection),
     paste: (text: string, options?: PasteOptions) => command(() => paste(text, options)),
+    pasteAsync: (text: string, bulk: GridBulkOptions, options?: PasteOptions) =>
+      bulkCommand(() => pasteSteps(text, options && { ...options }), bulk),
     undo: () => command(() => replay(false)),
     redo: () => command(() => replay(true)),
+    undoAsync: (options: GridBulkOptions) => bulkCommand(() => replaySteps(false, true), options),
+    redoAsync: (options: GridBulkOptions) => bulkCommand(() => replaySteps(true, true), options),
     canUndo: () => !destroyed && past.length > 0,
     canRedo: () => !destroyed && future.length > 0,
     getFormat: (row: number, col: number) => getFormat(sourceRow(row), col),
@@ -810,7 +869,7 @@ export function createGridEngine(options: GridEngineOptions) {
         lockedColumns.clear();
         lockedCells.clear();
         tableLocked = false;
-      }),
+      }, true),
   });
 }
 

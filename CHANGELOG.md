@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — bounded data workflows
+
+- Accept canonical cell delta receipts in the bounded remote source without reloading or replacing unrelated rows. Validate base/new revisions, mutation coverage and the entire receipt before applying it.
+- Add explicit cooperative paste, typed update, value-history and local-view APIs with host scheduling, cancellation and revision guards. Preparation yields; the final atomic commit and structural history remain synchronous.
+- Add configurable retained command/value-change history budgets and Canvas busy/focus handling. These source-preview APIs do not guarantee a frame-time budget and are not included in npm 0.1.0.
+
 ## Unreleased — integration readiness
 
 - Generate MCP declarations from TypeScript while preserving the existing server factory. Add structured error codes, a host-controlled schema row-count policy and post-write revision receipts with an explicit revision-unavailable success fallback.
