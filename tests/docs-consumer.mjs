@@ -81,6 +81,7 @@ try {
         'createAsyncDataSource',
         'createLiveDataSource',
         'createRemoteDataSource',
+        'createPagedRemoteDataSource',
       ])
         assert.ok(catalog.includes('### ' + source + ' source members'));
     }

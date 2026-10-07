@@ -6,6 +6,14 @@ Source-preview catalog generated from the exported TypeScript Grid type. Use the
 
 ## Data and lifecycle
 
+### updateCellsAsync
+
+```ts
+updateCellsAsync: (updates: readonly CellUpdate[], options: GridBulkOptions) => Promise<void>
+```
+
+
+
 ### getValue
 
 ```ts
@@ -95,6 +103,14 @@ destroy: () => void
 Release this instance. Idempotent; host-owned sources and external subscriptions still need host cleanup.
 
 ## Selection and clipboard
+
+### pasteAsync
+
+```ts
+pasteAsync: (text: string, bulk: GridBulkOptions, options?: PasteOptions) => Promise<void>
+```
+
+
 
 ### selectColumn
 
@@ -194,6 +210,22 @@ Parse TSV/editor text and preflight the complete destination before writing.
 
 ## History
 
+### undoAsync
+
+```ts
+undoAsync: (options: GridBulkOptions) => Promise<boolean>
+```
+
+
+
+### redoAsync
+
+```ts
+redoAsync: (options: GridBulkOptions) => Promise<boolean>
+```
+
+
+
 ### undo
 
 ```ts
@@ -211,6 +243,14 @@ redo: () => boolean
 Reapply a previously undone command under current identity/value/permission checks.
 
 ## Views and persistence
+
+### setViewAsync
+
+```ts
+setViewAsync: (next: LocalViewOptions, options: GridBulkOptions) => Promise<void>
+```
+
+
 
 ### exportState
 
@@ -629,3 +669,4 @@ Call createGrid with GridOptions. Required fields are marked; options are read a
 | allowLockChanges | No | `boolean \| undefined` |
 | columnWidths | No | `Readonly<Record<string, number>> \| undefined` |
 | canChangeVisibility | No | `((request: Readonly<{ axis: "row" \| "column"; indices: readonly number[]; hidden: boolean; }>) => boolean) \| undefined` |
+| historyLimits | No | `GridHistoryLimits \| undefined` |

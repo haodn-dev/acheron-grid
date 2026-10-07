@@ -1,9 +1,12 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { createRemoteDemoHandler } from '../remote/backend.mjs';
+import { createPagedDemoHandler } from '../paged/backend.mjs';
 const remoteDemo = createRemoteDemoHandler();
+const pagedDemo = createPagedDemoHandler();
 
 createServer(async (request, response) => {
+  if (await pagedDemo(request, response)) return;
   if (await remoteDemo(request, response)) return;
   if (request.method !== 'GET') {
     response.writeHead(405).end();

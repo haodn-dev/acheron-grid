@@ -1,5 +1,8 @@
 # Editing, display and remote writes
 
+For datasets beyond the bounded snapshot working set, see [writable remote pages](paged-remote.md).
+Explicit [cooperative bulk commands](bulk-commands.md) yield during local preparation while retaining one atomic commit.
+
 These APIs are **Unreleased source preview**. Build matching packages from the recorded source revision; they are absent from npm 0.1.0. Commands reuse engine validation, permissions, atomic batches and bounded history.
 
 ## Paste special

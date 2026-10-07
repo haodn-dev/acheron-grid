@@ -719,3 +719,5 @@ React/Vue adapters expose the grid instance through their documented ref/getGrid
 ## Paste special, visibility, numbers and localization (source preview)
 
 Canvas exposes values-only/formats-only/transposed/skip-empty paste, hide/show rows and columns, and decimal/integer/percent/currency formats. Hidden axes retain data and positive stored sizes while painting, navigation and viewport ARIA skip them. Number display uses `Intl.NumberFormat`; editing and callbacks retain raw values. Set `locale`, `currency` and `messages` at construction; complete English/Vietnamese message inventories are exported for host language packs. Menus, dialogs, choice/media editors and accessibility share these messages. See the [complete editing and remote guide](../../../guides/editing-and-remote.md). These additions are not in npm 0.1.0.
+
+Source-preview bulk APIs, busy/focus behavior and history budgets are documented in the [bulk guide](../../../guides/bulk-commands.md).

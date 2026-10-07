@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 const coreFiles = new Set([
+  'paged-remote-data-source.js',
+  'internal/remote-json.js',
   'internal/bulk.js',
   'internal/history-budget.js',
   'internal/local-view-steps.js',

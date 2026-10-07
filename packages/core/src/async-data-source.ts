@@ -21,7 +21,7 @@ export interface AsyncDataSourceOptions<S> {
     readonly query: Readonly<LocalViewOptions>;
   }) => Promise<{ readonly rows: readonly Readonly<Record<string, unknown>>[]; readonly total: number }>;
   /** Stable positional identity within one server query; query changes invalidate identity. */
-  readonly getRowId?: (index: number) => RowId;
+  readonly getRowId?: (index: number, loadedRow?: Readonly<Record<string, unknown>>) => RowId;
 }
 
 /** Explicit asynchronous loading around a synchronous, read-only cache. No browser globals. */
@@ -204,7 +204,7 @@ export function createAsyncDataSource<S>(options: AsyncDataSourceOptions<S>) {
     },
     getRowId: (row) => {
       index(row);
-      return options.getRowId?.(row) ?? row;
+      return options.getRowId?.(row, pages.get(Math.floor(row / pageSize) * pageSize)?.[row % pageSize]) ?? row;
     },
     getValue: (row, key) => {
       index(row);
