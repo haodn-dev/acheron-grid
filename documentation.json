@@ -1,12 +1,25 @@
 {
   "schema": 1,
-  "sourceRevision": "81db243914dfcbe3a21080e5bb6844f6f653865d",
+  "sourceRevision": "9b628381483aede4d9a9a865a46c679916908f21",
   "release": {
     "version": "0.1.0",
     "tag": "v0.1.0",
     "revision": "f34e22765456d644bcae08ebb52241ae6a71238b"
   },
   "documents": [
+    {
+      "id": "v1-readiness",
+      "path": "guides/v1-readiness.md",
+      "revision": 1,
+      "updated": "2026-10-07",
+      "sha256": "1cc5d9572695f3f87f5153ed6584861d2bdfdcffec660db772da971c4f263440",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Selected 1.0 contracts, compatibility policy and evidence gates; not a release announcement."
+        }
+      ]
+    },
     {
       "id": "architecture",
       "path": "guides/architecture.md",
@@ -157,9 +170,9 @@
     {
       "id": "versions",
       "path": "guides/versions.md",
-      "revision": 3,
-      "updated": "2026-10-06",
-      "sha256": "936f3739deed20dcac412bfd29caa7cb3271871b801bf6c69487297684c534e2",
+      "revision": 4,
+      "updated": "2026-10-07",
+      "sha256": "e64ddba9082ac4ba000ab2a160cbe6706302e302af5b18be65b07833a744ccb1",
       "history": [
         {
           "revision": 1,
@@ -171,6 +184,10 @@
         },
         {
           "revision": 3,
+          "summary": "Separate package releases, source previews and per-document revisions."
+        },
+        {
+          "revision": 4,
           "summary": "Separate package releases, source previews and per-document revisions."
         }
       ]
@@ -497,9 +514,9 @@
     {
       "id": "support",
       "path": "SUPPORT.md",
-      "revision": 11,
+      "revision": 12,
       "updated": "2026-10-07",
-      "sha256": "e39c8dc4ce64685625e87be983ef261e3a95d0468c62340b966035b3d676e16b",
+      "sha256": "b45e9c118b6caf276412594da20507cd74aa219915f2ff29be2060dfd979e5db",
       "history": [
         {
           "revision": 1,
@@ -543,6 +560,10 @@
         },
         {
           "revision": 11,
+          "summary": "Verified environments and practical limits."
+        },
+        {
+          "revision": 12,
           "summary": "Verified environments and practical limits."
         }
       ]
