@@ -1209,6 +1209,13 @@ test('frozen viewport reads stay bounded even when the entire dataset is frozen'
   await page.goto('/');
   const result = await page.evaluate(async () => {
     const { createGrid } = await import('/canvas/index.js');
+    const createElement = document.createElement,
+      images = [];
+    document.createElement = function (...args) {
+      const element = createElement.apply(this, args);
+      if (args[0] === 'img') images.push(element);
+      return element;
+    };
     let reads = 0;
     const grid = createGrid({
       container: document.querySelector('#grid'),
@@ -1225,6 +1232,11 @@ test('frozen viewport reads stay bounded even when the entire dataset is frozen'
         setValue() {},
       },
     });
+    document.createElement = createElement;
+    if (!images.length) throw new Error('Image decode instrumentation captured no icons.');
+    // Resource-driven full paints must finish before measuring an offscreen dirty-cell update.
+    await Promise.all(images.map((image) => image.decode()));
+    await document.fonts.ready;
     const next = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     await next();
     reads = 0;

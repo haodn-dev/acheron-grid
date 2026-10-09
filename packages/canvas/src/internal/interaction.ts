@@ -1528,6 +1528,9 @@ export function createInteraction(context: InteractionContext) {
     indexRow,
     rowLabels,
     clearReorder,
+    get reorderAxis() {
+      return reorderDrag?.axis;
+    },
     commitTouchReorder,
     reorderHandle,
     onDoubleClick,

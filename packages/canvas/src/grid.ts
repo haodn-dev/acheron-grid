@@ -204,6 +204,7 @@ export interface GridOptions extends Pick<
   accessibility?: 'active' | 'viewport';
   getCellLabel?: (rowIndex: number, columnKey: string, value: unknown) => string | undefined;
   renderCell?: CellRenderer;
+  renderCellBackground?: (context: CanvasRenderingContext2D, cell: CellRenderInfo) => void;
   createEditor?: CellEditorFactory;
   onEditorMount?: (cell: Readonly<CellEditorInfo>, editor: CellEditor) => void | (() => void);
   onObserverError?: GridEngineOptions['onObserverError'];
@@ -808,6 +809,13 @@ export function createGrid(options: GridOptions): Grid {
         if (!searchBar.hidden) refreshSearch();
       } else if (change.type === 'layout' || change.type === 'structure') {
         if (change.type === 'structure') {
+          const reorderAxis = interaction.reorderAxis;
+          const reorderMap = reorderAxis === 'column' ? change.columnMap : change.rowMap;
+          const preserveReorder =
+            reorderAxis !== undefined &&
+            reorderMap.length ===
+              (reorderAxis === 'column' ? gridContext.layout.columns.length : gridContext.layout.rowCount) &&
+            reorderMap.every((index, previous) => index === previous);
           editors.hoveredChoice = null;
           if (managesView) gridContext.layout.currentView = gridContext.engine.view;
           if (interaction.axisAnchor) {
@@ -816,7 +824,7 @@ export function createGrid(options: GridOptions): Grid {
             interaction.axisAnchor =
               next !== undefined && next >= 0 ? { ...interaction.axisAnchor, index: next } : null;
           }
-          onPointerEnd();
+          if (!preserveReorder) onPointerEnd();
           gridContext.layout.columns = gridContext.engine.columns;
           gridContext.layout.rowCount = gridContext.engine.rowCount;
           const outline = gridContext.engine.getRowGroups();
@@ -857,7 +865,7 @@ export function createGrid(options: GridOptions): Grid {
           )
             scroller.focus({ preventScroll: true });
           indexGutter.replaceChildren();
-          clearReorder();
+          if (!preserveReorder) clearReorder();
           rendering.measuredRows.clear();
           accessibility.accessibleCells.clear();
           accessibleBody.replaceChildren();

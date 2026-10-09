@@ -306,13 +306,10 @@ export function createRendering(context: RenderingContext) {
     const change = header ? undefined : cellChange(value, rowIndex, columnIndex);
     const inset = change?.direction && width >= 40 ? 16 : 0;
     // Reserve a leading gutter so custom numeric renderers cannot overlap the indicator.
-    paintCell(value, x + inset, y, width - inset, height, header, rowIndex, columnIndex, change);
+    paintCell(value, x, y, width, height, header, rowIndex, columnIndex, change, inset);
     if (inset) {
       const ctx = context.context!;
       ctx.save();
-      ctx.clearRect(x, y, inset, height);
-      ctx.fillStyle = context.engine.getFormat(rowIndex, columnIndex).background ?? context.theme.background;
-      ctx.fillRect(x, y, inset, height);
       ctx.fillStyle = change!.direction > 0 ? context.theme.increaseColor : context.theme.decreaseColor;
       const center = y + height / 2;
       ctx.beginPath();
@@ -416,6 +413,7 @@ export function createRendering(context: RenderingContext) {
     rowIndex = 0,
     columnIndex = 0,
     change?: { previousValue: unknown; animationProgress: number },
+    inset = 0,
   ): void {
     const selection = context.engine.getSelection();
     const ctx = context.context!;
@@ -429,6 +427,41 @@ export function createRendering(context: RenderingContext) {
     const textColor = format?.textColor ?? context.theme.textColor;
     ctx.fillStyle = header ? context.theme.headerBackground : background;
     ctx.fillRect(x, y, width, height);
+    const backgroundX = x,
+      backgroundWidth = width;
+    const paintBackground = () => {
+      if (header || !context.options.renderCellBackground) return;
+      ctx.save();
+      try {
+        ctx.beginPath();
+        ctx.rect(backgroundX, y, backgroundWidth, height);
+        ctx.clip();
+        context.options.renderCellBackground(
+          ctx,
+          Object.freeze({
+            value,
+            ...change,
+            format: format!,
+            rowIndex,
+            rowId: context.engine.getRowId(rowIndex),
+            columnIndex,
+            columnKey: context.columns[columnIndex]!.key,
+            x: backgroundX,
+            y,
+            width: backgroundWidth,
+            height,
+          }),
+        );
+      } catch (error) {
+        context.win.console.error(context.t('Cell renderer failed.'), error);
+      } finally {
+        ctx.restore();
+        ctx.beginPath();
+      }
+    };
+    paintBackground();
+    x += inset;
+    width -= inset;
     const range = context.getSelectionRange();
     const wholeColumn = context
       .getSelectionRanges()
@@ -490,6 +523,12 @@ export function createRendering(context: RenderingContext) {
       ctx.clearRect(x, y, width, height);
       ctx.fillStyle = background;
       ctx.fillRect(x, y, width, height);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, y, width, height);
+      ctx.clip();
+      paintBackground();
+      ctx.restore();
     }
     if (!header && context.mediaColumn(context.columns[columnIndex]!.key)) {
       if (context.avatarColumns.has(context.columns[columnIndex]!.key) || Array.isArray(value))

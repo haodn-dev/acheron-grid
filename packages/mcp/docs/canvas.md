@@ -103,6 +103,8 @@ Each grid snapshots its theme independently. Canvas cells, headers, lines and se
 
 Pass `renderCell(context, cell)` to `createGrid`. Return `true` to replace the default body text, or `false` to draw the default text. Headers, grid lines and selection remain owned by the grid.
 
+For full-cell flash or background effects, use `renderCellBackground(context, cell)`. It receives the complete cell rectangle, including the value-direction arrow gutter, and runs after the formatted background but before content and indicators. `renderCell` retains its reserved content rectangle so text cannot overlap the arrow. Both callbacks are clipped to the visible cell/pane and have isolated Canvas state; background effects must respect reduced-motion preferences supplied by the host. This callback is a source preview API.
+
 ```ts
 renderCell: (ctx, cell) => {
   if (cell.columnKey !== 'status') return false;

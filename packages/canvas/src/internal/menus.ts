@@ -1028,7 +1028,7 @@ export function createMenus(context: MenusContext) {
     dialog.addEventListener('close', () => {
       dialog.remove();
       if (context.overlay.activeDialog === dialog) context.overlay.activeDialog = null;
-      if (!context.destroyed) context.scroller.focus({ preventScroll: true });
+      if (!context.destroyed && !context.editors.editor) context.scroller.focus({ preventScroll: true });
     });
     dialog.showModal();
     title.focus();

@@ -1,5 +1,32 @@
 import { test, expect } from './browser-fixtures.mjs';
 
+test('queued column dialog close does not steal focus from a newly opened cell editor', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
+    window.grid = createGrid({
+      container: document.querySelector('#grid'),
+      allowColumnChanges: true,
+      dataSource: new LocalDataSource([{ id: 1, value: 'unchanged' }], (row) => row.id),
+      columns: [{ key: 'value', title: 'Value', editable: true }],
+    });
+    grid.selectColumn(0);
+  });
+  await page.locator('[data-grid-header-cell="0"]').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Insert column right…', exact: true }).click();
+  await page.evaluate(() => {
+    document.querySelector('dialog button:last-child').click();
+    // Native close is queued: start editing before that event is delivered.
+    document.querySelector('[role="grid"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true }));
+  });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('textbox')).toBeFocused();
+  await page.getByRole('textbox').fill('retained draft');
+  await page.keyboard.press('Escape');
+  expect(await page.evaluate(() => grid.getValue(0, 'value'))).toBe('unchanged');
+});
+
 test('Vietnamese drag hints and validation guidance are localized while host messages stay intact', async ({
   page,
 }) => {

@@ -106,6 +106,30 @@ test('pointer drag shows a real row or column ghost, commits on release, cancels
   await page.screenshot({ path: testInfo.outputPath('grid-motion-mobile.png') });
 });
 
+test('live refresh keeps an in-progress column drag and commits it once', async ({ page }) => {
+  await setup(page);
+  await page.evaluate(() => window.grid.setView({ sorts: [{ columnKey: 'score', direction: 'asc' }] }));
+  await page.evaluate(() => window.grid.selectColumn(0));
+  const col = await page.locator('[data-grid-header-cell="0"]').boundingBox();
+  await page.mouse.move(col.x + 50, col.y + col.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(col.x + 250, col.y + col.height / 2, { steps: 8 });
+  await expect(page.locator('[data-grid-drag-ghost="column"]')).toBeVisible();
+  for (let tick = 1; tick <= 3; tick++) {
+    await page.evaluate((tick) => {
+      window.source.setValue(0, 'score', tick);
+      window.grid.refreshData('values');
+      window.grid.render();
+    }, tick);
+    await expect(page.locator('[data-grid-drag-ghost="column"]')).toBeVisible();
+    expect(await page.evaluate(() => window.requests.length)).toBe(0);
+  }
+  await page.mouse.up();
+  expect(await page.evaluate(() => window.requests.length)).toBe(1);
+  expect(await page.evaluate(() => window.grid.columns.map((column) => column.key))).toEqual(['score', 'name', 'team']);
+  await expect(page.locator('[data-grid-drag-ghost]')).toHaveCount(0);
+});
+
 test('selection exits, visibility and replay use live customizable motion without delaying state', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await setup(page);
@@ -375,6 +399,54 @@ test('live value indicator gutters preserve formatted cell backgrounds', async (
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     }, price);
     expect(await pixel()).toEqual(translucent);
+  }
+});
+
+test('full-cell background effects cover the direction gutter for handled and fallback content', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
+    window.source = new LocalDataSource([{ id: 1, price: 10 }], (row) => row.id);
+    window.handled = true;
+    window.grid = createGrid({
+      container: document.querySelector('#grid'),
+      indexColumn: false,
+      columns: [{ key: 'price', title: 'Price' }],
+      dataSource: window.source,
+      motion: { valueIndicators: true },
+      renderCellBackground: (ctx, cell) => {
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = '#e11d48';
+        ctx.fillRect(cell.x, cell.y, cell.width, cell.height);
+      },
+      renderCell: () => window.handled,
+    });
+  });
+  const pixels = () =>
+    page.locator('canvas').evaluate((canvas) => {
+      const ratio = canvas.width / canvas.clientWidth;
+      const ctx = canvas.getContext('2d');
+      return [2, 24].map((x) => [...ctx.getImageData(Math.round(x * ratio), Math.round(36 * ratio), 1, 1).data]);
+    });
+  const uniformFlash = async () => {
+    const [gutter, content] = await pixels();
+    return gutter[0] > gutter[1] + 40 && gutter.every((value, index) => value === content[index]);
+  };
+  await expect.poll(uniformFlash).toBe(true);
+  for (const [price, handled] of [
+    [12, true],
+    [8, false],
+  ]) {
+    await page.evaluate(
+      ([price, handled]) => {
+        window.handled = handled;
+        window.source.setValue(0, 'price', price);
+        window.grid.refreshData('values');
+      },
+      [price, handled],
+    );
+    await expect.poll(uniformFlash).toBe(true);
   }
 });
 

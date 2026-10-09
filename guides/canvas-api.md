@@ -650,6 +650,7 @@ Call createGrid with GridOptions. Required fields are marked; options are read a
 | accessibility | No | `"active" \| "viewport" \| undefined` |
 | getCellLabel | No | `((rowIndex: number, columnKey: string, value: unknown) => string \| undefined) \| undefined` |
 | renderCell | No | `CellRenderer \| undefined` |
+| renderCellBackground | No | `((context: CanvasRenderingContext2D, cell: CellRenderInfo) => void) \| undefined` |
 | createEditor | No | `CellEditorFactory \| undefined` |
 | onEditorMount | No | `((cell: Readonly<CellEditorInfo>, editor: CellEditor) => void \| (() => void)) \| undefined` |
 | onObserverError | No | `((error: unknown) => void) \| undefined` |
