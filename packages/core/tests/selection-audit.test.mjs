@@ -13,6 +13,82 @@ const has = (engine, row, col) =>
   engine
     .getSelectionRanges()
     .some((r) => r.startRow <= row && r.endRow >= row && r.startColumn <= col && r.endColumn >= col);
+
+test('projected selection no-ops preserve event counts and detached snapshots', () => {
+  const events = [];
+  const engine = createGridEngine({
+    columns: [{ key: 'a', title: 'A' }],
+    dataSource: new LocalDataSource([{ a: 3 }, { a: 1 }, { a: 2 }], (_, id) => id),
+    onEvent: (event) => events.push(event),
+  });
+  engine.setView({ sort: { columnKey: 'a', direction: 'asc' } });
+  assert.equal(engine.select(0, 0), true);
+  const count = events.length;
+  assert.equal(engine.select(0, 0), false);
+  assert.equal(engine.selectRange({ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }), false);
+  assert.equal(events.length, count);
+  const snapshot = engine.getSelectionRanges();
+  snapshot[0].endRow = 99;
+  assert.deepEqual(engine.getSelectionRanges(), [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }]);
+  engine.destroy();
+});
+
+test('denied projected selection does not move the extension anchor', () => {
+  const events = [];
+  const engine = createGridEngine({
+    columns: [{ key: 'a', title: 'A' }],
+    dataSource: new LocalDataSource(
+      Array.from({ length: 4 }, (_, id) => ({ a: id })),
+      (_, id) => id,
+    ),
+    resolveCellPermission: (cell) => (cell.rowId === 1 ? { selectable: false } : undefined),
+    onEvent: (event) => events.push(event),
+  });
+  engine.setView({ sort: { columnKey: 'a', direction: 'desc' } });
+  engine.select(0, 0);
+  const count = events.length;
+  assert.equal(engine.select(2, 0), false);
+  assert.equal(events.length, count);
+  assert.equal(engine.getSelection().rowId, 3);
+  engine.select(3, 0, true);
+  assert.deepEqual(engine.getSelectionRanges(), [{ startRow: 0, endRow: 3, startColumn: 0, endColumn: 0 }]);
+  engine.destroy();
+});
+
+test('fragmented projected range limits and invalid inputs leave selection and events untouched', () => {
+  const events = [];
+  const engine = createGridEngine({
+    columns: [{ key: 'a', title: 'A' }],
+    dataSource: new LocalDataSource(
+      Array.from({ length: 260 }, (_, id) => ({ a: id % 2 ? 'odd' : 'even' })),
+      (_, id) => id,
+    ),
+    onEvent: (event) => events.push(event),
+  });
+  engine.setView({ filters: [{ columnKey: 'a', query: 'even' }] });
+  const range = { startRow: 0, endRow: 127, startColumn: 0, endColumn: 0 };
+  engine.selectRange(range);
+  const snapshot = engine.exportState();
+  const count = events.length;
+  assert.throws(() => engine.selectRange({ ...range, endRow: 128 }), /128 source ranges/);
+  for (const bad of [
+    { ...range, startRow: -1 },
+    { ...range, endRow: 130 },
+    { ...range, startRow: 0.5 },
+    { ...range, endColumn: 1 },
+    { ...range, startRow: 2, endRow: 1 },
+  ])
+    assert.throws(() => engine.selectRange(bad), RangeError);
+  assert.throws(() => engine.selectRange(range, 'invalid'), TypeError);
+  assert.deepEqual(engine.exportState(), snapshot);
+  assert.equal(events.length, count);
+  engine.clearSelection();
+  const cleared = events.length;
+  engine.clearSelection();
+  assert.equal(events.length, cleared);
+  assert.deepEqual(engine.getSelectionRanges(), []);
+  engine.destroy();
+});
 test('subtracting a visible cell under a filter retains selected records outside that filter', () => {
   const engine = make();
   engine.selectRange({ startRow: 0, endRow: 7, startColumn: 0, endColumn: 2 });

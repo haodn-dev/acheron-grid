@@ -49,6 +49,7 @@ test('async malformed results and excessive cached error states remain bounded a
     { total: 1, rows: [] },
     { total: 1, rows: [null] },
     { total: 1, rows: [[]] },
+    { total: 1, rows: Array(1) },
   ]) {
     const source = createAsyncDataSource({
       pageSize: 1,

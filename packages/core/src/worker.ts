@@ -35,13 +35,18 @@ export function createTsvWorker(createWorker: () => GridWorkerTransport) {
           settled = true;
           active = false;
           cancel = undefined;
-          signal?.removeEventListener?.('abort', abort);
-          if (worker) {
-            worker.removeEventListener('message', message);
-            worker.removeEventListener('error', failure);
-            worker.removeEventListener('messageerror', failure);
-            worker.terminate();
-          }
+          for (const cleanup of [
+            () => signal?.removeEventListener?.('abort', abort),
+            () => worker?.removeEventListener('message', message),
+            () => worker?.removeEventListener('error', failure),
+            () => worker?.removeEventListener('messageerror', failure),
+            () => worker?.terminate(),
+          ])
+            try {
+              cleanup();
+            } catch (cause) {
+              error ??= cause instanceof Error ? cause : new Error('TSV worker cleanup failed.');
+            }
           if (error) reject(error);
           else resolve(values);
         };

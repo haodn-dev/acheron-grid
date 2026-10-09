@@ -87,7 +87,11 @@ export class LocalDataSource<T extends Record<string, unknown>> implements DataS
   }
 
   addColumns(keys: readonly string[], defaults: Readonly<Record<string, unknown>> = {}): void {
-    if (keys.some((key) => typeof key !== 'string' || !key || ['__proto__', 'constructor', 'prototype'].includes(key)))
+    if (
+      [...keys].some(
+        (key) => typeof key !== 'string' || !key || ['__proto__', 'constructor', 'prototype'].includes(key),
+      )
+    )
       throw new TypeError('Invalid added column key.');
     const initial = Object.fromEntries(
       keys.filter((key) => Object.hasOwn(defaults, key)).map((key) => [key, defaults[key]]),
@@ -119,7 +123,7 @@ export class LocalDataSource<T extends Record<string, unknown>> implements DataS
         !Array.isArray(splice.rows)
       )
         throw new RangeError('Invalid row splice.');
-      const added = splice.rows.map((row) => {
+      const added = Array.from(splice.rows, (row) => {
         if (
           !row ||
           (typeof row.id !== 'string' && typeof row.id !== 'number') ||

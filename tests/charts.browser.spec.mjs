@@ -12,6 +12,7 @@ test('smooth area renders in real Canvas and preserves gaps and drawing state', 
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, 600, 240);
     ctx.globalAlpha = 0.8;
+    const originalAlpha = ctx.globalAlpha;
     const renderer = createChartRenderer({
       trend: {
         kind: 'area',
@@ -24,13 +25,13 @@ test('smooth area renders in real Canvas and preserves gaps and drawing state', 
     });
     renderer(ctx, { columnKey: 'trend', value: [2, 8, 4, null, 6, 3, 7], x: 0, y: 0, width: 600, height: 240 });
     return {
-      alpha: ctx.globalAlpha,
+      alphaRestored: ctx.globalAlpha === originalAlpha,
       fill: ctx.fillStyle,
       gap: Array.from(ctx.getImageData(300, 10, 1, 200).data).every((n) => n === 255),
       painted: Array.from(ctx.getImageData(90, 80, 1, 120).data).some((n) => n !== 255),
     };
   }, source);
-  expect(result).toEqual({ alpha: 0.8, fill: '#ffffff', gap: true, painted: true });
+  expect(result).toEqual({ alphaRestored: true, fill: '#ffffff', gap: true, painted: true });
   await page.screenshot({ path: testInfo.outputPath('smooth-area.png') });
 });
 
@@ -54,6 +55,7 @@ for (const dpr of [1, 2]) {
           ctx.globalAlpha = 0.8;
           ctx.lineWidth = 7;
           ctx.setLineDash([4, 2]);
+          const originalAlpha = ctx.globalAlpha;
           const renderer = createChartRenderer({
             trend: {
               kind,
@@ -86,7 +88,7 @@ for (const dpr of [1, 2]) {
           const restored =
             ctx.fillStyle === '#123456' &&
             ctx.strokeStyle === '#654321' &&
-            ctx.globalAlpha === 0.8 &&
+            ctx.globalAlpha === originalAlpha &&
             ctx.lineWidth === 7;
           const dash = ctx.getLineDash(),
             matrix = ctx.getTransform();

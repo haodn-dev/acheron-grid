@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "6b1f98346a351e8f67a045838d9edf0a048d46fb",
+  "sourceRevision": "df33c4cfdb641898ee5cc072db59635122d3f3a5",
   "release": {
     "version": "0.1.0",
     "tag": "v0.1.0",
@@ -491,9 +491,9 @@
     {
       "id": "export",
       "path": "packages/export/README.md",
-      "revision": 3,
-      "updated": "2026-10-06",
-      "sha256": "745448ad040791a5814edfca194f893340440698bda366fdb2b029de6d62f257",
+      "revision": 4,
+      "updated": "2026-10-09",
+      "sha256": "01a70600663b86eaf0fa778b788f84600e7edd3b54f0c7647a6dc9bd1e3d078c",
       "history": [
         {
           "revision": 1,
@@ -505,6 +505,10 @@
         },
         {
           "revision": 3,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 4,
           "summary": "Align publication status, installation and current source contracts."
         }
       ]

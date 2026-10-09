@@ -114,7 +114,7 @@ export function createLayout(
       typeof hidden !== 'boolean' ||
       !Array.isArray(indices) ||
       new Set(indices).size !== indices.length ||
-      indices.some((index) => !Number.isSafeInteger(index) || index < 0 || index >= layout.count)
+      [...indices].some((index) => !Number.isSafeInteger(index) || index < 0 || index >= layout.count)
     )
       throw new RangeError('Invalid visibility request.');
     requireVisibilityPolicy(axis, indices, hidden);

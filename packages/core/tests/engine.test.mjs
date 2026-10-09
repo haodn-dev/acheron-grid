@@ -4,6 +4,41 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createGridEngine, LocalDataSource, LocalDataView } from '@acheron-grid/core';
 
+test('sparse visibility input fails before selection history or events change', () => {
+  const events = [];
+  const { engine } = fixture({ onEvent: (event) => events.push(event) });
+  engine.select(0, 0);
+  const before = engine.exportState();
+  const count = events.length;
+  assert.throws(() => engine.setColumnsHidden(Array(1), true), RangeError);
+  assert.deepEqual(engine.exportState(), before);
+  assert.equal(events.length, count);
+  engine.destroy();
+});
+
+test('each capability denial survives later scopes without disabling independent capabilities', () => {
+  const keys = ['editable', 'selectable', 'copyable', 'pasteable', 'writable', 'formatting'];
+  const allowed = Object.fromEntries(keys.map((key) => [key, true]));
+  for (const scope of ['grid', 'column', 'resolver']) {
+    for (const denied of keys) {
+      const policy = { ...allowed, [denied]: false };
+      const engine = createGridEngine({
+        columns: [{ key: 'a', title: 'A', editable: true, permissions: scope === 'column' ? policy : allowed }],
+        dataSource: new LocalDataSource([{ a: 1 }], (_, id) => id),
+        permissions: scope === 'grid' ? policy : allowed,
+        resolveCellPermission: () => (scope === 'resolver' ? policy : allowed),
+      });
+      const permission = engine.getCellPermission(0, 0);
+      for (const key of keys) {
+        const expected = key !== denied && !(denied === 'writable' && ['editable', 'pasteable'].includes(key));
+        assert.equal(permission[key], expected, scope + ':' + denied + ':' + key);
+      }
+      assert.ok(Object.isFrozen(permission));
+      engine.destroy();
+    }
+  }
+});
+
 test('batch and paste keys remain distinct for numeric prefixes, colons and quotes', () => {
   const keys = ['1:a', 'a', 'quoted"\n:b'];
   const source = new LocalDataSource(

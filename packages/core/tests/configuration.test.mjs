@@ -2,6 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGridEngine, restoreGridConfiguration, LocalDataSource } from '@acheron-grid/core';
 
+test('configuration rejects sparse columns and view criteria instead of returning malformed options', () => {
+  const columns = [{ key: 'a', title: 'A' }];
+  const valid = { version: 1, columns: [{ key: 'a', width: 160 }], frozenRows: 0, frozenColumns: 0, view: {} };
+  for (const input of [
+    { ...valid, columns: Array(1) },
+    { ...valid, view: { sorts: Array(1) } },
+    { ...valid, view: { filters: Array(1) } },
+  ])
+    assert.throws(() => restoreGridConfiguration(input, columns, 1), TypeError);
+});
+
 test('configuration round trip keeps layout and view without serializing data or policies', () => {
   const columns = [
     { key: 'name', title: 'Name', parse: (text) => text },

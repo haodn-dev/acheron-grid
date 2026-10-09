@@ -58,6 +58,7 @@ import type {GridMcpOptions} from '@acheron-grid/mcp';
 const revisionOptions: GridMcpOptions = {getRevision: () => 'session:1'};
 createGridMcpServer(revisionOptions);
 import {exportSelectionCsv,exportSelectionXlsx} from '@acheron-grid/export';
+import {renderHtmlTable} from '@acheron-grid/export/html';
 import {createChartRenderer,chartGeometry} from '@acheron-grid/charts';
 import type {ChartOptions,ChartKind,ChartPoint} from '@acheron-grid/charts';
 const chartKind: ChartKind = 'area';
@@ -69,7 +70,7 @@ createChartRenderer({trend:'pie'});
 // @ts-expect-error Unsupported highlight modes must remain a type error.
 createChartRenderer({trend:{kind:'line',highlight:['first']}});
 export {createGridEngine,LocalDataSource,createAsyncDataSource,createGrid,ReactGrid,VueGrid,markdownToHtml,createGridMcpServer,exportSelectionCsv,exportSelectionXlsx};
-export {createChartRenderer,chartGeometry};
+export {createChartRenderer,chartGeometry,renderHtmlTable};
 const remote=createAsyncDataSource({query:{sorts:[{columnKey:'a',direction:'asc'}]},createAbortController:()=>new AbortController(),load:async ({query})=>({total:1,rows:[{a:query.sorts?.[0]?.direction}]})});
 remote.setQuery({filters:[{columnKey:'a',query:'ok'}]});
 `,
@@ -97,11 +98,13 @@ import {AcheronGrid as ReactGrid} from '@acheron-grid/react';import {AcheronGrid
 import {markdownToHtml} from '@acheron-grid/markdown';import {createGridMcpServer} from '@acheron-grid/mcp';
 import {exportSelectionCsv,exportSelectionXlsx} from '@acheron-grid/export';
 import {chartGeometry,createChartRenderer} from '@acheron-grid/charts';
+import {renderHtmlTable} from '@acheron-grid/export/html';
 assert.deepEqual(chartGeometry([0,5,10],100,40,'area',[0,10]).points,[{x:0,y:40},{x:50,y:20},{x:100,y:0}]);
 assert.doesNotThrow(()=>createChartRenderer({trend:{kind:'area',curve:'smooth',domain:[0,10],threshold:5,highlight:['min','max','last']}}));
 assert.throws(()=>createChartRenderer({trend:{kind:'area',domain:[1,10]}}),RangeError);
 const options={columns:[{key:'a',title:'A',editable:true}],dataSource:new LocalDataSource([{a:'old'}],(_,i)=>i)};
 const remote=createAsyncDataSource({createAbortController:()=>new AbortController(),load:async ({query})=>({total:1,rows:[{a:query.filters[0].query}]})});remote.setQuery({filters:[{columnKey:'a',query:'ok'}]});await remote.loadPage(0);assert.equal(remote.getValue(0,'a'),'ok');remote.destroy();
+assert.ok(renderHtmlTable({columns:options.columns,rowCount:1,getValue:()=>'<b>SSR</b>'},{authorize:()=>true}).includes('&lt;b&gt;SSR&lt;/b&gt;'));
 const engine=createGridEngine(options);engine.editCell(0,0,'new');assert.equal(engine.getValue(0,'a'),'new');engine.undo();assert.equal(engine.getValue(0,'a'),'old');engine.select(0,0);assert.equal(exportSelectionCsv(engine,{includeHeaders:true}),'A\\r\\nold');assert.equal(exportSelectionXlsx(engine)[0],80);engine.replaceText('old','replaced');assert.equal(engine.getValue(0,'a'),'replaced');engine.destroy();
 assert.match(renderToString(createElement(ReactGrid,{options})),/div/);assert.match(await vueRender(createSSRApp({render:()=>h(VueGrid,{options})})),/div/);assert.match(markdownToHtml('**ok**'),/strong/);await createGridMcpServer({documents:{core:'test'}}).close();
 `,

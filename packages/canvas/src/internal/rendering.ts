@@ -310,7 +310,8 @@ export function createRendering(context: RenderingContext) {
     if (inset) {
       const ctx = context.context!;
       ctx.save();
-      ctx.fillStyle = context.theme.background;
+      ctx.clearRect(x, y, inset, height);
+      ctx.fillStyle = context.engine.getFormat(rowIndex, columnIndex).background ?? context.theme.background;
       ctx.fillRect(x, y, inset, height);
       ctx.fillStyle = change!.direction > 0 ? context.theme.increaseColor : context.theme.decreaseColor;
       const center = y + height / 2;
@@ -978,9 +979,11 @@ export function createRendering(context: RenderingContext) {
         const filtered = context.currentView?.filters?.some((item) => item.columnKey === columnKey) ?? false;
         const previous = headerStates.get(columnKey);
         const state = `${sortState ?? ''}:${filtered}`;
+        const visibleWidth = Number.parseFloat(header.style.width);
+        const compact = !!sortState && filtered && visibleWidth < 54;
         for (const [name, right] of [
-          [sortState === 'asc' ? 'arrow-up' : sortState === 'desc' ? 'arrow-down' : '', 20],
-          [filtered ? 'funnel' : '', sortState ? 38 : 20],
+          [!compact && sortState === 'asc' ? 'arrow-up' : !compact && sortState === 'desc' ? 'arrow-down' : '', 20],
+          [filtered ? 'funnel' : '', sortState && !compact ? 38 : 20],
         ] as const) {
           if (!name) continue;
           const icon = context.doc.createElement('button');
@@ -988,17 +991,24 @@ export function createRendering(context: RenderingContext) {
           icon.dataset.gridHeaderState = name;
           icon.setAttribute(
             'aria-label',
-            context.t(name === 'funnel' ? 'Filter column {0}' : 'Sort column {0}', context.columns[col]!.title),
+            context.t(
+              compact ? 'Sort and filter column {0}' : name === 'funnel' ? 'Filter column {0}' : 'Sort column {0}',
+              context.columns[col]!.title,
+            ),
           );
           icon.disabled = context.options.viewMode === 'host' && !context.options.onViewChange;
           icon.addEventListener('pointerdown', (event) => event.stopPropagation());
           icon.addEventListener('keydown', (event) => event.stopPropagation());
           icon.addEventListener('click', (event) => {
             event.stopPropagation();
-            if (context.finishEdit(true))
-              context.openViewDialog(col, name === 'funnel' ? undefined : sortState === 'asc' ? 'desc' : 'asc');
+            if (context.finishEdit(true)) {
+              if (compact) {
+                const bounds = icon.getBoundingClientRect();
+                context.openMenu(context.engine.getSelection()?.rowIndex ?? 0, col, bounds.left, bounds.bottom, true);
+              } else context.openViewDialog(col, name === 'funnel' ? undefined : sortState === 'asc' ? 'desc' : 'asc');
+            }
           });
-          icon.style.cssText = `position:absolute;cursor:pointer;border:0;padding:0;background:transparent;right:${right}px;top:calc(50% - 8px);width:16px;height:16px;color:var(--acheron-icon-color)`;
+          icon.style.cssText = `position:absolute;cursor:pointer;border:0;padding:0;background:transparent;right:${Math.min(right, Math.max(0, visibleWidth - 16))}px;top:calc(50% - 8px);width:${Math.min(16, visibleWidth)}px;height:16px;color:var(--acheron-icon-color)`;
           icon.innerHTML = context.stateIconSvg[name];
           icon.firstElementChild?.setAttribute('width', '16');
           icon.firstElementChild?.setAttribute('height', '16');
@@ -1296,7 +1306,7 @@ export function createRendering(context: RenderingContext) {
         const resizeHandle = context.doc.createElement('span');
         resizeHandle.dataset.gridRowResize = String(row);
         resizeHandle.setAttribute('aria-hidden', 'true');
-        resizeHandle.title = 'Drag to resize row; double-click to fit';
+        resizeHandle.title = context.t('Drag to resize row; double-click to fit');
         resizeHandle.style.cssText = 'position:absolute;bottom:0;left:0;width:100%;height:5px;cursor:row-resize';
         button.append(resizeHandle);
         context.reorderHandle(button, 'row', row);

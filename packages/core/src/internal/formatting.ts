@@ -145,7 +145,7 @@ export function createFormatting(
   function format(targets: readonly CellFormatTarget[], patch: CellFormatPatch | null): void {
     dependencies.assertAlive();
     if (patch !== null) {
-      if (!patch || typeof patch !== 'object') throw new TypeError('Invalid formatting patch.');
+      if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new TypeError('Invalid formatting patch.');
       patch = Object.freeze({ ...patch });
       for (const [key, value] of Object.entries(patch))
         if (

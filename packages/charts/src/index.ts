@@ -74,16 +74,17 @@ export function chartGeometry(
   });
 }
 
-// Samples are evenly spaced. Harmonic tangents preserve monotonic runs and flatten only extrema.
+// Updates can interpolate unequal sample counts. Use actual spacing to keep joins continuous.
 function smoothTangent(
   previous: ChartPoint | null | undefined,
   point: ChartPoint,
   next: ChartPoint | null | undefined,
 ): number {
-  if (!previous) return next ? next.y - point.y : 0;
-  if (!next) return point.y - previous.y;
-  const before = point.y - previous.y,
-    after = next.y - point.y;
+  const slope = (from: ChartPoint, to: ChartPoint) => (to.x > from.x ? (to.y - from.y) / (to.x - from.x) : 0);
+  if (!previous) return next ? slope(point, next) : 0;
+  if (!next) return slope(previous, point);
+  const before = slope(previous, point),
+    after = slope(point, next);
   if (before === 0 || after === 0 || Math.sign(before) !== Math.sign(after)) return 0;
   const small = Math.min(Math.abs(before), Math.abs(after)),
     large = Math.max(Math.abs(before), Math.abs(after));
@@ -218,9 +219,9 @@ export function createChartRenderer(
             const to = smoothTangent(previous, point, geometry.points[index + 1]);
             context.bezierCurveTo(
               previous.x + dx,
-              previous.y + from / 3,
+              previous.y + from * dx,
               point.x - dx,
-              point.y - to / 3,
+              point.y - to * dx,
               point.x,
               point.y,
             );

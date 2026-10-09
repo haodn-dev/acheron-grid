@@ -107,6 +107,36 @@ test('remote option loaders cancel old requests, keep selected values and abort 
   expect(await page.evaluate(() => window.source.getValue(0, 'tags'))).toBe('b, a, c');
   expect(await page.evaluate(() => window.calls[1].signal.aborted)).toBe(true);
 });
+test('invalid sparse remote options preserve the selected draft and recover without data loss', async ({ page }) => {
+  await setup(page);
+  await page.evaluate(() => {
+    window.grid.setColumnEditor('tags', {
+      type: 'multiselect',
+      values: ['a', 'b'],
+      choiceEditor: {
+        searchDelay: 0,
+        loadOptions: async (query) => (query === 'recover' ? [{ value: 'c', label: 'Recovered' }] : Array(1)),
+      },
+    });
+  });
+  const viewport = page.getByRole('grid');
+  await viewport.press('Control+Home');
+  await viewport.press('Enter');
+  await expect(page.getByText('Unable to load options. Try searching again.', { exact: true })).toBeVisible();
+  expect(
+    await page.locator('select').evaluate((select) => Array.from(select.selectedOptions, (option) => option.value)),
+  ).toEqual(['a', 'b']);
+  await expect(page.getByRole('checkbox', { name: 'a', exact: true })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'b', exact: true })).toBeChecked();
+  expect(await page.evaluate(() => window.source.getValue(0, 'tags'))).toBe('b, a');
+  await page.getByRole('searchbox', { name: 'Search options' }).fill('recover');
+  await page.getByRole('checkbox', { name: 'Recovered' }).check();
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  expect(await page.evaluate(() => window.source.getValue(0, 'tags'))).toBe('b, a, c');
+  await page.evaluate(() => window.grid.undo());
+  expect(await page.evaluate(() => window.source.getValue(0, 'tags'))).toBe('b, a');
+});
+
 test('custom editor integration cleans up, external refresh and state restore update Canvas', async ({ page }) => {
   await setup(page);
   await page.evaluate(async () => {

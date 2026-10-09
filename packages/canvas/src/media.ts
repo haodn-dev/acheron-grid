@@ -14,7 +14,7 @@ export function validateMediaValue(value: unknown): MediaValue {
   if (typeof value === 'string') return value;
   if (!Array.isArray(value) || value.length > 100) throw new TypeError('Use at most 100 images or people per cell.');
   return Object.freeze(
-    value.map((item) => {
+    Array.from(value, (item) => {
       if (typeof item === 'string') return item;
       if (
         !item ||

@@ -43,3 +43,36 @@ Existing clipboard limits apply. Additional limits: 32,767 UTF-16 units per text
 ZIP/UTF-8 support comes from [fflate](https://github.com/101arrowz/fflate), MIT licensed, confined to this optional module. Its license is included in the package.
 
 Default CSV escaping also covers leading control characters and full-width formula operators. Spreadsheet applications can reinterpret CSV after edits or re-saving; use XLSX inline strings for untrusted text when available. CSV escaping is not a universal spreadsheet execution guarantee. See [CSV injection guidance](https://community.owasp.org/attacks/CSV_Injection).
+
+## Semantic HTML snapshots (source preview)
+
+```ts
+import { createGridEngine, LocalDataSource } from '@acheron-grid/core';
+import { renderHtmlTable } from '@acheron-grid/export/html';
+
+const engine = createGridEngine({
+  columns: [{key:'name',title:'Name'}, {key:'score',title:'Score'}],
+  dataSource: new LocalDataSource([{id:'r1',name:'Ada',score:42}], row=>row.id),
+});
+
+const html = renderHtmlTable(engine, {
+  columns: ['name', 'score'],
+  offset: 0,
+  limit: 50,
+  caption: 'Public scores',
+  lang: 'en',
+  authorize: () => true, // This example owns public fixture data.
+  getCellLabel: (_row, _column, value) => typeof value === 'number'
+    ? new Intl.NumberFormat('en').format(value) : String(value ?? ''),
+});
+console.log(html);
+engine.destroy();
+```
+
+In production, replace the fixture authorization with your server publication policy. Reuse the same text label callback for Canvas `getCellLabel`; pass locale, currency and number-format rules from your application. Without a label callback, only strings, finite numbers and booleans produce text; null, undefined, objects and arrays are empty. Custom labels, titles, caption and language attributes are always HTML-escaped. HTML/Markdown is never executed, and media never creates URLs or resource requests.
+
+The independent `export/html` entry has no runtime dependencies or DOM globals. It accepts `HtmlTableSource`: columns, rowCount and synchronous getValue, with optional engine permission/visibility/merge methods. An engine follows its current sort/filter projection and column order; an approved static source works during server rendering. `columns` selects/reorders known keys; hidden columns and rows are omitted. Offset and limit address positions in that projection, so hidden rows can make a page shorter. Default: offset 0, limit 100. Empty pages retain headers. Merged cells use flat anchor text and empty covered placeholders, without HTML spans.
+
+Host `authorize` is mandatory and must return exactly true for every emitted cell. All page permissions are checked before reading values or calling labels; engine sources also require copyable. Denial throws rather than returning a partial table. Copy permission and column visibility are not server authorization: supply only host-approved column metadata and make publication decisions on the server. Optional methods must be preserved when adapting an engine. A static source without permission methods relies entirely on the host callback.
+
+Bounds: at most 100,000 requested row positions, 100,000 cells and 10 million UTF-16 units of HTML including escaping/markup. Rendering is synchronous and read-only: no selection changes, history commands, subscriptions, automatic live updates, remote fetching or whole-dataset snapshots. Missing cached values remain empty; load the requested page explicitly before calling. The host owns pagination links and placing the returned table in server HTML. HTML output alone does not guarantee indexing.

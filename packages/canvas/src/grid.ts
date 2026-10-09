@@ -1591,7 +1591,7 @@ export function createGrid(options: GridOptions): Grid {
     button.type = 'button';
     button.hidden = true;
     button.tabIndex = -1;
-    button.setAttribute('aria-label', gridContext.env.t('Adjust selection {0}', endpoint));
+    button.setAttribute('aria-label', gridContext.env.t('Adjust selection {0}', gridContext.env.t(endpoint)));
     button.style.cssText =
       'position:absolute;width:20px;height:20px;padding:0;margin:0;border:3px solid var(--acheron-background);border-radius:50%;background:var(--acheron-selection-color);z-index:3;touch-action:none;cursor:crosshair';
     button.addEventListener('pointerdown', (event) => {
@@ -1963,7 +1963,7 @@ export function createGrid(options: GridOptions): Grid {
     },
     {
       key: 'checkbox',
-      label: 'Checkbox',
+      label: gridContext.env.t('Checkbox'),
       create: (input) => {
         const parse = (text: string) => {
           if (text === '' || text === 'false') return false;

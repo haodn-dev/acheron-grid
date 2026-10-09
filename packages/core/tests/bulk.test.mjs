@@ -21,6 +21,35 @@ function fixture(extra = {}, count = 1024) {
 }
 const scheduler = { yieldControl: async () => {} };
 
+test('host scheduler, progress and revision failures release the mutation guard without committing', async () => {
+  for (const hook of ['yieldControl', 'onProgress', 'getRevision']) {
+    const { engine, source, changes } = fixture();
+    const before = engine.exportState();
+    const options = {
+      ...scheduler,
+      [hook]: () => {
+        throw Error('host failure');
+      },
+    };
+    await assert.rejects(
+      engine.updateCellsAsync(
+        Array.from({ length: 1024 }, (_, rowIndex) => ({ rowIndex, columnKey: 'value', value: 'new' })),
+        options,
+      ),
+      /host failure/,
+    );
+    assert.deepEqual(engine.exportState(), before);
+    assert.equal(source.getValue(1023, 'value'), 'old');
+    assert.equal(engine.canUndo(), false);
+    assert.deepEqual(changes, []);
+    await engine.updateCellsAsync([{ rowIndex: 0, columnKey: 'value', value: 'retry' }], scheduler);
+    assert.equal(source.getValue(0, 'value'), 'retry');
+    assert.equal(engine.undo(), true);
+    assert.equal(source.getValue(0, 'value'), 'old');
+    engine.destroy();
+  }
+});
+
 test('revision-guarded final checks yield and reject late changes without losing data or history', async () => {
   for (const operation of ['update', 'paste', 'undo', 'redo']) {
     const { engine, source } = fixture();

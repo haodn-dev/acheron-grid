@@ -51,3 +51,21 @@ test('undo availability is not replay permission and a veto retains the pending 
   assert.equal(engine.canUndo(), false);
   assert.equal(engine.undo(), false);
 });
+test('malformed structural capability queries and array formatting leave state and history untouched', () => {
+  const source = new LocalDataSource([{ a: 'original' }], (_, i) => i);
+  const grid = createGridEngine({ dataSource: source, columns: [{ key: 'a', title: 'A', editable: true }] });
+  grid.select(0, 0);
+  const before = grid.exportState();
+  assert.equal(
+    grid.canChangeStructure({ axis: 'row', kind: 'move', indices: Array(1), beforeIndex: 0, count: 1 }),
+    false,
+  );
+  assert.throws(() => grid.format([{ scope: 'table' }], []), TypeError);
+  assert.throws(
+    () => grid.restoreState({ ...before, formats: [{ target: { scope: 'table' }, patch: [] }] }),
+    TypeError,
+  );
+  assert.deepEqual(grid.exportState(), before);
+  assert.equal(grid.canUndo(), false);
+  grid.destroy();
+});

@@ -121,7 +121,7 @@ export function choicePanel(
           if (disposed || controller.signal.aborted || !panel.isConnected) return;
           if (
             !Array.isArray(values) ||
-            values.some(
+            Array.from(values).some(
               (value) =>
                 !value ||
                 typeof value.value !== 'string' ||

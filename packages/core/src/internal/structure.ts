@@ -300,7 +300,7 @@ export function createStructure(
       !Number.isSafeInteger(request.count) ||
       request.count < 1 ||
       new Set(request.indices).size !== request.indices.length ||
-      request.indices.some((i) => !Number.isSafeInteger(i) || i < 0 || i >= limit)
+      [...request.indices].some((i) => !Number.isSafeInteger(i) || i < 0 || i >= limit)
     )
       return false;
     if (

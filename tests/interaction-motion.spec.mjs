@@ -66,6 +66,7 @@ test('pointer drag shows a real row or column ghost, commits on release, cancels
   await setup(page);
   await page.evaluate(() => window.grid.selectRow(0));
   const row = page.getByRole('button', { name: 'Select row 1', exact: true });
+  await expect(row).toBeVisible();
   const bounds = await row.boundingBox();
   await page.mouse.move(bounds.x + 10, bounds.y + bounds.height / 2);
   await page.mouse.down();
@@ -333,6 +334,50 @@ test('live arrows compare successive values and charts animate without data writ
   expect(await page.evaluate(() => window.samples.every((s) => (s.progress ?? 1) === 1))).toBe(true);
 });
 
+test('live value indicator gutters preserve formatted cell backgrounds', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
+    window.source = new LocalDataSource([{ id: 1, price: 10 }], (row) => row.id);
+    window.grid = createGrid({
+      container: document.querySelector('#grid'),
+      columns: [{ key: 'price', title: 'Price' }],
+      dataSource: window.source,
+      motion: { valueIndicators: true },
+    });
+    window.grid.format([{ scope: 'column', columnIndex: 0 }], { background: '#123456' });
+  });
+  const pixel = () =>
+    page.locator('canvas').evaluate((canvas) => {
+      const scale = canvas.width / canvas.clientWidth;
+      return Array.from(canvas.getContext('2d').getImageData(Math.round(2 * scale), Math.round(42 * scale), 1, 1).data);
+    });
+  await expect.poll(pixel).toEqual([18, 52, 86, 255]);
+  for (const price of [12, 8]) {
+    await page.evaluate(async (price) => {
+      window.source.setValue(0, 'price', price);
+      window.grid.refreshData('values');
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }, price);
+    await expect.poll(pixel).toEqual([18, 52, 86, 255]);
+  }
+  await page.evaluate(async () => {
+    window.grid.format([{ scope: 'column', columnIndex: 0 }], null);
+    window.grid.setTheme({ background: 'rgba(18, 52, 86, 0.5)' });
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  const translucent = await pixel();
+  for (const price of [15, 4]) {
+    await page.evaluate(async (price) => {
+      window.source.setValue(0, 'price', price);
+      window.grid.refreshData('values');
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }, price);
+    expect(await pixel()).toEqual(translucent);
+  }
+});
+
 test('hidden wrapped columns do not inflate rows after clearing a view', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
@@ -405,6 +450,41 @@ test('narrow grouped headers reserve icon space and ellipsize their titles', asy
   expect(icons[0].left).toBeGreaterThanOrEqual(icons[1].right);
 });
 
+test('minimum-width headers keep sort and filter controls reachable inside their own column', async ({ page }) => {
+  await setup(page);
+  await page.evaluate(() =>
+    window.grid.setView({
+      sort: { columnKey: 'score', direction: 'asc' },
+      filters: [{ columnKey: 'score', query: '' }],
+    }),
+  );
+  const header = page.locator('[data-grid-header-cell="1"]');
+  for (const width of [24, 40, 55, 56]) {
+    await page.evaluate((width) => window.grid.setColumnWidth(1, width), width);
+    await expect.poll(() => header.evaluate((node) => node.offsetWidth)).toBe(width);
+    expect(
+      await header.evaluate((node) => {
+        const column = node.getBoundingClientRect();
+        return Array.from(node.querySelectorAll('[data-grid-header-state]')).every((button) => {
+          const bounds = button.getBoundingClientRect();
+          return bounds.left >= column.left && bounds.right <= column.right;
+        });
+      }),
+    ).toBe(true);
+    if (width < 54) {
+      const actions = header.getByRole('button', { name: 'Sort and filter column Score', exact: true });
+      await expect(actions).toBeVisible();
+      await actions.click();
+      await expect(page.getByRole('menuitem', { name: 'Sort ascending…', exact: true })).toBeVisible();
+      await page.getByRole('menuitem', { name: 'Filter column…', exact: true }).click();
+      await expect(page.getByRole('dialog', { name: 'Filter column', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    } else {
+      await expect(header.locator('[data-grid-header-state]')).toHaveCount(2);
+    }
+  }
+});
+
 test('drag selection followed by click or Escape fades only removed tint and cancels on another drag', async ({
   page,
 }) => {
@@ -451,4 +531,28 @@ test('drag selection followed by click or Escape fades only removed tint and can
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.mouse.click(start.x, start.y);
   await expect(page.locator('[data-grid-selection-exit]')).toHaveCount(0);
+});
+
+test('merging cells does not animate unrelated row or column strips', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await setup(page);
+  const result = await page.evaluate(() => {
+    const counts = [];
+    for (const range of [
+      { startRow: 0, endRow: 0, startColumn: 0, endColumn: 1 },
+      { startRow: 0, endRow: 1, startColumn: 0, endColumn: 0 },
+    ]) {
+      window.grid.mergeCells(range);
+      counts.push(document.querySelectorAll('[data-grid-motion]').length);
+      window.grid.unmergeCells(range);
+      counts.push(document.querySelectorAll('[data-grid-motion]').length);
+      window.grid.undo();
+      counts.push(document.querySelectorAll('[data-grid-motion]').length);
+      window.grid.redo();
+      counts.push(document.querySelectorAll('[data-grid-motion]').length);
+    }
+    return counts;
+  });
+  expect(result).toEqual(Array(8).fill(0));
+  await page.evaluate(() => window.grid.destroy());
 });

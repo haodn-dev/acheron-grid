@@ -120,7 +120,7 @@ export function createAsyncDataSource<S>(options: AsyncDataSourceOptions<S>) {
           result.rows.length !== Math.max(0, Math.min(pageSize, result.total - offset))
         )
           throw new TypeError('Invalid page result.');
-        const rows = result.rows.map((row) => {
+        const rows = Array.from(result.rows, (row) => {
           if (!row || typeof row !== 'object' || Array.isArray(row)) throw new TypeError('Invalid page row.');
           return Object.freeze({ ...row });
         });

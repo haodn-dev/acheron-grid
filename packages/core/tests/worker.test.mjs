@@ -9,6 +9,28 @@ function fixture() {
   grid.select(0, 0);
   return { grid, source };
 }
+test('worker cleanup failures settle requests and still attempt every cleanup', async () => {
+  for (const failed of ['abort', 'message', 'error', 'messageerror', 'terminate']) {
+    const listeners = new Map();
+    const cleaned = [];
+    const cleanup = (name) => {
+      cleaned.push(name);
+      if (name === failed) throw Error('cleanup failed');
+    };
+    const client = createTsvWorker(() => ({
+      postMessage: () => {},
+      terminate: () => cleanup('terminate'),
+      addEventListener: (type, listener) => listeners.set(type, listener),
+      removeEventListener: (type) => cleanup(type),
+    }));
+    const promise = client.decodeTsv('a', { aborted: false, removeEventListener: () => cleanup('abort') });
+    const rejected = assert.rejects(promise, /cleanup failed/);
+    assert.doesNotThrow(() => listeners.get('message')({ data: { values: [['a']] } }));
+    await rejected;
+    assert.deepEqual(cleaned, ['abort', 'message', 'error', 'messageerror', 'terminate']);
+    client.destroy();
+  }
+});
 test('external TSV decoder output validates before mutation and preserves history on failure', async () => {
   for (const values of [
     undefined,

@@ -54,6 +54,7 @@ export function createSelection(
     const keep =
       mode === 'replace' ? [] : mode === 'extend' ? old.slice(0, Math.max(0, old.length - context.activeParts)) : old;
     const row = dependencies.sourceRow(range.startRow);
+    const changed = context.selection?.rowIndex !== row || context.selection?.columnIndex !== range.startColumn;
     const others = parts.flatMap((part) =>
       row < part.startRow || row > part.endRow
         ? [part]
@@ -79,13 +80,15 @@ export function createSelection(
     context.activeParts = others.length + 1;
     context.cachedRanges = null;
     context.displayAnchor = { row: range.startRow, col: range.startColumn };
-    notifySelection(true, true);
-    return true;
+    const rangeChanged = JSON.stringify(old) !== JSON.stringify(getSelectionRanges());
+    if (changed || rangeChanged) notifySelection(changed, rangeChanged);
+    return changed || rangeChanged;
   }
   function selectDisplay(row: number, col: number, extend = false, add = false): boolean {
     if (!context.projection && context.activeParts === 1) {
-      context.displayAnchor = { row, col };
-      return select(row, col, extend, add);
+      const result = select(row, col, extend, add);
+      if (result) context.displayAnchor = { row, col };
+      return result;
     }
     const span = dependencies.mergeAt(dependencies.sourceRow(row), col);
     if (span) {
@@ -107,7 +110,7 @@ export function createSelection(
       },
       add ? 'add' : extend ? 'extend' : 'replace',
     );
-    context.displayAnchor = from;
+    if (result) context.displayAnchor = from;
     return result;
   }
   function toggleSelection(row: number, col: number): boolean {

@@ -1,9 +1,60 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LocalDataSource } from '../dist/index.js';
+import { LocalDataSource, reorderedIndices } from '../dist/index.js';
 import { visibleRange } from '../dist/viewport.js';
 import { GridAxis } from '../dist/axis.js';
 import { decodeTsv, encodeTsv, clipboardCellLimit, clipboardTextLimit } from '../dist/tsv.js';
+
+test('local structural input rejects sparse column keys and inserted rows atomically', () => {
+  const source = new LocalDataSource([{ a: 'original' }], (_, id) => id);
+  assert.throws(() => source.addColumns(Array(1)), TypeError);
+  assert.throws(() => source.spliceRows([{ index: 1, deleteCount: 0, rows: Array(1) }]), TypeError);
+  assert.equal(source.getRowCount(), 1);
+  assert.deepEqual(source.getRow(0), { id: 0, values: { a: 'original' } });
+  assert.throws(() => reorderedIndices(2, Array(1), 0), RangeError);
+});
+
+test('hidden axis requests reject sparse indices and overflow without changing stored geometry', () => {
+  const axis = new GridAxis(2, 32);
+  assert.throws(() => axis.replaceHidden(Array(1)), RangeError);
+  axis.replaceHidden([0, 1]);
+  axis.setSize(0, 1e308);
+  axis.setSize(1, 1e308);
+  assert.throws(() => axis.replaceHidden([]), /overflow/);
+  assert.deepEqual(axis.hiddenIndices(), [0, 1]);
+  assert.equal(axis.position(2), 0);
+  assert.equal(axis.storedSize(0), 1e308);
+});
+
+test('sparse geometry agrees with a dense oracle through repeated resizing and visibility changes', () => {
+  const axis = new GridAxis(24, 32);
+  const sizes = Array(24).fill(32),
+    hidden = new Set();
+  let seed = 471;
+  const random = (limit) => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) % limit;
+  for (let step = 0; step < 120; step++) {
+    const index = random(sizes.length);
+    if (step % 3) axis.setSize(index, (sizes[index] = 1 + random(80)));
+    else {
+      if (hidden.has(index)) hidden.delete(index);
+      else hidden.add(index);
+      axis.replaceHidden([...hidden]);
+    }
+    const positions = [0];
+    for (let i = 0; i < sizes.length; i++) positions.push(positions.at(-1) + (hidden.has(i) ? 0 : sizes[i]));
+    assert.deepEqual(
+      Array.from({ length: 25 }, (_, i) => axis.position(i)),
+      positions,
+    );
+    for (const offset of [-1, 0, ...positions, positions.at(-1) + 1]) {
+      const expected = Math.max(
+        0,
+        positions.findLastIndex((position) => position <= offset),
+      );
+      assert.equal(axis.indexAt(offset), expected);
+    }
+  }
+});
 
 test('local rows preserve identity and snapshot top-level values', () => {
   const rows = [

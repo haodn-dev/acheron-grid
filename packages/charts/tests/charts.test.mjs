@@ -173,6 +173,55 @@ test('renderers route configured columns, preserve context and do not join missi
   assert.equal(createChartRenderer({ trend: 'line' })(context, { ...cell, columnKey: 'name' }), false);
 });
 
+test('smooth updates retain continuous bounded tangents when the sample count changes', () => {
+  const calls = [];
+  const ctx = new Proxy(
+    {},
+    {
+      set: () => true,
+      get:
+        (_, key) =>
+        (...args) =>
+          calls.push([key, ...args]),
+    },
+  );
+  const render = createChartRenderer({ trend: { kind: 'line', curve: 'smooth', domain: [0, 10], markerRadius: 0 } });
+  for (const [previousValue, value] of [
+    [
+      [0, 3],
+      [0, 4, 8, 10],
+    ],
+    [[0], [0, 4, 8, 10]],
+    [
+      [0, 4, 8, 10],
+      [0, 3],
+    ],
+  ]) {
+    for (const animationProgress of [0, 0.2, 0.5, 0.9, 1]) {
+      calls.length = 0;
+      render(ctx, { columnKey: 'trend', previousValue, value, animationProgress, x: 0, y: 0, width: 116, height: 52 });
+      const curves = calls.filter(([key]) => key === 'bezierCurveTo');
+      let start = calls.find(([key]) => key === 'moveTo').slice(1);
+      for (const [index, curve] of curves.entries()) {
+        const [, x1, y1, x2, y2, x, y] = curve;
+        assert.ok(curve.slice(1).every(Number.isFinite));
+        for (let step = 0; step <= 20; step++) {
+          const t = step / 20;
+          const height = (1 - t) ** 3 * start[1] + 3 * (1 - t) ** 2 * t * y1 + 3 * (1 - t) * t ** 2 * y2 + t ** 3 * y;
+          assert.ok(height >= Math.min(start[1], y) - 1e-10 && height <= Math.max(start[1], y) + 1e-10);
+        }
+        const next = curves[index + 1];
+        if (next && x !== x2 && next[1] !== x) {
+          const incoming = (y - y2) / (x - x2);
+          const outgoing = (next[2] - y) / (next[1] - x);
+          assert.ok(Math.abs(incoming - outgoing) < 1e-10, 'tangent must remain continuous');
+        }
+        start = [x, y];
+      }
+    }
+  }
+});
+
 test('chart update interpolates geometry, appends from the last point and respects gaps', () => {
   const calls = [];
   const ctx = new Proxy(

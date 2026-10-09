@@ -67,6 +67,47 @@ async function pixels(page, cells) {
     );
   }, cells);
 }
+for (const axis of ['row', 'column'])
+  test('denied ' + axis + ' selection preserves the previous Shift anchor', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(async (axis) => {
+      const { createGrid } = await import('/canvas/index.js');
+      const { LocalDataSource } = await import('/core/index.js');
+      window.denied = true;
+      window.grid = createGrid({
+        container: document.querySelector('#grid'),
+        columns: ['a', 'b', 'c'].map((key) => ({ key, title: key })),
+        dataSource: new LocalDataSource(
+          Array.from({ length: 3 }, (_, id) => ({ id, a: id, b: id, c: id })),
+          (row) => row.id,
+        ),
+        resolveCellPermission: (cell) =>
+          window.denied &&
+          (axis === 'row'
+            ? cell.rowIndex === 1 && cell.columnIndex === 0
+            : cell.rowIndex === 0 && cell.columnIndex === 1)
+            ? { selectable: false }
+            : {},
+        motion: false,
+      });
+      window.grid[axis === 'row' ? 'selectRow' : 'selectColumn'](0);
+      window.beforeDenied = window.grid.getSelectionRanges();
+      window.grid[axis === 'row' ? 'selectRow' : 'selectColumn'](1);
+    }, axis);
+    expect(await page.evaluate(() => window.grid.getSelectionRanges())).toEqual(
+      await page.evaluate(() => window.beforeDenied),
+    );
+    await page.evaluate(() => (window.denied = false));
+    const target =
+      axis === 'row'
+        ? page.getByRole('button', { name: 'Select row 3', exact: true })
+        : page.locator('[data-grid-header-cell="2"]');
+    await target.click({ modifiers: ['Shift'] });
+    expect(await page.evaluate(() => window.grid.getSelectionRanges())).toEqual([
+      { startRow: 0, endRow: 2, startColumn: 0, endColumn: 2 },
+    ]);
+  });
+
 for (const scale of [1, 1.5, 2])
   test.describe('selection raster DPR ' + scale, () => {
     test.use({ deviceScaleFactor: scale });

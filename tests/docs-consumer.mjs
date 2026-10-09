@@ -37,6 +37,19 @@ try {
   await writeFile(remoteFile, remoteCode);
   files.push(remoteFile);
   const core = await readFile('packages/core/README.md', 'utf8');
+  const exportGuide = await readFile('packages/export/README.md', 'utf8');
+  const htmlCode = [...exportGuide.matchAll(/```ts\n([\s\S]*?)```/g)].find(([, code]) =>
+    code.includes('renderHtmlTable'),
+  )?.[1];
+  assert.ok(htmlCode, 'Missing complete HTML snapshot example.');
+  const htmlExample = directory + '/html-snapshot.ts';
+  await writeFile(htmlExample, htmlCode);
+  files.push(htmlExample);
+  const htmlRuntime = directory + '/html-snapshot.mjs';
+  await writeFile(htmlRuntime, htmlCode);
+  const htmlExecuted = spawnSync(process.execPath, [htmlRuntime], { encoding: 'utf8' });
+  assert.equal(htmlExecuted.status, 0, htmlExecuted.stderr);
+  assert.match(htmlExecuted.stdout, /<th scope="col">Name<\/th>/);
   const lifecycle = [...core.matchAll(/```ts\n([\s\S]*?)```/g)].find(([, code]) =>
     code.includes('source.spliceRows'),
   )?.[1];
@@ -89,7 +102,7 @@ try {
   const publicCatalog = await readFile('guides/core-api.md', 'utf8');
   for (const contract of Object.values(coreExportContracts)) assert.ok(publicCatalog.includes(contract));
   console.log(
-    'PASS: document hashes, five complete TypeScript examples, executable core lifecycle and core/Canvas API catalogs.',
+    'PASS: document hashes, six complete TypeScript examples, executable HTML/core lifecycle and core/Canvas API catalogs.',
   );
 } finally {
   assert.ok(resolve(directory).startsWith(resolve('test-results') + sep));

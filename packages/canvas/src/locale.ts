@@ -1,6 +1,15 @@
 export type CanvasTranslator = (message: string, ...values: readonly unknown[]) => string;
 
 export const canvasVietnameseMessages: Readonly<Record<string, string>> = Object.freeze({
+  start: 'đầu',
+  end: 'cuối',
+  Checkbox: 'Hộp kiểm',
+  'Sort and filter column {0}': 'Sắp xếp và lọc cột {0}',
+  'Drag selected items to move; Alt+arrow moves one position':
+    'Kéo các mục đã chọn để di chuyển; Alt+mũi tên di chuyển một vị trí',
+  'Drag to resize row; double-click to fit': 'Kéo để đổi chiều cao hàng; nhấp đúp để tự căn',
+  ' You can save this value.': ' Bạn có thể lưu giá trị này.',
+  ' Correct this before saving.': ' Hãy sửa giá trị trước khi lưu.',
   cell: 'ô',
   'selected cells': 'các ô đã chọn',
   table: 'bảng',
@@ -393,6 +402,15 @@ export function createCanvasTranslator(
 
 /** Complete default message inventory for application-owned locale packs. */
 export const canvasEnglishMessages: Readonly<Record<string, string>> = Object.freeze({
+  start: 'start',
+  end: 'end',
+  Checkbox: 'Checkbox',
+  'Sort and filter column {0}': 'Sort and filter column {0}',
+  'Drag selected items to move; Alt+arrow moves one position':
+    'Drag selected items to move; Alt+arrow moves one position',
+  'Drag to resize row; double-click to fit': 'Drag to resize row; double-click to fit',
+  ' You can save this value.': ' You can save this value.',
+  ' Correct this before saving.': ' Correct this before saving.',
   cell: 'cell',
   'selected cells': 'selected cells',
   table: 'table',

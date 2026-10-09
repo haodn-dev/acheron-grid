@@ -1,3 +1,4 @@
+import { axisCellRect } from './reorder-geometry.js';
 import type { DataSource, GridEngine } from '@acheron-grid/core';
 import type { MotionOptions } from '../grid.js';
 import type { GridContext } from './grid-context.js';
@@ -18,7 +19,11 @@ interface MotionContext
 }
 
 export function resolveMotion(value: boolean | MotionOptions | undefined, doc: Document): Required<MotionOptions> {
-  if (value !== undefined && typeof value !== 'boolean' && (!value || typeof value !== 'object'))
+  if (
+    value !== undefined &&
+    typeof value !== 'boolean' &&
+    (!value || typeof value !== 'object' || Array.isArray(value))
+  )
     throw new TypeError('Invalid motion settings.');
   const options = typeof value === 'object' ? value : {};
   const result = {
@@ -142,7 +147,7 @@ export function createMotion(context: MotionContext) {
         ),
       ].slice(0, 64);
       return indices.map((index) => {
-        const rect = oldView.cellRect(axis === 'row' ? index : 0, axis === 'column' ? index : 0);
+        const rect = axisCellRect(context.engine, oldView, axis === 'row' ? index : 0, axis === 'column' ? index : 0);
         return {
           key:
             axis === 'row'
@@ -150,6 +155,7 @@ export function createMotion(context: MotionContext) {
               : context.columns[index]!.key,
           position: axis === 'row' ? context.headerHeight + rect.y : rect.x,
           size: axis === 'row' ? rect.height : rect.width,
+          fixed: index < (axis === 'row' ? context.engine.frozenRows : context.engine.frozenColumns),
         };
       });
     };
@@ -171,8 +177,8 @@ export function createMotion(context: MotionContext) {
         const index = context.columns.findIndex((column) => column.key === strip.key);
         return (
           index < 0 ||
-          nextView.cellRect(0, index).x !== strip.position ||
-          nextView.cellRect(0, index).width !== strip.size
+          axisCellRect(context.engine, nextView, 0, index).x !== strip.position ||
+          axisCellRect(context.engine, nextView, 0, index).width !== strip.size
         );
       });
       axis = changedColumns ? 'column' : 'row';
@@ -183,7 +189,7 @@ export function createMotion(context: MotionContext) {
     for (const region of nextView.regions) {
       const range = axis === 'row' ? region.rows : region.columns;
       for (let i = range.start; i < range.end; i++) {
-        const rect = nextView.cellRect(axis === 'row' ? i : 0, axis === 'column' ? i : 0);
+        const rect = axisCellRect(context.engine, nextView, axis === 'row' ? i : 0, axis === 'column' ? i : 0);
         if ((axis === 'row' ? rect.height : rect.width) <= 0) continue;
         sizes.set(
           axis === 'row' ? context.dataSource.getRowId(context.engine.getRowSourceIndex(i)) : context.columns[i]!.key,
@@ -217,12 +223,35 @@ export function createMotion(context: MotionContext) {
       layoutMotion.delete(layer);
     };
     transition.finished.then(removeLayer, removeLayer);
+    const frozenExtent = axis === 'row' ? nextView.frozenHeight : nextView.frozenWidth;
+    const fixedChanged = old.some(
+      (strip) => strip.fixed && (positions.get(strip.key) !== strip.position || sizes.get(strip.key) !== strip.size),
+    );
+    if (!fixedChanged)
+      layer.style.clipPath = axis === 'row' ? `inset(${frozenExtent}px 0 0 0)` : `inset(0 0 0 ${frozenExtent}px)`;
+    const panes = [true, false].map((fixed) => {
+      const pane = context.doc.createElement('div');
+      const boundary = Math.max(0, frozenExtent);
+      pane.style.cssText = 'position:absolute;inset:0;pointer-events:none;';
+      pane.style.clipPath =
+        axis === 'row'
+          ? `inset(${fixed ? 0 : boundary}px 0 ${fixed ? Math.max(0, extent - top - boundary) : 0}px 0)`
+          : `inset(0 ${fixed ? Math.max(0, extent - boundary) : 0}px 0 ${fixed ? 0 : boundary}px)`;
+      layer.append(pane);
+      return pane;
+    });
     for (const strip of old) {
       const next = positions.get(strip.key);
-      const start = Math.max(axis === 'row' ? context.headerHeight : 0, strip.position),
+      const frozenBoundary = axis === 'row' ? context.headerHeight + oldView.frozenHeight : oldView.frozenWidth;
+      const start = Math.max(
+          axis === 'row' ? context.headerHeight : 0,
+          strip.position,
+          strip.fixed ? 0 : frozenBoundary,
+        ),
         end = Math.min(
           axis === 'row' ? context.canvas.clientHeight : context.canvas.clientWidth,
           strip.position + strip.size,
+          strip.fixed ? frozenBoundary : Infinity,
         );
       if (end <= start) continue;
       const tile = context.doc.createElement('canvas');
@@ -245,9 +274,9 @@ export function createMotion(context: MotionContext) {
           tile.width,
           tile.height,
         );
-      const destination = next ?? start;
+      const destination = next === undefined ? start : next + start - strip.position;
       tile.style.cssText = `position:absolute;pointer-events:none;left:${axis === 'column' ? destination : 0}px;top:${axis === 'row' ? destination - top : 0}px;width:${width}px;height:${height}px`;
-      layer.append(tile);
+      panes[strip.fixed ? 0 : 1]!.append(tile);
       const delta = start - destination;
       const animation = tile.animate(
         [

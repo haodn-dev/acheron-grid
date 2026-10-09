@@ -5,6 +5,49 @@ import { createNumberDisplay } from '../dist/internal/display.js';
 import { headerLayout, reorderedHeaderGroups } from '../dist/headers.js';
 import { validateMediaValue, mediaItems, parseMediaValue } from '../dist/media.js';
 import { safeWebUrl, detectLinks } from '../dist/links.js';
+import { resolveMotion } from '../dist/internal/motion.js';
+
+test('sparse media and select options are rejected before rendering', () => {
+  for (const value of [Array(1), ['image', , 'last']]) {
+    assert.throws(() => validateMediaValue(value), TypeError);
+    assert.deepEqual(mediaItems(value), []);
+  }
+  for (const type of ['select', 'multiselect'])
+    for (const values of [Array(1), ['first', , 'last']])
+      assert.throws(() => validateColumnEditor({ key: 'a', title: 'A' }, { type, values }), TypeError);
+});
+
+test('motion settings reject array objects and validate boundaries without changing caller options', () => {
+  const doc = { createElement: () => ({ animate: () => ({ cancel() {} }) }) };
+  for (const value of [[], [220], null, 'fast', 1]) assert.throws(() => resolveMotion(value, doc), TypeError);
+  for (const key of ['duration', 'selectionDuration', 'surfaceDuration']) {
+    for (const value of [-1, 1001, NaN, Infinity])
+      assert.throws(() => resolveMotion({ [key]: value }, doc), RangeError);
+    for (const value of [0, 1000]) assert.equal(resolveMotion({ [key]: value }, doc)[key], value);
+  }
+  for (const key of ['layout', 'selection', 'surfaces', 'liveSort', 'valueIndicators', 'chartUpdates'])
+    assert.throws(() => resolveMotion({ [key]: 'true' }, doc), TypeError);
+  const options = { duration: 300, liveSort: true };
+  const resolved = resolveMotion(options, doc);
+  options.duration = 500;
+  assert.equal(resolved.duration, 300);
+  assert.ok(Object.isFrozen(resolved));
+  assert.throws(() => resolveMotion({ easing: 1 }, doc), TypeError);
+  const invalidEasing = {
+    createElement: () => ({
+      animate() {
+        throw new Error('invalid');
+      },
+    }),
+  };
+  assert.throws(() => resolveMotion({ easing: 'invalid' }, invalidEasing), /Invalid motion easing/);
+});
+
+test('sparse header groups cannot silently omit a configured group', () => {
+  const columns = [{ key: 'a', title: 'A' }];
+  assert.throws(() => headerLayout(columns, Array(1)), TypeError);
+  assert.throws(() => headerLayout(columns, [{ title: 'Group', children: Array(1) }]), TypeError);
+});
 
 test('editor configuration validates option fields, duplicates and immutable choice modes', () => {
   const column = { key: 'a', title: 'A', editable: true, parse: Boolean };
