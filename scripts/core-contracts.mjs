@@ -46,6 +46,8 @@ export const coreContracts = {
     'Select a visible cell, or extend from the anchor when extend is true. Selectable policy can veto; returns whether selection changed.',
   selectRange:
     'Select an inclusive visible rectangle with replace/add/extend semantics. Validate bounds, policies and projected fragmentation before changing selection.',
+  toggleSelection:
+    'Toggle a visible cell or its entire merged span. Subtract selected cells from every overlapping rectangle; add unselected cells. Invalid coordinates, denied policies and the 128-source-range limit preserve prior state.',
   addSelection:
     'Retain the existing selection and add a visible active cell. Subject to selectable policy and range/fragment limits.',
   clearSelection:

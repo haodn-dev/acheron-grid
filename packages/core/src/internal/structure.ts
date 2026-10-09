@@ -305,7 +305,7 @@ export function createStructure(
       return false;
     if (
       context.destroyed ||
-      context.projection ||
+      (context.projection && !(request.axis === 'column' && request.kind === 'move')) ||
       context.tableLocked ||
       context.options.canChangeStructure?.(request) === false
     )

@@ -43,7 +43,50 @@ structural snapshots and final commits can still block the main thread. These AP
 do not guarantee a frame-time budget or reduce total CPU time. Server-side sort/filter is preferable for
 datasets larger than the local working set.
 
-## Retained history
+## Optional TSV worker
+
+The source preview can decode TSV in a module Worker before the existing cooperative paste preparation.
+The core root stays headless. Import the worker client explicitly and let your bundler emit the entry:
+
+```ts
+import { createTsvWorker } from '@acheron-grid/core/worker';
+
+const decoder = createTsvWorker(
+  () => new Worker(new URL('@acheron-grid/core/worker-entry', import.meta.url), { type: 'module' }),
+);
+const cancellation = new AbortController();
+try {
+  await grid.pasteAsync(text, {
+    tsvDecoder: decoder,
+    signal: cancellation.signal,
+    getRevision: () => applicationRevision,
+    yieldControl: () => new Promise<void>(resolve => setTimeout(resolve, 0)),
+  });
+} finally {
+  decoder.destroy();
+}
+```
+
+Some bundlers require an application-owned `new URL('./paste.worker.ts', import.meta.url)` instead.
+That file can contain `import '@acheron-grid/core/worker-entry';`. With plain browser ESM, serve the
+built worker entry and its relative dependencies at a same-origin URL. Import maps in the document
+do not apply inside Workers. The standalone playground serves `/core/worker-entry.js`.
+
+Each decode creates one disposable Worker, terminated on completion, error, `AbortSignal` cancellation
+or `decoder.destroy()`. A decoder permits one pending request. Worker startup, module/CSP failure and
+malformed TSV reject the promise; no partial writes occur. No silent synchronous fallback is performed:
+omit `tsvDecoder` to retain cooperative main-thread parsing. Pass a real `AbortSignal` for immediate
+termination; a signal exposing only `aborted` is checked when the operation resumes. Destroy the decoder
+when unmounting, as well as the grid. Host timeouts can abort the same controller.
+
+Worker output is validated and copied in cooperative chunks, using the existing 100,000-cell and
+10M UTF-16 limits. Revision tracking starts before decoding; permissions, identities, parsers, validators,
+history and the final atomic commit remain on the main thread. Parse progress starts after decoding;
+the worker parser does not stream progress. Structured cloning and worker startup add latency/memory.
+This does not move sorting, rendering, callbacks or the whole engine into a Worker, and does not guarantee
+lower total latency. Compare workloads with `npm run benchmark -- tests/benchmark-worker.mjs`.
+
+## Retained history limits
 
 Pass `historyLimits: { maxCommands: 100, maxValueCells: 200_000 }` when constructing an engine or Canvas
 grid. Both limits must be positive safe integers. Defaults preserve 100 commands with no value-cell

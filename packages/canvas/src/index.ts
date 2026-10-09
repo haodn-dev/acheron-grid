@@ -5,6 +5,7 @@ export type {
   ColumnType,
   ColumnEditor,
   GridOptions,
+  MotionOptions,
   Grid,
   GridTheme,
   CellRenderer,

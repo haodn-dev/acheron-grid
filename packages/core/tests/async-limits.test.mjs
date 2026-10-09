@@ -3,6 +3,84 @@ import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers/promises';
 import { createAsyncDataSource } from '@acheron-grid/core';
 
+test('async cache hits refresh LRU order without loading and observer errors are bounded', async () => {
+  let loads = 0,
+    notifications = 0;
+  const source = createAsyncDataSource({
+    pageSize: 1,
+    maxPages: 2,
+    createAbortController: () => new AbortController(),
+    load: async ({ offset }) => {
+      loads++;
+      return { total: 20, rows: [{ value: offset }] };
+    },
+  });
+  const unsubscribe = source.subscribe(() => {
+    notifications++;
+    throw Error('observer');
+  });
+  try {
+    await source.loadPage(0);
+    await source.loadPage(1);
+    await source.loadPage(0);
+    assert.equal(loads, 2);
+    await source.loadPage(2);
+    assert.equal(source.getPageState(0).status, 'ready');
+    assert.equal(source.getPageState(1), null);
+    for (let offset = 3; offset < 10; offset++) await source.loadPage(offset);
+    assert.equal(source.takeObserverErrors().length, 10);
+    assert.deepEqual(source.takeObserverErrors(), []);
+    const before = notifications;
+    unsubscribe();
+    unsubscribe();
+    await source.loadPage(10);
+    assert.equal(notifications, before);
+  } finally {
+    source.destroy();
+    source.destroy();
+  }
+});
+
+test('async malformed results and excessive cached error states remain bounded and recoverable', async () => {
+  for (const result of [
+    { total: -1, rows: [] },
+    { total: 1.5, rows: [] },
+    { total: 1, rows: null },
+    { total: 1, rows: [] },
+    { total: 1, rows: [null] },
+    { total: 1, rows: [[]] },
+  ]) {
+    const source = createAsyncDataSource({
+      pageSize: 1,
+      createAbortController: () => new AbortController(),
+      load: async () => result,
+    });
+    try {
+      await assert.rejects(source.loadPage(0));
+      assert.equal(source.getPageState(0).status, 'error');
+      assert.equal(source.getRowCount(), 0);
+    } finally {
+      source.destroy();
+    }
+  }
+  const source = createAsyncDataSource({
+    pageSize: 1,
+    maxPages: 2,
+    createAbortController: () => new AbortController(),
+    load: async () => {
+      throw Error('offline');
+    },
+  });
+  try {
+    for (let i = 0; i < 4; i++) await assert.rejects(source.loadPage(i), /offline/);
+    assert.equal(source.getPageState(0), null);
+    assert.equal(source.getPageState(1), null);
+    assert.equal(source.getPageState(2).status, 'error');
+  } finally {
+    source.destroy();
+  }
+});
+
 test('async loads bound concurrency, deduplicate queued pages and preflight range capacity', async () => {
   const requests = [];
   let active = 0,

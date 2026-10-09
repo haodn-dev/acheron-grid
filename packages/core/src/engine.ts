@@ -13,6 +13,7 @@ import type { GridState } from './state.js';
 import { snapshotLocalView as snapshotView } from './data-source.js';
 import type { LocalViewOptions } from './data-source.js';
 import { encodeBlocks, decodeBlocks } from './clipboard.js';
+import { clipboardTextLimit } from './tsv.js';
 import type { PasteOptions } from './types.js';
 import type { StructureRequest } from './structure.js';
 import type { CellUpdate, DataSource, RowId, DataRow } from './data-source.js';
@@ -344,7 +345,11 @@ export function createGridEngine(options: GridEngineOptions) {
       busy = false;
     }
   }
-  async function bulkCommand<T>(create: (guarded: boolean) => BulkSteps<T>, options: GridBulkOptions): Promise<T> {
+  async function bulkCommand<T>(
+    create: (guarded: boolean) => BulkSteps<T>,
+    options: GridBulkOptions,
+    prepare?: (captured: GridBulkOptions) => Promise<void>,
+  ): Promise<T> {
     assertAlive();
     if (busy || bulkActive) throw new Error('Nested grid mutations are not allowed.');
     bulkActive = true;
@@ -366,7 +371,7 @@ export function createGridEngine(options: GridEngineOptions) {
           return this;
         },
       };
-      return await runSteps(guarded, captured, assertAlive);
+      return await runSteps(guarded, captured, assertAlive, prepare && (() => prepare(captured)));
     } finally {
       bulkActive = false;
     }
@@ -613,6 +618,7 @@ export function createGridEngine(options: GridEngineOptions) {
   const {
     selectDisplayRange,
     selectDisplay,
+    toggleSelection,
     getSelection,
     getSelectionRange,
     getSelectionRanges,
@@ -767,6 +773,7 @@ export function createGridEngine(options: GridEngineOptions) {
         return selectDisplayRange(range, mode);
       }),
     addSelection: (row: number, col: number) => command(() => selectDisplay(row, col, false, true)),
+    toggleSelection: (row: number, col: number) => command(() => toggleSelection(row, col)),
     clearSelection: () => command(clearSelection),
     editCell: (row: number, col: number, text: string) => command(() => editCell(sourceRow(row), col, text)),
     updateCells: (updates: readonly CellUpdate[]) =>
@@ -802,8 +809,24 @@ export function createGridEngine(options: GridEngineOptions) {
       command(() => pasteBlocks(decodeBlocks(text), true, false, options)),
     copySelection: () => query(copySelection),
     paste: (text: string, options?: PasteOptions) => command(() => paste(text, options)),
-    pasteAsync: (text: string, bulk: GridBulkOptions, options?: PasteOptions) =>
-      bulkCommand((guarded) => pasteSteps(text, options && { ...options }, guarded), bulk),
+    pasteAsync: (text: string, bulk: GridBulkOptions, options?: PasteOptions) => {
+      let decoded: unknown;
+      const pasteOptions = options && { ...options };
+      const decoder = bulk?.tsvDecoder;
+      const decode = typeof decoder?.decodeTsv === 'function' ? decoder.decodeTsv.bind(decoder) : undefined;
+      return bulkCommand(
+        (guarded) => pasteSteps(text, pasteOptions, guarded, decoder ? () => decoded : undefined),
+        bulk,
+        bulk?.tsvDecoder
+          ? async (captured) => {
+              if (typeof text !== 'string' || text.length > clipboardTextLimit)
+                throw new RangeError('Clipboard text is too large.');
+              if (typeof captured.tsvDecoder?.decodeTsv !== 'function') throw new TypeError('Invalid TSV decoder.');
+              decoded = await decode!(text, captured.signal);
+            }
+          : undefined,
+      );
+    },
     undo: () => command(() => replay(false)),
     redo: () => command(() => replay(true)),
     undoAsync: (options: GridBulkOptions) => bulkCommand((guarded) => replaySteps(false, true, guarded), options),

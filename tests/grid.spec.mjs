@@ -2310,7 +2310,7 @@ test('image cells load once per visible URL, repaint on load, contain/clip and r
   expect(await page.locator('img').count()).toBe(0);
   const pixel = (x, y) =>
     page
-      .locator('canvas')
+      .locator('canvas:not([data-grid-motion])')
       .evaluate((canvas, [x, y]) => Array.from(canvas.getContext('2d').getImageData(x, y, 1, 1).data), [x, y]);
   const red =
     '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="20"><rect width="10" height="20" fill="red"/></svg>';

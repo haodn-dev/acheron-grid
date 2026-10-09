@@ -3,7 +3,7 @@ import { blocksToTsv, encodeBlocks } from '../clipboard.js';
 import type { CellUpdate, RowId } from '../data-source.js';
 import type { GridChangeSource } from '../events.js';
 import type { CellPermission } from '../permissions.js';
-import { clipboardCellLimit, clipboardTextLimit, decodeTsv, decodeTsvSteps } from '../tsv.js';
+import { clipboardCellLimit, clipboardTextLimit, decodeTsv, decodeTsvSteps, validateTsvSteps } from '../tsv.js';
 import { drain } from './bulk.js';
 import type { BulkSteps } from './bulk.js';
 import type { CellFormat, PasteOptions, SelectionRange } from '../types.js';
@@ -292,6 +292,7 @@ export function createClipboard(
           },
         });
       }
+    const previousProjection = context.projection;
     if (cooperative) {
       yield* dependencies.applyUpdatesSteps(
         updates,
@@ -310,7 +311,12 @@ export function createClipboard(
       );
     } else dependencies.applyUpdates(updates, 'paste', formatChanges);
     if (move) context.pendingCut = undefined;
-    // Preserve selection when a live filter removes a pasted row from the visible view.
+    // Existing source selection follows its records if pasted values reorder or filter the view.
+    if (
+      previousProjection?.length !== context.projection?.length ||
+      previousProjection?.some((row, index) => row !== context.projection?.[index])
+    )
+      return;
     const targets = placements.map((place) => ({
       startRow: place.row,
       endRow: place.row + (place.height ?? place.values.length) - 1,
@@ -332,8 +338,13 @@ export function createClipboard(
   ): void {
     drain(pasteBlocksSteps(blocks, structured, move, options));
   }
-  function* pasteSteps(text: string, options?: PasteOptions, guarded = false): BulkSteps<void> {
-    const values = yield* decodeTsvSteps(text, true);
+  function* pasteSteps(
+    text: string,
+    options?: PasteOptions,
+    guarded = false,
+    decoded?: () => unknown,
+  ): BulkSteps<void> {
+    const values = decoded ? yield* validateTsvSteps(decoded()) : yield* decodeTsvSteps(text, true);
     yield* pasteBlocksSteps([{ row: 0, column: 0, values }], false, false, options, true, guarded);
   }
   function paste(text: string, options?: PasteOptions): void {

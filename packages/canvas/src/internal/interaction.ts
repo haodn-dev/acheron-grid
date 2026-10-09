@@ -23,6 +23,7 @@ interface InteractionContext
     Pick<GridContext, 'engine' | 'options'>,
     Pick<GridContext['env'], 't' | 'win'>,
     Readonly<Pick<GridContext['appearance'], 'theme'>> {
+  readonly structureAction: <T>(run: () => T, axis?: 'row' | 'column') => T;
   readonly actionError: HTMLDivElement;
   readonly announceSelection: () => void;
   readonly beginEdit: () => void;
@@ -75,7 +76,9 @@ export function createInteraction(context: InteractionContext) {
   let dragFrame: number | undefined;
   let handleAnchor: { row: number; col: number } | null = null;
   let touchSelection = false;
+  let dragGhost: HTMLCanvasElement | null = null;
   let addNextSelection = false;
+  let pendingAddDrag: { row: number; col: number } | null = null;
   let resizing: {
     pointerId: number;
     axis: 'column' | 'row';
@@ -92,9 +95,9 @@ export function createInteraction(context: InteractionContext) {
     if (context.destroyed) throw new Error('Grid is destroyed.');
     if (context.editors.editor) throw new Error('Finish editing before resizing cells.');
     if (axis === context.rowAxis) {
-      context.engine.setRowHeight(index, size);
+      context.structureAction(() => context.engine.setRowHeight(index, size), 'row');
     } else {
-      context.engine.setColumnWidth(index, size);
+      context.structureAction(() => context.engine.setColumnWidth(index, size), 'column');
       context.measuredRows.clear();
     }
   }
@@ -157,6 +160,7 @@ export function createInteraction(context: InteractionContext) {
       const metrics = ctx.measureText('M');
       const lineHeight = Math.ceil(metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent) || 18;
       for (const col of allColumns ? context.columns.keys() : visibleIndices('column')) {
+        if (context.columnAxis.size(col) <= 0) continue;
         const key = context.columns[col]!.key;
         const value = context.engine.getValue(index, key);
         const custom = context.options.measureCellHeight?.(value, key, context.columnAxis.size(col));
@@ -355,7 +359,11 @@ export function createInteraction(context: InteractionContext) {
   }
 
   function onHeaderPointerDown(event: PointerEvent): void {
-    if (event.target instanceof context.win.Element && event.target.closest('[data-grid-row-group]')) return;
+    if (
+      event.target instanceof context.win.Element &&
+      event.target.closest('[data-grid-row-group], [data-grid-header-state]')
+    )
+      return;
     const moveTarget =
       event.target instanceof context.win.Element ? event.target.closest<HTMLElement>('[data-grid-reorder]') : null;
     if (
@@ -366,7 +374,7 @@ export function createInteraction(context: InteractionContext) {
       columnEdge(event) === null &&
       rowEdge(event) === null
     ) {
-      if (event.pointerType === 'touch') startTouchReorder(event, moveTarget);
+      if (event.button === 0) startTouchReorder(event, moveTarget);
       return;
     }
     if (resizing) {
@@ -607,10 +615,11 @@ export function createInteraction(context: InteractionContext) {
     const previousRange = JSON.stringify(context.getSelectionRange());
     const previousRanges = JSON.stringify(context.getSelectionRanges());
     if (
-      !(add ? context.engine.addSelection(rowIndex, columnIndex) : context.engine.select(rowIndex, columnIndex, extend))
+      !(add
+        ? context.engine.toggleSelection(rowIndex, columnIndex)
+        : context.engine.select(rowIndex, columnIndex, extend))
     )
       return;
-    const selection = context.engine.getSelection()!;
     if (add) addNextSelection = false;
     context.announceSelection();
     const rangeChanged = previousRange !== JSON.stringify(context.getSelectionRange());
@@ -784,14 +793,9 @@ export function createInteraction(context: InteractionContext) {
       selectRow(cell.row);
       return;
     }
+    const add = !event.shiftKey && (event.ctrlKey || event.metaKey || addNextSelection);
     try {
-      select(
-        cell.row,
-        cell.col,
-        event.shiftKey,
-        true,
-        !event.shiftKey && (event.ctrlKey || event.metaKey || addNextSelection),
-      );
+      select(cell.row, cell.col, event.shiftKey, true, add);
     } catch (error) {
       context.actionError.textContent =
         error instanceof Error ? context.t(error.message) : context.t('Unable to add selection.');
@@ -837,6 +841,7 @@ export function createInteraction(context: InteractionContext) {
       }
     }
     if (event.pointerType !== 'touch') {
+      pendingAddDrag = add ? { row: cell.row, col: cell.col } : null;
       dragPointer = event.pointerId;
       context.scroller.setPointerCapture(event.pointerId);
     }
@@ -850,6 +855,30 @@ export function createInteraction(context: InteractionContext) {
     }
     const cell = pointerCell(dragPosition, true);
     if (!cell) return;
+    if (pendingAddDrag) {
+      const start = pendingAddDrag;
+      const span = context.engine.getMerge(start.row, start.col);
+      if (
+        span
+          ? cell.row >= span.startRow &&
+            cell.row <= span.endRow &&
+            cell.col >= span.startColumn &&
+            cell.col <= span.endColumn
+          : cell.row === start.row && cell.col === start.col
+      )
+        return;
+      // A modifier tap toggles; crossing into another cell starts an additive drag at the pressed cell.
+      pendingAddDrag = null;
+      try {
+        context.engine.addSelection(start.row, start.col);
+      } catch (error) {
+        context.actionError.textContent =
+          error instanceof Error ? context.t(error.message) : context.t('Unable to add selection.');
+        context.actionError.style.display = 'block';
+        onPointerEnd();
+        return;
+      }
+    }
     if (handleAnchor)
       selectScope(
         {
@@ -899,6 +928,7 @@ export function createInteraction(context: InteractionContext) {
   }
 
   function onPointerEnd(): void {
+    pendingAddDrag = null;
     if (touchReorder) clearReorder();
     const pointer = dragPointer;
     dragPointer = null;
@@ -1116,6 +1146,9 @@ export function createInteraction(context: InteractionContext) {
       dragFrame = undefined;
       if (context.root.hasPointerCapture(pointer)) context.root.releasePointerCapture(pointer);
     }
+    dragGhost?.remove();
+    dragGhost = null;
+    context.reorderBadge.style.transform = '';
     reorderDrag = null;
     context.reorderGuide.style.display = context.reorderBadge.style.display = 'none';
     context.root.style.cursor = '';
@@ -1171,8 +1204,9 @@ export function createInteraction(context: InteractionContext) {
           last === first ? first + 1 : `${first + 1}–${last + 1}`,
         )
       : context.t('Moving here is disabled');
-    context.reorderBadge.style.left = `${Math.max(4, Math.min(context.root.clientWidth - context.reorderBadge.offsetWidth - 4, event.clientX - origin.left + 14))}px`;
-    context.reorderBadge.style.top = `${Math.max(4, Math.min(context.root.clientHeight - context.reorderBadge.offsetHeight - 4, event.clientY - origin.top + 14))}px`;
+    context.reorderBadge.style.left = '0px';
+    context.reorderBadge.style.top = '0px';
+    context.reorderBadge.style.transform = `translate(${Math.max(4, Math.min(context.root.clientWidth - context.reorderBadge.offsetWidth - 4, event.clientX - origin.left + 14))}px, ${Math.max(4, Math.min(context.root.clientHeight - context.reorderBadge.offsetHeight - 4, event.clientY - origin.top + 14))}px)`;
     context.reorderBadge.style.display = 'block';
     return { beforeIndex, allowed };
   }
@@ -1212,6 +1246,50 @@ export function createInteraction(context: InteractionContext) {
     )
       return;
     touchReorder.moved = true;
+    if (!dragGhost && context.context) {
+      const canvas = context.context.canvas,
+        view = context.viewport();
+      const first = reorderDrag.indices[0]!;
+      const rect = view.cellRect(reorderDrag.axis === 'row' ? first : 0, reorderDrag.axis === 'column' ? first : 0);
+      const x = reorderDrag.axis === 'row' ? 0 : Math.max(0, rect.x);
+      const y = reorderDrag.axis === 'row' ? Math.max(context.headerHeight, context.headerHeight + rect.y) : 0;
+      const width =
+        reorderDrag.axis === 'row'
+          ? canvas.clientWidth
+          : Math.max(0, Math.min(canvas.clientWidth, rect.x + rect.width) - x);
+      const height =
+        reorderDrag.axis === 'row'
+          ? Math.max(0, Math.min(canvas.clientHeight, context.headerHeight + rect.y + rect.height) - y)
+          : canvas.clientHeight;
+      if (width > 0 && height > 0) {
+        dragGhost = context.root.ownerDocument.createElement('canvas');
+        dragGhost.dataset.gridDragGhost = reorderDrag.axis;
+        dragGhost.setAttribute('aria-hidden', 'true');
+        const ratio = canvas.width / canvas.clientWidth;
+        dragGhost.width = Math.ceil(width * ratio);
+        dragGhost.height = Math.ceil(height * ratio);
+        dragGhost
+          .getContext('2d')!
+          .drawImage(
+            canvas,
+            x * ratio,
+            y * ratio,
+            width * ratio,
+            height * ratio,
+            0,
+            0,
+            dragGhost.width,
+            dragGhost.height,
+          );
+        dragGhost.style.cssText = `position:absolute;pointer-events:none;z-index:8;opacity:.92;left:${context.indexWidth + x}px;top:${y}px;width:${width}px;height:${height}px;box-shadow:0 4px 16px #0003;outline:1px solid var(--acheron-selection-color)`;
+        context.root.append(dragGhost);
+      }
+    }
+    if (dragGhost)
+      dragGhost.style.transform =
+        reorderDrag.axis === 'row'
+          ? `translateY(${position.clientY - touchReorder.startY}px)`
+          : `translateX(${position.clientX - touchReorder.startX}px)`;
     const bounds = context.scroller.getBoundingClientRect(),
       view = context.viewport();
     const hit = view.hitTest(

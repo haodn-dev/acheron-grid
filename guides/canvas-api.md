@@ -474,6 +474,22 @@ getCellPermission: (rowIndex: number, columnIndex: number) => CellPermission
 
 ## Layout and browser controls
 
+### getMotion
+
+```ts
+getMotion: () => Readonly<Required<MotionOptions>>
+```
+
+
+
+### setMotion
+
+```ts
+setMotion: (value: boolean | MotionOptions) => void
+```
+
+
+
 ### setColumnEditor
 
 ```ts
@@ -638,7 +654,7 @@ Call createGrid with GridOptions. Required fields are marked; options are read a
 | onEditorMount | No | `((cell: Readonly<CellEditorInfo>, editor: CellEditor) => void \| (() => void)) \| undefined` |
 | onObserverError | No | `((error: unknown) => void) \| undefined` |
 | choiceEditor | No | `false \| ChoiceEditorOptions \| undefined` |
-| motion | No | `boolean \| { readonly duration?: number; } \| undefined` |
+| motion | No | `boolean \| MotionOptions \| undefined` |
 | tableLockNotice | No | `false \| { readonly title?: string; readonly description?: string; } \| undefined` |
 | selectionStyle | No | `{ readonly activeCellBorderInRange?: boolean; readonly activeBorderWidth?: number; readonly headerTintOpacity?: number; readonly rangeBorderWidth?: number; readonly rangeTintOpacity?: number; } \| undefined` |
 | allowColumnChanges | No | `boolean \| undefined` |

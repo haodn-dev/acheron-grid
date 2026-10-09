@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 const coreFiles = new Set([
+  'worker.js',
+  'worker-entry.js',
   'paged-remote-data-source.js',
   'internal/remote-json.js',
   'internal/bulk.js',
@@ -118,7 +120,9 @@ createServer(async (request, response) => {
   const file = segments.join('/');
   if (
     request.url !== '/' + pkg + '/' + file ||
-    !(pkg === 'core' ? coreFiles : pkg === 'canvas' ? canvasFiles : new Set()).has(file)
+    !(
+      pkg === 'core' ? coreFiles : pkg === 'canvas' ? canvasFiles : pkg === 'charts' ? new Set(['index.js']) : new Set()
+    ).has(file)
   ) {
     response.writeHead(404).end();
     return;

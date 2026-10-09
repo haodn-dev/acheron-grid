@@ -124,3 +124,36 @@ test('nested row groups keep source identity, freeze, selection, source height a
   engine.setView({ filters: [{ columnKey: 'a', query: 'A' }] });
   assert.equal(engine.getRowGroups().length, 2);
 });
+
+test('merging a larger rectangle replaces contained merges atomically and preserves values and history', () => {
+  let blocked = false;
+  const { engine, source } = fixture({ canChangeLayout: () => !blocked });
+  const second = { startRow: 4, endRow: 5, startColumn: 1, endColumn: 2 };
+  const unrelated = { startRow: 8, endRow: 9, startColumn: 0, endColumn: 0 };
+  const larger = { startRow: 0, endRow: 6, startColumn: 0, endColumn: 2 };
+  engine.mergeCells(span);
+  engine.mergeCells(second);
+  engine.mergeCells(unrelated);
+  const before = engine.getMergedCells();
+  assert.equal(engine.canMerge(span), false);
+  assert.equal(engine.canMerge({ ...larger, endRow: 4 }), false);
+  assert.throws(() => engine.mergeCells({ ...larger, endRow: 4 }));
+  blocked = true;
+  assert.equal(engine.canMerge(larger), false);
+  blocked = false;
+  engine.setLocked({ scope: 'cell', rowIndex: 6, columnIndex: 2 }, true);
+  assert.equal(engine.canMerge(larger), false);
+  engine.setLocked({ scope: 'cell', rowIndex: 6, columnIndex: 2 }, false);
+  assert.equal(engine.canMerge(larger), true);
+  engine.mergeCells(larger);
+  assert.deepEqual(engine.getMergedCells(), [unrelated, larger]);
+  assert.equal(source.getValue(2, 'b'), 'B2');
+  assert.equal(source.getValue(4, 'b'), 'B4');
+  engine.undo();
+  assert.deepEqual(engine.getMergedCells(), before);
+  engine.redo();
+  assert.deepEqual(engine.getMergedCells(), [unrelated, larger]);
+  engine.unmergeCells(larger);
+  assert.deepEqual(engine.getMergedCells(), [unrelated]);
+  assert.equal(source.getValue(4, 'b'), 'B4');
+});

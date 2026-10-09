@@ -618,6 +618,14 @@ addSelection: (row: number, col: number) => boolean
 
 Retain the existing selection and add a visible active cell. Subject to selectable policy and range/fragment limits.
 
+### toggleSelection
+
+```ts
+toggleSelection: (row: number, col: number) => boolean
+```
+
+Toggle a visible cell or its entire merged span. Subtract selected cells from every overlapping rectangle; add unselected cells. Invalid coordinates, denied policies and the 128-source-range limit preserve prior state.
+
 ### setFrozen
 
 ```ts
@@ -1074,6 +1082,10 @@ export interface GridBulkOptions {
   readonly onProgress?: (progress: GridBulkProgress) => void;
   /** Must change on external data, schema or permission changes during the operation. */
   readonly getRevision?: () => string;
+  /** Optional off-thread TSV decoder. Results are validated before paste. */
+  readonly tsvDecoder?: {
+    decodeTsv(text: string, signal?: { readonly aborted: boolean }): Promise<unknown>;
+  };
 }
 ```
 

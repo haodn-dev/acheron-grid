@@ -60,3 +60,27 @@ export function* decodeTsvSteps(text: string, cooperative = false): BulkSteps<st
 export function decodeTsv(text: string): string[][] {
   return drain(decodeTsvSteps(text));
 }
+
+/** Validate and copy external decoder output without trusting its worker boundary. */
+export function* validateTsvSteps(input: unknown): BulkSteps<string[][]> {
+  if (!Array.isArray(input) || !input.length || input.length > clipboardCellLimit)
+    throw new TypeError('Invalid decoded TSV.');
+  const width = Array.isArray(input[0]) ? input[0].length : 0;
+  if (!width || width * input.length > clipboardCellLimit) throw new RangeError('Clipboard has too many cells.');
+  const rows: string[][] = [];
+  let length = 0,
+    cells = 0;
+  for (const row of input) {
+    if (!Array.isArray(row) || row.length !== width) throw new TypeError('Invalid decoded TSV.');
+    const copy: string[] = [];
+    for (const value of row) {
+      if (typeof value !== 'string') throw new TypeError('Invalid decoded TSV.');
+      length += value.length;
+      if (length > clipboardTextLimit) throw new RangeError('Clipboard text is too large.');
+      copy.push(value);
+      if (++cells % 256 === 0) yield { phase: 'parse', completed: cells, total: width * input.length };
+    }
+    rows.push(copy);
+  }
+  return rows;
+}

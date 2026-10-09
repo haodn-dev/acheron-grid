@@ -26,6 +26,154 @@ function fixture(write = async (request) => accepted(request), extra = {}) {
     ...extra,
   });
 }
+
+test('remote option, snapshot and row validation reject malformed transport data', async () => {
+  for (const extra of [
+    { datasetId: '' },
+    { datasetId: 1 },
+    { columnKeys: [] },
+    { columnKeys: ['name', 'name'] },
+    { columnKeys: [''] },
+    { columnKeys: [1] },
+    { maxRows: 0 },
+    { maxPendingCells: 0.5 },
+  ])
+    assert.throws(() => fixture(undefined, extra), TypeError);
+  for (const value of [
+    null,
+    { ...snapshot(), datasetId: 'wrong' },
+    { ...snapshot(), revision: '' },
+    { ...snapshot(), revision: 1 },
+    { ...snapshot(), rows: {} },
+    { ...snapshot(), rows: [null] },
+    { ...snapshot(), rows: [{ id: 'a', values: [] }] },
+    { ...snapshot(), rows: [{ id: 'a', values: {} }] },
+    {
+      ...snapshot(),
+      rows: [
+        { id: 'a', values: { name: 'x' } },
+        { id: 'a', values: { name: 'y' } },
+      ],
+    },
+  ]) {
+    const remote = fixture(undefined, { load: async () => value });
+    try {
+      await assert.rejects(remote.resync());
+      assert.equal(remote.status, 'disconnected');
+      assert.equal(remote.revision, null);
+      assert.equal(remote.getRowCount(), 0);
+    } finally {
+      remote.destroy();
+    }
+  }
+  const limited = fixture(undefined, { maxRows: 1 });
+  try {
+    await assert.rejects(limited.resync(), /snapshot/);
+  } finally {
+    limited.destroy();
+  }
+});
+
+test('remote malformed receipts and mutation IDs preserve drafts for explicit retry', async () => {
+  const results = [
+    null,
+    {},
+    { status: 'unknown' },
+    { status: 'rejected', datasetId: 'wrong', message: 'no' },
+    { status: 'rejected', datasetId: 'people', message: 1 },
+    { status: 'accepted', snapshot: null },
+  ];
+  for (const result of results) {
+    const remote = fixture(async (request) => result && { mutationId: request.mutationId, ...result });
+    try {
+      await remote.resync();
+      remote.setValue(0, 'name', 'draft');
+      await assert.rejects(remote.commit());
+      assert.equal(remote.pendingCellCount, 1);
+      assert.equal(remote.getValue(0, 'name'), 'draft');
+      assert.equal(remote.revision, '0');
+    } finally {
+      remote.destroy();
+    }
+  }
+  for (const id of ['', null, 1]) {
+    const remote = fixture(undefined, { createMutationId: () => id });
+    try {
+      await remote.resync();
+      remote.setValue(0, 'name', 'draft');
+      assert.throws(() => remote.commit(), /mutation ID/);
+      assert.equal(remote.status, 'ready');
+      assert.equal(remote.pendingCellCount, 1);
+    } finally {
+      remote.destroy();
+    }
+  }
+});
+
+test('remote observer failures are bounded, drainable and unsubscribed without disrupting state', async () => {
+  const remote = fixture();
+  let notifications = 0;
+  const unsubscribe = remote.subscribe(() => {
+    notifications++;
+    throw Error('observer');
+  });
+  try {
+    for (let i = 0; i < 8; i++) {
+      await remote.resync();
+      remote.disconnect();
+    }
+    assert.equal(remote.takeObserverErrors().length, 10);
+    assert.deepEqual(remote.takeObserverErrors(), []);
+    const before = notifications;
+    unsubscribe();
+    unsubscribe();
+    await remote.reconnect();
+    assert.equal(notifications, before);
+    assert.equal(remote.status, 'ready');
+    await remote.commit();
+    assert.equal(remote.pendingCellCount, 0);
+  } finally {
+    remote.destroy();
+    remote.destroy();
+  }
+  for (const action of [
+    () => remote.getRowCount(),
+    () => remote.getRowId(0),
+    () => remote.getValue(0, 'name'),
+    () => remote.getPendingChanges(),
+    () => remote.subscribe(() => {}),
+    () => remote.resync(),
+    () => remote.commit(),
+    () => remote.disconnect(),
+    () => remote.acceptServer(),
+    () => remote.setValue(0, 'name', 'x'),
+  ])
+    assert.throws(action, /destroyed/);
+});
+
+test('remote late rejected loaders and writers cannot resurrect a disconnected or destroyed source', async () => {
+  for (const phase of ['load', 'write'])
+    for (const finish of ['disconnect', 'destroy']) {
+      let reject;
+      const delayed = () =>
+        new Promise((_, fail) => {
+          reject = fail;
+        });
+      const remote = fixture(phase === 'write' ? delayed : undefined, phase === 'load' ? { load: delayed } : {});
+      if (phase === 'write') {
+        await remote.resync();
+        remote.setValue(0, 'name', 'draft');
+      }
+      const pending = phase === 'load' ? remote.resync() : remote.commit();
+      await Promise.resolve();
+      remote[finish]();
+      reject(Error('late transport failure'));
+      await pending;
+      assert.equal(remote.status, finish === 'destroy' ? 'destroyed' : 'disconnected');
+      assert.equal(remote.lastError, undefined);
+      remote.destroy();
+    }
+});
 test('remote engine validation, optimistic atomic drafts, undo and accepted canonical refresh', async () => {
   const remote = fixture();
   await remote.resync();

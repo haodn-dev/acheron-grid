@@ -69,6 +69,8 @@ export const canvasVietnameseMessages: Readonly<Record<string, string>> = Object
   'Select column': 'Chọn cột',
   'Select all cells': 'Chọn tất cả ô',
   'Select row {0}': 'Chọn hàng {0}',
+  'Sort column {0}': 'Sắp xếp cột {0}',
+  'Filter column {0}': 'Lọc cột {0}',
   'Select column {0}': 'Chọn cột {0}',
   'Hide selected columns': 'Ẩn các cột đã chọn',
   'Hide selected rows': 'Ẩn các hàng đã chọn',
@@ -233,8 +235,8 @@ export const canvasVietnameseMessages: Readonly<Record<string, string>> = Object
   'Action failed.': 'Thao tác không thành công.',
   'Rich text is too large to display': 'Văn bản có định dạng quá lớn để hiển thị',
   'Rich text unavailable': 'Không hiển thị được văn bản có định dạng',
-  'Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Clear the view before changing rows or columns.':
-    'Vùng chọn, lịch sử, màu, khóa và kích thước đi theo bản ghi. Các thay đổi cập nhật chế độ xem tự động. Bỏ chế độ xem trước khi thay đổi cấu trúc hàng hoặc cột.',
+  'Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Columns can be reordered; clear the view before changing rows or adding/removing columns.':
+    'Vùng chọn, lịch sử, màu, khóa và kích thước đi theo bản ghi. Có thể đổi thứ tự cột; bỏ chế độ xem trước khi thay đổi hàng hoặc thêm/xóa cột.',
   'The host applies this row view. State retention depends on its handler.':
     'Ứng dụng áp dụng chế độ xem này. Việc giữ trạng thái phụ thuộc trình xử lý của ứng dụng.',
   'Alt+click to open links': 'Alt+nhấp để mở liên kết',
@@ -655,6 +657,8 @@ export const canvasEnglishMessages: Readonly<Record<string, string>> = Object.fr
   'Select an image or people column before pasting images.': 'Select an image or people column before pasting images.',
   'Select column': 'Select column',
   'Select column {0}': 'Select column {0}',
+  'Sort column {0}': 'Sort column {0}',
+  'Filter column {0}': 'Filter column {0}',
   'Select options must be nonempty.': 'Select options must be nonempty.',
   'Select row': 'Select row',
   'Select row {0}': 'Select row {0}',
@@ -663,8 +667,8 @@ export const canvasEnglishMessages: Readonly<Record<string, string>> = Object.fr
   'Selected cells': 'Selected cells',
   'Selection changed before paste. Try again.': 'Selection changed before paste. Try again.',
   'Selection cleared.': 'Selection cleared.',
-  'Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Clear the view before changing rows or columns.':
-    'Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Clear the view before changing rows or columns.',
+  'Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Columns can be reordered; clear the view before changing rows or adding/removing columns.':
+    'Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Columns can be reordered; clear the view before changing rows or adding/removing columns.',
   'Show all actions': 'Show all actions',
   'Show all hidden columns': 'Show all hidden columns',
   'Show all hidden rows': 'Show all hidden rows',

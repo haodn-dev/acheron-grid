@@ -15,6 +15,25 @@ function fixture(rows, permissions) {
   engine.selectRange({ startRow: 0, endRow: rows.length - 1, startColumn: 0, endColumn: 1 });
   return engine;
 }
+
+test('XLSX rejects invalid names and boolean flags before reading values; preserves XML escaping', () => {
+  const engine = fixture([{ text: '<&>"\'\r\n_x0041_', value: true }]);
+  try {
+    for (const sheetName of ['', 'x'.repeat(32), "'start", "end'", 'a[b', 'a:b', 'a*b', 'a?b', 'a/b', 'a\\b', 123])
+      assert.throws(() => exportSelectionXlsx(engine, { sheetName }), TypeError);
+    for (const includeHeaders of [null, 'true', 1])
+      assert.throws(() => exportSelectionXlsx(engine, { includeHeaders }), TypeError);
+    const files = unzipSync(exportSelectionXlsx(engine, { includeHeaders: true, sheetName: 'A&B' }));
+    const sheet = strFromU8(files['xl/worksheets/sheet1.xml']);
+    assert.match(sheet, /&lt;&amp;&gt;&quot;&apos;&#13;/);
+    assert.match(sheet, /_x005F_x0041_/);
+    assert.match(strFromU8(files['xl/workbook.xml']), /A&amp;B/);
+    engine.clearSelection();
+    assert.throws(() => exportSelectionXlsx(engine), /rectangular/);
+  } finally {
+    engine.destroy();
+  }
+});
 test('XLSX preserves scalar types, Unicode and literal formula strings in a valid package', () => {
   const engine = fixture([
     { text: '=1+1 Việt 😃 & <', value: -3 },

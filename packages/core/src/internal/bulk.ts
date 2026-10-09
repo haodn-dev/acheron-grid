@@ -10,6 +10,10 @@ export interface GridBulkOptions {
   readonly onProgress?: (progress: GridBulkProgress) => void;
   /** Must change on external data, schema or permission changes during the operation. */
   readonly getRevision?: () => string;
+  /** Optional off-thread TSV decoder. Results are validated before paste. */
+  readonly tsvDecoder?: {
+    decodeTsv(text: string, signal?: { readonly aborted: boolean }): Promise<unknown>;
+  };
 }
 export type BulkSteps<T> = Generator<GridBulkProgress, T, void>;
 export function drain<T>(steps: BulkSteps<T>): T {
@@ -17,10 +21,16 @@ export function drain<T>(steps: BulkSteps<T>): T {
   while (!result.done) result = steps.next();
   return result.value;
 }
-export async function runSteps<T>(steps: BulkSteps<T>, options: GridBulkOptions, assertAlive: () => void): Promise<T> {
+export async function runSteps<T>(
+  steps: BulkSteps<T>,
+  options: GridBulkOptions,
+  assertAlive: () => void,
+  prepare?: () => Promise<void>,
+): Promise<T> {
   if (
     !options ||
     typeof options.yieldControl !== 'function' ||
+    (options.tsvDecoder !== undefined && (!options.tsvDecoder || typeof options.tsvDecoder.decodeTsv !== 'function')) ||
     (options.onProgress !== undefined && typeof options.onProgress !== 'function') ||
     (options.getRevision !== undefined && typeof options.getRevision !== 'function')
   )
@@ -36,6 +46,11 @@ export async function runSteps<T>(steps: BulkSteps<T>, options: GridBulkOptions,
   try {
     check();
     await yieldControl();
+    if (prepare) {
+      check();
+      await prepare();
+      check();
+    }
     while (true) {
       check();
       const result = steps.next();

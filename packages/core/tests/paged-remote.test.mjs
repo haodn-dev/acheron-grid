@@ -103,6 +103,140 @@ function fixture(extra = {}) {
   return { source, rows, requests, loads: () => loads };
 }
 
+test('paged option and page payload boundaries reject malformed loads without installing revisions', async () => {
+  for (const extra of [
+    { datasetId: '' },
+    { datasetId: 3 },
+    { columnKeys: [] },
+    { columnKeys: ['title', 'title'] },
+    { columnKeys: [''] },
+    { maxPendingCells: 0 },
+    { maxPendingCells: Infinity },
+  ])
+    assert.throws(() => fixture(extra), TypeError);
+  const valid = { datasetId: 'tasks', revision: '1', total: 1, rows: [{ id: 0, values: { title: 'old' } }] };
+  for (const patch of [
+    { datasetId: 'wrong' },
+    { revision: '' },
+    { revision: 1 },
+    { total: -1 },
+    { total: 1.5 },
+    { rows: [] },
+    { rows: null },
+    { rows: [null] },
+    { rows: [{ id: 0, values: [] }] },
+    { rows: [{ id: 0, values: {} }] },
+    { rows: [{ id: '\0acheron-unloaded:fake', values: { title: 'x' } }] },
+  ]) {
+    const { source } = fixture({ load: async () => ({ ...valid, ...patch }) });
+    try {
+      await assert.rejects(source.loadPage(0));
+      assert.equal(source.revision, null);
+      assert.equal(source.pendingCellCount, 0);
+    } finally {
+      source.destroy();
+    }
+  }
+});
+
+test('paged invalid batches, draft limits and reverts leave existing drafts atomic', async () => {
+  const { source } = fixture({ maxPendingCells: 1 });
+  try {
+    await source.loadPage(0);
+    source.setValue(0, 'title', 'draft');
+    for (const updates of [
+      null,
+      [{ rowIndex: 0, columnKey: 'missing', value: 'x' }],
+      [{ rowIndex: 0, columnKey: 'title' }],
+      [
+        { rowIndex: 0, columnKey: 'title', value: 'changed' },
+        { rowIndex: 1, columnKey: 'title', value: 'new' },
+      ],
+    ]) {
+      assert.throws(() => source.setValues(updates));
+      assert.equal(source.pendingCellCount, 1);
+      assert.equal(source.getValue(0, 'title'), 'draft');
+      assert.equal(source.getValue(1, 'title'), '1');
+    }
+    source.setValue(0, 'title', '0');
+    assert.equal(source.pendingCellCount, 0);
+    await source.commit();
+    source.setValue(0, 'title', 'draft');
+    const changes = source.getPendingChanges();
+    assert.ok(Object.isFrozen(changes) && Object.isFrozen(changes[0]));
+    source.discardPending();
+    assert.equal(source.pendingCellCount, 0);
+    source.reset(4);
+    assert.equal(source.getRowCount(), 4);
+    assert.equal(source.revision, null);
+    assert.throws(() => source.acceptServer(), /conflict/);
+  } finally {
+    source.destroy();
+    source.destroy();
+  }
+  for (const action of [
+    () => source.setValue(0, 'title', 'x'),
+    () => source.reset(),
+    () => source.cancel(),
+    () => source.discardPending(),
+    () => source.acceptServer(),
+  ])
+    assert.throws(action, /destroyed/);
+  await assert.rejects(source.commit(), /destroyed/);
+});
+
+test('paged malformed receipt totals preserve drafts and committing guards prevent concurrent edits', async () => {
+  for (const total of [undefined, -1, 0.5, '1']) {
+    const { source } = fixture({
+      write: async (mutation) => ({
+        mutationId: mutation.mutationId,
+        status: 'rejected',
+        datasetId: 'tasks',
+        message: 'no',
+        total,
+      }),
+    });
+    try {
+      await source.loadPage(0);
+      source.setValue(0, 'title', 'draft');
+      await assert.rejects(source.commit());
+      assert.equal(source.getValue(0, 'title'), 'draft');
+      assert.equal(source.pendingCellCount, 1);
+      assert.equal(source.revision, '1');
+    } finally {
+      source.destroy();
+    }
+  }
+  let complete;
+  const { source } = fixture({
+    write: (mutation) =>
+      new Promise((resolve) => {
+        complete = () =>
+          resolve({
+            mutationId: mutation.mutationId,
+            status: 'rejected',
+            datasetId: 'tasks',
+            message: 'no',
+            total: 10000,
+          });
+      }),
+  });
+  await source.loadPage(0);
+  source.setValue(0, 'title', 'draft');
+  const pending = source.commit();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(source.status, 'committing');
+  await assert.rejects(source.commit(), /running/);
+  assert.throws(() => source.setValue(0, 'title', 'next'), /Resolve/);
+  assert.throws(() => source.setQuery({}), /Resolve/);
+  assert.throws(() => source.acceptServer(), /conflict/);
+  source.destroy();
+  complete();
+  await pending;
+  assert.equal(source.status, 'destroyed');
+  assert.equal(source.pendingCellCount, 0);
+});
+
 test('paged drafts survive eviction; accepted bounded receipts invalidate pages without fetching the dataset', async () => {
   const { source, loads, requests } = fixture();
   await source.loadPage(0);
