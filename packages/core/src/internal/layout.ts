@@ -5,6 +5,7 @@ import type { ViewportOptions } from '../panes.js';
 import { createViewport } from '../panes.js';
 import type { SelectionRange } from '../types.js';
 import type { EngineContext } from './engine-context.js';
+import { recordHistory } from './history-budget.js';
 export function createLayout(
   context: Pick<
     EngineContext,
@@ -76,7 +77,7 @@ export function createLayout(
     axis.setSize(index, size);
     if (previous !== size && history) {
       if (axis === context.rowAxis) context.manualRows.add(index);
-      context.past.push({
+      recordHistory(context, {
         kind: 'resize',
         axis: axis === context.rowAxis ? 'row' : 'column',
         index,
@@ -84,7 +85,6 @@ export function createLayout(
         size,
         previousManual,
       });
-      if (context.past.length > 100) context.past.shift();
       context.future.length = 0;
     }
     if (previous !== size)
@@ -114,7 +114,7 @@ export function createLayout(
       typeof hidden !== 'boolean' ||
       !Array.isArray(indices) ||
       new Set(indices).size !== indices.length ||
-      indices.some((index) => !Number.isSafeInteger(index) || index < 0 || index >= layout.count)
+      [...indices].some((index) => !Number.isSafeInteger(index) || index < 0 || index >= layout.count)
     )
       throw new RangeError('Invalid visibility request.');
     requireVisibilityPolicy(axis, indices, hidden);
@@ -130,8 +130,7 @@ export function createLayout(
     dependencies.clearSelection();
     context.pendingCut = undefined;
     if (history) {
-      context.past.push({ kind: 'visibility', axis, indices: Object.freeze(changed), hidden });
-      if (context.past.length > 100) context.past.shift();
+      recordHistory(context, { kind: 'visibility', axis, indices: Object.freeze(changed), hidden });
       context.future.length = 0;
     }
     dependencies.notify(
@@ -158,8 +157,7 @@ export function createLayout(
     const previousColumns = context.frozenColumns;
     context.frozenRows = rows;
     context.frozenColumns = columnCount;
-    context.past.push({ kind: 'freeze', previousRows, previousColumns, rows, columns: columnCount });
-    if (context.past.length > 100) context.past.shift();
+    recordHistory(context, { kind: 'freeze', previousRows, previousColumns, rows, columns: columnCount });
     context.future.length = 0;
     dependencies.notify(
       { type: 'layout' },

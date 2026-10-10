@@ -270,7 +270,7 @@ export function createEditors(context: EditorsContext) {
             editor.setAttribute('aria-invalid', 'true');
             context.editorError.textContent =
               message +
-              (column.invalidInput === 'allow' ? ' You can save this value.' : ' Correct this before saving.');
+              context.t(column.invalidInput === 'allow' ? ' You can save this value.' : ' Correct this before saving.');
             context.editorError.style.display = 'block';
           }
         } catch (error) {

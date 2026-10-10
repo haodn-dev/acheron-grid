@@ -28,7 +28,7 @@ interface MenusContext
     Pick<GridContext['env'], 'doc' | 't' | 'win'>,
     Pick<GridContext, 'engine' | 'options'> {
   readonly actionError: HTMLDivElement;
-  readonly animateLayout: <T>(run: () => T, axis: 'row' | 'column') => T;
+  readonly animateLayout: <T>(run: () => T, axis: 'row' | 'column' | 'auto') => T;
   readonly autoFitColumn: (index: number) => void;
   readonly autoFitRow: (index: number) => void;
   readonly beginEdit: () => void;
@@ -369,6 +369,9 @@ export function createMenus(context: MenusContext) {
     if (!selection) return;
     const popup = context.doc.createElement('div');
     context.overlay.menu = popup;
+    popup.dataset.gridMenuRow = String(row);
+    popup.dataset.gridMenuColumn = String(col);
+    popup.dataset.gridMenuHeader = String(header);
     popup.popover = 'auto';
     popup.setAttribute('role', 'menu');
     popup.setAttribute('aria-label', header ? context.t('Column actions') : context.t('Cell actions'));
@@ -568,16 +571,28 @@ export function createMenus(context: MenusContext) {
       item('Select column', true, () => context.selectColumn(col));
     }
     item(header ? 'Hide selected columns' : 'Hide selected rows', !context.engine.isLocked({ scope: 'table' }), () => {
-      if (header) context.engine.setColumnsHidden(context.selectedAxisIndices('column', col), true);
-      else context.engine.setRowsHidden(context.selectedAxisIndices('row', row), true);
+      if (header)
+        context.structureAction(
+          () => context.engine.setColumnsHidden(context.selectedAxisIndices('column', col), true),
+          'column',
+        );
+      else
+        context.structureAction(
+          () => context.engine.setRowsHidden(context.selectedAxisIndices('row', row), true),
+          'row',
+        );
     });
     item('Show all hidden rows', context.engine.getHiddenRows().length > 0, () =>
-      context.engine.setRowsHidden(context.engine.getHiddenRows(), false),
+      context.structureAction(() => context.engine.setRowsHidden(context.engine.getHiddenRows(), false), 'row'),
     );
     item(
       'Show all hidden columns',
       context.columns.some((_, i) => context.engine.isColumnHidden(i)),
-      () => context.engine.setColumnsHidden(context.engine.getHiddenColumns(), false),
+      () =>
+        context.structureAction(
+          () => context.engine.setColumnsHidden(context.engine.getHiddenColumns(), false),
+          'column',
+        ),
     );
     const indices = context.selectedAxisIndices(header ? 'column' : 'row', header ? col : row);
     if (!header && context.rowCount) {
@@ -1013,7 +1028,7 @@ export function createMenus(context: MenusContext) {
     dialog.addEventListener('close', () => {
       dialog.remove();
       if (context.overlay.activeDialog === dialog) context.overlay.activeDialog = null;
-      if (!context.destroyed) context.scroller.focus({ preventScroll: true });
+      if (!context.destroyed && !context.editors.editor) context.scroller.focus({ preventScroll: true });
     });
     dialog.showModal();
     title.focus();
@@ -1033,7 +1048,7 @@ export function createMenus(context: MenusContext) {
     const note = context.doc.createElement('p');
     note.textContent = context.managesView
       ? context.t(
-          'Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Clear the view before changing rows or columns.',
+          'Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Columns can be reordered; clear the view before changing rows or adding/removing columns.',
         )
       : context.t('The host applies this row view. State retention depends on its handler.');
     const input = context.doc.createElement('input');
@@ -1090,8 +1105,12 @@ export function createMenus(context: MenusContext) {
               }
             : { ...context.currentView, filters };
       try {
-        if (context.managesView) context.engine.setView(view);
-        context.currentView = view;
+        if (context.managesView)
+          context.animateLayout(() => {
+            context.engine.setView(view);
+            context.currentView = context.engine.view;
+          }, 'row');
+        else context.currentView = view;
         context.options.onViewChange?.(view);
         if (dialog.isConnected) dialog.close();
       } catch (error) {
@@ -1140,5 +1159,5 @@ export function createMenus(context: MenusContext) {
     if (!context.finishEdit(true)) return;
     openMenu(cell.row, cell.col, event.clientX, event.clientY);
   }
-  return { format, setFrozen, setLocked, openMenu, onHeaderContextMenu, onContextMenu };
+  return { openViewDialog, format, setFrozen, setLocked, openMenu, onHeaderContextMenu, onContextMenu };
 }

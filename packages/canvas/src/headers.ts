@@ -39,7 +39,7 @@ export function headerLayout(
       !item.children.length
     )
       throw new TypeError('Header groups require a title and children.');
-    const spans = item.children.map((child) => visit(child, level + 1));
+    const spans = Array.from(item.children, (child) => visit(child, level + 1));
     for (let i = 1; i < spans.length; i++)
       if (spans[i]!.start !== spans[i - 1]!.end)
         throw new TypeError('Header group columns must be contiguous and ordered.');
@@ -48,7 +48,7 @@ export function headerLayout(
     cells.push({ title: item.title, start, end, level, rowSpan: 1, leaf: false });
     return { start, end };
   }
-  groups.forEach((group) => visit(group, 0));
+  for (const group of groups) visit(group, 0);
   columns.forEach((column, index) => {
     if (!used.has(index))
       cells.push({ title: column.title, start: index, end: index + 1, level: 0, rowSpan: levels, leaf: true });

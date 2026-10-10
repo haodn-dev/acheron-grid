@@ -13,6 +13,10 @@
     "NOTICE"
   ],
   "exports": {
+    "./html": {
+      "types": "./dist/html.d.ts",
+      "import": "./dist/html.js"
+    },
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"

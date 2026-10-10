@@ -61,7 +61,8 @@ export function decodeBlocks(text: string): ClipboardBlock[] {
       formats = block.formats.map((line: unknown) => {
         if (!Array.isArray(line) || line.length !== width) throw new TypeError('Invalid clipboard formats.');
         return line.map((format: unknown) => {
-          if (!format || typeof format !== 'object') throw new TypeError('Invalid clipboard format.');
+          if (!format || typeof format !== 'object' || Array.isArray(format))
+            throw new TypeError('Invalid clipboard format.');
           const result: Record<string, string> = {};
           for (const [key, value] of Object.entries(format)) {
             if (

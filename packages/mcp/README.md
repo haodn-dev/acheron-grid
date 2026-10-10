@@ -17,6 +17,7 @@ Install core/Canvas at the same version when used. For newer APIs, use a built s
 From the source checkout, after installing dependencies:
 
 ```sh
+npm run build
 node packages/mcp/src/cli.mjs
 ```
 
@@ -49,7 +50,7 @@ The application must authorize every schema/read/write request for the connected
 
 The discovery and budget options below are unreleased source changes.
 
-- `grid_schema`: approved column keys/titles and visible row count. Schema authorization grants visibility of that count.
+- `grid_schema`: approved column keys/titles and visible row count by default. Unreleased `schemaRowCount: 'omit'` excludes the count without reading it; a synchronous host callback can return a nonnegative safe integer or null to omit it. The callback must be pure. This policy covers schema only: disable discovery if positional cursors would disclose restricted cardinality.
 - `grid_read`: `{ cells: [{ rowId, columnKey }] }`, 1–100 cells.
 - `grid_rows`: opt-in with `allowDiscovery: true`; `{ cursor?: number, limit?: number }` returns authorized `rowIds` and `nextCursor`. Limit defaults to 100 and cannot exceed 100. Requires both `discover` and `schema` authorization, plus row-level `read` approval for every returned ID. The CLI keeps discovery disabled.
 - `grid_update`: `{ cells: [{ rowId, columnKey, expected, value }] }`, 1–100 cells. Requires read/write host permission and core writable permission; host validation runs before one atomic `updateCells` call. Undo uses normal core history.
@@ -60,7 +61,13 @@ Stable IDs are resolved in the current visible view, not stale row indices. Rows
 
 Unreleased source option `getRevision: () => string` enables host-managed consistency. Return a non-empty opaque token of at most 256 characters, synchronously and without side effects. Never reuse a token within a session: change it on dataset replacement, data, query/order or permission changes, including undo. The adapter does not infer backend revisions.
 
-With this option, schema/discovery/read responses include `revision`; all tools accept `expectedRevision`. Writes require it in addition to each cell's `expected` value. Discovery continuation (`cursor > 0`) also requires it. A mismatch fails before values or mutations are returned; a changing token during a read fails before returning its result. Write receipts include the pre-write `checkedRevision`; read again for the post-write revision. Without the option, existing response shapes remain unchanged, and `expectedRevision` is rejected rather than silently ignored.
+With this option, schema/discovery/read responses include `revision`; all tools accept `expectedRevision`. Writes require it in addition to each cell's `expected` value. Discovery continuation (`cursor > 0`) also requires it. A mismatch fails before values or mutations are returned; a changing token during a read fails before returning its result. Unreleased write receipts retain the pre-write `checkedRevision` and include the post-write `revision`. If the provider fails or the post-write token exceeds the output budget, the committed receipt has `revisionUnavailable: true`: read again when possible, do not retry an already committed write. A bounded fallback receipt is checked before mutation. Without the option, successful response shapes remain unchanged, and `expectedRevision` is rejected rather than silently ignored.
+
+## Structured tool errors — Unreleased
+
+Errors retain `isError: true` and text content. `structuredContent.error` adds `{code, message, retryable}`. Codes are `INVALID_ARGUMENT`, `ACCESS_DENIED`, `CELL_UNAVAILABLE`, `CONFLICT`, `BUDGET_EXCEEDED`, `TOOL_UNAVAILABLE`, `HOST_ERROR`, `VALIDATION_FAILED` and `OPERATION_FAILED`. Only `CONFLICT` is marked retryable, meaning reread/reconcile first; never blindly repeat a write. Host validation messages must be safe for the caller. Error codes are assigned at adapter boundaries, not inferred from arbitrary host error text.
+
+Implementation and CLI are TypeScript; build generates package declarations into dist. Source `.mjs` shims keep existing checkout examples working after build. The package factory name and existing options remain available; the new policy and error type are source-preview additions.
 
 This is optimistic detection, not an immutable snapshot or remote transaction. The host must keep callbacks pure and cover all state changes in the token. Backend compare-and-swap and authorization remain mandatory for remote persistence.
 

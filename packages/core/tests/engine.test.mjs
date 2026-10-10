@@ -4,6 +4,41 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createGridEngine, LocalDataSource, LocalDataView } from '@acheron-grid/core';
 
+test('sparse visibility input fails before selection history or events change', () => {
+  const events = [];
+  const { engine } = fixture({ onEvent: (event) => events.push(event) });
+  engine.select(0, 0);
+  const before = engine.exportState();
+  const count = events.length;
+  assert.throws(() => engine.setColumnsHidden(Array(1), true), RangeError);
+  assert.deepEqual(engine.exportState(), before);
+  assert.equal(events.length, count);
+  engine.destroy();
+});
+
+test('each capability denial survives later scopes without disabling independent capabilities', () => {
+  const keys = ['editable', 'selectable', 'copyable', 'pasteable', 'writable', 'formatting'];
+  const allowed = Object.fromEntries(keys.map((key) => [key, true]));
+  for (const scope of ['grid', 'column', 'resolver']) {
+    for (const denied of keys) {
+      const policy = { ...allowed, [denied]: false };
+      const engine = createGridEngine({
+        columns: [{ key: 'a', title: 'A', editable: true, permissions: scope === 'column' ? policy : allowed }],
+        dataSource: new LocalDataSource([{ a: 1 }], (_, id) => id),
+        permissions: scope === 'grid' ? policy : allowed,
+        resolveCellPermission: () => (scope === 'resolver' ? policy : allowed),
+      });
+      const permission = engine.getCellPermission(0, 0);
+      for (const key of keys) {
+        const expected = key !== denied && !(denied === 'writable' && ['editable', 'pasteable'].includes(key));
+        assert.equal(permission[key], expected, scope + ':' + denied + ':' + key);
+      }
+      assert.ok(Object.isFrozen(permission));
+      engine.destroy();
+    }
+  }
+});
+
 test('batch and paste keys remain distinct for numeric prefixes, colons and quotes', () => {
   const keys = ['1:a', 'a', 'quoted"\n:b'];
   const source = new LocalDataSource(
@@ -1372,4 +1407,152 @@ test('column validation rejects a batch atomically and can allow invalid values'
   assert.equal(source.getValue(0, 'b'), 'bad');
   engine.undo();
   assert.equal(source.getValue(0, 'b'), 'ok');
+});
+
+test('column moves preserve sorted filtered row identities, state and undo while row moves stay disabled', () => {
+  const source = new LocalDataSource(
+    [
+      { id: 'a', score: 3, name: 'A' },
+      { id: 'b', score: 1, name: 'B' },
+      { id: 'c', score: 2, name: 'C' },
+    ],
+    (row) => row.id,
+  );
+  const engine = createGridEngine({
+    dataSource: source,
+    columns: [
+      { key: 'name', title: 'Name', editable: true },
+      { key: 'score', title: 'Score', editable: true },
+    ],
+  });
+  engine.setView({
+    sorts: [{ columnKey: 'score', direction: 'asc' }],
+    filters: [{ columnKey: 'name', operator: 'not-empty', query: '' }],
+  });
+  engine.selectRange({ startRow: 0, endRow: 1, startColumn: 0, endColumn: 0 });
+  engine.format([{ scope: 'cell', rowIndex: 0, columnIndex: 0 }], { background: '#aabbcc' });
+  engine.setLocked({ scope: 'cell', rowIndex: 0, columnIndex: 1 }, true);
+  const ids = Array.from({ length: engine.rowCount }, (_, i) => engine.getRowId(i));
+  const ranges = engine.getSelectionRanges();
+  assert.equal(
+    engine.canChangeStructure({ axis: 'column', kind: 'move', indices: [0], beforeIndex: 2, count: 1 }),
+    true,
+  );
+  engine.moveColumns([0], 2);
+  assert.deepEqual(
+    engine.columns.map((column) => column.key),
+    ['score', 'name'],
+  );
+  assert.deepEqual(
+    Array.from({ length: engine.rowCount }, (_, i) => engine.getRowId(i)),
+    ids,
+  );
+  assert.equal(engine.getFormat(0, 1).background, '#aabbcc');
+  assert.equal(engine.isLocked({ scope: 'cell', rowIndex: 0, columnIndex: 0 }), true);
+  assert.deepEqual(
+    engine.getSelectionRanges(),
+    ranges.map((range) => ({ ...range, startColumn: 1, endColumn: 1 })),
+  );
+  assert.throws(() => engine.moveRows([0], 3), /disabled/);
+  assert.equal(engine.undo(), true);
+  assert.deepEqual(
+    engine.columns.map((column) => column.key),
+    ['name', 'score'],
+  );
+  assert.deepEqual(engine.getSelectionRanges(), ranges);
+  assert.equal(engine.redo(), true);
+  assert.deepEqual(
+    engine.columns.map((column) => column.key),
+    ['score', 'name'],
+  );
+  engine.setView({ filters: [{ columnKey: 'score', query: '1', operator: 'equals' }] });
+  engine.moveColumns([1], 0);
+  assert.equal(engine.rowCount, 1);
+  assert.equal(engine.getRowId(0), 'b');
+  assert.equal(engine.undo(), true);
+  assert.equal(engine.rowCount, 1);
+  engine.destroy();
+});
+
+test('toggle selection subtracts holes, repeated clicks stay bounded and normal select replaces', () => {
+  const source = new LocalDataSource(
+    Array.from({ length: 8 }, (_, id) => ({ id, a: id, b: id, c: id, d: id })),
+    (row) => row.id,
+  );
+  const engine = createGridEngine({
+    dataSource: source,
+    columns: ['a', 'b', 'c', 'd'].map((key) => ({ key, title: key })),
+  });
+  const selected = (row, col) =>
+    engine
+      .getSelectionRanges()
+      .some((r) => row >= r.startRow && row <= r.endRow && col >= r.startColumn && col <= r.endColumn);
+  engine.selectRange({ startRow: 0, endRow: 7, startColumn: 0, endColumn: 3 });
+  for (const [row, col] of [
+    [1, 1],
+    [3, 2],
+    [5, 1],
+  ]) {
+    engine.toggleSelection(row, col);
+    assert.equal(selected(row, col), false);
+  }
+  assert.equal(selected(1, 2), true);
+  assert.equal(selected(7, 3), true);
+  for (let i = 0; i < 60; i++) {
+    engine.toggleSelection(3, 2);
+    assert.equal(selected(3, 2), i % 2 === 0);
+    assert.ok(engine.getSelectionRanges().length <= 14);
+  }
+  engine.select(0, 0);
+  assert.equal(engine.getSelectionRanges().length, 1);
+  for (let i = 0; i < 60; i++) {
+    engine.toggleSelection(0, 0);
+    assert.equal(engine.getSelectionRanges().length, i % 2 ? 1 : 0);
+  }
+  const before = engine.exportState();
+  assert.throws(() => engine.toggleSelection(-1, 0), RangeError);
+  assert.throws(() => engine.toggleSelection(0, 9), RangeError);
+  assert.deepEqual(engine.exportState(), before);
+  engine.selectRange({ startRow: 0, endRow: 2, startColumn: 0, endColumn: 2 });
+  for (let i = 0; i < 127; i++) engine.addSelection(7, 3);
+  const capped = engine.getSelectionRanges();
+  assert.throws(() => engine.toggleSelection(1, 1), RangeError);
+  assert.deepEqual(engine.getSelectionRanges(), capped);
+  engine.destroy();
+  assert.throws(() => engine.toggleSelection(0, 0));
+});
+
+test('toggle follows sorted/filter row identities, merge bounds and permission checks', () => {
+  const source = new LocalDataSource(
+    [
+      { id: 1, a: 3, b: 1 },
+      { id: 2, a: 1, b: 2 },
+      { id: 3, a: 2, b: 3 },
+    ],
+    (row) => row.id,
+  );
+  const engine = createGridEngine({
+    dataSource: source,
+    columns: [
+      { key: 'a', title: 'A' },
+      { key: 'b', title: 'B' },
+    ],
+    resolveCellPermission: (cell) => (cell.rowId === 2 && cell.columnIndex === 1 ? { selectable: false } : undefined),
+  });
+  engine.setView({ sort: { columnKey: 'a', direction: 'asc' } });
+  engine.selectRange({ startRow: 0, endRow: 2, startColumn: 0, endColumn: 1 });
+  engine.toggleSelection(0, 0);
+  assert.equal(
+    engine.getSelectionRanges().some((r) => r.startRow <= 0 && r.endRow >= 0 && r.startColumn <= 0 && r.endColumn >= 0),
+    false,
+  );
+  const before = engine.getSelectionRanges();
+  assert.equal(engine.toggleSelection(0, 1), false);
+  assert.deepEqual(engine.getSelectionRanges(), before);
+  engine.setView({});
+  engine.clearSelection();
+  engine.mergeCells({ startRow: 1, endRow: 2, startColumn: 0, endColumn: 0 });
+  engine.select(1, 0);
+  engine.toggleSelection(2, 0);
+  assert.deepEqual(engine.getSelectionRanges(), []);
 });

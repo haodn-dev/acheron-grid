@@ -6,7 +6,7 @@ export function validateColumnEditor(column: Column, config: ColumnEditor): Colu
     throw new TypeError('Invalid column editor configuration.');
   if (config.type === 'select' || config.type === 'multiselect') {
     if (!Array.isArray(config.values) || !config.values.length) throw new TypeError('Select options must be nonempty.');
-    const values = config.values.map((value) => (typeof value === 'string' ? { value } : value));
+    const values = Array.from(config.values, (value) => (typeof value === 'string' ? { value } : value));
     if (
       values.some(
         (value) =>

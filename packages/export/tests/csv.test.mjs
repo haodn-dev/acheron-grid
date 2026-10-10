@@ -76,3 +76,24 @@ test('headers and escaping count toward the output budget', () => {
   assert.equal(exportSelectionCsv(engine), 'x');
   engine.destroy();
 });
+
+test('CSV validates boolean options before reading the engine and rejects multiple clipboard blocks', () => {
+  const unreadable = {
+    getSelectionRanges: () => {
+      throw Error('must not read');
+    },
+  };
+  for (const key of ['includeHeaders', 'bom'])
+    for (const value of [null, 'true', 1, {}])
+      assert.throws(() => exportSelectionCsv(unreadable, { [key]: value }), TypeError);
+  const blocks = [
+    { row: 0, column: 0, values: [['a']] },
+    { row: 1, column: 0, values: [['b']] },
+  ];
+  const engine = {
+    getSelectionRanges: () => [{ startRow: 0, endRow: 1, startColumn: 0, endColumn: 0 }],
+    copySelectionBlocks: () => JSON.stringify({ version: 1, blocks }),
+    columns: [{ key: 'a', title: 'A' }],
+  };
+  assert.throws(() => exportSelectionCsv(engine), /one rectangular/);
+});

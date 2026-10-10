@@ -1,6 +1,7 @@
+import { jsonSnapshot } from './internal/remote-json.js';
 import { LocalDataSource } from './data-source.js';
 import type { CellUpdate, DataRow, RowId } from './data-source.js';
-import { clipboardCellLimit, clipboardTextLimit } from './tsv.js';
+import { clipboardCellLimit } from './tsv.js';
 
 export interface RemoteSnapshot {
   readonly datasetId: string;
@@ -19,8 +20,16 @@ export interface RemoteMutation {
   readonly expectedRevision: string;
   readonly changes: readonly RemoteChange[];
 }
+export interface RemoteDelta {
+  readonly datasetId: string;
+  readonly baseRevision: string;
+  readonly revision: string;
+  /** Canonical values for every submitted cell and any server-side effects; row order is unchanged. */
+  readonly cells: readonly { readonly rowId: RowId; readonly columnKey: string; readonly value: unknown }[];
+}
 export type RemoteWriteResult =
   | { readonly mutationId: string; readonly status: 'accepted' | 'conflict'; readonly snapshot: RemoteSnapshot }
+  | { readonly mutationId: string; readonly status: 'accepted'; readonly delta: RemoteDelta }
   | { readonly datasetId: string; readonly mutationId: string; readonly status: 'rejected'; readonly message: string };
 export type RemoteStatus = 'disconnected' | 'loading' | 'ready' | 'committing' | 'conflict' | 'destroyed';
 export interface RemoteDataSourceOptions<S> {
@@ -52,6 +61,7 @@ export function createRemoteDataSource<S>(options: RemoteDataSourceOptions<S>) {
   )
     throw new TypeError('Invalid remote source options.');
   let source = new LocalDataSource<Record<string, unknown>>([], (_, i) => i);
+  let rowIndices = new Map<RowId, number>();
   let status: RemoteStatus = 'disconnected',
     revision: string | null = null,
     generation = 0;
@@ -61,30 +71,6 @@ export function createRemoteDataSource<S>(options: RemoteDataSourceOptions<S>) {
   let lastError: unknown;
   const listeners = new Set<(status: RemoteStatus) => void>(),
     errors: unknown[] = [];
-  function jsonSnapshot<T>(value: T): T {
-    const text = JSON.stringify(value, (_, item: unknown) => {
-      if (
-        item === undefined ||
-        typeof item === 'function' ||
-        typeof item === 'symbol' ||
-        typeof item === 'bigint' ||
-        (typeof item === 'number' && !Number.isFinite(item))
-      )
-        throw new TypeError('Remote values must be JSON-serializable and finite.');
-      return item;
-    });
-    if (text.length > clipboardTextLimit) throw new RangeError('Remote payload is too large.');
-    const copy: unknown = JSON.parse(text);
-    function freeze(item: unknown, depth: number): void {
-      if (depth > 64) throw new RangeError('Remote payload is too deeply nested.');
-      if (item && typeof item === 'object') {
-        for (const child of Object.values(item)) freeze(child, depth + 1);
-        Object.freeze(item);
-      }
-    }
-    freeze(copy, 0);
-    return copy as T;
-  }
   function alive(): void {
     if (status === 'destroyed') throw new Error('Remote source is destroyed.');
   }
@@ -138,7 +124,41 @@ export function createRemoteDataSource<S>(options: RemoteDataSourceOptions<S>) {
   function install(snapshot: RemoteSnapshot): void {
     const valid = readSnapshot(snapshot);
     source = valid.source;
+    rowIndices = new Map(valid.snapshot.rows.map((row, index) => [row.id, index]));
     revision = valid.snapshot.revision;
+    pending.clear();
+    request = conflict = undefined;
+    lastError = undefined;
+    emit('ready');
+  }
+  function installDelta(input: RemoteDelta, mutation: RemoteMutation): void {
+    const delta = jsonSnapshot(input);
+    if (
+      !delta ||
+      delta.datasetId !== options.datasetId ||
+      delta.baseRevision !== mutation.expectedRevision ||
+      delta.baseRevision !== revision ||
+      typeof delta.revision !== 'string' ||
+      !delta.revision ||
+      delta.revision === delta.baseRevision ||
+      !Array.isArray(delta.cells) ||
+      delta.cells.length > clipboardCellLimit
+    )
+      throw new TypeError('Invalid remote delta.');
+    const seen = new Set<string>();
+    const updates: CellUpdate[] = [];
+    for (const cell of delta.cells) {
+      if (!cell || !rowIndices.has(cell.rowId) || !keys.has(cell.columnKey) || !Object.hasOwn(cell, 'value'))
+        throw new TypeError('Invalid remote delta cell.');
+      const key = JSON.stringify([cell.rowId, cell.columnKey]);
+      if (seen.has(key)) throw new TypeError('Duplicate remote delta cell.');
+      seen.add(key);
+      updates.push({ rowIndex: rowIndices.get(cell.rowId)!, columnKey: cell.columnKey, value: cell.value });
+    }
+    if (mutation.changes.some((cell) => !seen.has(JSON.stringify([cell.rowId, cell.columnKey]))))
+      throw new TypeError('Remote delta must acknowledge every submitted cell.');
+    source.setValues(updates);
+    revision = delta.revision;
     pending.clear();
     request = conflict = undefined;
     lastError = undefined;
@@ -258,6 +278,11 @@ export function createRemoteDataSource<S>(options: RemoteDataSourceOptions<S>) {
           emit('ready');
           return;
         }
+        if (result.status === 'accepted' && 'delta' in result) {
+          if ('snapshot' in result) throw new TypeError('Ambiguous remote write result.');
+          installDelta(result.delta, mutation);
+          return;
+        }
         const valid = readSnapshot(result.snapshot);
         if (result.status === 'accepted') {
           if (valid.snapshot.revision === mutation.expectedRevision)
@@ -344,6 +369,7 @@ export function createRemoteDataSource<S>(options: RemoteDataSourceOptions<S>) {
       pending.clear();
       request = conflict = undefined;
       source = new LocalDataSource([], (_, i) => i);
+      rowIndices.clear();
       listeners.clear();
       errors.length = 0;
       status = 'destroyed';

@@ -94,6 +94,14 @@ updateCells: (updates: readonly CellUpdate[]) => void
 
 Typed-value updates: resolve visible rows, validate and require writable, without editor parsing or editable checks. Duplicate cells use the last value. Multi-cell changes require atomic setValues.
 
+### updateCellsAsync
+
+```ts
+updateCellsAsync: (updates: readonly CellUpdate[], options: GridBulkOptions) => Promise<void>
+```
+
+Cooperative typed batch preparation with host scheduling, cancellation and optional external revision guard. One final synchronous atomic write; other engine mutations are blocked while pending.
+
 ### replaceText
 
 ```ts
@@ -216,6 +224,14 @@ paste: (text: string, options?: PasteOptions) => void
 
 Parse TSV/editor text and atomically preflight destinations, parsing, permissions and validation. PasteOptions supports all/values/formats, transpose and skipEmpty; TSV carries no formats. Empty means an empty clipboard string, not whitespace.
 
+### pasteAsync
+
+```ts
+pasteAsync: (text: string, bulk: GridBulkOptions, options?: PasteOptions) => Promise<void>
+```
+
+Cooperative TSV parsing/preflight with the same paste options, limits and permissions. One atomic commit/history entry. Structured clipboard operations remain synchronous.
+
 ## History
 
 ### undo
@@ -233,6 +249,22 @@ redo: () => boolean
 ```
 
 Replay a previously undone command under current identity/value/permission checks. A new committed command clears redo; refresh clears both stacks.
+
+### undoAsync
+
+```ts
+undoAsync: (options: GridBulkOptions) => Promise<boolean>
+```
+
+Cooperatively preflight value history, then replay atomically. Other history kinds and final commit remain synchronous; cancellation retains the entry.
+
+### redoAsync
+
+```ts
+redoAsync: (options: GridBulkOptions) => Promise<boolean>
+```
+
+Cooperatively preflight value redo, then replay atomically. Current identity, values and authority are rechecked before commit.
 
 ### canUndo
 
@@ -275,6 +307,14 @@ setView: (next: LocalViewOptions) => void
 ```
 
 Set a core-owned local sort/filter view; this scans local source data and is not a server query. Preserve stable source identities; clear projected views before structural commands.
+
+### setViewAsync
+
+```ts
+setViewAsync: (next: LocalViewOptions, options: GridBulkOptions) => Promise<void>
+```
+
+Cooperative local filtering and stable merge sort with the same ordering as setView. Installs the completed projection once; server queries belong to the data source.
 
 ### view
 
@@ -578,6 +618,14 @@ addSelection: (row: number, col: number) => boolean
 
 Retain the existing selection and add a visible active cell. Subject to selectable policy and range/fragment limits.
 
+### toggleSelection
+
+```ts
+toggleSelection: (row: number, col: number) => boolean
+```
+
+Toggle a visible cell or its entire merged span. Subtract selected cells from every overlapping rectangle; add unselected cells. Invalid coordinates, denied policies and the 128-source-range limit preserve prior state.
+
 ### setFrozen
 
 ```ts
@@ -656,6 +704,7 @@ Call createGridEngine with GridEngineOptions. Required fields are marked; option
 
 | Field | Required | Type |
 | --- | --- | --- |
+| historyLimits | No | `GridHistoryLimits \| undefined` |
 | onObserverError | No | `((error: unknown) => void) \| undefined` |
 | allowMerging | No | `boolean \| undefined` |
 | allowRowGrouping | No | `boolean \| undefined` |
@@ -678,7 +727,7 @@ Call createGridEngine with GridEngineOptions. Required fields are marked; option
 
 ## Public exports and source interfaces
 
-The root and headless alias expose the same API. Source interfaces use their own row indices, not an engine visible projection. The table lists every public export, including types; declarations and the package guide define their contracts. Async/live sources remain read-only.
+The root and headless alias expose the same API. Source interfaces use their own row indices, not an engine visible projection. The table lists every public export, including types; declarations and the package guide define their contracts. createAsyncDataSource and createLiveDataSource remain read-only; createPagedRemoteDataSource adds explicit writable paging.
 
 | Export | Kind | Defined in | Contract |
 | --- | --- | --- | --- |
@@ -686,13 +735,20 @@ The root and headless alias expose the same API. Source interfaces use their own
 | GridEngine | Type | engine.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | GridEngineOptions | Type | engine.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | GridInvalidation | Type | engine.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| GridBulkOptions | Type | bulk.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| GridBulkProgress | Type | bulk.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| GridHistoryLimits | Type | history-budget.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | LocalDataSource | Runtime | data-source.ts | Shallow immutable local row snapshots with unique string/finite-number IDs, synchronous atomic batches and sequential atomic splices. Nested objects remain host-owned. |
 | LocalDataView | Runtime | data-source.ts | A fixed local projection using stable ties and nullish-last sorting. Delegated writes map view indices to underlying source indices; reconstruct the view to reapply criteria. |
 | createAsyncDataSource | Runtime | async-data-source.ts | Read-only synchronous cache with explicit asynchronous page/range loading. The host owns load scheduling, AbortController creation, engine refresh and dataset revision consistency. |
 | createLiveDataSource | Runtime | live-data-source.ts | Read-only bounded local cache of a host stream. Start with a matching snapshot; receive consecutive sequences, coalesce pending cells and flush explicitly. Gaps/disconnect require resync. |
 | createRemoteDataSource | Runtime | remote-data-source.ts | Bounded optimistic JSON snapshot cache with synchronous atomic drafts and explicit async commit/resync. Host server must provide atomic revision checks and mutation ID deduplication. Lost ACK retains an immutable retry; conflict requires explicit resolution. |
+| createPagedRemoteDataSource | Runtime | paged-remote-data-source.ts | Create a bounded writable page cache with stable-ID drafts, server-owned query/revision, dirty-cohort receipts, exact uncertain retry and whole-cache invalidation after accepted writes. Load only required pages; reconcile engine identity/history after cache changes. |
+| PagedRemoteDataSourceOptions | Type | paged-remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| PagedRemoteWriteResult | Type | paged-remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | RemoteDataSourceOptions | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | RemoteSnapshot | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| RemoteDelta | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | RemoteChange | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | RemoteMutation | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | RemoteWriteResult | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
@@ -923,7 +979,7 @@ destroy: () => void
 | lastError | Most recent remote load/transport/validation rejection; a valid installed snapshot clears it. |
 | getPendingChanges | Return frozen remote draft entries keyed by stable row ID and column key. Preserve these before explicitly accepting a conflicting server snapshot. |
 | conflict | Validated remote server snapshot on conflict, or null. Draft values remain in the cache until explicit adoption. |
-| commit | Commit one immutable mutation against expectedRevision. Concurrent commit calls share the promise; lost responses retain the exact request for retry. Accepted snapshots clear drafts, rejection retains correctable drafts, conflict blocks editing. |
+| commit | Commit one immutable mutation against expectedRevision. Bounded remote concurrent calls share the promise; paged concurrent calls reject. Lost responses retain the exact request for retry. Acceptance clears drafts; paged acceptance invalidates pages without fetching them. Rejection retains correctable drafts; conflict blocks editing. |
 | resync | Load a fresh bounded remote snapshot. Unsent drafts require explicit discardPending=true; an uncertain mutation cannot be discarded. Capture engine identity first and refresh afterward. |
 | reconnect | Remote resync without discarding drafts; retry an uncertain commit first. Transport reconnection itself belongs to the host. |
 | disconnect | Remote: abort/invalidate the active generation but retain drafts and uncertain mutation for exact retry. Live: mark the live source stale and discard buffered updates; does not itself reconnect transport or remove retained rows. |
@@ -931,6 +987,76 @@ destroy: () => void
 | subscribe | Observe page state changes; returns unsubscribe. Observer exceptions are isolated in a bounded queue; engine refresh is host-owned. |
 | takeObserverErrors | Drain up to the last ten isolated page observer errors. This does not retry failed loads. |
 | destroy | Idempotent disposal of owned cache/queues/observers. Data access and active loads require a live source; cleanup/status probes follow their specific contract. The host owns external transport resources. |
+
+### createPagedRemoteDataSource source members
+
+Use source indices here; engine selection/value APIs use visible indices.
+
+```ts
+query: Readonly<LocalViewOptions>
+revision: string | null
+status: RemoteStatus
+lastError: unknown
+conflict: RemoteSnapshot | null
+pendingCellCount: number
+getRowId: (index: number) => RowId
+getValue: (index: number, key: string) => unknown
+setValues: (updates: readonly CellUpdate[]) => void
+setValue: (rowIndex: number, columnKey: string, value: unknown) => void
+commit: () => Promise<void>
+getPendingChanges: () => readonly Readonly<{ rowId: RowId; columnKey: string; previous: unknown; value: unknown; }>[]
+setQuery: (next: LocalViewOptions, total?: number) => void
+reset: (total?: number) => void
+cancel: () => void
+discardPending: () => void
+acceptServer: () => void
+destroy: () => void
+pageSize: number
+maxConcurrentLoads: number
+maxPendingLoads: number
+loadPage: (offset: number) => Promise<void>
+loadRange: (start: number, end: number) => Promise<void>
+getPageState: (offset: number) => PageState | null
+subscribe: (listener: (state: PageState) => void) => () => void
+takeObserverErrors: () => unknown[]
+getRowCount: () => number
+getRow?: ((index: number) => DataRow) | undefined
+addColumns?: ((keys: readonly string[], defaults?: Readonly<Record<string, unknown>>) => void) | undefined
+spliceRows?: ((splices: readonly RowSplice[]) => void) | undefined
+```
+
+| Source member | Behavior |
+| --- | --- |
+| query | Immutable captured server criteria. Each load receives the snapshot for its generation; this is not local sorting of cached rows. |
+| revision | Remote authoritative snapshot revision; optimistic drafts do not advance it. |
+| status | Remote lifecycle: disconnected/loading/ready/committing/conflict/destroyed. Only ready permits drafts; pending uncertain writes block new edits. |
+| lastError | Most recent remote load/transport/validation rejection; a valid installed snapshot clears it. |
+| conflict | Validated remote server snapshot on conflict, or null. Draft values remain in the cache until explicit adoption. |
+| pendingCellCount | Number of unique buffered destination cells after bounded coalescing; not the count of received messages. |
+| getRowId | Read the ID using this source/view index. Async positional identity belongs to one query; the host must manage dataset revisions. |
+| getValue | Read a raw shallow value using this source/view index and key. Missing fields return undefined; async unloaded rows also return undefined, so inspect page state separately. |
+| setValues | Remote: bounded atomic optimistic JSON-safe staging only while ready. Local atomic batch, or an optional mapped view batch when the underlying source supports it. Direct source changes require engine refresh and remain outside engine history. |
+| setValue | Remote: stage one optimistic value only while ready. Local atomic single-value replacement, or an optional delegated view setter when the underlying source supports it. No engine permissions/history are applied by direct source writes. |
+| commit | Commit one immutable mutation against expectedRevision. Bounded remote concurrent calls share the promise; paged concurrent calls reject. Lost responses retain the exact request for retry. Acceptance clears drafts; paged acceptance invalidates pages without fetching them. Rejection retains correctable drafts; conflict blocks editing. |
+| getPendingChanges | Return frozen remote draft entries keyed by stable row ID and column key. Preserve these before explicitly accepting a conflicting server snapshot. |
+| setQuery | Validate new criteria/count, clear cache/statuses and cancel the previous generation. The host must reconcile the engine and identity after a query change. |
+| reset | Async: clear cache/statuses and cancel generation, retaining query with the supplied count. Live: change stream, clear pending changes and mark stale; retain old data until a matching snapshot. |
+| cancel | Invalidate the request generation and signal pending controllers without clearing completed cache/count. Safe cleanup after disposal; loaders must settle/timeout. |
+| discardPending | Paged remote: discard only unsent or rejected drafts and invalidate cached pages. An uncertain or conflicting mutation must be resolved first. |
+| acceptServer | Explicitly adopt a validated conflicting remote snapshot and discard its drafts. Host refreshes engine and may reapply selected saved drafts through validation. |
+| destroy | Idempotent disposal of owned cache/queues/observers. Data access and active loads require a live source; cleanup/status probes follow their specific contract. The host owns external transport resources. |
+| pageSize | Validated positive page length fixed at construction; loadPage offsets must be aligned. |
+| maxConcurrentLoads | Maximum active loader calls; a canceled loader must settle so its active slot can be released. |
+| maxPendingLoads | Maximum active plus queued loads. Duplicate pages share a promise; admission failures occur before scheduling extra work. |
+| loadPage | Load one aligned nonnegative offset with deduplication/FIFO concurrency. Validate result dimensions; errors reject, canceled/stale results do not repopulate cache. |
+| loadRange | Load inclusive source indices start through end. The requested pages must fit the cache and pending capacity before admission. |
+| getPageState | Return state for a page offset or null; error/ready bookkeeping is bounded and eviction can remove it. This is not a per-cell loaded-state API. |
+| subscribe | Observe page state changes; returns unsubscribe. Observer exceptions are isolated in a bounded queue; engine refresh is host-owned. |
+| takeObserverErrors | Drain up to the last ten isolated page observer errors. This does not retry failed loads. |
+| getRowCount | Synchronous row count of this source/view. Engine projection is a separate layer. |
+| getRow | Return a shallow row snapshot including hidden fields; nested values are caller-owned. |
+| addColumns | Validate new keys and initialize missing fields atomically while preserving existing fields/defaults. Direct use is outside engine history. |
+| spliceRows | Apply sequential row splices atomically with unique valid IDs and shallow snapshots. Capture engine IDs before external structure changes. |
 
 ## Exported type definitions
 
@@ -944,6 +1070,76 @@ export type GridInvalidation =
   | { readonly type: 'selection'; readonly changed: boolean; readonly rangeChanged: boolean }
   | { readonly type: 'layout' }
   | { readonly type: 'structure'; readonly rowMap: readonly number[]; readonly columnMap: readonly number[] };
+```
+
+### Type GridBulkOptions
+
+```ts
+export interface GridBulkOptions {
+  /** Host scheduler, for example a browser task yield. Must eventually settle. */
+  readonly yieldControl: () => Promise<void>;
+  readonly signal?: { readonly aborted: boolean };
+  readonly onProgress?: (progress: GridBulkProgress) => void;
+  /** Must change on external data, schema or permission changes during the operation. */
+  readonly getRevision?: () => string;
+  /** Optional off-thread TSV decoder. Results are validated before paste. */
+  readonly tsvDecoder?: {
+    decodeTsv(text: string, signal?: { readonly aborted: boolean }): Promise<unknown>;
+  };
+}
+```
+
+### Type GridBulkProgress
+
+```ts
+export interface GridBulkProgress {
+  readonly phase: 'parse' | 'prepare' | 'validate' | 'sort';
+  readonly completed: number;
+  readonly total: number;
+}
+```
+
+### Type GridHistoryLimits
+
+```ts
+export interface GridHistoryLimits {
+  readonly maxCommands?: number;
+  /** Retained value/format change records, not an estimate of JavaScript heap bytes. */
+  readonly maxValueCells?: number;
+}
+```
+
+### Type PagedRemoteDataSourceOptions
+
+```ts
+export interface PagedRemoteDataSourceOptions<S> extends Pick<
+  AsyncDataSourceOptions<S>,
+  'rowCount' | 'pageSize' | 'maxPages' | 'maxConcurrentLoads' | 'maxPendingLoads' | 'query' | 'createAbortController'
+> {
+  readonly datasetId: string;
+  readonly columnKeys: readonly string[];
+  readonly maxPendingCells?: number;
+  readonly createMutationId: () => string;
+  readonly load: (request: {
+    readonly offset: number;
+    readonly limit: number;
+    readonly signal: S;
+    readonly query: Readonly<LocalViewOptions>;
+    readonly expectedRevision: string | null;
+  }) => Promise<RemoteSnapshot & { readonly total: number }>;
+  /** Receipts contain only the dirty-row cohort. Every accepted write invalidates the page cache. */
+  readonly write: (
+    mutation: RemoteMutation,
+    signal: S,
+    query: Readonly<LocalViewOptions>,
+  ) => Promise<PagedRemoteWriteResult>;
+}
+```
+
+### Type PagedRemoteWriteResult
+
+```ts
+export type PagedRemoteWriteResult = RemoteWriteResult & { readonly total: number };
 ```
 
 ### Type RemoteDataSourceOptions
@@ -970,6 +1166,18 @@ export interface RemoteSnapshot {
   readonly datasetId: string;
   readonly revision: string;
   readonly rows: readonly DataRow[];
+}
+```
+
+### Type RemoteDelta
+
+```ts
+export interface RemoteDelta {
+  readonly datasetId: string;
+  readonly baseRevision: string;
+  readonly revision: string;
+  /** Canonical values for every submitted cell and any server-side effects; row order is unchanged. */
+  readonly cells: readonly { readonly rowId: RowId; readonly columnKey: string; readonly value: unknown }[];
 }
 ```
 
@@ -1000,6 +1208,7 @@ export interface RemoteMutation {
 ```ts
 export type RemoteWriteResult =
   | { readonly mutationId: string; readonly status: 'accepted' | 'conflict'; readonly snapshot: RemoteSnapshot }
+  | { readonly mutationId: string; readonly status: 'accepted'; readonly delta: RemoteDelta }
   | { readonly datasetId: string; readonly mutationId: string; readonly status: 'rejected'; readonly message: string };
 ```
 
@@ -1047,7 +1256,7 @@ export interface AsyncDataSourceOptions<S> {
     readonly query: Readonly<LocalViewOptions>;
   }) => Promise<{ readonly rows: readonly Readonly<Record<string, unknown>>[]; readonly total: number }>;
   /** Stable positional identity within one server query; query changes invalidate identity. */
-  readonly getRowId?: (index: number) => RowId;
+  readonly getRowId?: (index: number, loadedRow?: Readonly<Record<string, unknown>>) => RowId;
 }
 ```
 

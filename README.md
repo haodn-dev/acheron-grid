@@ -16,6 +16,9 @@ Every Acheron feature and optional module is intended to remain open source and 
 
 ## Status
 
+See the [1.0 contract and acceptance policy](guides/v1-readiness.md). Current source is for integration
+evaluation; manual/device and production-host acceptance remain open. No stable version is announced.
+
 The original six packages are published on npm at 0.1.0 as development previews. APIs may change before 1.0. Changes under Unreleased and the new export/charts modules are source previews; build from source or install packed artifacts to try them. The project is licensed under [Apache 2.0](LICENSE).
 
 | Package                                               | Purpose                                                                     | Runtime dependencies          |
@@ -169,9 +172,14 @@ See [Contributing](CONTRIBUTING.md) for changes and bug reports.
 
 Engine reads and validation are synchronous; the optional async source loads remote pages into a synchronous read-only cache. Rows and columns can change through structural commands with state remapping and undo/redo; external source changes reconcile through `captureRowIdentity` / `refreshData`. Local values, user state and history are in memory. Version-1 configuration exports a subset of layout/view state for initialization; storage, backend authorization and schema migration belong to the application. `exportState` additionally persists row heights, groups, merges, formatting, locks and selection; data, policies and history are excluded.
 
-Native browser scroll dimensions impose practical limits. Read-only async paging is supported through `createAsyncDataSource`; async setters, multi-column sorting and complete assistive-technology coverage are not implemented. Only Chromium is currently covered by browser tests.
+Native browser scroll dimensions impose practical limits. Read-only async paging, bounded remote writes,
+writable remote paging and local multi-column sorting are implemented in source. DataSource setters remain
+synchronous; explicit cooperative engine APIs yield during preparation and keep a synchronous final commit.
+Chromium, Firefox and WebKit have automated suites; results must match the candidate revision. Complete
+assistive-technology and physical-device coverage remains unverified.
 
-Formula evaluation, charts, pivot tables, multi-sheet workbooks, Excel calculation compatibility and real-time collaboration are outside the current scope.
+Optional inline charts are available in the source charts package. Formula evaluation, pivot tables,
+multi-sheet workbooks, Excel calculation compatibility and real-time collaboration are outside the current scope.
 
 ## License
 

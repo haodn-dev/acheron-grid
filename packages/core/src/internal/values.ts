@@ -5,6 +5,9 @@ import type { CellPermission } from '../permissions.js';
 import { clipboardCellLimit, clipboardTextLimit } from '../tsv.js';
 import type { SelectionRange } from '../types.js';
 import type { Change, EngineContext, FormatChange } from './engine-context.js';
+import { drain } from './bulk.js';
+import type { BulkSteps } from './bulk.js';
+import { assertHistoryCapacity, recordHistory } from './history-budget.js';
 export function createValues(
   context: Pick<
     EngineContext,
@@ -40,42 +43,80 @@ export function createValues(
     } else if (context.dataSource.setValues) context.dataSource.setValues(changes);
     else throw new Error('An atomic setValues method is required for batch writes.');
   }
-  function applyUpdates(
+  function* applyUpdatesSteps(
     updates: readonly CellUpdate[],
     source: GridChangeSource = 'api',
     formatChanges: FormatChange[] = [],
-  ): void {
+    cooperative = false,
+    finalCheck?: () => BulkSteps<void>,
+    guarded = false,
+  ): BulkSteps<void> {
     dependencies.assertAlive();
-    const unique = new Map<string, CellUpdate>();
+    const unique = new Map<string | number, CellUpdate>();
+    let completed = 0;
     for (const update of updates) {
       if (!Number.isSafeInteger(update.rowIndex) || update.rowIndex < 0 || update.rowIndex >= context.rowCount)
         throw new RangeError('Invalid row index.');
       if (!context.columnIndices.has(update.columnKey)) throw new Error(`Unknown column: ${update.columnKey}`);
-      unique.set(`${update.rowIndex}:${update.columnKey}`, { ...update });
+      const rowIndex = update.rowIndex,
+        columnKey = update.columnKey;
+      const coordinate = rowIndex * context.columns.length + context.columnIndices.get(columnKey)!;
+      // Numeric coordinates avoid string allocations; oversized layouts retain collision-free string keys.
+      unique.set(Number.isSafeInteger(coordinate) ? coordinate : `${rowIndex}:${columnKey}`, { ...update });
+      if (cooperative && ++completed % 256 === 0) yield { phase: 'prepare', completed, total: updates.length };
     }
-    const changes: Change[] = [...unique.values()]
-      .map((update) => ({
+    const changes: Change[] = [];
+    completed = 0;
+    for (const update of unique.values()) {
+      const change = {
         ...update,
         previous: context.dataSource.getValue(update.rowIndex, update.columnKey),
         rowId: context.dataSource.getRowId(update.rowIndex),
-      }))
-      .filter((change) => !Object.is(change.previous, change.value));
+      };
+      if (!Object.is(change.previous, change.value)) changes.push(change);
+      if (cooperative && ++completed % 256 === 0) yield { phase: 'prepare', completed, total: unique.size };
+    }
     if (!changes.length && !formatChanges.length) return;
-    for (const change of changes)
+    completed = 0;
+    for (const change of changes) {
       dependencies.requirePermission(change.rowIndex, context.columnIndices.get(change.columnKey)!, 'writable');
+      if (cooperative && ++completed % 256 === 0) yield { phase: 'validate', completed, total: changes.length };
+    }
+    completed = 0;
     for (const change of changes) {
       const column = context.columns[context.columnIndices.get(change.columnKey)!]!;
       const message = column.validate?.(change.value);
       if (message && column.invalidInput !== 'allow') throw new Error(message);
+      if (cooperative && ++completed % 256 === 0) yield { phase: 'validate', completed, total: changes.length };
     }
+    // Recheck identity, values and authority after preparation may have yielded to the host.
+    completed = 0;
+    if (cooperative)
+      for (const change of changes) {
+        if (
+          context.dataSource.getRowId(change.rowIndex) !== change.rowId ||
+          !Object.is(context.dataSource.getValue(change.rowIndex, change.columnKey), change.previous)
+        )
+          throw new Error('Bulk values conflict with external data changes.');
+        dependencies.requirePermission(change.rowIndex, context.columnIndices.get(change.columnKey)!, 'writable');
+        if (guarded && ++completed % 256 === 0) yield { phase: 'validate', completed, total: changes.length };
+      }
+    if (finalCheck) yield* finalCheck();
+    const entry = { kind: 'values' as const, changes, formats: formatChanges };
+    assertHistoryCapacity(context, entry);
     if (changes.length) write(changes);
     dependencies.writeFormats(formatChanges);
-    context.past.push({ kind: 'values', changes, formats: formatChanges });
-    // keep the latest 100 commands; large values remain shallow caller-owned references.
-    if (context.past.length > 100) context.past.shift();
+    recordHistory(context, entry);
     context.future.length = 0;
     if (changes.length) notifyCells(changes, source);
     if (formatChanges.length) dependencies.notifyFormats(formatChanges, source === 'paste' ? 'paste' : 'api');
+  }
+  function applyUpdates(
+    updates: readonly CellUpdate[],
+    source: GridChangeSource = 'api',
+    formats: FormatChange[] = [],
+  ): void {
+    drain(applyUpdatesSteps(updates, source, formats));
   }
   function canEdit(rowIndex: number, columnIndex: number): boolean {
     const span = dependencies.mergeAt(rowIndex, columnIndex);
@@ -191,5 +232,5 @@ export function createValues(
     applyUpdates(updates);
     return Object.freeze({ changedCells: updates.length, matches });
   }
-  return { notifyCells, write, applyUpdates, canEdit, editCell, replaceText };
+  return { notifyCells, write, applyUpdates, applyUpdatesSteps, canEdit, editCell, replaceText };
 }

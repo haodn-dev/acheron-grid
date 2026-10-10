@@ -1,12 +1,80 @@
 {
   "schema": 1,
-  "sourceRevision": "c35b60926021dc4437333580c97919f75ae7cea3",
+  "sourceRevision": "37a4dd47af5c33e776961921d58602e6c70d3682",
   "release": {
     "version": "0.1.0",
     "tag": "v0.1.0",
     "revision": "f34e22765456d644bcae08ebb52241ae6a71238b"
   },
   "documents": [
+    {
+      "id": "v1-readiness",
+      "path": "guides/v1-readiness.md",
+      "revision": 1,
+      "updated": "2026-10-07",
+      "sha256": "1cc5d9572695f3f87f5153ed6584861d2bdfdcffec660db772da971c4f263440",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Selected 1.0 contracts, compatibility policy and evidence gates; not a release announcement."
+        }
+      ]
+    },
+    {
+      "id": "architecture",
+      "path": "guides/architecture.md",
+      "revision": 1,
+      "updated": "2026-10-07",
+      "sha256": "cefb38115d40de98ee009de7b0755b8adf911cc05a79b7edc954ebf43c6f59ed",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Headless package/module map, controlled mutations, source lifecycles and extension boundaries."
+        }
+      ]
+    },
+    {
+      "id": "bulk-commands",
+      "path": "guides/bulk-commands.md",
+      "revision": 4,
+      "updated": "2026-10-08",
+      "sha256": "6c0c7a91670aa2b2f191ca07961fcc6b0c2e24a385a5da85018ba54817b0cd68",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Cooperative bulk preparation, cancellation, atomic commit limits and retained history budgets."
+        },
+        {
+          "revision": 2,
+          "summary": "Cooperative bulk preparation, cancellation, atomic commit limits and retained history budgets."
+        },
+        {
+          "revision": 3,
+          "summary": "Optional module Worker TSV decoding, cancellation, validated output and atomic paste integration."
+        },
+        {
+          "revision": 4,
+          "summary": "Cooperative bulk preparation, cancellation, atomic commit limits and retained history budgets."
+        }
+      ]
+    },
+    {
+      "id": "paged-remote",
+      "path": "guides/paged-remote.md",
+      "revision": 2,
+      "updated": "2026-10-07",
+      "sha256": "87ef43a5b8aba44ee3da1c57e5d7d5e594615c860ea6e9184145a4e63f911f6c",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Stable-ID writable paging, query/revision lifecycle, dirty-cohort receipts and runnable HTTP example."
+        },
+        {
+          "revision": 2,
+          "summary": "Stable-ID writable paging, query/revision lifecycle, dirty-cohort receipts and runnable HTTP example."
+        }
+      ]
+    },
     {
       "id": "getting-started",
       "path": "guides/getting-started.md",
@@ -60,9 +128,9 @@
     {
       "id": "frameworks",
       "path": "guides/frameworks.md",
-      "revision": 2,
+      "revision": 3,
       "updated": "2026-10-06",
-      "sha256": "55fe5594b39c54f2701407b29c0f93ed7afe034dd069dfb65cf2589e1556e7ae",
+      "sha256": "c2635aa3f02b27a3cd15bf17f4754092ff299d6cb2ac5cdfe1d1661d93808785",
       "history": [
         {
           "revision": 1,
@@ -70,6 +138,10 @@
         },
         {
           "revision": 2,
+          "summary": "Canonical React/Vue lifecycle guide."
+        },
+        {
+          "revision": 3,
           "summary": "Canonical React/Vue lifecycle guide."
         }
       ]
@@ -106,9 +178,9 @@
     {
       "id": "versions",
       "path": "guides/versions.md",
-      "revision": 3,
-      "updated": "2026-10-06",
-      "sha256": "936f3739deed20dcac412bfd29caa7cb3271871b801bf6c69487297684c534e2",
+      "revision": 4,
+      "updated": "2026-10-07",
+      "sha256": "e64ddba9082ac4ba000ab2a160cbe6706302e302af5b18be65b07833a744ccb1",
       "history": [
         {
           "revision": 1,
@@ -120,6 +192,10 @@
         },
         {
           "revision": 3,
+          "summary": "Separate package releases, source previews and per-document revisions."
+        },
+        {
+          "revision": 4,
           "summary": "Separate package releases, source previews and per-document revisions."
         }
       ]
@@ -127,9 +203,9 @@
     {
       "id": "core-api",
       "path": "guides/core-api.md",
-      "revision": 7,
-      "updated": "2026-10-06",
-      "sha256": "f70771ae93d077409f32aece27588a49b500cc521e55dd5446782cb5947a3910",
+      "revision": 11,
+      "updated": "2026-10-08",
+      "sha256": "50f17cbe71976cf02050784d6e08a0266e593012549ead17e27c126f66b69380",
       "history": [
         {
           "revision": 1,
@@ -157,6 +233,22 @@
         },
         {
           "revision": 7,
+          "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
+        },
+        {
+          "revision": 8,
+          "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
+        },
+        {
+          "revision": 9,
+          "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
+        },
+        {
+          "revision": 10,
+          "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
+        },
+        {
+          "revision": 11,
           "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
         }
       ]
@@ -164,9 +256,9 @@
     {
       "id": "canvas-api",
       "path": "guides/canvas-api.md",
-      "revision": 3,
-      "updated": "2026-10-06",
-      "sha256": "13b45ad1bc52ea9054400f2a576f07cdbd23bd445597b9312d7d31309b245a78",
+      "revision": 6,
+      "updated": "2026-10-09",
+      "sha256": "c55b194ddb92f05622c86a8eb47c942f1d3b48e8827917ad4d1a746151e09fb3",
       "history": [
         {
           "revision": 1,
@@ -179,15 +271,27 @@
         {
           "revision": 3,
           "summary": "Generated source API signatures and construction options."
+        },
+        {
+          "revision": 4,
+          "summary": "Generated source API signatures and construction options."
+        },
+        {
+          "revision": 5,
+          "summary": "Generated source API signatures and construction options."
+        },
+        {
+          "revision": 6,
+          "summary": "Generated source API signatures and construction options."
         }
       ]
     },
     {
       "id": "core",
       "path": "packages/core/README.md",
-      "revision": 7,
-      "updated": "2026-10-06",
-      "sha256": "c2c14bf2ef7f349f67b1b9b02d5eca621e651702c27a0f31cc4df2161c339cd0",
+      "revision": 10,
+      "updated": "2026-10-08",
+      "sha256": "03dc915f892ce4ca2e26af348c912e0ebcd84a152ffd77683dde976e3cf2ab20",
       "history": [
         {
           "revision": 1,
@@ -216,15 +320,27 @@
         {
           "revision": 7,
           "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
+        },
+        {
+          "revision": 8,
+          "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
+        },
+        {
+          "revision": 9,
+          "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
+        },
+        {
+          "revision": 10,
+          "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
         }
       ]
     },
     {
       "id": "canvas",
       "path": "packages/canvas/README.md",
-      "revision": 6,
-      "updated": "2026-10-06",
-      "sha256": "5f10928d2c86d5443b2fa1e5dfdb2ecd2b963cd1aef63e752d34f6728982fd15",
+      "revision": 9,
+      "updated": "2026-10-09",
+      "sha256": "dc9b14b062f4262d4be335ef8068970fb1f193e577e62aa66df65aa9f48b15f0",
       "history": [
         {
           "revision": 1,
@@ -248,6 +364,18 @@
         },
         {
           "revision": 6,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 7,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 8,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 9,
           "summary": "Align publication status, installation and current source contracts."
         }
       ]
@@ -280,9 +408,9 @@
     {
       "id": "vue",
       "path": "packages/vue/README.md",
-      "revision": 4,
+      "revision": 5,
       "updated": "2026-10-06",
-      "sha256": "e1d170a7a371845e89bda6853aebfd35f988d9549bd91a3149f192fb840aa50b",
+      "sha256": "a81b2d445020385c0f62c29c50d0eaddca85e381f98853ee8ddbbcff7aae4527",
       "history": [
         {
           "revision": 1,
@@ -298,6 +426,10 @@
         },
         {
           "revision": 4,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 5,
           "summary": "Align publication status, installation and current source contracts."
         }
       ]
@@ -334,9 +466,9 @@
     {
       "id": "mcp",
       "path": "packages/mcp/README.md",
-      "revision": 5,
+      "revision": 6,
       "updated": "2026-10-06",
-      "sha256": "14acf52a18a145072c502a699d904b425260061c8ff82537f3a740690885573f",
+      "sha256": "0bfbc1e6ad637a62165034ce8ed3603b7a8bedae6a42a532fc5f5433b4e849c5",
       "history": [
         {
           "revision": 1,
@@ -357,15 +489,19 @@
         {
           "revision": 5,
           "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 6,
+          "summary": "Align publication status, installation and current source contracts."
         }
       ]
     },
     {
       "id": "export",
       "path": "packages/export/README.md",
-      "revision": 3,
-      "updated": "2026-10-06",
-      "sha256": "745448ad040791a5814edfca194f893340440698bda366fdb2b029de6d62f257",
+      "revision": 4,
+      "updated": "2026-10-09",
+      "sha256": "01a70600663b86eaf0fa778b788f84600e7edd3b54f0c7647a6dc9bd1e3d078c",
       "history": [
         {
           "revision": 1,
@@ -377,6 +513,10 @@
         },
         {
           "revision": 3,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 4,
           "summary": "Align publication status, installation and current source contracts."
         }
       ]
@@ -384,9 +524,9 @@
     {
       "id": "charts",
       "path": "packages/charts/README.md",
-      "revision": 3,
-      "updated": "2026-10-06",
-      "sha256": "0af924e5b067447799fa785c77366972f4521bb91aed510ead5518693c251960",
+      "revision": 7,
+      "updated": "2026-10-08",
+      "sha256": "c460ef6d1a9a6f5fe42648f8517f871fb14f425980f0966e67e733de2cacda34",
       "history": [
         {
           "revision": 1,
@@ -398,6 +538,22 @@
         },
         {
           "revision": 3,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 4,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 5,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 6,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 7,
           "summary": "Align publication status, installation and current source contracts."
         }
       ]
@@ -418,9 +574,9 @@
     {
       "id": "support",
       "path": "SUPPORT.md",
-      "revision": 9,
-      "updated": "2026-10-06",
-      "sha256": "246dc44a2d9ff76e988a67565fbbfad05901ee553bb4f3bbd826ba86cd2d06af",
+      "revision": 13,
+      "updated": "2026-10-07",
+      "sha256": "f19d3c5914dc87a741df3247955db5973b30586a717f48aded1124d39324d56e",
       "history": [
         {
           "revision": 1,
@@ -457,15 +613,31 @@
         {
           "revision": 9,
           "summary": "Verified environments and practical limits."
+        },
+        {
+          "revision": 10,
+          "summary": "Verified environments and practical limits."
+        },
+        {
+          "revision": 11,
+          "summary": "Verified environments and practical limits."
+        },
+        {
+          "revision": 12,
+          "summary": "Verified environments and practical limits."
+        },
+        {
+          "revision": 13,
+          "summary": "Verified environments and practical limits."
         }
       ]
     },
     {
       "id": "editing-and-remote",
       "path": "guides/editing-and-remote.md",
-      "revision": 3,
-      "updated": "2026-10-06",
-      "sha256": "e74eec65a8db192fa12e5e5a69591b328b0fd9f868c4336b29e4e3377e1a47a6",
+      "revision": 5,
+      "updated": "2026-10-07",
+      "sha256": "df86f52af4a6e79d388da1064767d6dc2395661f7d871d372c0f428c70668c8c",
       "history": [
         {
           "revision": 1,
@@ -478,15 +650,23 @@
         {
           "revision": 3,
           "summary": "Paste special, hidden axes, number formats, Canvas localization and bounded remote write lifecycle."
+        },
+        {
+          "revision": 4,
+          "summary": "Paste special, hidden axes, number formats, Canvas localization and bounded remote write lifecycle."
+        },
+        {
+          "revision": 5,
+          "summary": "Paste special, hidden axes, number formats, Canvas localization and bounded remote write lifecycle."
         }
       ]
     },
     {
       "id": "manual-validation",
       "path": "guides/manual-validation.md",
-      "revision": 5,
-      "updated": "2026-10-06",
-      "sha256": "b303e2012222e029f075516798f95ee95e478629d783cc16825e5cf42667fe4c",
+      "revision": 8,
+      "updated": "2026-10-07",
+      "sha256": "19d215f5c7dc46fa4042242b8ea24494216b04ad6155f7630d20bcfb1d62d67b",
       "history": [
         {
           "revision": 1,
@@ -506,6 +686,18 @@
         },
         {
           "revision": 5,
+          "summary": "Manual accessibility, device, clipboard and operational acceptance protocol."
+        },
+        {
+          "revision": 6,
+          "summary": "Manual accessibility, device, clipboard and operational acceptance protocol."
+        },
+        {
+          "revision": 7,
+          "summary": "Manual accessibility, device, clipboard and operational acceptance protocol."
+        },
+        {
+          "revision": 8,
           "summary": "Manual accessibility, device, clipboard and operational acceptance protocol."
         }
       ]

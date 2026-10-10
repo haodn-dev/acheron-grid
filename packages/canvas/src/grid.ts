@@ -8,7 +8,7 @@ import { createMediaController } from './internal/media-controller.js';
 import { createClipboard } from './internal/clipboard.js';
 import { createSearch } from './internal/search.js';
 import { createOverlay } from './internal/overlay.js';
-import { createMotion } from './internal/motion.js';
+import { createMotion, resolveMotion } from './internal/motion.js';
 import { createNumberDisplay, createRichDisplay } from './internal/display.js';
 import { reorderInsertionIndex } from './internal/reorder-geometry.js';
 import { validateColumnEditor } from './internal/editor-config.js';
@@ -76,6 +76,8 @@ export type {
 } from '@acheron-grid/core';
 export interface CellRenderInfo {
   readonly value: unknown;
+  readonly previousValue?: unknown;
+  readonly animationProgress?: number;
   readonly format: Readonly<CellFormat>;
   readonly rowIndex: number;
   readonly rowId: string | number;
@@ -106,6 +108,8 @@ export interface GridTheme {
   font: string;
   headerFont: string;
   linkColor: string;
+  increaseColor: string;
+  decreaseColor: string;
 }
 export type { ChoiceOption } from './choices.js';
 export type ColumnEditor =
@@ -123,6 +127,19 @@ export interface ColumnType {
     editor?: ColumnEditor;
   };
 }
+export interface MotionOptions {
+  readonly duration?: number;
+  readonly easing?: string;
+  readonly selectionDuration?: number;
+  readonly surfaceDuration?: number;
+  readonly layout?: boolean;
+  readonly selection?: boolean;
+  readonly surfaces?: boolean;
+  readonly liveSort?: boolean;
+  readonly valueIndicators?: boolean;
+  readonly chartUpdates?: boolean;
+}
+
 export interface GridOptions extends Pick<
   GridEngineOptions,
   | 'permissions'
@@ -134,6 +151,7 @@ export interface GridOptions extends Pick<
   | 'canChangeStructure'
   | 'columnWidths'
   | 'canChangeVisibility'
+  | 'historyLimits'
 > {
   allowMerging?: boolean;
   allowRowGrouping?: boolean;
@@ -186,11 +204,12 @@ export interface GridOptions extends Pick<
   accessibility?: 'active' | 'viewport';
   getCellLabel?: (rowIndex: number, columnKey: string, value: unknown) => string | undefined;
   renderCell?: CellRenderer;
+  renderCellBackground?: (context: CanvasRenderingContext2D, cell: CellRenderInfo) => void;
   createEditor?: CellEditorFactory;
   onEditorMount?: (cell: Readonly<CellEditorInfo>, editor: CellEditor) => void | (() => void);
   onObserverError?: GridEngineOptions['onObserverError'];
   choiceEditor?: ChoiceEditorOptions | false;
-  motion?: boolean | { readonly duration?: number };
+  motion?: boolean | MotionOptions;
   tableLockNotice?: false | { readonly title?: string; readonly description?: string };
   selectionStyle?: {
     readonly activeCellBorderInRange?: boolean;
@@ -220,6 +239,13 @@ export interface GridOptions extends Pick<
   indexColumn?: boolean;
 }
 export interface Grid {
+  getMotion: () => Readonly<Required<MotionOptions>>;
+  setMotion: (value: boolean | MotionOptions) => void;
+  updateCellsAsync: GridEngine['updateCellsAsync'];
+  pasteAsync: GridEngine['pasteAsync'];
+  undoAsync: GridEngine['undoAsync'];
+  redoAsync: GridEngine['redoAsync'];
+  setViewAsync: GridEngine['setViewAsync'];
   getValue(rowIndex: number, columnKey: string): unknown;
   replaceText(
     search: string,
@@ -390,10 +416,8 @@ export function createGrid(options: GridOptions): Grid {
     },
   };
   const numberText = createNumberDisplay(gridContext.options);
-  const motionDuration =
-    typeof gridContext.options.motion === 'object' ? (gridContext.options.motion.duration ?? 220) : 220;
-  if (!Number.isFinite(motionDuration) || motionDuration < 0 || motionDuration > 1000)
-    throw new RangeError('Motion duration must be between 0 and 1000ms.');
+  let motionSettings = resolveMotion(gridContext.options.motion, container.ownerDocument);
+  let motionDuration = motionSettings.duration;
 
   const managesView =
     gridContext.options.viewMode === 'core' ||
@@ -441,6 +465,8 @@ export function createGrid(options: GridOptions): Grid {
     freezeColor: '#94a3b8',
     scrollbarColor: '#a8b6c8',
     linkColor: '#2563eb',
+    increaseColor: '#16803c',
+    decreaseColor: '#c8284d',
     font: '400 13px system-ui, sans-serif',
     headerFont: '600 13px system-ui, sans-serif',
     ...gridContext.options.theme,
@@ -459,6 +485,12 @@ export function createGrid(options: GridOptions): Grid {
   }
   validateTheme(gridContext.appearance.theme);
   const rendering = createRendering({
+    get motionSettings() {
+      return motionSettings;
+    },
+    fadeSelection: (rects) => motion.fadeSelection(rects),
+    animateFeedback: (node, frames) => motion.animateFeedback(node, frames),
+    openViewDialog: (col, sort) => menus.openViewDialog(col, sort),
     get accessibility() {
       return accessibility;
     },
@@ -706,6 +738,7 @@ export function createGrid(options: GridOptions): Grid {
         : column,
     ),
     dataSource,
+    ...(gridContext.options.historyLimits ? { historyLimits: gridContext.options.historyLimits } : {}),
     ...(gridContext.options.allowMerging === undefined ? {} : { allowMerging: gridContext.options.allowMerging }),
     ...(gridContext.options.allowRowGrouping === undefined
       ? {}
@@ -754,6 +787,17 @@ export function createGrid(options: GridOptions): Grid {
     ...(gridContext.options.frozenRows === undefined ? {} : { frozenRows: gridContext.options.frozenRows }),
     ...(gridContext.options.frozenColumns === undefined ? {} : { frozenColumns: gridContext.options.frozenColumns }),
     onInvalidate(change) {
+      const menu = overlay.menu;
+      if (menu && change.type === 'structure') {
+        const col = Number(menu.dataset.gridMenuColumn),
+          row = Number(menu.dataset.gridMenuRow);
+        if (
+          !Number.isSafeInteger(col) ||
+          change.columnMap[col] !== col ||
+          (menu.dataset.gridMenuHeader !== 'true' && change.rowMap[row] !== row)
+        )
+          closeMenu();
+      } else if (menu && (change.type === 'layout' || change.type === 'selection')) closeMenu();
       if (change.type !== 'selection') clearCopyFeedback();
       if (change.type === 'cells') {
         if (gridContext.engine.getMergedCells().length) rendering.fullDraw = true;
@@ -765,6 +809,13 @@ export function createGrid(options: GridOptions): Grid {
         if (!searchBar.hidden) refreshSearch();
       } else if (change.type === 'layout' || change.type === 'structure') {
         if (change.type === 'structure') {
+          const reorderAxis = interaction.reorderAxis;
+          const reorderMap = reorderAxis === 'column' ? change.columnMap : change.rowMap;
+          const preserveReorder =
+            reorderAxis !== undefined &&
+            reorderMap.length ===
+              (reorderAxis === 'column' ? gridContext.layout.columns.length : gridContext.layout.rowCount) &&
+            reorderMap.every((index, previous) => index === previous);
           editors.hoveredChoice = null;
           if (managesView) gridContext.layout.currentView = gridContext.engine.view;
           if (interaction.axisAnchor) {
@@ -773,7 +824,7 @@ export function createGrid(options: GridOptions): Grid {
             interaction.axisAnchor =
               next !== undefined && next >= 0 ? { ...interaction.axisAnchor, index: next } : null;
           }
-          onPointerEnd();
+          if (!preserveReorder) onPointerEnd();
           gridContext.layout.columns = gridContext.engine.columns;
           gridContext.layout.rowCount = gridContext.engine.rowCount;
           const outline = gridContext.engine.getRowGroups();
@@ -813,9 +864,8 @@ export function createGrid(options: GridOptions): Grid {
             indexGutter.contains(gridContext.env.doc.activeElement)
           )
             scroller.focus({ preventScroll: true });
-          headerSurface.replaceChildren();
           indexGutter.replaceChildren();
-          clearReorder();
+          if (!preserveReorder) clearReorder();
           rendering.measuredRows.clear();
           accessibility.accessibleCells.clear();
           accessibleBody.replaceChildren();
@@ -967,6 +1017,11 @@ export function createGrid(options: GridOptions): Grid {
     [data-grid-row-group]:disabled { opacity:.4;cursor:default!important }
     [data-grid-row-resize]:hover { background:var(--acheron-selection-color);opacity:.5 }
     [data-grid-header-cell]:focus-visible { outline:2px solid var(--acheron-selection-color);outline-offset:-3px }
+    [data-grid-header-cell] { overflow:hidden;transition:background-color var(--acheron-feedback-duration,0ms) ease-out;touch-action:none; }
+    @media(hover:hover) and (pointer:fine) { [data-grid-header-cell]:hover { background:color-mix(in srgb,var(--acheron-selection-color) 7%,transparent); } }
+    [data-grid-header-cell]:active { background:color-mix(in srgb,var(--acheron-selection-color) 13%,transparent);transition:none; }
+    dialog[data-grid-dialog] button:active, [data-grid-choices] button:active { transform:translateY(1px); }
+    @media(prefers-reduced-motion:reduce) { [data-grid-header-cell] { transition:none; } }
     [data-grid-search]:not([hidden]) { display:flex;align-items:center;flex-wrap:wrap;gap:4px }
     dialog[data-grid-dialog] [data-dialog-actions] { display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:4px }
   `;
@@ -1344,6 +1399,7 @@ export function createGrid(options: GridOptions): Grid {
     editors;
 
   const interaction = createInteraction({
+    structureAction: (run, axis) => structureAction(run, axis),
     get actionError() {
       return actionError;
     },
@@ -1543,7 +1599,7 @@ export function createGrid(options: GridOptions): Grid {
     button.type = 'button';
     button.hidden = true;
     button.tabIndex = -1;
-    button.setAttribute('aria-label', gridContext.env.t('Adjust selection {0}', endpoint));
+    button.setAttribute('aria-label', gridContext.env.t('Adjust selection {0}', gridContext.env.t(endpoint)));
     button.style.cssText =
       'position:absolute;width:20px;height:20px;padding:0;margin:0;border:3px solid var(--acheron-background);border-radius:50%;background:var(--acheron-selection-color);z-index:3;touch-action:none;cursor:crosshair';
     button.addEventListener('pointerdown', (event) => {
@@ -1915,7 +1971,7 @@ export function createGrid(options: GridOptions): Grid {
     },
     {
       key: 'checkbox',
-      label: 'Checkbox',
+      label: gridContext.env.t('Checkbox'),
       create: (input) => {
         const parse = (text: string) => {
           if (text === '' || text === 'false') return false;
@@ -1968,6 +2024,7 @@ export function createGrid(options: GridOptions): Grid {
   observer.observe(root);
   scroller.addEventListener('scroll', renderCopyFeedback, { passive: true });
   scroller.addEventListener('scroll', clearLayoutMotion, { passive: true });
+  scroller.addEventListener('scroll', closeMenuOnScroll, { passive: true });
   scroller.addEventListener('scroll', render, { passive: true });
   scroller.addEventListener('scroll', clearChoiceHover, { passive: true });
   root.addEventListener('pointerleave', cancelLinkPreviewHover);
@@ -2000,12 +2057,16 @@ export function createGrid(options: GridOptions): Grid {
   gridContext.env.win.addEventListener('scroll', positionEditor, { capture: true, passive: true });
   render();
 
+  function closeMenuOnScroll(): void {
+    closeMenu();
+  }
   function clearLayoutMotion(): void {
     motion.clearLayoutMotion();
   }
   const motion = createMotion({
-    options: gridContext.options,
-    motionDuration,
+    get settings() {
+      return motionSettings;
+    },
     win: gridContext.env.win,
     root,
     canvas,
@@ -2046,9 +2107,50 @@ export function createGrid(options: GridOptions): Grid {
   function structureAction<T>(run: () => T, axis?: 'row' | 'column'): T {
     if (editors.editor || gridContext.runtime.destroyed)
       throw new Error('Save or cancel the editor before changing structure.');
-    return axis ? animateLayout(run, axis) : run();
+    return animateLayout(run, axis ?? 'auto');
+  }
+  let canvasBulkActive = false;
+  async function bulkAction<T>(run: () => Promise<T>): Promise<T> {
+    if (gridContext.runtime.destroyed) throw new Error('Grid is destroyed.');
+    if (editors.editor) throw new Error('Finish editing before running bulk commands.');
+    if (canvasBulkActive) throw new Error('A bulk command is already running.');
+    canvasBulkActive = true;
+    const previousInert = root.inert,
+      previousBusy = root.getAttribute('aria-busy');
+    const restoreFocus = root.contains(doc.activeElement);
+    root.inert = true;
+    root.setAttribute('aria-busy', 'true');
+    try {
+      return await run();
+    } finally {
+      canvasBulkActive = false;
+      root.inert = previousInert;
+      if (previousBusy === null) root.removeAttribute('aria-busy');
+      else root.setAttribute('aria-busy', previousBusy);
+      if (restoreFocus && !gridContext.runtime.destroyed && !root.inert) scroller.focus({ preventScroll: true });
+    }
   }
   return {
+    getMotion: () => Object.freeze({ ...motionSettings }),
+    setMotion: (value) => {
+      if (gridContext.runtime.destroyed) throw new Error('Grid is destroyed.');
+      const next = resolveMotion(value, gridContext.env.doc);
+      motion.clearLayoutMotion();
+      root.getAnimations({ subtree: true }).forEach((animation) => animation.cancel());
+      motionSettings = next;
+      motionDuration = next.duration;
+      motion.syncSettings();
+      rendering.render();
+    },
+    updateCellsAsync: (updates, options) => bulkAction(() => gridContext.engine.updateCellsAsync(updates, options)),
+    pasteAsync: (text, bulk, options) => bulkAction(() => gridContext.engine.pasteAsync(text, bulk, options)),
+    undoAsync: (options) => bulkAction(() => gridContext.engine.undoAsync(options)),
+    redoAsync: (options) => bulkAction(() => gridContext.engine.redoAsync(options)),
+    setViewAsync: (view, options) =>
+      bulkAction(async () => {
+        await gridContext.engine.setViewAsync(view, options);
+        gridContext.layout.currentView = gridContext.engine.view;
+      }),
     subscribe: gridContext.engine.subscribe,
     getValue: gridContext.engine.getValue,
     replaceText: (search: string, replacement: string, options?: Parameters<GridEngine['replaceText']>[2]) => {
@@ -2062,7 +2164,14 @@ export function createGrid(options: GridOptions): Grid {
       finishEdit(false);
       clearCopyFeedback();
       clipboard.pendingCutText = undefined;
-      gridContext.engine.refreshData(ids);
+      const refresh = () => gridContext.engine.refreshData(ids);
+      if (
+        ids === 'values' &&
+        motionSettings.liveSort &&
+        (gridContext.engine.view.sort || gridContext.engine.view.sorts?.length)
+      )
+        animateLayout(refresh, 'row');
+      else refresh();
     },
     exportState: gridContext.engine.exportState,
     restoreState: (state: unknown) => {
@@ -2107,7 +2216,7 @@ export function createGrid(options: GridOptions): Grid {
       structureAction(() => {
         gridContext.engine.setView(view);
         gridContext.layout.currentView = gridContext.engine.view;
-      }),
+      }, 'row'),
     get view() {
       return managesView ? gridContext.engine.view : (gridContext.layout.currentView ?? {});
     },
@@ -2170,13 +2279,13 @@ export function createGrid(options: GridOptions): Grid {
     setRowsHidden: (indices, hidden) => {
       if (finishEdit(true)) {
         cancelCut();
-        gridContext.engine.setRowsHidden(indices, hidden);
+        structureAction(() => gridContext.engine.setRowsHidden(indices, hidden), 'row');
       }
     },
     setColumnsHidden: (indices, hidden) => {
       if (finishEdit(true)) {
         cancelCut();
-        gridContext.engine.setColumnsHidden(indices, hidden);
+        structureAction(() => gridContext.engine.setColumnsHidden(indices, hidden), 'column');
       }
     },
     getHiddenRows: gridContext.engine.getHiddenRows,
@@ -2202,6 +2311,7 @@ export function createGrid(options: GridOptions): Grid {
     setRowHeight: (index, height) => resizeAxis(rowAxis, index, height),
     destroy() {
       if (gridContext.runtime.destroyed) return;
+      rendering.clearValueHistory();
       cancelLinkPreviewHover();
       root.removeEventListener('pointerleave', cancelLinkPreviewHover);
       clipboard.pendingCutText = undefined;
@@ -2266,6 +2376,7 @@ export function createGrid(options: GridOptions): Grid {
       observer.disconnect();
       scroller.removeEventListener('scroll', renderCopyFeedback);
       scroller.removeEventListener('scroll', clearLayoutMotion);
+      scroller.removeEventListener('scroll', closeMenuOnScroll);
       scroller.removeEventListener('scroll', render);
       scroller.removeEventListener('scroll', clearChoiceHover);
       root.removeEventListener('pointerleave', clearChoiceHover);

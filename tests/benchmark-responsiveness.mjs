@@ -1,5 +1,111 @@
 import { test, expect } from '@playwright/test';
 
+test('cooperative bulk elapsed time and longest synchronous slices', async ({ browser, browserName }, info) => {
+  test.skip(
+    process.env.ACHERON_RESPONSIVENESS !== '1' || browserName !== 'chromium',
+    'Opt-in Chromium CPU profiles; no timing acceptance gate.',
+  );
+  test.setTimeout(180_000);
+  const profiles = [];
+  for (const cpu of [1, 4]) {
+    const context = await browser.newContext({
+      viewport: { width: cpu === 1 ? 1280 : 390, height: 844 },
+      isMobile: cpu === 4,
+      hasTouch: cpu === 4,
+    });
+    try {
+      const page = await context.newPage();
+      await page.goto('http://127.0.0.1:4179/');
+      const cdp = await context.newCDPSession(page);
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate: cpu });
+      const results = await page.evaluate(async () => {
+        const { createGridEngine, LocalDataSource } = await import('/core/index.js');
+        const results = [];
+        for (const mode of ['sync', 'async', 'revision-guarded']) {
+          const samples = [];
+          for (let trial = -2; trial < 4; trial++) {
+            const count = 100000;
+            const source = new LocalDataSource(
+              Array.from({ length: count }, (_, id) => ({ id, value: id })),
+              (row) => row.id,
+            );
+            const engine = createGridEngine({
+              dataSource: source,
+              columns: [{ key: 'value', title: 'Value', editable: true, parse: Number }],
+            });
+            engine.select(0, 0);
+            const text = Array.from({ length: count }, (_, id) => String(id + count)).join('\n');
+            const times = {};
+            for (const operation of ['paste', 'undo', 'redo', 'sort']) {
+              const channel = new MessageChannel();
+              let wake,
+                longest = 0,
+                slices = 0;
+              const start = performance.now();
+              let resumed = start;
+              channel.port1.onmessage = () => {
+                resumed = performance.now();
+                wake();
+              };
+              const options = {
+                ...(mode === 'revision-guarded' ? { getRevision: () => 'unchanged-fixture' } : {}),
+                yieldControl: () => {
+                  longest = Math.max(longest, performance.now() - resumed);
+                  slices++;
+                  return new Promise((resolve) => {
+                    wake = resolve;
+                    channel.port2.postMessage(0);
+                  });
+                },
+              };
+              if (operation === 'paste') mode === 'sync' ? engine.paste(text) : await engine.pasteAsync(text, options);
+              if (operation === 'undo' && !(mode === 'sync' ? engine.undo() : await engine.undoAsync(options)))
+                throw Error('Undo oracle');
+              if (operation === 'redo' && !(mode === 'sync' ? engine.redo() : await engine.redoAsync(options)))
+                throw Error('Redo oracle');
+              if (operation === 'sort')
+                mode === 'sync'
+                  ? engine.setView({ sort: { columnKey: 'value', direction: 'desc' } })
+                  : await engine.setViewAsync({ sort: { columnKey: 'value', direction: 'desc' } }, options);
+              const end = performance.now();
+              longest = Math.max(longest, end - resumed);
+              channel.port1.close();
+              channel.port2.close();
+              times[operation] = { totalMs: end - start, longestSliceMs: longest, slices };
+              if (source.getValue(count - 1, 'value') !== (operation === 'undo' ? count - 1 : count * 2 - 1))
+                throw Error('Value oracle');
+              if (operation === 'sort' && engine.getRowId(0) !== count - 1) throw Error('Sort oracle');
+            }
+            engine.destroy();
+            if (trial >= 0) samples.push(times);
+          }
+          results.push({ mode, samples });
+        }
+        return results;
+      });
+      expect(results).toHaveLength(3);
+      profiles.push({ cpuThrottle: cpu, emulatedMobile: cpu === 4, results });
+    } finally {
+      await context.close();
+    }
+  }
+  await info.attach('cooperative-bulk-profile', {
+    body: JSON.stringify(
+      {
+        browser: browser.version(),
+        warmups: 2,
+        trials: 4,
+        count: 100000,
+        profiles,
+        note: 'Emulation is not physical hardware. Monotonic sort is favorable. Longest JS slice includes final atomic commit, not presented frame time. No peak-memory or timing acceptance claim.',
+      },
+      null,
+      2,
+    ),
+    contentType: 'application/json',
+  });
+});
+
 test('warmed local command responsiveness profiles', async ({ page, browserName }) => {
   test.skip(
     process.env.ACHERON_RESPONSIVENESS !== '1',

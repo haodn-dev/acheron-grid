@@ -103,6 +103,8 @@ Each grid snapshots its theme independently. Canvas cells, headers, lines and se
 
 Pass `renderCell(context, cell)` to `createGrid`. Return `true` to replace the default body text, or `false` to draw the default text. Headers, grid lines and selection remain owned by the grid.
 
+For full-cell flash or background effects, use `renderCellBackground(context, cell)`. It receives the complete cell rectangle, including the value-direction arrow gutter, and runs after the formatted background but before content and indicators. `renderCell` retains its reserved content rectangle so text cannot overlap the arrow. Both callbacks are clipped to the visible cell/pane and have isolated Canvas state; background effects must respect reduced-motion preferences supplied by the host. This callback is a source preview API.
+
 ```ts
 renderCell: (ctx, cell) => {
   if (cell.columnKey !== 'status') return false;
@@ -159,7 +161,7 @@ All local rows reside in memory. Virtualization bounds cell rendering work, not 
 
 Click a data cell to select it and focus the viewport. Arrow keys move one cell; Home/End move to the first/last column; Ctrl/Meta+Home/End move to the first/last cell. Navigation clamps at dataset boundaries and scrolls the active cell into view. With no selection, arrows/Home start at the first cell; End starts at the last column and Ctrl/Meta+End at the last cell. Escape clears selection; Tab leaves the viewport normally. Shift-modified navigation extends a rectangular range. See range selection and clipboard below.
 
-`grid.getSelection()` returns a fresh `{ rowIndex, rowId, columnIndex, columnKey }` object or `null`. Indices are zero-based. Pass `onSelectionChange(selection)` to `createGrid` to observe changes, including `null` when cleared. Callback objects are copies; selecting the same cell does not fire again. Destroy clears selection without emitting an event. Headers select whole columns; blank space and scrollbar clicks do not select cells. Ctrl/Meta+click adds a range and Shift-click extends it. The viewport label describes the active cell, and the optional viewport accessibility mode exposes bounded visible rows, cells and headers; assistive-technology verification remains incomplete.
+`grid.getSelection()` returns a fresh `{ rowIndex, rowId, columnIndex, columnKey }` object or `null`. Indices are zero-based. Pass `onSelectionChange(selection)` to `createGrid` to observe changes, including `null` when cleared. Callback objects are copies; selecting the same cell does not fire again. Destroy clears selection without emitting an event. Headers select whole columns; blank space and scrollbar clicks do not select cells. Ctrl/Meta+click toggles a cell: selected cells become holes in all overlapping ranges; unselected cells are added. Merged cells toggle as a whole. Shift-click extends the active range. The viewport label describes the active cell, and the optional viewport accessibility mode exposes bounded visible rows, cells and headers; assistive-technology verification remains incomplete.
 
 ## Inline editing
 
@@ -256,7 +258,7 @@ The single DOM editor uses a clipped overlay following its pane. A frozen editor
 
 ## Multiple selection ranges
 
-Ctrl/Cmd+click retains previous rectangles and starts a new active range. Shift/click/drag and Shift navigation extend the active range. Shift+F8 arms the next unshifted click/navigation to add a range; press it again or Escape to cancel that mode. This supports keyboard addition, for example Shift+F8 then Ctrl+End and Shift+ArrowLeft. Plain click/navigation replaces the selection; Escape clears all ranges. Overlapping rectangles are kept separately, with a maximum of 128.
+Ctrl/Cmd+click adds an unselected cell or removes a selected cell from all overlapping rectangles. Removed cells remain clear holes; merged cells toggle as a whole. Shift/click/drag and Shift navigation extend the active range. Shift+F8 arms the next unshifted click to toggle a cell, or navigation to add a range; press it again or Escape to cancel that mode. This supports keyboard addition, for example Shift+F8 then Ctrl+End and Shift+ArrowLeft. Plain click/navigation replaces the selection; Escape clears all ranges. Overlapping rectangles are kept separately, with a maximum of 128.
 
 `getSelectionRanges()` returns copies, active range last; `getSelectionRange()` remains the active rectangle. `onSelectionRangesChange` receives copies when the list changes. Existing single-range/cell callbacks retain their semantics; domain `selection:change` now also carries a frozen `ranges` array. Editing preserves all ranges and changes the active cell. Right-click inside the active rectangle preserves the set; outside it selects a new single cell. Copy/paste support multiple ranges. Plain TSV packs copied ranges and broadcasts pasted data at target starts. Native keyboard copy also writes application/x-acheron-grid+json; keyboard paste uses it to preserve gaps or pair equal source/target range counts. If the browser removes that format, TSV remains available. The context menu uses the browser plain-text clipboard API. All destinations validate before one atomic command. copySelectionBlocks()/pasteSelectionBlocks(text) expose the structured payload APIs. Borders use the same frozen-pane clips and partial repaint path; partial updates redraw borders only inside dirty cells, including translucent colors.
 
@@ -470,7 +472,7 @@ Automatic row height measures all columns for each visible row and caches the re
 
 Locking the table through `setLocked({ scope: 'table' }, true)` displays a non-blocking notice for four seconds. It uses the grid theme; it does not change selection or clipboard permissions. Configure `tableLockNotice: { title: 'Read only', description: 'Custom host message' }` or set `tableLockNotice: false` to hide it. `motion: false` disables grid motion; reduced-motion preferences are respected automatically. Headless core has no visual notifications.
 
-Canvas animates row/column reordering and group collapse/expand using temporary visible-strip snapshots. State, focus and hit testing update immediately. Freeze separators draw in; context menus and choice panels use short entrance/exit transitions. The default layout duration is 220ms; customize it with `motion: { duration: 300 }` (0–1000ms, 0 disables motion). Scrolling cancels layout snapshots, reduced motion is respected, and at most 64 visible strips participate per transition. Selection and ordinary scrolling do not animate. Very wide/tall viewports beyond that cap update the remaining strips immediately.
+Canvas animates synchronous sort/filter views, row/column reordering and group collapse/expand using temporary visible-strip snapshots. State, focus and hit testing update immediately. Header sort/filter icons provide short state feedback. Selected rows and columns use pointer capture with a viewport-sized drag snapshot, a 6px activation threshold and an insertion guide; release commits, Escape/cancellation discards the drag. Column moves remain available with core-owned sort/filter views, subject to host policy. Freeze separators draw in; context menus and choice panels use short entrance/exit transitions. The default layout duration is 220ms. Visibility, insertion/deletion, resizing and undo/redo use the same bounded layout layer. Header state icons are keyboard-accessible buttons that open the existing sort/filter dialogs. Scrolling cancels layout snapshots, reduced motion is respected, and at most 64 visible strips participate per transition. Removing retained selection ranges fades their viewport outlines; focus, range dragging and ordinary scrolling remain immediate. Very wide/tall viewports beyond that cap update the remaining strips immediately.
 
 Multi-cell selections use one uniform tint and an outer range border by default. Set `selectionStyle.activeCellBorderInRange: true` to also outline the active cell inside a range. Single-cell focus keeps its border.
 
@@ -497,7 +499,7 @@ Successful cell copy through Ctrl/Cmd+C, the context menu, `copySelection()` or 
 
 With motion enabled the marker fades in for at most 120ms; reduced motion or `motion:false` keeps the static marker. There is no indefinite marching animation or Canvas repaint loop. Visual feedback is bounded to the first 64 selected ranges; clipboard content is unaffected. Programmatic copy methods return content and show feedback, but do not themselves write to the operating-system clipboard.
 
-Menu/choice surfaces use a 2px translation without scaling text (up to 160ms enter, 100ms exit). Interrupted exits start from the rendered opacity/transform. Table-lock notice moves 2px and cancels prior notice animation before replay. Selection, focus, scrolling and resize guides remain immediate; layout transitions retain the existing bounded strip snapshot and reduced-motion behavior.
+Menu/choice surfaces use a 2px translation without scaling text (up to 160ms enter, 100ms exit). Interrupted exits start from the rendered opacity/transform. Table-lock notice moves 2px and cancels prior notice animation before replay. Focus, selection entry, scrolling and resize guides remain immediate; deselection has a short exit fade; layout transitions retain the existing bounded strip snapshot and reduced-motion behavior.
 
 ## Cut and repeating a single copied cell
 
@@ -719,3 +721,36 @@ React/Vue adapters expose the grid instance through their documented ref/getGrid
 ## Paste special, visibility, numbers and localization (source preview)
 
 Canvas exposes values-only/formats-only/transposed/skip-empty paste, hide/show rows and columns, and decimal/integer/percent/currency formats. Hidden axes retain data and positive stored sizes while painting, navigation and viewport ARIA skip them. Number display uses `Intl.NumberFormat`; editing and callbacks retain raw values. Set `locale`, `currency` and `messages` at construction; complete English/Vietnamese message inventories are exported for host language packs. Menus, dialogs, choice/media editors and accessibility share these messages. See the [complete editing and remote guide](../../guides/editing-and-remote.md). These additions are not in npm 0.1.0.
+
+Source-preview bulk APIs, busy/focus behavior and history budgets are documented in the [bulk guide](../../guides/bulk-commands.md).
+
+### Runtime motion settings
+
+Motion belongs to Canvas; the headless core commits state synchronously. Menu and API actions share the renderer's motion layer. Configure at mount with `motion` or replace settings without remounting:
+
+```ts
+grid.setMotion({
+  duration: 220,
+  easing: 'cubic-bezier(.22,1,.36,1)',
+  selectionDuration: 120,
+  surfaceDuration: 160,
+  layout: true,
+  selection: true,
+  surfaces: true,
+  liveSort: true,
+});
+const settings = grid.getMotion();
+grid.setMotion(false);
+```
+
+Durations accept 0–1000ms; global duration 0 disables motion. Easing accepts a single Web Animations easing value. Each call replaces the settings and fills omitted fields with defaults; `liveSort` defaults to false. When enabled, `refreshData('values')` animates visible records that move under an active core sort, following stable row IDs. Update the DataSource first and retain row count, identities and order as required by values-only refresh. A newer operation or scrolling cancels temporary layers; reduced motion overrides all settings. Exit selection feedback is capped at 64 clipped rectangles; layout feedback at 64 strips. Bulk async operations, theme changes and ordinary value painting remain immediate. These preview settings are not serialized in core configuration/state.
+
+Value repaint no longer dismisses an open context menu. Header menus survive live reordering when their column remains valid; cell menus close if their displayed row changes identity. Selection, layout changes, scrolling, actions and native popover dismissal still close menus as appropriate.
+
+### Live value feedback
+
+Set `motion: { valueIndicators: true, chartUpdates: true }` for numeric direction arrows and inline chart transitions. Arrows compare successive painted values of the same row ID and column key; initial values have no arrow, unchanged repaints retain direction. Canvas reserves a 16px leading gutter in numeric cells at least 40px wide, including custom renderers. Customize `theme.increaseColor` and `theme.decreaseColor`; arrow orientation also conveys direction.
+
+Indicators default off, chart updates default on. Change switches through `setMotion`. Chart transitions use shared duration/easing and redraw only active cells. Reduced motion keeps arrows and applies chart geometry immediately; `motion: false` disables both. Canvas retains at most 4,096 recently painted snapshots and 512 samples per array; offscreen values outside that cache have no update history. Custom renderers receive optional `previousValue` and `animationProgress`. Source and accessible values update immediately; destroy releases snapshots.
+
+Selection exit fades only removed tint outside the retained selection. Old borders disappear immediately; further selection changes cancel exit feedback. Highly fragmented rectangle subtraction falls back to immediate painting.

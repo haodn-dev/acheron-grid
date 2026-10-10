@@ -1,4 +1,5 @@
 import { GridAxis } from '../axis.js';
+import type { GridHistoryLimits } from './history-budget.js';
 import type { CellUpdate, DataSource, LocalViewOptions, RowId, RowSplice } from '../data-source.js';
 import type { GridEngineOptions } from '../engine.js';
 import type { CellPermissionPolicy, CellPermissionResolver } from '../permissions.js';
@@ -76,6 +77,7 @@ export type HistoryCommand =
       columnMap: readonly number[];
     };
 export interface EngineContext {
+  readonly historyLimits?: GridHistoryLimits;
   readonly dataSource: DataSource;
   columns: readonly Readonly<Column>[];
   readonly rowHeight: number;

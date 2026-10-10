@@ -6,7 +6,7 @@ import type {
   SelectionRange,
   ViewportRegion,
 } from '@acheron-grid/core';
-import type { ColumnEditor } from '../grid.js';
+import type { ColumnEditor, MotionOptions } from '../grid.js';
 import { icons } from '../icons.js';
 import { detectLinks } from '../links.js';
 import { mediaItems } from '../media.js';
@@ -30,6 +30,20 @@ interface RenderingContext
     Pick<GridContext['env'], 'doc' | 't' | 'win'>,
     Pick<GridContext, 'engine' | 'options'>,
     Readonly<Pick<GridContext['appearance'], 'theme'>> {
+  readonly motionSettings: Required<MotionOptions>;
+  readonly fadeSelection: (
+    rects: readonly {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      color: string;
+      opacity: number;
+      border: number;
+    }[],
+  ) => void;
+  readonly animateFeedback: (node: HTMLElement, frames: Keyframe[]) => void;
+  readonly openViewDialog: (col: number, sort?: 'asc' | 'desc' | 'clear') => void;
   readonly accessibility: ReturnType<typeof createAccessibility>;
   readonly accessibleBody: HTMLDivElement;
   readonly accessibleCell: (row: number, col: number, value: unknown) => HTMLElement;
@@ -91,6 +105,7 @@ interface RenderingContext
 }
 
 export function createRendering(context: RenderingContext) {
+  const headerStates = new Map<string, string>();
   const measuredRows = new Set<number>();
   let frame: number | undefined;
   let fullDraw = true;
@@ -132,7 +147,7 @@ export function createRendering(context: RenderingContext) {
 
   function replay(redo: boolean): boolean {
     if (context.destroyed || context.editors.editor) return false;
-    return redo ? context.engine.redo() : context.engine.undo();
+    return context.structureAction(() => (redo ? context.engine.redo() : context.engine.undo()));
   }
 
   function cellLinks(row: number, col: number) {
@@ -177,6 +192,107 @@ export function createRendering(context: RenderingContext) {
     return locked;
   }
 
+  // Retain only recently visible values, never a snapshot of the data source.
+  const valueHistory = new Map<
+    string,
+    {
+      value: number | readonly unknown[];
+      previous: unknown;
+      started: number;
+      direction: number;
+      timing: Animation | null;
+    }
+  >();
+  const animatedCells = new Map<string, { rowIndex: number; columnKey: string }>();
+  function cellChange(value: unknown, rowIndex: number, columnIndex: number) {
+    const settings = context.motionSettings;
+    if (!(settings.valueIndicators || settings.chartUpdates)) {
+      valueHistory.clear();
+      return undefined;
+    }
+    const numeric = settings.valueIndicators && typeof value === 'number' && Number.isFinite(value);
+    const series = settings.chartUpdates && Array.isArray(value) && value.length <= 512;
+    const key = JSON.stringify([context.engine.getRowId(rowIndex), context.columns[columnIndex]!.key]);
+    if (!numeric && !series) {
+      valueHistory.delete(key);
+      return undefined;
+    }
+    const next = numeric ? (value as number) : (value as unknown[]);
+    let record = valueHistory.get(key);
+    const changed =
+      record &&
+      (numeric
+        ? !Object.is(record.value, next)
+        : !Array.isArray(record.value) ||
+          record.value.length !== (next as unknown[]).length ||
+          record.value.some((item, index) => !Object.is(item, (next as unknown[])[index])));
+    if (!record || changed) {
+      let previous = record?.value;
+      if (record?.timing && Array.isArray(previous) && Array.isArray(record.previous)) {
+        record.timing.currentTime = context.win.performance.now() - record.started;
+        const progress = record.timing.effect!.getComputedTiming().progress ?? 1;
+        const old = record.previous;
+        previous = previous.map((item, index) => {
+          const from = old[Math.min(index, old.length - 1)];
+          return typeof item === 'number' && Number.isFinite(item) && typeof from === 'number' && Number.isFinite(from)
+            ? from * (1 - progress) + item * progress
+            : item;
+        });
+      }
+      record?.timing?.cancel();
+      const timing =
+        series &&
+        previous !== undefined &&
+        settings.duration > 0 &&
+        !context.win.matchMedia('(prefers-reduced-motion: reduce)').matches
+          ? new context.win.Animation(
+              new context.win.KeyframeEffect(null, [], {
+                duration: settings.duration,
+                easing: settings.easing,
+                fill: 'both',
+              }),
+              null,
+            )
+          : null;
+      record = {
+        value: Array.isArray(next) ? [...next] : next,
+        previous,
+        started: context.win.performance.now(),
+        direction: numeric && typeof previous === 'number' ? Math.sign((next as number) - previous) : 0,
+        timing,
+      };
+      valueHistory.delete(key);
+      valueHistory.set(key, record);
+      if (valueHistory.size > 4096) {
+        const first = valueHistory.keys().next().value!;
+        valueHistory.get(first)?.timing?.cancel();
+        valueHistory.delete(first);
+      }
+    }
+    let progress = 1;
+    if (record.timing) {
+      const elapsed = context.win.performance.now() - record.started;
+      if (
+        !settings.chartUpdates ||
+        !settings.duration ||
+        context.win.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+        elapsed >= settings.duration
+      ) {
+        record.timing.cancel();
+        record.timing = null;
+      } else {
+        record.timing.currentTime = elapsed;
+        progress = record.timing.effect!.getComputedTiming().progress ?? 1;
+        animatedCells.set(key, { rowIndex, columnKey: context.columns[columnIndex]!.key });
+      }
+    }
+    return {
+      previousValue: record.previous,
+      animationProgress: progress,
+      direction: settings.valueIndicators ? record.direction : 0,
+    };
+  }
+
   function cell(
     value: unknown,
     x: number,
@@ -187,7 +303,23 @@ export function createRendering(context: RenderingContext) {
     rowIndex = 0,
     columnIndex = 0,
   ): void {
-    paintCell(value, x, y, width, height, header, rowIndex, columnIndex);
+    const change = header ? undefined : cellChange(value, rowIndex, columnIndex);
+    const inset = change?.direction && width >= 40 ? 16 : 0;
+    // Reserve a leading gutter so custom numeric renderers cannot overlap the indicator.
+    paintCell(value, x, y, width, height, header, rowIndex, columnIndex, change, inset);
+    if (inset) {
+      const ctx = context.context!;
+      ctx.save();
+      ctx.fillStyle = change!.direction > 0 ? context.theme.increaseColor : context.theme.decreaseColor;
+      const center = y + height / 2;
+      ctx.beginPath();
+      ctx.moveTo(x + 8, center + (change!.direction > 0 ? -4 : 4));
+      ctx.lineTo(x + 4, center + (change!.direction > 0 ? 3 : -3));
+      ctx.lineTo(x + 12, center + (change!.direction > 0 ? 3 : -3));
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
     const labels = context.stateLabels(header ? null : rowIndex, columnIndex);
     const ctx = context.context!;
     ctx.save();
@@ -221,17 +353,6 @@ export function createRendering(context: RenderingContext) {
       ctx.fillStyle = context.theme.selectionColor;
       ctx.fillRect(x, y, width, height);
       ctx.globalAlpha = 1;
-    }
-    if (header) {
-      const sort =
-        context.currentView?.sorts?.find((item) => item.columnKey === context.columns[columnIndex]!.key) ??
-        context.currentView?.sort;
-      if (sort?.columnKey === context.columns[columnIndex]!.key) {
-        stateIcon(sort.direction === 'asc' ? 'arrow-up' : 'arrow-down', x + width - 36, y + (height - 16) / 2);
-      }
-      if (context.currentView?.filters?.some((filter) => filter.columnKey === context.columns[columnIndex]!.key)) {
-        stateIcon('funnel', x + width - 54, y + (height - 16) / 2);
-      }
     }
     if (labels.some((label) => label.includes('disabled'))) {
       ctx.globalAlpha = 0.22;
@@ -291,6 +412,8 @@ export function createRendering(context: RenderingContext) {
     header: boolean,
     rowIndex = 0,
     columnIndex = 0,
+    change?: { previousValue: unknown; animationProgress: number },
+    inset = 0,
   ): void {
     const selection = context.engine.getSelection();
     const ctx = context.context!;
@@ -304,6 +427,41 @@ export function createRendering(context: RenderingContext) {
     const textColor = format?.textColor ?? context.theme.textColor;
     ctx.fillStyle = header ? context.theme.headerBackground : background;
     ctx.fillRect(x, y, width, height);
+    const backgroundX = x,
+      backgroundWidth = width;
+    const paintBackground = () => {
+      if (header || !context.options.renderCellBackground) return;
+      ctx.save();
+      try {
+        ctx.beginPath();
+        ctx.rect(backgroundX, y, backgroundWidth, height);
+        ctx.clip();
+        context.options.renderCellBackground(
+          ctx,
+          Object.freeze({
+            value,
+            ...change,
+            format: format!,
+            rowIndex,
+            rowId: context.engine.getRowId(rowIndex),
+            columnIndex,
+            columnKey: context.columns[columnIndex]!.key,
+            x: backgroundX,
+            y,
+            width: backgroundWidth,
+            height,
+          }),
+        );
+      } catch (error) {
+        context.win.console.error(context.t('Cell renderer failed.'), error);
+      } finally {
+        ctx.restore();
+        ctx.beginPath();
+      }
+    };
+    paintBackground();
+    x += inset;
+    width -= inset;
     const range = context.getSelectionRange();
     const wholeColumn = context
       .getSelectionRanges()
@@ -340,6 +498,7 @@ export function createRendering(context: RenderingContext) {
           ctx,
           Object.freeze({
             value,
+            ...change,
             format: format!,
             rowIndex,
             rowId: context.engine.getRowId(rowIndex),
@@ -364,6 +523,12 @@ export function createRendering(context: RenderingContext) {
       ctx.clearRect(x, y, width, height);
       ctx.fillStyle = background;
       ctx.fillRect(x, y, width, height);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, y, width, height);
+      ctx.clip();
+      paintBackground();
+      ctx.restore();
     }
     if (!header && context.mediaColumn(context.columns[columnIndex]!.key)) {
       if (context.avatarColumns.has(context.columns[columnIndex]!.key) || Array.isArray(value))
@@ -439,12 +604,26 @@ export function createRendering(context: RenderingContext) {
     }
     ctx.save();
     ctx.beginPath();
-    ctx.rect(x + 8, y, Math.max(0, width - 16), height);
+    const headerKey = context.columns[columnIndex]?.key;
+    const headerSort =
+      header &&
+      (context.currentView?.sorts ?? (context.currentView?.sort ? [context.currentView.sort] : [])).some(
+        (sort) => sort.columnKey === headerKey,
+      );
+    const headerFilter = header && context.currentView?.filters?.some((filter) => filter.columnKey === headerKey);
+    const rightInset =
+      header && (headerSort || headerFilter) ? 20 + 18 * (Number(!!headerSort) + Number(!!headerFilter)) : 8;
+    const textWidth = Math.max(0, width - 10 - rightInset);
+    ctx.rect(x + 8, y, Math.max(0, width - 8 - rightInset), height);
     ctx.clip();
     ctx.fillStyle = header ? context.theme.headerTextColor : textColor;
     ctx.font = header ? context.theme.headerFont : cellFont;
     ctx.textBaseline = 'middle';
-    const text = header ? String(value ?? '') : context.numberText(value, format?.numberFormat);
+    let text = header ? String(value ?? '') : context.numberText(value, format?.numberFormat);
+    if (header && ctx.measureText(text).width > textWidth) {
+      while (text && ctx.measureText(text + '…').width > textWidth) text = text.slice(0, -1);
+      text = text ? text + '…' : '';
+    }
     const links = !header && context.options.detectLinks !== false ? detectLinks(value) : [];
     const paintText = (line: string, offset: number, top: number, lineHeight = 0) => {
       let left = x + 10;
@@ -494,7 +673,7 @@ export function createRendering(context: RenderingContext) {
       if (top + lineHeight <= y + height) paintText(line, offset, top, lineHeight);
     } else if (header && context.headers.levels > 1) {
       ctx.textAlign = 'center';
-      ctx.fillText(text, x + width / 2, y + height / 2);
+      ctx.fillText(text, x + 10 + textWidth / 2, y + height / 2);
     } else paintText(text, 0, y + height / 2);
     ctx.restore();
     if (!header) context.highlightSearch(x, y, width, height, rowIndex, columnIndex);
@@ -683,6 +862,8 @@ export function createRendering(context: RenderingContext) {
     rowLockCache.clear();
     frame = undefined;
     if (context.destroyed) return;
+    for (const change of animatedCells.values()) dirty.set(JSON.stringify([change.rowIndex, change.columnKey]), change);
+    animatedCells.clear();
     if (context.options.autoRowHeight && !context.editors.editor && !context.interaction.resizing)
       for (const row of context.visibleIndices('row')) {
         if (context.engine.isRowHeightManual(row) || measuredRows.has(row)) continue;
@@ -719,6 +900,7 @@ export function createRendering(context: RenderingContext) {
         context.context!.restore();
       }
       dirty.clear();
+      if (animatedCells.size) schedule();
       return;
     }
     fullDraw = false;
@@ -805,6 +987,7 @@ export function createRendering(context: RenderingContext) {
         );
         const header = context.doc.createElement('div');
         header.dataset.gridHeaderCell = String(col);
+        header.dataset.columnKey = context.columns[col]!.key;
         header.tabIndex = 0;
         header.setAttribute('role', context.viewportAccessibility ? 'columnheader' : 'button');
         header.setAttribute(
@@ -828,8 +1011,64 @@ export function createRendering(context: RenderingContext) {
         });
         header.style.cssText = `position:absolute;left:${Math.max(band.x, context.columnAxis.position(col) + band.offset)}px;top:${layout.level * context.headerRowHeight}px;width:${Math.max(0, Math.min(band.x + band.width, context.columnAxis.position(col + 1) + band.offset) - Math.max(band.x, context.columnAxis.position(col) + band.offset))}px;height:${layout.rowSpan * context.headerRowHeight}px`;
         header.dataset.headerLevel = String(layout.level);
-        header.setAttribute('aria-rowspan', String(layout.rowSpan));
+        const columnKey = context.columns[col]!.key;
+        const sortState = (
+          context.currentView?.sorts ?? (context.currentView?.sort ? [context.currentView.sort] : [])
+        ).find((item) => item.columnKey === columnKey)?.direction;
+        const filtered = context.currentView?.filters?.some((item) => item.columnKey === columnKey) ?? false;
+        const previous = headerStates.get(columnKey);
+        const state = `${sortState ?? ''}:${filtered}`;
+        const visibleWidth = Number.parseFloat(header.style.width);
+        const compact = !!sortState && filtered && visibleWidth < 54;
+        for (const [name, right] of [
+          [!compact && sortState === 'asc' ? 'arrow-up' : !compact && sortState === 'desc' ? 'arrow-down' : '', 20],
+          [filtered ? 'funnel' : '', sortState && !compact ? 38 : 20],
+        ] as const) {
+          if (!name) continue;
+          const icon = context.doc.createElement('button');
+          icon.type = 'button';
+          icon.dataset.gridHeaderState = name;
+          icon.setAttribute(
+            'aria-label',
+            context.t(
+              compact ? 'Sort and filter column {0}' : name === 'funnel' ? 'Filter column {0}' : 'Sort column {0}',
+              context.columns[col]!.title,
+            ),
+          );
+          icon.disabled = context.options.viewMode === 'host' && !context.options.onViewChange;
+          icon.addEventListener('pointerdown', (event) => event.stopPropagation());
+          icon.addEventListener('keydown', (event) => event.stopPropagation());
+          icon.addEventListener('click', (event) => {
+            event.stopPropagation();
+            if (context.finishEdit(true)) {
+              if (compact) {
+                const bounds = icon.getBoundingClientRect();
+                context.openMenu(context.engine.getSelection()?.rowIndex ?? 0, col, bounds.left, bounds.bottom, true);
+              } else context.openViewDialog(col, name === 'funnel' ? undefined : sortState === 'asc' ? 'desc' : 'asc');
+            }
+          });
+          icon.style.cssText = `position:absolute;cursor:pointer;border:0;padding:0;background:transparent;right:${Math.min(right, Math.max(0, visibleWidth - 16))}px;top:calc(50% - 8px);width:${Math.min(16, visibleWidth)}px;height:16px;color:var(--acheron-icon-color)`;
+          icon.innerHTML = context.stateIconSvg[name];
+          icon.firstElementChild?.setAttribute('width', '16');
+          icon.firstElementChild?.setAttribute('height', '16');
+          header.append(icon);
+          if (previous !== undefined && previous !== state)
+            context.animateFeedback(icon, [
+              {
+                opacity: 0.25,
+                transform:
+                  name === 'funnel'
+                    ? 'scale(.7)'
+                    : previous.startsWith(sortState === 'asc' ? 'desc' : 'asc')
+                      ? 'rotate(180deg)'
+                      : 'translateY(3px)',
+              },
+              { opacity: 1, transform: 'none' },
+            ]);
+        }
+        headerStates.set(columnKey, state);
         if (context.viewportAccessibility) {
+          header.setAttribute('aria-rowspan', String(layout.rowSpan));
           header.setAttribute('role', 'columnheader');
           header.setAttribute('aria-colindex', String(col + 1));
           header.setAttribute('aria-label', context.columns[col]!.title);
@@ -942,8 +1181,22 @@ export function createRendering(context: RenderingContext) {
         row.append(...headerNodes.filter((node) => Number(node.dataset.headerLevel) === level));
         return row;
       });
-      context.headerSurface.replaceChildren(...rows);
-    } else context.headerSurface.replaceChildren(...headerNodes);
+      if (
+        rows.length !== context.headerSurface.children.length ||
+        rows.some((node, i) => !node.isEqualNode(context.headerSurface.children[i]!))
+      )
+        context.headerSurface.replaceChildren(...rows);
+    } else if (
+      headerNodes.length !== context.headerSurface.children.length ||
+      headerNodes.some((node, i) => !node.isEqualNode(context.headerSurface.children[i]!))
+    )
+      context.headerSurface.replaceChildren(...headerNodes);
+    const visibleHeaderKeys = new Set(
+      headerNodes.flatMap((node) =>
+        node.dataset.gridHeaderCell === undefined ? [] : [context.columns[Number(node.dataset.gridHeaderCell)]!.key],
+      ),
+    );
+    for (const key of headerStates.keys()) if (!visibleHeaderKeys.has(key)) headerStates.delete(key);
     if (focusedHeader !== undefined)
       headerNodes.find((node) => node.dataset.gridHeaderCell === focusedHeader)?.focus({ preventScroll: true });
     else if (focusedGroup !== undefined)
@@ -980,6 +1233,7 @@ export function createRendering(context: RenderingContext) {
     }
     drawIndex();
     context.releaseUnusedImages();
+    if (animatedCells.size) schedule();
   }
 
   function drawIndex(): void {
@@ -1091,7 +1345,7 @@ export function createRendering(context: RenderingContext) {
         const resizeHandle = context.doc.createElement('span');
         resizeHandle.dataset.gridRowResize = String(row);
         resizeHandle.setAttribute('aria-hidden', 'true');
-        resizeHandle.title = 'Drag to resize row; double-click to fit';
+        resizeHandle.title = context.t('Drag to resize row; double-click to fit');
         resizeHandle.style.cssText = 'position:absolute;bottom:0;left:0;width:100%;height:5px;cursor:row-resize';
         button.append(resizeHandle);
         context.reorderHandle(button, 'row', row);
@@ -1170,9 +1424,85 @@ export function createRendering(context: RenderingContext) {
     context.enteringGroups.clear();
   }
 
+  let previousSelection: {
+    key: string;
+    multiple: boolean;
+    rects: { x: number; y: number; width: number; height: number; color: string; opacity: number; border: number }[];
+  }[] = [];
+  let previousScroll = '';
   function drawSelection(regions: readonly ViewportRegion[]): void {
     const selection = context.engine.getSelection();
     const original = context.getSelectionRanges();
+    const scroll = context.scroller.scrollLeft + ':' + context.scroller.scrollTop;
+    const current = original.slice(0, 64).map((range) => ({
+      key: JSON.stringify(range),
+      multiple: range.startRow !== range.endRow || range.startColumn !== range.endColumn,
+      rects: regions.flatMap((region) => {
+        const x = Math.max(region.clip.x, context.columnAxis.position(range.startColumn) + region.offsetX);
+        const y = Math.max(region.clip.y, context.rowAxis.position(range.startRow) + region.offsetY);
+        const right = Math.min(
+          region.clip.x + region.clip.width,
+          context.columnAxis.position(range.endColumn + 1) + region.offsetX,
+        );
+        const bottom = Math.min(
+          region.clip.y + region.clip.height,
+          context.rowAxis.position(range.endRow + 1) + region.offsetY,
+        );
+        return right > x && bottom > y
+          ? [
+              {
+                x,
+                y: y + context.headerHeight,
+                width: right - x,
+                height: bottom - y,
+                color: context.theme.selectionColor,
+                opacity: context.rangeTintOpacity,
+                border: context.rangeBorderWidth,
+              },
+            ]
+          : [];
+      }),
+    }));
+    const changed =
+      JSON.stringify(current.map((next) => next.key)) !== JSON.stringify(previousSelection.map((old) => old.key));
+    const dragging = context.interaction.dragPointer !== null && context.interaction.dragPosition !== null;
+    const exiting =
+      changed &&
+      !dragging &&
+      scroll === previousScroll &&
+      (current.length < previousSelection.length || previousSelection.some((old) => old.multiple));
+    if (exiting) {
+      const retained = current.flatMap((next) => next.rects);
+      const removed = previousSelection
+        .filter((old) => !current.some((next) => next.key === old.key))
+        .flatMap((old) => old.rects);
+      // Only fade the tint that actually left the selection; current borders are immediate.
+      for (const keep of retained) {
+        for (let i = removed.length - 1; i >= 0; i--) {
+          const old = removed[i]!;
+          const left = Math.max(old.x, keep.x);
+          const top = Math.max(old.y, keep.y);
+          const right = Math.min(old.x + old.width, keep.x + keep.width);
+          const bottom = Math.min(old.y + old.height, keep.y + keep.height);
+          if (right <= left || bottom <= top) continue;
+          const pieces = [
+            { ...old, height: top - old.y },
+            { ...old, y: bottom, height: old.y + old.height - bottom },
+            { ...old, y: top, width: left - old.x, height: bottom - top },
+            { ...old, x: right, y: top, width: old.x + old.width - right, height: bottom - top },
+          ].filter((rect) => rect.width > 0 && rect.height > 0);
+          removed.splice(i, 1, ...pieces);
+        }
+        if (removed.length > 256) {
+          removed.length = 0;
+          break;
+        }
+      }
+      context.fadeSelection(removed);
+    }
+    if (!exiting && (changed || scroll !== previousScroll)) context.fadeSelection([]);
+    previousSelection = current;
+    previousScroll = scroll;
     const ranges: SelectionRange[] = [];
     for (const axis of ['row', 'column'] as const) {
       const full = (range: SelectionRange) =>
@@ -1216,6 +1546,7 @@ export function createRendering(context: RenderingContext) {
       clipRegion(region);
       context.context!.strokeStyle = context.theme.selectionColor;
       context.context!.lineWidth = context.rangeBorderWidth;
+      context.context!.beginPath();
       for (const range of ranges) {
         if (
           !activeScope &&
@@ -1225,26 +1556,50 @@ export function createRendering(context: RenderingContext) {
           range.startColumn === selection.columnIndex
         )
           continue;
-        context.context!.strokeRect(
-          context.columnAxis.position(range.startColumn) + region.offsetX + context.rangeBorderWidth / 2,
-          context.headerHeight +
-            context.rowAxis.position(range.startRow) +
-            region.offsetY +
-            context.rangeBorderWidth / 2,
-          Math.max(
-            0,
-            context.columnAxis.position(range.endColumn + 1) -
-              context.columnAxis.position(range.startColumn) -
-              context.rangeBorderWidth,
-          ),
-          Math.max(
-            0,
-            context.rowAxis.position(range.endRow + 1) -
-              context.rowAxis.position(range.startRow) -
-              context.rangeBorderWidth,
-          ),
-        );
+        // Sparse rectangle edges: hide interior seams, including boundaries around subtracted cells.
+        // At most 128 ranges; use a sweep-line union if that public cap grows.
+        for (const edge of ['top', 'bottom', 'left', 'right'] as const) {
+          const horizontal = edge === 'top' || edge === 'bottom';
+          const leading = edge === 'top' || edge === 'left';
+          const at = horizontal
+            ? leading
+              ? range.startRow
+              : range.endRow + 1
+            : leading
+              ? range.startColumn
+              : range.endColumn + 1;
+          let spans = [
+            [horizontal ? range.startColumn : range.startRow, horizontal ? range.endColumn + 1 : range.endRow + 1],
+          ];
+          for (const other of ranges) {
+            if (other === range) continue;
+            const low = horizontal ? other.startRow : other.startColumn;
+            const high = horizontal ? other.endRow + 1 : other.endColumn + 1;
+            if (!(leading ? low < at && high >= at : low <= at && high > at)) continue;
+            const start = horizontal ? other.startColumn : other.startRow;
+            const end = horizontal ? other.endColumn + 1 : other.endRow + 1;
+            spans = spans.flatMap(([a, b]) =>
+              end <= a! || start >= b!
+                ? [[a!, b!]]
+                : [...(a! < start ? [[a!, start]] : []), ...(end < b! ? [[end, b!]] : [])],
+            );
+          }
+          const axis = horizontal ? context.columnAxis : context.rowAxis;
+          const offset = horizontal ? region.offsetX : context.headerHeight + region.offsetY;
+          const fixed =
+            (horizontal
+              ? context.headerHeight + context.rowAxis.position(at) + region.offsetY
+              : context.columnAxis.position(at) + region.offsetX) +
+            ((leading ? 1 : -1) * context.rangeBorderWidth) / 2;
+          for (const [a, b] of spans) {
+            const start = axis.position(a!) + offset + context.rangeBorderWidth / 2;
+            const end = axis.position(b!) + offset - context.rangeBorderWidth / 2;
+            context.context!.moveTo(horizontal ? start : fixed, horizontal ? fixed : start);
+            context.context!.lineTo(horizontal ? end : fixed, horizontal ? fixed : end);
+          }
+        }
       }
+      context.context!.stroke();
       // Draw the active cell once in its own pane, above semantic cell colors.
       if (
         !activeScope &&
@@ -1354,7 +1709,6 @@ export function createRendering(context: RenderingContext) {
       button.style.left = `${context.indexWidth + Math.max(half, Math.min(view.width - half, x)) - half}px`;
       button.style.top = `${context.headerHeight + Math.max(half, Math.min(view.height - half, y)) - half}px`;
     });
-    context.closeMenu();
     fullDraw = true;
     schedule();
   }
@@ -1363,6 +1717,11 @@ export function createRendering(context: RenderingContext) {
     if (!context.destroyed && frame === undefined) frame = context.win.requestAnimationFrame(draw);
   }
   return {
+    clearValueHistory: () => {
+      for (const record of valueHistory.values()) record.timing?.cancel();
+      valueHistory.clear();
+      animatedCells.clear();
+    },
     svgIcon,
     invalidate,
     updateCells,

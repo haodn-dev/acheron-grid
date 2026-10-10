@@ -4,6 +4,7 @@ import type { CellPermission } from '../permissions.js';
 import { resolvePermissions } from '../permissions.js';
 import type { CellFormat, CellFormatPatch, CellFormatTarget, CellLockTarget, SelectionRange } from '../types.js';
 import type { EngineContext, FormatChange } from './engine-context.js';
+import { assertHistoryCapacity, recordHistory } from './history-budget.js';
 export function createFormatting(
   context: Pick<
     EngineContext,
@@ -144,7 +145,7 @@ export function createFormatting(
   function format(targets: readonly CellFormatTarget[], patch: CellFormatPatch | null): void {
     dependencies.assertAlive();
     if (patch !== null) {
-      if (!patch || typeof patch !== 'object') throw new TypeError('Invalid formatting patch.');
+      if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new TypeError('Invalid formatting patch.');
       patch = Object.freeze({ ...patch });
       for (const [key, value] of Object.entries(patch))
         if (
@@ -213,9 +214,10 @@ export function createFormatting(
       });
     }
     if (!changes.length) return;
+    const entry = { kind: 'format' as const, changes };
+    assertHistoryCapacity(context, entry);
     writeFormats(changes);
-    context.past.push({ kind: 'format', changes });
-    if (context.past.length > 100) context.past.shift();
+    recordHistory(context, entry);
     context.future.length = 0;
     notifyFormats(changes, 'api');
   }

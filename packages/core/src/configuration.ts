@@ -26,7 +26,7 @@ export function restoreGridConfiguration(input: unknown, columns: readonly Colum
     throw new TypeError('Configuration must contain all current columns.');
   const seen = new Set<string>();
   const widths: [string, number][] = [];
-  const ordered = state.columns.map((value: unknown) => {
+  const ordered = Array.from(state.columns, (value: unknown) => {
     const entry = record(value);
     if (typeof entry.key !== 'string' || !definitions.has(entry.key) || seen.has(entry.key))
       throw new TypeError('Unknown or duplicate configuration column.');
@@ -56,7 +56,7 @@ export function restoreGridConfiguration(input: unknown, columns: readonly Colum
   if (savedView.sorts !== undefined) {
     if (savedView.sort !== undefined || !Array.isArray(savedView.sorts))
       throw new TypeError('Invalid configuration sorts.');
-    const sorts: NonNullable<LocalViewOptions['sorts']> = savedView.sorts.map((value: unknown) => {
+    const sorts: NonNullable<LocalViewOptions['sorts']> = Array.from(savedView.sorts, (value: unknown) => {
       const sort = record(value);
       if (sort.direction !== 'asc' && sort.direction !== 'desc')
         throw new TypeError('Invalid configuration sort direction.');
@@ -70,7 +70,7 @@ export function restoreGridConfiguration(input: unknown, columns: readonly Colum
     if (!Array.isArray(savedView.filters)) throw new TypeError('Invalid configuration filters.');
     view = {
       ...view,
-      filters: savedView.filters.map((value: unknown) => {
+      filters: Array.from(savedView.filters, (value: unknown) => {
         const filter = record(value);
         if (typeof filter.query !== 'string') throw new TypeError('Invalid configuration filter query.');
         const operator = filter.operator;

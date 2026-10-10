@@ -3,6 +3,7 @@ import type { GridInvalidation } from '../engine.js';
 import type { GridEvent } from '../events.js';
 import type { CellPermission } from '../permissions.js';
 import { clipboardCellLimit } from '../tsv.js';
+import { recordHistory } from './history-budget.js';
 import type { LayoutRequest, RowGroup, SelectionRange } from '../types.js';
 import type { EngineContext, HistoryCommand } from './engine-context.js';
 export function createOutline(
@@ -177,8 +178,7 @@ export function createOutline(
     };
     context.merges = [...nextMerges];
     context.groups = [...nextGroups];
-    context.past.push(entry);
-    if (context.past.length > 100) context.past.shift();
+    recordHistory(context, entry);
     context.future.length = 0;
     notifyOutline(requests[0] && 'range' in requests[0] ? 'merge' : 'group', old, 'api');
   }
@@ -196,7 +196,20 @@ export function createOutline(
       validateMergeFreeze([span]);
       return (
         (span.startRow !== span.endRow || span.startColumn !== span.endColumn) &&
-        !context.merges.some((other) => intersects(span, other)) &&
+        !context.merges.some(
+          (other) =>
+            intersects(span, other) &&
+            (!(
+              span.startRow <= other.startRow &&
+              span.endRow >= other.endRow &&
+              span.startColumn <= other.startColumn &&
+              span.endColumn >= other.endColumn
+            ) ||
+              (span.startRow === other.startRow &&
+                span.endRow === other.endRow &&
+                span.startColumn === other.startColumn &&
+                span.endColumn === other.endColumn)),
+        ) &&
         layoutAllowed({ kind: 'merge', range: span })
       );
     } catch {
@@ -207,7 +220,11 @@ export function createOutline(
     if (!canMerge(range))
       throw new Error('This range cannot be merged. Check locks, existing merges and frozen boundaries.');
     const span = mergeRange(range);
-    changeOutline([{ kind: 'merge', range: span }], [...context.merges, span], context.groups);
+    changeOutline(
+      [{ kind: 'merge', range: span }],
+      [...context.merges.filter((other) => !intersects(span, other)), span],
+      context.groups,
+    );
   }
   function unmergeCells(range: SelectionRange): void {
     const parts = dependencies.sourceRanges(range),

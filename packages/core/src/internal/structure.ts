@@ -1,4 +1,5 @@
 import { GridAxis } from '../axis.js';
+import { recordHistory } from './history-budget.js';
 import type { DataRow, RowId, RowSplice } from '../data-source.js';
 import type { GridInvalidation } from '../engine.js';
 import type { GridEvent } from '../events.js';
@@ -299,12 +300,12 @@ export function createStructure(
       !Number.isSafeInteger(request.count) ||
       request.count < 1 ||
       new Set(request.indices).size !== request.indices.length ||
-      request.indices.some((i) => !Number.isSafeInteger(i) || i < 0 || i >= limit)
+      [...request.indices].some((i) => !Number.isSafeInteger(i) || i < 0 || i >= limit)
     )
       return false;
     if (
       context.destroyed ||
-      context.projection ||
+      (context.projection && !(request.axis === 'column' && request.kind === 'move')) ||
       context.tableLocked ||
       context.options.canChangeStructure?.(request) === false
     )
@@ -479,8 +480,7 @@ export function createStructure(
       rowMap: Object.freeze(rowMap),
       columnMap: Object.freeze(columnMap),
     };
-    context.past.push(entry);
-    if (context.past.length > 100) context.past.shift();
+    recordHistory(context, entry);
     context.future.length = 0;
     notifyStructure(entry, true, 'api');
   }

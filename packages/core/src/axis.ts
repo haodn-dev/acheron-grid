@@ -34,9 +34,14 @@ export class GridAxis {
   replaceHidden(indices: readonly number[]): void {
     if (
       new Set(indices).size !== indices.length ||
-      indices.some((index) => !Number.isSafeInteger(index) || index < 0 || index >= this.count)
+      [...indices].some((index) => !Number.isSafeInteger(index) || index < 0 || index >= this.count)
     )
       throw new RangeError('Invalid hidden axis indices.');
+    const next = new GridAxis(this.count, this.defaultSize);
+    for (const [index, size] of this.overrides) next.overrides.set(index, size);
+    for (const index of indices) next.hidden.add(index);
+    next.rebuild();
+    if (!Number.isFinite(next.position(this.count))) throw new RangeError('Axis dimensions overflow.');
     this.hidden.clear();
     for (const index of indices) this.hidden.add(index);
     this.rebuild();

@@ -4,6 +4,8 @@ import type { GridChangeSource, GridEvent } from '../events.js';
 import type { CellPermission } from '../permissions.js';
 import type { LayoutRequest, SelectionRange } from '../types.js';
 import type { Change, EngineContext, FormatChange, HistoryCommand } from './engine-context.js';
+import { drain } from './bulk.js';
+import type { BulkSteps } from './bulk.js';
 export function createHistory(
   context: Pick<
     EngineContext,
@@ -50,7 +52,7 @@ export function createHistory(
     notifyCells: (changes: readonly Change[], source: GridChangeSource) => void;
   },
 ) {
-  function replay(redo: boolean): boolean {
+  function* replaySteps(redo: boolean, cooperative = false, guarded = false): BulkSteps<boolean> {
     if (context.destroyed) return false;
     const from = redo ? context.future : context.past;
     const to = redo ? context.past : context.future;
@@ -198,6 +200,7 @@ export function createHistory(
         throw new Error('Formatting history conflicts with external changes.');
       dependencies.requireFormatPermission((change.value ?? change.previous)!.bounds);
     }
+    let completed = 0;
     for (const change of changes) {
       if (
         context.dataSource.getRowId(change.rowIndex) !== change.rowId ||
@@ -208,14 +211,37 @@ export function createHistory(
       ) {
         throw new Error('History conflicts with external data changes.');
       }
+      if (cooperative && ++completed % 256 === 0) yield { phase: 'validate', completed, total: changes.length };
     }
-    for (const change of changes)
+    completed = 0;
+    for (const change of changes) {
       dependencies.requirePermission(change.rowIndex, context.columnIndices.get(change.columnKey)!, 'writable');
-    const updates = changes.map((change) => ({
-      ...change,
-      previous: redo ? change.previous : change.value,
-      value: redo ? change.value : change.previous,
-    }));
+      if (cooperative && ++completed % 256 === 0) yield { phase: 'validate', completed, total: changes.length };
+    }
+    const updates: Change[] = [];
+    completed = 0;
+    for (const change of changes) {
+      updates.push({
+        ...change,
+        previous: redo ? change.previous : change.value,
+        value: redo ? change.value : change.previous,
+      });
+      if (cooperative && ++completed % 256 === 0) yield { phase: 'prepare', completed, total: changes.length };
+    }
+    completed = 0;
+    if (cooperative)
+      for (const change of changes) {
+        if (
+          context.dataSource.getRowId(change.rowIndex) !== change.rowId ||
+          !Object.is(
+            context.dataSource.getValue(change.rowIndex, change.columnKey),
+            redo ? change.previous : change.value,
+          )
+        )
+          throw new Error('History conflicts with external data changes.');
+        dependencies.requirePermission(change.rowIndex, context.columnIndices.get(change.columnKey)!, 'writable');
+        if (guarded && ++completed % 256 === 0) yield { phase: 'validate', completed, total: changes.length };
+      }
     if (updates.length) dependencies.write(updates);
     const formatChanges = (entry.formats ?? []).map((change) => ({
       ...change,
@@ -229,5 +255,8 @@ export function createHistory(
     if (formatChanges.length) dependencies.notifyFormats(formatChanges, redo ? 'redo' : 'undo');
     return true;
   }
-  return { replay };
+  function replay(redo: boolean): boolean {
+    return drain(replaySteps(redo));
+  }
+  return { replay, replaySteps };
 }

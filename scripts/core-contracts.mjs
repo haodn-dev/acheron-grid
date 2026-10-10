@@ -1,5 +1,15 @@
 // Behavioral notes for the generated public API catalog.
 export const coreContracts = {
+  updateCellsAsync:
+    'Cooperative typed batch preparation with host scheduling, cancellation and optional external revision guard. One final synchronous atomic write; other engine mutations are blocked while pending.',
+  pasteAsync:
+    'Cooperative TSV parsing/preflight with the same paste options, limits and permissions. One atomic commit/history entry. Structured clipboard operations remain synchronous.',
+  undoAsync:
+    'Cooperatively preflight value history, then replay atomically. Other history kinds and final commit remain synchronous; cancellation retains the entry.',
+  redoAsync:
+    'Cooperatively preflight value redo, then replay atomically. Current identity, values and authority are rechecked before commit.',
+  setViewAsync:
+    'Cooperative local filtering and stable merge sort with the same ordering as setView. Installs the completed projection once; server queries belong to the data source.',
   subscribe:
     'Register independent event/invalidation observers. Returns an unsubscribe function; callbacks observe committed state and cannot perform nested mutations. Registration requires a live engine.',
   takeObserverErrors:
@@ -36,6 +46,8 @@ export const coreContracts = {
     'Select a visible cell, or extend from the anchor when extend is true. Selectable policy can veto; returns whether selection changed.',
   selectRange:
     'Select an inclusive visible rectangle with replace/add/extend semantics. Validate bounds, policies and projected fragmentation before changing selection.',
+  toggleSelection:
+    'Toggle a visible cell or its entire merged span. Subtract selected cells from every overlapping rectangle; add unselected cells. Invalid coordinates, denied policies and the 128-source-range limit preserve prior state.',
   addSelection:
     'Retain the existing selection and add a visible active cell. Subject to selectable policy and range/fragment limits.',
   clearSelection:
@@ -152,6 +164,8 @@ export const coreContracts = {
 };
 
 export const coreExportContracts = {
+  createPagedRemoteDataSource:
+    'Create a bounded writable page cache with stable-ID drafts, server-owned query/revision, dirty-cohort receipts, exact uncertain retry and whole-cache invalidation after accepted writes. Load only required pages; reconcile engine identity/history after cache changes.',
   createGridEngine:
     'Create the headless domain instance from application-owned columns/source/policies. See the member contracts and construction options above.',
   LocalDataSource:
@@ -179,6 +193,8 @@ export const coreExportContracts = {
 };
 
 export const sourceContracts = {
+  discardPending:
+    'Paged remote: discard only unsent or rejected drafts and invalidate cached pages. An uncertain or conflicting mutation must be resolved first.',
   getRowCount: 'Synchronous row count of this source/view. Engine projection is a separate layer.',
   getRowId:
     'Read the ID using this source/view index. Async positional identity belongs to one query; the host must manage dataset revisions.',
@@ -231,7 +247,7 @@ export const sourceContracts = {
   conflict:
     'Validated remote server snapshot on conflict, or null. Draft values remain in the cache until explicit adoption.',
   commit:
-    'Commit one immutable mutation against expectedRevision. Concurrent commit calls share the promise; lost responses retain the exact request for retry. Accepted snapshots clear drafts, rejection retains correctable drafts, conflict blocks editing.',
+    'Commit one immutable mutation against expectedRevision. Bounded remote concurrent calls share the promise; paged concurrent calls reject. Lost responses retain the exact request for retry. Acceptance clears drafts; paged acceptance invalidates pages without fetching them. Rejection retains correctable drafts; conflict blocks editing.',
   resync:
     'Load a fresh bounded remote snapshot. Unsent drafts require explicit discardPending=true; an uncertain mutation cannot be discarded. Capture engine identity first and refresh afterward.',
   reconnect:

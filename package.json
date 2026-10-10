@@ -10,8 +10,8 @@
     "format:check": "prettier --check .",
     "release": "node scripts/release.mjs",
     "test:release": "node --test tests/release.node.mjs",
-    "build": "npm run build --workspace @acheron-grid/core && npm run build --workspace @acheron-grid/canvas && npm run build --workspace @acheron-grid/markdown && npm run build --workspace @acheron-grid/react && npm run build --workspace @acheron-grid/vue && npm run build --workspace @acheron-grid/export && npm run build --workspace @acheron-grid/charts",
-    "typecheck": "npm run build && npm run typecheck --workspace @acheron-grid/core && npm run typecheck --workspace @acheron-grid/canvas && npm run typecheck --workspace @acheron-grid/markdown && npm run typecheck --workspace @acheron-grid/react && npm run typecheck --workspace @acheron-grid/vue && npm run typecheck --workspace @acheron-grid/export && npm run typecheck --workspace @acheron-grid/charts",
+    "build": "npm run build --workspace @acheron-grid/core && npm run build --workspace @acheron-grid/canvas && npm run build --workspace @acheron-grid/markdown && npm run build --workspace @acheron-grid/react && npm run build --workspace @acheron-grid/vue && npm run build --workspace @acheron-grid/export && npm run build --workspace @acheron-grid/charts && npm run build --workspace @acheron-grid/mcp",
+    "typecheck": "npm run build && npm run typecheck --workspace @acheron-grid/core && npm run typecheck --workspace @acheron-grid/canvas && npm run typecheck --workspace @acheron-grid/markdown && npm run typecheck --workspace @acheron-grid/react && npm run typecheck --workspace @acheron-grid/vue && npm run typecheck --workspace @acheron-grid/export && npm run typecheck --workspace @acheron-grid/charts && npm run typecheck --workspace @acheron-grid/mcp",
     "test": "npm run build && node --test packages/core/tests/*.test.mjs packages/canvas/tests/*.test.mjs packages/react/tests/*.test.mjs packages/export/tests/*.test.mjs packages/charts/tests/*.test.mjs",
     "test:browser": "npm run build && playwright test",
     "benchmark": "npm run build && playwright test --config benchmark.config.mjs",
@@ -27,6 +27,7 @@
     "node": ">=22"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@playwright/test": "^1.63.0",
     "@types/react": "18.3.31",
     "esbuild": "0.28.2",
@@ -34,7 +35,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "typescript": "~5.9.3",
-    "vue": "3.5.32"
+    "vue": "3.5.43"
   },
   "license": "Apache-2.0",
   "repository": {

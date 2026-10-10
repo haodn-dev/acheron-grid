@@ -1,5 +1,87 @@
 import { test, expect } from './browser-fixtures.mjs';
 
+test('queued column dialog close does not steal focus from a newly opened cell editor', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
+    window.grid = createGrid({
+      container: document.querySelector('#grid'),
+      allowColumnChanges: true,
+      dataSource: new LocalDataSource([{ id: 1, value: 'unchanged' }], (row) => row.id),
+      columns: [{ key: 'value', title: 'Value', editable: true }],
+    });
+    grid.selectColumn(0);
+  });
+  await page.locator('[data-grid-header-cell="0"]').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Insert column right…', exact: true }).click();
+  await page.evaluate(() => {
+    document.querySelector('dialog button:last-child').click();
+    // Native close is queued: start editing before that event is delivered.
+    document.querySelector('[role="grid"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true }));
+  });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('textbox')).toBeFocused();
+  await page.getByRole('textbox').fill('retained draft');
+  await page.keyboard.press('Escape');
+  expect(await page.evaluate(() => grid.getValue(0, 'value'))).toBe('unchanged');
+});
+
+test('Vietnamese drag hints and validation guidance are localized while host messages stay intact', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
+    window.grid = createGrid({
+      container: document.querySelector('#grid'),
+      locale: 'vi',
+      allowColumnChanges: true,
+      onReorder: () => {},
+      dataSource: new LocalDataSource([{ id: 1, allow: 10, reject: 10 }], (row) => row.id),
+      columns: ['allow', 'reject'].map((key) => ({
+        key,
+        title: key,
+        editable: true,
+        parse: Number,
+        validate: (value) => (value < 0 ? 'Host validation' : undefined),
+        invalidInput: key,
+      })),
+    });
+    window.grid.selectColumn(0);
+  });
+  await expect(page.locator('[data-grid-header-cell="0"]')).toHaveAttribute(
+    'title',
+    'Kéo các mục đã chọn để di chuyển; Alt+mũi tên di chuyển một vị trí',
+  );
+  await expect(page.locator('[data-grid-row-resize]').first()).toHaveAttribute(
+    'title',
+    'Kéo để đổi chiều cao hàng; nhấp đúp để tự căn',
+  );
+  const viewport = page.getByRole('grid');
+  await viewport.press('Control+Home');
+  await expect(page.getByRole('button', { name: 'Điều chỉnh vùng chọn cuối', exact: true })).toBeVisible();
+  await page.locator('[data-grid-header-cell="0"]').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Chèn cột bên phải…', exact: true }).click();
+  await expect(page.getByRole('dialog').getByRole('option', { name: 'Hộp kiểm', exact: true })).toBeAttached();
+  await page.getByRole('dialog').getByRole('button', { name: 'Hủy', exact: true }).click();
+  await viewport.press('Control+Home');
+  for (const [key, guidance] of [
+    ['allow', 'Bạn có thể lưu giá trị này.'],
+    ['reject', 'Hãy sửa giá trị trước khi lưu.'],
+  ]) {
+    await viewport.press('F2');
+    await page.getByRole('textbox').fill('-1');
+    await expect(page.getByRole('alert').filter({ hasText: 'Host validation' })).toHaveText(
+      'Host validation ' + guidance,
+    );
+    await page.keyboard.press('Escape');
+    expect(await page.evaluate((key) => window.grid.getValue(0, key), key)).toBe(10);
+    await viewport.press('ArrowRight');
+  }
+});
+
 test('hidden axes skip paint/ARIA and keyboard, retain data and recover when all columns are hidden', async ({
   page,
 }) => {

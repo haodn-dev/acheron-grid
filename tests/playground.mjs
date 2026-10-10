@@ -1,5 +1,20 @@
 import { test, expect } from '@playwright/test';
 
+test('standalone playground serves a working module worker', async ({ page }) => {
+  await page.goto('/');
+  expect(
+    await page.evaluate(async () => {
+      const { createTsvWorker } = await import('/core/worker.js');
+      const decoder = createTsvWorker(() => new Worker('/core/worker-entry.js', { type: 'module' }));
+      try {
+        return await decoder.decodeTsv('standalone\tworker');
+      } finally {
+        decoder.destroy();
+      }
+    }),
+  ).toEqual([['standalone', 'worker']]);
+});
+
 test('vanilla app edits, replays and remounts without Laravel or duplicated grid roots', async ({ page, request }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));

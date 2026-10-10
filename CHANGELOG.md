@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased — 1.0 acceptance policy
+
+- Record the selected public API compatibility/deprecation policy, package scope and evidence gates without changing runtime APIs or package versions.
+- Run standalone playground checks and retain failure diagnostics in the Firefox/WebKit CI jobs.
+- Correct outdated source capability/support descriptions; manual device, assistive-technology and production-host acceptance remain open.
+
+## Unreleased — bounded data workflows
+
+- Add writable remote paging with bounded page/draft counts, server-owned queries, stable IDs, dirty-cohort receipts and exact uncertain retry. A successful write invalidates pages without fetching the complete dataset. Include a runnable HTTP playground with 10,000 server records.
+- Accept canonical cell delta receipts in the bounded remote source without reloading or replacing unrelated rows. Validate base/new revisions, mutation coverage and the entire receipt before applying it.
+- Add explicit cooperative paste, typed update, value-history and local-view APIs with host scheduling, cancellation and revision guards. Preparation yields; the final atomic commit and structural history remain synchronous.
+- A host revision guard also permits chunked final identity/authority checks. Without it, final checks stay synchronous; callbacks/signal references are captured for the lifetime of the operation.
+- Add configurable retained command/value-change history budgets and Canvas busy/focus handling. These source-preview APIs do not guarantee a frame-time budget and are not included in npm 0.1.0.
+
+## Unreleased — integration readiness
+
+- Generate MCP declarations from TypeScript while preserving the existing server factory. Add structured error codes, a host-controlled schema row-count policy and post-write revision receipts with an explicit revision-unavailable success fallback.
+- Add a runnable HTTP remote-editing example with pending, rejected, retry and conflict review states. Its process-local backend checks revisions and deduplicates uncertain retries; production authorization and durable storage remain host responsibilities.
+- Add desktop/mobile-viewport axe checks to the remote playground and correct invalid `aria-rowspan` on button-role headers. Manual assistive-technology and physical-device acceptance remains open.
+- Reduce batch coordinate-key allocation without changing mutation order, validation, duplicate handling or history. Large commands remain synchronous.
+- Update development and packed-consumer Vue to 3.5.43. Publish an English architecture guide and complete contribution verification instructions. No package release is made by these source changes.
+
 ## Unreleased — MCP application workflow
 
 - Optional host-managed dataset revisions detect stale reads, pagination and writes while retaining per-cell expected-value checks.

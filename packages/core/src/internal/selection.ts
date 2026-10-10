@@ -54,6 +54,7 @@ export function createSelection(
     const keep =
       mode === 'replace' ? [] : mode === 'extend' ? old.slice(0, Math.max(0, old.length - context.activeParts)) : old;
     const row = dependencies.sourceRow(range.startRow);
+    const changed = context.selection?.rowIndex !== row || context.selection?.columnIndex !== range.startColumn;
     const others = parts.flatMap((part) =>
       row < part.startRow || row > part.endRow
         ? [part]
@@ -79,13 +80,15 @@ export function createSelection(
     context.activeParts = others.length + 1;
     context.cachedRanges = null;
     context.displayAnchor = { row: range.startRow, col: range.startColumn };
-    notifySelection(true, true);
-    return true;
+    const rangeChanged = JSON.stringify(old) !== JSON.stringify(getSelectionRanges());
+    if (changed || rangeChanged) notifySelection(changed, rangeChanged);
+    return changed || rangeChanged;
   }
   function selectDisplay(row: number, col: number, extend = false, add = false): boolean {
     if (!context.projection && context.activeParts === 1) {
-      context.displayAnchor = { row, col };
-      return select(row, col, extend, add);
+      const result = select(row, col, extend, add);
+      if (result) context.displayAnchor = { row, col };
+      return result;
     }
     const span = dependencies.mergeAt(dependencies.sourceRow(row), col);
     if (span) {
@@ -107,8 +110,81 @@ export function createSelection(
       },
       add ? 'add' : extend ? 'extend' : 'replace',
     );
-    context.displayAnchor = from;
+    if (result) context.displayAnchor = from;
     return result;
+  }
+  function toggleSelection(row: number, col: number): boolean {
+    dependencies.assertAlive();
+    if (
+      !Number.isSafeInteger(row) ||
+      row < 0 ||
+      row >= (context.projection?.length ?? context.rowCount) ||
+      !Number.isSafeInteger(col) ||
+      col < 0 ||
+      col >= context.columns.length
+    )
+      throw new RangeError('Invalid cell position.');
+    if (!dependencies.getCellPermission(dependencies.sourceRow(row), col).selectable) return false;
+    const span = dependencies.mergeAt(dependencies.sourceRow(row), col);
+    if (span && !dependencies.getCellPermission(span.startRow, span.startColumn).selectable) return false;
+    const beforeSelection = dependencies.displaySelection();
+    const source = dependencies.sourceRow(row);
+    const cut = span ?? { startRow: source, endRow: source, startColumn: col, endColumn: col };
+    // Subtract in source coordinates so filtered-out selections remain attached to their records.
+    const old = getSelectionRanges();
+    if (
+      !old.some(
+        (range) =>
+          range.startRow <= cut.endRow &&
+          range.endRow >= cut.startRow &&
+          range.startColumn <= cut.endColumn &&
+          range.endColumn >= cut.startColumn,
+      )
+    )
+      return selectDisplay(row, col, false, true);
+    const remaining = old.flatMap((range) => {
+      const top = Math.max(range.startRow, cut.startRow),
+        bottom = Math.min(range.endRow, cut.endRow);
+      const left = Math.max(range.startColumn, cut.startColumn),
+        right = Math.min(range.endColumn, cut.endColumn);
+      if (top > bottom || left > right) return [range];
+      return [
+        { ...range, endRow: top - 1 },
+        { ...range, startRow: bottom + 1 },
+        { startRow: top, endRow: bottom, startColumn: range.startColumn, endColumn: left - 1 },
+        { startRow: top, endRow: bottom, startColumn: right + 1, endColumn: range.endColumn },
+      ].filter((part) => part.startRow <= part.endRow && part.startColumn <= part.endColumn);
+    });
+    const parts = remaining;
+    if (parts.length > 128) throw new RangeError('Selection supports at most 128 source ranges.');
+    const active = parts.at(-1);
+    if (!active) {
+      clearSelection();
+      return true;
+    }
+    context.retainedRanges.splice(0, context.retainedRanges.length, ...parts.slice(0, -1));
+    context.selection = {
+      rowIndex: active.startRow,
+      rowId: context.dataSource.getRowId(active.startRow),
+      columnIndex: active.startColumn,
+      columnKey: context.columns[active.startColumn]!.key,
+    };
+    context.anchor = {
+      rowIndex: active.endRow,
+      rowId: context.dataSource.getRowId(active.endRow),
+      columnIndex: active.endColumn,
+      columnKey: context.columns[active.endColumn]!.key,
+    };
+    context.activeParts = 1;
+    context.cachedRanges = null;
+    const afterSelection = dependencies.displaySelection();
+    context.displayAnchor = afterSelection ? { row: afterSelection.rowIndex, col: afterSelection.columnIndex } : null;
+    notifySelection(
+      beforeSelection?.rowIndex !== afterSelection?.rowIndex ||
+        beforeSelection?.columnIndex !== afterSelection?.columnIndex,
+      true,
+    );
+    return true;
   }
   function getSelection(): CellSelection | null {
     return context.selection ? { ...context.selection } : null;
@@ -272,6 +348,7 @@ export function createSelection(
   return {
     selectDisplayRange,
     selectDisplay,
+    toggleSelection,
     getSelection,
     getSelectionRange,
     getSelectionRanges,

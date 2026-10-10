@@ -1,6 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGridEngine, LocalDataSource, encodeBlocks } from '../dist/index.js';
+import { createGridEngine, LocalDataSource, encodeBlocks, decodeBlocks } from '../dist/index.js';
+
+test('clipboard rejects array formats before changing values, selection or history', () => {
+  const source = new LocalDataSource([{ a: 'original' }], (_, i) => i);
+  const grid = createGridEngine({ dataSource: source, columns: [{ key: 'a', title: 'A', editable: true }] });
+  grid.select(0, 0);
+  const before = grid.exportState();
+  const payload = encodeBlocks([{ row: 0, column: 0, values: [['new']], formats: [[[]]] }]);
+  assert.throws(() => decodeBlocks(payload), TypeError);
+  assert.throws(() => grid.pasteSelectionBlocks(payload), TypeError);
+  assert.equal(source.getValue(0, 'a'), 'original');
+  assert.deepEqual(grid.exportState(), before);
+  assert.equal(grid.canUndo(), false);
+  grid.destroy();
+});
 
 test('formatted clipboard writes and replays atomically, checks format permissions before parsers', () => {
   let allow = true,

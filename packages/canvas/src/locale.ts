@@ -1,6 +1,15 @@
 export type CanvasTranslator = (message: string, ...values: readonly unknown[]) => string;
 
 export const canvasVietnameseMessages: Readonly<Record<string, string>> = Object.freeze({
+  start: 'đầu',
+  end: 'cuối',
+  Checkbox: 'Hộp kiểm',
+  'Sort and filter column {0}': 'Sắp xếp và lọc cột {0}',
+  'Drag selected items to move; Alt+arrow moves one position':
+    'Kéo các mục đã chọn để di chuyển; Alt+mũi tên di chuyển một vị trí',
+  'Drag to resize row; double-click to fit': 'Kéo để đổi chiều cao hàng; nhấp đúp để tự căn',
+  ' You can save this value.': ' Bạn có thể lưu giá trị này.',
+  ' Correct this before saving.': ' Hãy sửa giá trị trước khi lưu.',
   cell: 'ô',
   'selected cells': 'các ô đã chọn',
   table: 'bảng',
@@ -69,6 +78,8 @@ export const canvasVietnameseMessages: Readonly<Record<string, string>> = Object
   'Select column': 'Chọn cột',
   'Select all cells': 'Chọn tất cả ô',
   'Select row {0}': 'Chọn hàng {0}',
+  'Sort column {0}': 'Sắp xếp cột {0}',
+  'Filter column {0}': 'Lọc cột {0}',
   'Select column {0}': 'Chọn cột {0}',
   'Hide selected columns': 'Ẩn các cột đã chọn',
   'Hide selected rows': 'Ẩn các hàng đã chọn',
@@ -233,8 +244,8 @@ export const canvasVietnameseMessages: Readonly<Record<string, string>> = Object
   'Action failed.': 'Thao tác không thành công.',
   'Rich text is too large to display': 'Văn bản có định dạng quá lớn để hiển thị',
   'Rich text unavailable': 'Không hiển thị được văn bản có định dạng',
-  'Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Clear the view before changing rows or columns.':
-    'Vùng chọn, lịch sử, màu, khóa và kích thước đi theo bản ghi. Các thay đổi cập nhật chế độ xem tự động. Bỏ chế độ xem trước khi thay đổi cấu trúc hàng hoặc cột.',
+  'Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Columns can be reordered; clear the view before changing rows or adding/removing columns.':
+    'Vùng chọn, lịch sử, màu, khóa và kích thước đi theo bản ghi. Có thể đổi thứ tự cột; bỏ chế độ xem trước khi thay đổi hàng hoặc thêm/xóa cột.',
   'The host applies this row view. State retention depends on its handler.':
     'Ứng dụng áp dụng chế độ xem này. Việc giữ trạng thái phụ thuộc trình xử lý của ứng dụng.',
   'Alt+click to open links': 'Alt+nhấp để mở liên kết',
@@ -391,6 +402,15 @@ export function createCanvasTranslator(
 
 /** Complete default message inventory for application-owned locale packs. */
 export const canvasEnglishMessages: Readonly<Record<string, string>> = Object.freeze({
+  start: 'start',
+  end: 'end',
+  Checkbox: 'Checkbox',
+  'Sort and filter column {0}': 'Sort and filter column {0}',
+  'Drag selected items to move; Alt+arrow moves one position':
+    'Drag selected items to move; Alt+arrow moves one position',
+  'Drag to resize row; double-click to fit': 'Drag to resize row; double-click to fit',
+  ' You can save this value.': ' You can save this value.',
+  ' Correct this before saving.': ' Correct this before saving.',
   cell: 'cell',
   'selected cells': 'selected cells',
   table: 'table',
@@ -655,6 +675,8 @@ export const canvasEnglishMessages: Readonly<Record<string, string>> = Object.fr
   'Select an image or people column before pasting images.': 'Select an image or people column before pasting images.',
   'Select column': 'Select column',
   'Select column {0}': 'Select column {0}',
+  'Sort column {0}': 'Sort column {0}',
+  'Filter column {0}': 'Filter column {0}',
   'Select options must be nonempty.': 'Select options must be nonempty.',
   'Select row': 'Select row',
   'Select row {0}': 'Select row {0}',
@@ -663,8 +685,8 @@ export const canvasEnglishMessages: Readonly<Record<string, string>> = Object.fr
   'Selected cells': 'Selected cells',
   'Selection changed before paste. Try again.': 'Selection changed before paste. Try again.',
   'Selection cleared.': 'Selection cleared.',
-  'Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Clear the view before changing rows or columns.':
-    'Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Clear the view before changing rows or columns.',
+  'Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Columns can be reordered; clear the view before changing rows or adding/removing columns.':
+    'Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Columns can be reordered; clear the view before changing rows or adding/removing columns.',
   'Show all actions': 'Show all actions',
   'Show all hidden columns': 'Show all hidden columns',
   'Show all hidden rows': 'Show all hidden rows',

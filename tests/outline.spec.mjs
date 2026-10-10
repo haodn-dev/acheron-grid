@@ -441,3 +441,23 @@ test('host can prohibit metadata loading and user cannot enable it', async ({ pa
   await expect(popup.getByRole('button', { name: /website details/ })).toHaveCount(0);
   expect(await page.evaluate(() => window.loads)).toBe(0);
 });
+
+test('context menu can extend an existing merge and undo restores the original span', async ({ page }) => {
+  await setup(page);
+  const original = { startRow: 1, endRow: 2, startColumn: 0, endColumn: 1 };
+  const larger = { startRow: 1, endRow: 4, startColumn: 0, endColumn: 1 };
+  await page.evaluate((original) => window.grid.mergeCells(original), original);
+  const viewport = page.getByLabel(/^Data grid viewport/);
+  await viewport.click({ position: { x: 50, y: 48 } });
+  await viewport.click({ position: { x: 220, y: 144 }, modifiers: ['Shift'] });
+  await page.getByLabel(/^Data grid viewport/).click({ button: 'right', position: { x: 50, y: 48 } });
+  const merge = page.getByRole('menuitem', { name: 'Merge cells', exact: true });
+  await expect(merge).toBeEnabled();
+  await merge.click();
+  expect(await page.evaluate(() => window.grid.getMergedCells())).toEqual([larger]);
+  await expect(page.locator('[role=gridcell][id^="acheron-visible-"][aria-rowspan="4"][aria-colspan="2"]')).toHaveText(
+    'a: Alpha 1',
+  );
+  await page.evaluate(() => window.grid.undo());
+  expect(await page.evaluate(() => window.grid.getMergedCells())).toEqual([original]);
+});

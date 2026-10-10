@@ -17,7 +17,7 @@ export function reorderedIndices(count: number, indices: readonly number[], befo
     beforeIndex > count ||
     !indices.length ||
     new Set(indices).size !== indices.length ||
-    indices.some((index) => !Number.isSafeInteger(index) || index < 0 || index >= count)
+    [...indices].some((index) => !Number.isSafeInteger(index) || index < 0 || index >= count)
   )
     throw new RangeError('Invalid reorder coordinates.');
   const moved = new Set(indices),

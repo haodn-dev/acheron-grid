@@ -6,6 +6,14 @@ Source-preview catalog generated from the exported TypeScript Grid type. Use the
 
 ## Data and lifecycle
 
+### updateCellsAsync
+
+```ts
+updateCellsAsync: (updates: readonly CellUpdate[], options: GridBulkOptions) => Promise<void>
+```
+
+
+
 ### getValue
 
 ```ts
@@ -95,6 +103,14 @@ destroy: () => void
 Release this instance. Idempotent; host-owned sources and external subscriptions still need host cleanup.
 
 ## Selection and clipboard
+
+### pasteAsync
+
+```ts
+pasteAsync: (text: string, bulk: GridBulkOptions, options?: PasteOptions) => Promise<void>
+```
+
+
 
 ### selectColumn
 
@@ -194,6 +210,22 @@ Parse TSV/editor text and preflight the complete destination before writing.
 
 ## History
 
+### undoAsync
+
+```ts
+undoAsync: (options: GridBulkOptions) => Promise<boolean>
+```
+
+
+
+### redoAsync
+
+```ts
+redoAsync: (options: GridBulkOptions) => Promise<boolean>
+```
+
+
+
 ### undo
 
 ```ts
@@ -211,6 +243,14 @@ redo: () => boolean
 Reapply a previously undone command under current identity/value/permission checks.
 
 ## Views and persistence
+
+### setViewAsync
+
+```ts
+setViewAsync: (next: LocalViewOptions, options: GridBulkOptions) => Promise<void>
+```
+
+
 
 ### exportState
 
@@ -434,6 +474,22 @@ getCellPermission: (rowIndex: number, columnIndex: number) => CellPermission
 
 ## Layout and browser controls
 
+### getMotion
+
+```ts
+getMotion: () => Readonly<Required<MotionOptions>>
+```
+
+
+
+### setMotion
+
+```ts
+setMotion: (value: boolean | MotionOptions) => void
+```
+
+
+
 ### setColumnEditor
 
 ```ts
@@ -594,11 +650,12 @@ Call createGrid with GridOptions. Required fields are marked; options are read a
 | accessibility | No | `"active" \| "viewport" \| undefined` |
 | getCellLabel | No | `((rowIndex: number, columnKey: string, value: unknown) => string \| undefined) \| undefined` |
 | renderCell | No | `CellRenderer \| undefined` |
+| renderCellBackground | No | `((context: CanvasRenderingContext2D, cell: CellRenderInfo) => void) \| undefined` |
 | createEditor | No | `CellEditorFactory \| undefined` |
 | onEditorMount | No | `((cell: Readonly<CellEditorInfo>, editor: CellEditor) => void \| (() => void)) \| undefined` |
 | onObserverError | No | `((error: unknown) => void) \| undefined` |
 | choiceEditor | No | `false \| ChoiceEditorOptions \| undefined` |
-| motion | No | `boolean \| { readonly duration?: number; } \| undefined` |
+| motion | No | `boolean \| MotionOptions \| undefined` |
 | tableLockNotice | No | `false \| { readonly title?: string; readonly description?: string; } \| undefined` |
 | selectionStyle | No | `{ readonly activeCellBorderInRange?: boolean; readonly activeBorderWidth?: number; readonly headerTintOpacity?: number; readonly rangeBorderWidth?: number; readonly rangeTintOpacity?: number; } \| undefined` |
 | allowColumnChanges | No | `boolean \| undefined` |
@@ -629,3 +686,4 @@ Call createGrid with GridOptions. Required fields are marked; options are read a
 | allowLockChanges | No | `boolean \| undefined` |
 | columnWidths | No | `Readonly<Record<string, number>> \| undefined` |
 | canChangeVisibility | No | `((request: Readonly<{ axis: "row" \| "column"; indices: readonly number[]; hidden: boolean; }>) => boolean) \| undefined` |
+| historyLimits | No | `GridHistoryLimits \| undefined` |

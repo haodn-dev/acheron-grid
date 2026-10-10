@@ -20,10 +20,10 @@ const program = ts.createProgram(
 const checker = program.getTypeChecker();
 const groups = {
   'Data and lifecycle':
-    /^(getValue|getRowId|updateCells|editCell|replaceText|refreshData|captureRowIdentity|subscribe|takeObserverErrors|destroy|render|rowCount|sourceRowCount|columns)$/,
+    /^(getValue|getRowId|updateCells(?:Async)?|editCell|replaceText|refreshData|captureRowIdentity|subscribe|takeObserverErrors|destroy|render|rowCount|sourceRowCount|columns)$/,
   'Selection and clipboard':
     /^(select|navigate|extend|clearSelection|getSelection|copySelection|paste|cutSelection|cancelCut)/,
-  History: /^(undo|redo|canUndo|canRedo)$/,
+  History: /^(undo|redo|undoAsync|redoAsync|canUndo|canRedo)$/,
   'Views and persistence': /^(setView|view|export|restore)/,
   'Structure and groups':
     /^(insert|delete|move|getMerge|getMerged|canMerge|mergeCells|unmergeCells|getRowGroups|groupRows|ungroupRows|setGroupCollapsed)/,
@@ -99,7 +99,7 @@ for (const [name, file, typeName, optionsName] of [
     const entry = program.getSourceFile('packages/core/src/headless.ts');
     const symbols = checker.getExportsOfModule(checker.getSymbolAtLocation(entry));
     markdown +=
-      '\n## Public exports and source interfaces\n\nThe root and headless alias expose the same API. Source interfaces use their own row indices, not an engine visible projection. The table lists every public export, including types; declarations and the package guide define their contracts. Async/live sources remain read-only.\n\n| Export | Kind | Defined in | Contract |\n| --- | --- | --- | --- |\n';
+      '\n## Public exports and source interfaces\n\nThe root and headless alias expose the same API. Source interfaces use their own row indices, not an engine visible projection. The table lists every public export, including types; declarations and the package guide define their contracts. createAsyncDataSource and createLiveDataSource remain read-only; createPagedRemoteDataSource adds explicit writable paging.\n\n| Export | Kind | Defined in | Contract |\n| --- | --- | --- | --- |\n';
     for (const symbol of symbols) {
       const target = symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
       const declaration = target.valueDeclaration ?? target.declarations?.[0];
@@ -115,6 +115,7 @@ for (const [name, file, typeName, optionsName] of [
         'createAsyncDataSource',
         'createLiveDataSource',
         'createRemoteDataSource',
+        'createPagedRemoteDataSource',
       ].includes(symbol.name),
     )) {
       const target = checker.getAliasedSymbol(symbol),
@@ -158,6 +159,30 @@ for (const [name, file, typeName, optionsName] of [
   await writeFile(new URL(`guides/${name}-api.md`, root), markdown);
 }
 const entries = [
+  [
+    'v1-readiness',
+    'guides/v1-readiness.md',
+    1,
+    'Selected 1.0 contracts, compatibility policy and evidence gates; not a release announcement.',
+  ],
+  [
+    'architecture',
+    'guides/architecture.md',
+    1,
+    'Headless package/module map, controlled mutations, source lifecycles and extension boundaries.',
+  ],
+  [
+    'bulk-commands',
+    'guides/bulk-commands.md',
+    1,
+    'Cooperative bulk preparation, cancellation, atomic commit limits and retained history budgets.',
+  ],
+  [
+    'paged-remote',
+    'guides/paged-remote.md',
+    1,
+    'Stable-ID writable paging, query/revision lifecycle, dirty-cohort receipts and runnable HTTP example.',
+  ],
   ['getting-started', 'guides/getting-started.md', 1, 'Complete pinned-install browser example and troubleshooting.'],
   [
     'integration',

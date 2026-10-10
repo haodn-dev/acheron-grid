@@ -1,10 +1,13 @@
 import { GridAxis } from '../axis.js';
 import type { LocalViewOptions } from '../data-source.js';
-import { LocalDataView, snapshotLocalView as snapshotView } from '../data-source.js';
+import { snapshotLocalView as snapshotView } from '../data-source.js';
 import type { GridInvalidation } from '../engine.js';
 import type { GridEvent } from '../events.js';
 import type { CellFormatTarget, CellLockTarget, CellSelection, RowGroup, SelectionRange } from '../types.js';
 import type { EngineContext } from './engine-context.js';
+import { drain } from './bulk.js';
+import type { BulkSteps } from './bulk.js';
+import { localViewSteps } from './local-view-steps.js';
 export function createProjection(
   context: Pick<
     EngineContext,
@@ -64,15 +67,24 @@ export function createProjection(
       }),
     );
   }
-  function buildProjection(
+  function* buildProjectionSteps(
     next: LocalViewOptions,
     count = context.rowCount,
     spans: readonly Readonly<SelectionRange>[] = context.merges,
     outlines: readonly Readonly<RowGroup>[] = context.groups,
     frozen = context.frozenRows,
-  ): number[] | null {
+    cooperative = false,
+  ): BulkSteps<number[] | null> {
     if (!next.sort && !next.sorts?.length && !next.filters?.length) {
       const hidden = outlines.filter((group) => group.collapsed);
+      if (cooperative && hidden.length) {
+        const result: number[] = [];
+        for (let row = 0; row < count; row++) {
+          if (!hidden.some((group) => row > group.startRow && row <= group.endRow)) result.push(row);
+          if ((row + 1) % 256 === 0) yield { phase: 'prepare', completed: row + 1, total: count };
+        }
+        return result;
+      }
       return hidden.length
         ? Array.from({ length: count }, (_, i) => i).filter(
             (row) => !hidden.some((group) => row > group.startRow && row <= group.endRow),
@@ -98,44 +110,66 @@ export function createProjection(
         if (last && interval[0] <= last[1]) last[1] = Math.max(last[1], interval[1]);
         else combined.push([...interval]);
       }
-      const matches = new LocalDataView(context.dataSource, { ...(next.filters ? { filters: next.filters } : {}) }),
-        matching = new Set(Array.from({ length: matches.getRowCount() }, (_, i) => matches.getSourceIndex(i)));
+      const matches = yield* localViewSteps(
+        context.dataSource,
+        { ...(next.filters ? { filters: next.filters } : {}) },
+        cooperative,
+      );
+      const matching = new Set(matches);
       const blocks: { start: number; end: number }[] = [];
       let intervalIndex = 0;
+      let visited = 0;
       for (let row = 0; row < count;) {
         const interval = combined[intervalIndex];
         const end = interval?.[0] === row ? interval[1] : row;
         if (interval?.[0] === row) intervalIndex++;
-        for (let member = row; member <= end; member++)
+        for (let member = row; member <= end; member++) {
+          if (cooperative && (member - row + 1) % 256 === 0)
+            yield { phase: 'prepare', completed: member + 1, total: count };
           if (matching.has(member)) {
             blocks.push({ start: row, end });
             break;
           }
+        }
         row = end + 1;
+        if (cooperative && ++visited % 256 === 0) yield { phase: 'prepare', completed: row, total: count };
       }
       const pinned = blocks.filter((block) => block.start < frozen),
         movable = blocks.filter((block) => block.start >= frozen);
-      const ordered = new LocalDataView(
+      const ordered = yield* localViewSteps(
         {
           getRowCount: () => movable.length,
           getRowId: (i) => i,
           getValue: (i, key) => context.dataSource.getValue(movable[i]!.start, key),
         },
         { ...(next.sort ? { sort: next.sort } : {}), ...(next.sorts ? { sorts: next.sorts } : {}) },
+        cooperative,
       );
       const hidden = outlines.filter((group) => group.collapsed);
       const result: number[] = [];
-      for (let index = 0; index < pinned.length + ordered.getRowCount(); index++) {
-        const block = index < pinned.length ? pinned[index]! : movable[ordered.getSourceIndex(index - pinned.length)]!;
-        for (let row = block.start; row <= block.end; row++)
+      for (let index = 0; index < pinned.length + ordered.length; index++) {
+        const block = index < pinned.length ? pinned[index]! : movable[ordered[index - pinned.length]!]!;
+        for (let row = block.start; row <= block.end; row++) {
           if (!hidden.some((group) => row > group.startRow && row <= group.endRow)) result.push(row);
+          if (cooperative && (row - block.start + 1) % 256 === 0)
+            yield { phase: 'prepare', completed: row + 1, total: count };
+        }
+        if (cooperative && (index + 1) % 256 === 0)
+          yield { phase: 'prepare', completed: index + 1, total: pinned.length + ordered.length };
       }
       return result;
     }
-    const local = new LocalDataView(context.dataSource, next);
-    return next.sort || next.sorts?.length || next.filters?.length
-      ? Array.from({ length: local.getRowCount() }, (_, i) => local.getSourceIndex(i))
-      : null;
+    const local = yield* localViewSteps(context.dataSource, next, cooperative);
+    return next.sort || next.sorts?.length || next.filters?.length ? local : null;
+  }
+  function buildProjection(
+    next: LocalViewOptions,
+    count = context.rowCount,
+    spans: readonly Readonly<SelectionRange>[] = context.merges,
+    outlines: readonly Readonly<RowGroup>[] = context.groups,
+    frozen = context.frozenRows,
+  ): number[] | null {
+    return drain(buildProjectionSteps(next, count, spans, outlines, frozen));
   }
   function installProjection(next: number[] | null): void {
     context.projection = next;
@@ -161,10 +195,17 @@ export function createProjection(
         }
       : null;
   }
-  function setView(next: LocalViewOptions): void {
+  function* setViewSteps(next: LocalViewOptions, cooperative = false): BulkSteps<void> {
     dependencies.assertAlive();
     const snapshot = snapshotView(next);
-    const nextProjection = buildProjection(snapshot);
+    const nextProjection = yield* buildProjectionSteps(
+      snapshot,
+      context.rowCount,
+      context.merges,
+      context.groups,
+      context.frozenRows,
+      cooperative,
+    );
     const old = context.projection ?? Array.from({ length: context.rowCount }, (_, i) => i);
     context.view = snapshot;
     installProjection(nextProjection);
@@ -178,6 +219,9 @@ export function createProjection(
         sourceRowCount: context.rowCount,
       }),
     );
+  }
+  function setView(next: LocalViewOptions): void {
+    drain(setViewSteps(next));
   }
   function sourceTarget<T extends CellLockTarget>(target: T): T {
     return target.scope === 'row' || target.scope === 'cell'
@@ -231,6 +275,7 @@ export function createProjection(
     displayRow,
     displaySelection,
     setView,
+    setViewSteps,
     sourceTarget,
     sourceRanges,
     sourceFormats,

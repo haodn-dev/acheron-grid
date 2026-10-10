@@ -78,7 +78,7 @@ const options = shallowRef({
 - `onMounted` creates the renderer; `onBeforeUnmount` destroys it. SSR returns an empty container; browser hydration mounts the renderer.
 - Update values through `grid.updateCells()`; use `grid.refreshData('values')` after external value changes with unchanged row identities/order/count; capture identities before structural changes and call `grid.refreshData(previousIds)`, or replace `options` for an intentional reset. There is no separate controlled rows model.
 
-Tested with Vue 3.5.32. Custom cells/editors remain Canvas hooks, not Vue cell components. Screen-reader support follows Canvas limits.
+The current source validation uses Vue 3.5.43. Custom cells/editors remain Canvas hooks, not Vue cell components. Screen-reader support follows Canvas limits.
 
 ## Configuration persistence
 
