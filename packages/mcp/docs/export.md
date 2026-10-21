@@ -1,10 +1,12 @@
 # @acheron-grid/export
 
-Optional, free Apache-2.0-licensed CSV and XLSX selection export. Unreleased source preview; this package is not yet on npm. It uses public core APIs and requires no browser globals. The host owns saving/downloading the returned text or bytes.
+This guide targets **0.2.0 development preview** artifacts. Check [release status and migration](../../RELEASE-0.2.0.md) before registry installation. Older source-preview labels identify additions after npm 0.1.0; those APIs are included in the 0.2.0 candidate.
+
+Optional, free Apache-2.0-licensed CSV and XLSX selection export. Introduced in the 0.2.0 development preview. It uses public core APIs and requires no browser globals. The host owns saving/downloading the returned text or bytes.
 
 ## Installation and complete example
 
-Build a source revision that includes export. Pack core and export, then install both tarballs in the same command; `npm install @acheron-grid/export@0.1.0` is not a published installation path. See [source installation](../../../guides/getting-started.md#build-a-source-preview).
+Build a source revision that includes export. Pack core and export, then install both tarballs in the same command; the registry installation is available only after verified 0.2.0 publication. See [source installation](../../../guides/getting-started.md#build-a-source-preview).
 
 ```ts
 import { createGridEngine, LocalDataSource } from '@acheron-grid/core';

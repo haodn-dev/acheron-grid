@@ -3,11 +3,77 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createTaskApplication, sampleTasks } from '../../../examples/mcp/tasks.mjs';
+
+test('task application rejects malformed datasets and snapshots accepted boundary values', async () => {
+  const row = { ...sampleTasks[0] };
+  for (const rows of [
+    null,
+    {},
+    Array(1),
+    Array(1001).fill(row),
+    [null],
+    [row, row],
+    ...[
+      { id: '' },
+      { id: 'x'.repeat(101) },
+      { title: ' ' },
+      { title: 'x'.repeat(201) },
+      { status: 'invalid' },
+      { restricted: 1 },
+      { privateNote: 1 },
+      { privateNote: 'x'.repeat(1001) },
+    ].map((patch) => [{ ...row, ...patch }]),
+  ])
+    assert.throws(() => createTaskApplication(rows), /Invalid task dataset/);
+  for (const rows of [[], [{ ...row, id: 'x'.repeat(100), title: 'x'.repeat(200), privateNote: 'x'.repeat(1000) }]]) {
+    const application = createTaskApplication(rows);
+    try {
+      assert.equal(application.engine.rowCount, rows.length);
+      if (rows.length) {
+        rows[0].title = 'Host changed';
+        assert.equal(application.engine.getValue(0, 'title'), 'x'.repeat(200));
+      }
+    } finally {
+      await application.server.close();
+      application.engine.destroy();
+    }
+  }
+});
+
+test('task stdio rejects invalid arguments, malformed JSON and oversized files before connecting', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'acheron-mcp-cli-audit-'));
+  const malformed = join(directory, 'malformed.json');
+  const invalid = join(directory, 'invalid.json');
+  const oversized = join(directory, 'oversized.json');
+  const script = fileURLToPath(new URL('../../../examples/mcp/stdio.mjs', import.meta.url));
+  try {
+    await writeFile(malformed, '{broken');
+    await writeFile(invalid, '{}');
+    await writeFile(oversized, ' '.repeat(1000001));
+    for (const [args, error] of [
+      [['--unknown'], /Usage:/],
+      [[malformed, invalid], /Usage:/],
+      [[malformed], /SyntaxError/],
+      [[invalid], /Invalid task dataset/],
+      [[oversized], /exceeds 1 MB/],
+    ]) {
+      const result = spawnSync(process.execPath, [script, ...args], { encoding: 'utf8', timeout: 5000 });
+      assert.equal(result.error, undefined);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, error);
+      assert.equal(result.stdout, '');
+    }
+  } finally {
+    assert.equal(dirname(resolve(directory)), resolve(tmpdir()));
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test('stdio loads host JSON into a read-only session without exposing private fields', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'acheron-mcp-'));

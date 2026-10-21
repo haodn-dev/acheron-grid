@@ -55,7 +55,7 @@ async function run(operation) {
     if (failure) $('status').textContent += ' · ' + failure.message;
   }
 }
-await run(async () => {
+async function initializeGrid() {
   await remote.resync();
   grid = createGrid({
     container: $('grid'),
@@ -71,9 +71,11 @@ await run(async () => {
       },
     ],
     dataSource: remote,
+    onEvent: update,
     resolveCellPermission: () => ({ writable: remote.status === 'ready' }),
   });
-});
+}
+await run(initializeGrid);
 $('edit').addEventListener('submit', (event) => {
   event.preventDefault();
   run(() => grid.updateCells([{ rowIndex: 0, columnKey: 'title', value: $('draft').value }]));
@@ -87,6 +89,10 @@ $('save').addEventListener('click', () =>
 );
 $('reload').addEventListener('click', () =>
   run(async () => {
+    if (!grid) {
+      await initializeGrid();
+      return;
+    }
     const ids = grid.captureRowIdentity();
     await remote.reconnect();
     grid.refreshData(ids);
@@ -113,11 +119,9 @@ function resolve(keep) {
 }
 $('server').addEventListener('click', () => run(() => resolve(false)));
 $('mine').addEventListener('click', () => run(() => resolve(true)));
-addEventListener(
-  'pagehide',
-  () => {
+addEventListener('pagehide', (event) => {
+  if (!event.persisted) {
     grid?.destroy();
     remote.destroy();
-  },
-  { once: true },
-);
+  }
+});

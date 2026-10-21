@@ -346,6 +346,49 @@ test('link previews are opt-in, show full URLs and recover from metadata failure
   await expect(dialog.getByText('https://example.com/full/path?query=1', { exact: true })).toHaveCount(1);
 });
 
+test('late link metadata cannot restore hidden details or overwrite a reopened popup', async ({ page }) => {
+  await setup(page);
+  await page.evaluate(async () => {
+    window.grid.destroy();
+    const { createGrid } = await import('/canvas/index.js');
+    window.source.setValue(0, 'a', 'https://example.com/page');
+    window.previewRequests = [];
+    window.grid = createGrid({
+      container: document.querySelector('#grid'),
+      dataSource: window.source,
+      columns: [{ key: 'a', title: 'Link' }],
+      linkPreview: {
+        load: (_, signal) => new Promise((resolve) => window.previewRequests.push({ signal, resolve })),
+      },
+    });
+  });
+  const viewport = page.getByRole('grid');
+  const popup = page.getByRole('dialog', { name: 'Cell links' });
+  await viewport.press('Control+Home');
+  await viewport.press('Alt+Enter');
+  await expect.poll(() => page.evaluate(() => window.previewRequests.length)).toBe(1);
+  await popup.getByRole('button', { name: 'Hide website details' }).click();
+  expect(await page.evaluate(() => window.previewRequests[0].signal.aborted)).toBe(true);
+  await page.evaluate(() => window.previewRequests[0].resolve({ title: 'Stale hidden details' }));
+  await expect(popup.getByText('Stale hidden details')).toHaveCount(0);
+  await popup.getByRole('button', { name: 'Show website details' }).click();
+  await expect.poll(() => page.evaluate(() => window.previewRequests.length)).toBe(2);
+  await popup.getByRole('button', { name: 'Close', exact: true }).click();
+  expect(await page.evaluate(() => window.previewRequests[1].signal.aborted)).toBe(true);
+  await viewport.press('Alt+Enter');
+  await expect.poll(() => page.evaluate(() => window.previewRequests.length)).toBe(3);
+  await page.evaluate(async () => {
+    window.previewRequests[2].resolve({ title: 'Current details' });
+    await Promise.resolve();
+    window.previewRequests[1].resolve({ title: 'Stale closed details' });
+  });
+  await expect(popup.getByText('Current details', { exact: true })).toBeVisible();
+  await expect(popup.getByText('Stale closed details')).toHaveCount(0);
+  await page.evaluate(() => window.grid.destroy());
+  expect(await page.evaluate(() => window.previewRequests.every(({ signal }) => signal.aborted))).toBe(true);
+  await expect(popup).toHaveCount(0);
+});
+
 test('a fully cell-locked row is indicated in its index and described when index is hidden', async ({ page }) => {
   await setup(page);
   await page.evaluate(() => {

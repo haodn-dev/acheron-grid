@@ -57,11 +57,15 @@ export function createSearch(grid: SearchContext) {
           for (let col = 0; col < grid.columns.length; col++) {
             const span = grid.engine.getMerge(row, col);
             if (span && (span.startRow !== row || span.startColumn !== col)) continue;
+            if (
+              grid.engine.isRowHidden(row) ||
+              grid.engine.isColumnHidden(col) ||
+              !grid.engine.getCellPermission(row, col).selectable
+            )
+              continue;
             const value = grid.engine.getValue(row, grid.columns[col]!.key);
             if (
               value != null &&
-              !grid.engine.isRowHidden(row) &&
-              !grid.engine.isColumnHidden(col) &&
               grid
                 .displayedText(
                   value,
@@ -70,8 +74,7 @@ export function createSearch(grid: SearchContext) {
                   grid.engine.getFormat(row, col).numberFormat,
                 )
                 .toLocaleLowerCase()
-                .includes(query) &&
-              grid.engine.getCellPermission(row, col).selectable
+                .includes(query)
             )
               searchMatches.add(row * grid.columns.length + col);
           }

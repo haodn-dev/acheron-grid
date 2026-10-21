@@ -1,5 +1,110 @@
 import { test, expect } from '@playwright/test';
 
+test('rich parsing preserves supported text and bounds hostile nesting and source size', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const { readHtml, richTextHtml, richTextSource } = await import('/canvas/rich-text.js');
+    const { markdownToHtml } = await import('/markdown/index.js');
+    const list = readHtml('<ol start="3">\n<li>One</li>\n<li><b>Two</b></li>\n</ol><img alt="Photo">', document);
+    const edited = readHtml(
+      '<span style="font-weight:700;font-style:italic;text-decoration-line:underline">  A  B </span><pre>x\n y</pre>',
+      document,
+      true,
+    );
+    const rich = {
+      text: '<unsafe>\nnext',
+      runs: [{ text: '<unsafe>\nnext', bold: true, href: 'javascript:alert(1)' }],
+    };
+    const safe = richTextHtml(rich, document);
+    const markdown = richTextSource(
+      {
+        text: 'A*B and `code`',
+        runs: [
+          { text: 'A*', bold: true },
+          { text: 'B', bold: true },
+          { text: ' and ' },
+          { text: '`code`', code: true },
+        ],
+      },
+      'markdown',
+      document,
+    );
+    const errors = [];
+    for (const parse of [(value) => readHtml(value, document), markdownToHtml]) {
+      try {
+        parse('x'.repeat(100001));
+      } catch (error) {
+        errors.push(error instanceof RangeError);
+      }
+    }
+    return {
+      list: list.text,
+      edited,
+      safe,
+      safeRoundTrip: readHtml(safe, document).text,
+      markdownRoundTrip: readHtml(markdownToHtml(markdown), document).text,
+      exactLimit: readHtml('x'.repeat(100000), document).text.length,
+      errors,
+      deep: readHtml('<span>'.repeat(130) + 'hidden' + '</span>'.repeat(130) + '<b>Visible</b>', document).text,
+    };
+  });
+  expect(result.list).toBe('3. One\n4. Two\nPhoto');
+  expect(result.edited.runs[0]).toMatchObject({ text: '  A  B ', bold: true, italic: true, underline: true });
+  expect(result.edited.text).toContain('x\n y');
+  expect(result.safe).toContain('&lt;unsafe&gt;');
+  expect(result.safe).not.toContain('href');
+  expect(result.safeRoundTrip).toBe('<unsafe>\nnext');
+  expect(result.markdownRoundTrip).toBe('A*B and `code`');
+  expect(result.exactLimit).toBe(100000);
+  expect(result.errors).toEqual([true, true]);
+  expect(result.deep).toBe('Visible');
+});
+
+test('rich layout keeps Unicode, mixed marks and bounded wrapping consistent', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const { layoutRichText } = await import('/canvas/rich-text.js');
+    const context = document.createElement('canvas').getContext('2d');
+    const runs = [
+      { text: 'A'.repeat(300) },
+      { text: ' Việt 😀', bold: true, italic: true },
+      { text: ' code', code: true },
+    ];
+    const rich = { text: runs.map((run) => run.text).join(''), runs };
+    const unwrapped = layoutRichText(context, rich, '400 16px monospace', Infinity, false);
+    const wrapped = layoutRichText(context, rich, '400 16px monospace', 80, true, 3);
+    const newline = layoutRichText(
+      context,
+      { text: 'a\nb\nc', runs: [{ text: 'a\nb\nc' }] },
+      '16px monospace',
+      80,
+      false,
+      2,
+    );
+    return {
+      text: rich.text,
+      unwrapped,
+      wrapped,
+      newline,
+      empty: layoutRichText(context, { text: '', runs: [] }, '16px monospace', 80, true),
+    };
+  });
+  expect(result.unwrapped.pieces.map((piece) => piece.text).join('')).toBe(result.text);
+  expect(result.unwrapped.lines).toBe(1);
+  expect(result.unwrapped.pieces.some((piece) => /italic.*700/.test(piece.font))).toBe(true);
+  expect(result.unwrapped.pieces.at(-1).font).toContain('monospace');
+  expect(result.unwrapped.width).toBeCloseTo(
+    result.unwrapped.pieces.reduce((sum, piece) => sum + piece.width, 0),
+    3,
+  );
+  expect(result.wrapped.lines).toBe(3);
+  expect(result.wrapped.pieces.every((piece) => piece.line < 3 && piece.x + piece.width <= 80)).toBe(true);
+  expect(result.newline.pieces.map((piece) => piece.text).join('')).toBe('ab');
+  expect(result.newline.lines).toBe(2);
+  expect(result.empty).toMatchObject({ pieces: [], lines: 1, width: 0 });
+  expect(result.empty.lineHeight).toBeGreaterThan(0);
+});
+
 test('rich text paints partial styles, wraps, searches visible text and visually edits with history', async ({
   page,
 }) => {

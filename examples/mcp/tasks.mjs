@@ -14,7 +14,7 @@ export function createTaskApplication(rows, { allowWrites = false } = {}) {
   if (
     !Array.isArray(rows) ||
     rows.length > 1_000 ||
-    rows.some(
+    Array.from(rows).some(
       (row) =>
         !row ||
         typeof row.id !== 'string' ||

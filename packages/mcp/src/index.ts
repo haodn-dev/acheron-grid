@@ -57,6 +57,8 @@ export function createGridMcpServer({
   getRevision,
   schemaRowCount = 'visible',
 }: GridMcpOptions): Server {
+  if (typeof allowWrites !== 'boolean' || typeof allowDiscovery !== 'boolean')
+    throw new TypeError('Access options must be boolean.');
   if (schemaRowCount !== 'visible' && schemaRowCount !== 'omit' && typeof schemaRowCount !== 'function')
     throw new TypeError('Invalid schema row count policy.');
   if (engine && typeof authorize !== 'function') throw new TypeError('Grid access requires an authorize callback.');

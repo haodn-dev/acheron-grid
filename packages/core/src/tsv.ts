@@ -4,7 +4,11 @@ export const clipboardTextLimit = 10_000_000;
 
 export function encodeTsv(rows: readonly (readonly string[])[]): string {
   return rows
-    .map((row) => row.map((value) => (/[\t\r\n"]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value)).join('\t'))
+    .map((row) =>
+      rows.length > 1 && row.length === 1 && row[0] === ''
+        ? '""'
+        : row.map((value) => (/[\t\r\n"]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value)).join('\t'),
+    )
     .join('\r\n');
 }
 

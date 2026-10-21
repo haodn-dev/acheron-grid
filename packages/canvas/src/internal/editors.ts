@@ -175,9 +175,7 @@ export function createEditors(context: EditorsContext) {
         context.overlay.activeDialog = dialog;
         context.root.append(dialog);
         dialog.addEventListener('close', () => {
-          dialog.remove();
-          if (context.overlay.activeDialog === dialog) context.overlay.activeDialog = null;
-          if (!context.destroyed) context.scroller.focus({ preventScroll: true });
+          context.overlay.finishDialogClose(dialog);
         });
         dialog.showModal();
         return;
@@ -446,35 +444,36 @@ export function createEditors(context: EditorsContext) {
       selection?.removeAllRanges();
       selection?.addRange(range);
     } else if (editor.tagName !== 'SELECT' && 'select' in editor) editor.select();
-    const choiceOptions = choiceOptionsFor(column.key);
-    if (
-      editor instanceof context.win.HTMLSelectElement &&
-      editor.dataset.gridChoiceEditor !== undefined &&
-      choiceOptions
-    ) {
-      choices = choicePanel(
-        editor,
-        context.root,
-        choiceOptions,
-        (commit) => {
-          const done = finishEdit(commit);
-          if (done) context.scroller.focus({ preventScroll: true });
-          return done;
-        },
-        column.key,
-        context.t,
-      );
-      context.enterSurface(choices);
-      editor.style.opacity = '0';
-      editor.style.pointerEvents = 'none';
-      editor.tabIndex = -1;
-      editor.setAttribute('aria-hidden', 'true');
-    }
     try {
+      const choiceOptions = choiceOptionsFor(column.key);
+      if (
+        editor instanceof context.win.HTMLSelectElement &&
+        editor.dataset.gridChoiceEditor !== undefined &&
+        choiceOptions
+      ) {
+        choices = choicePanel(
+          editor,
+          context.root,
+          choiceOptions,
+          (commit) => {
+            const done = finishEdit(commit);
+            if (done) context.scroller.focus({ preventScroll: true });
+            return done;
+          },
+          column.key,
+          context.t,
+        );
+        context.enterSurface(choices);
+        editor.style.opacity = '0';
+        editor.style.pointerEvents = 'none';
+        editor.tabIndex = -1;
+        editor.setAttribute('aria-hidden', 'true');
+      }
       const cleanup = context.options.onEditorMount?.(Object.freeze({ ...selection, value }), editor);
       editorCleanup = typeof cleanup === 'function' ? cleanup : undefined;
     } catch (error) {
       finishEdit(false);
+      if (!context.destroyed) context.scroller.focus({ preventScroll: true });
       context.actionError.textContent =
         error instanceof Error ? context.t(error.message) : context.t('Unable to mount custom editor.');
       context.actionError.style.display = 'block';

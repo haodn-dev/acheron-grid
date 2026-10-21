@@ -1,6 +1,6 @@
 {
   "name": "@acheron-grid/export",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Optional headless CSV selection export for Acheron Grid",
   "license": "Apache-2.0",
@@ -23,7 +23,7 @@
     }
   },
   "dependencies": {
-    "@acheron-grid/core": "0.1.0",
+    "@acheron-grid/core": "0.2.0",
     "fflate": "0.8.3"
   },
   "scripts": {

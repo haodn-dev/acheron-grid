@@ -316,14 +316,20 @@ export function choicePanel(
   panel.addEventListener('pointerdown', (event) => event.stopPropagation());
   panel.addEventListener('click', (event) => event.stopPropagation());
   panel.append(query, remoteStatus, list, summary, actions);
-  draw();
-  root.append(panel);
-  if (options.loadOptions) search();
-  list.setAttribute('aria-label', options.optionsLabel ?? t('Available options'));
-  positionChoicePanel(panel, select);
-  if (query.hidden) panel.querySelector<HTMLElement>('input:not(:disabled):not([hidden]),button')?.focus();
-  else query.focus();
-  return panel;
+  try {
+    draw();
+    root.append(panel);
+    if (options.loadOptions) search();
+    list.setAttribute('aria-label', options.optionsLabel ?? t('Available options'));
+    positionChoicePanel(panel, select);
+    if (query.hidden) panel.querySelector<HTMLElement>('input:not(:disabled):not([hidden]),button')?.focus();
+    else query.focus();
+    return panel;
+  } catch (error) {
+    disposeChoicePanel(panel);
+    panel.remove();
+    throw error;
+  }
 }
 export function positionChoicePanel(panel: HTMLElement, select: HTMLSelectElement): void {
   const bounds = select.getBoundingClientRect();

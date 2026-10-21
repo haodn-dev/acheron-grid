@@ -4,6 +4,21 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createGridEngine, LocalDataSource } from '@acheron-grid/core';
 import { createGridMcpServer } from '../src/index.mjs';
+
+test('access opt-ins reject non-boolean values before registering tools', async () => {
+  for (const key of ['allowWrites', 'allowDiscovery']) {
+    for (const value of [null, 'false', 'true', 0, 1, {}, []]) {
+      assert.throws(() => createGridMcpServer({ [key]: value, validateWrite: () => {} }), {
+        name: 'TypeError',
+        message: 'Access options must be boolean.',
+      });
+    }
+  }
+  for (const value of [undefined, false, true]) {
+    const server = createGridMcpServer({ allowWrites: value, allowDiscovery: value, validateWrite: () => {} });
+    await server.close();
+  }
+});
 test('revision provider validates tokens and detects changes during reads before returning values', async () => {
   let token = '',
     moving = false;

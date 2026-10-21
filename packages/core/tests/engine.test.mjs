@@ -4,6 +4,38 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createGridEngine, LocalDataSource, LocalDataView } from '@acheron-grid/core';
 
+test('row insertion rejects malformed values before changing source, state or history', () => {
+  const source = new LocalDataSource([{ a: 'keep' }], (_, i) => i);
+  const events = [];
+  const engine = createGridEngine({
+    columns: [{ key: 'a', title: 'A' }],
+    dataSource: source,
+    onEvent: (event) => events.push(event),
+  });
+  try {
+    engine.select(0, 0);
+    const state = engine.exportState();
+    events.length = 0;
+    for (const values of [null, undefined, 'text', 42, true, ['array']]) {
+      assert.throws(
+        () =>
+          engine.insertRows(1, [
+            { id: 1, values: { a: 'valid' } },
+            { id: 2, values },
+          ]),
+        TypeError,
+      );
+      assert.equal(source.getRowCount(), 1);
+      assert.equal(source.getValue(0, 'a'), 'keep');
+      assert.deepEqual(engine.exportState(), state);
+      assert.equal(engine.canUndo(), false);
+      assert.deepEqual(events, []);
+    }
+  } finally {
+    engine.destroy();
+  }
+});
+
 test('sparse visibility input fails before selection history or events change', () => {
   const events = [];
   const { engine } = fixture({ onEvent: (event) => events.push(event) });

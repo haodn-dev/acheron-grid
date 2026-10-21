@@ -1,6 +1,8 @@
 # @acheron-grid/core
 
-Documentation revision 4 · npm 0.1.0 + explicitly marked source additions. See [documentation versions](../../../guides/versions.md).
+This guide targets **0.2.0 development preview** artifacts. Check [release status and migration](../../RELEASE-0.2.0.md) before registry installation. Older source-preview labels identify additions after npm 0.1.0; those APIs are included in the 0.2.0 candidate.
+
+Version 0.2.0 preview scope; npm 0.1.0 has a separate frozen reference. See [documentation versions](../../../guides/versions.md).
 
 An experimental headless TypeScript data-grid engine. Core owns data access and controlled mutations, selection, layout, editing, TSV clipboard operations and history. The host owns source storage and transport. Core has no runtime dependencies or browser/framework types.
 

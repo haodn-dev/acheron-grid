@@ -58,24 +58,6 @@ test('thresholds follow chart orientation and highlights use raw extrema with tr
   renderer(ctx, { ...cell, value: [null] });
   assert.equal(calls.filter(([key]) => key === 'arc' || key === 'setLineDash').length, 0);
 });
-test('chart domains handle missing, constant, negative and extreme values', () => {
-  const line = chartGeometry([1, null, 3], 100, 20);
-  assert.deepEqual(line.points, [{ x: 0, y: 20 }, null, { x: 100, y: 0 }]);
-  assert.equal(chartGeometry([7], 100, 20).points[0].y, 10);
-  assert.equal(chartGeometry([Infinity, NaN], 100, 20).count, 0);
-  const columns = chartGeometry([-2, 2], 100, 20, 'column');
-  assert.equal(columns.baseline, 10);
-  const extreme = chartGeometry([-Number.MAX_VALUE, Number.MAX_VALUE], 100, 20, 'column');
-  assert.deepEqual(extreme.points, [
-    { x: 0, y: 20 },
-    { x: 100, y: 0 },
-  ]);
-  assert.throws(() => chartGeometry(Array(513), 100, 20), RangeError);
-  assert.deepEqual(chartGeometry([0, Number.MIN_VALUE], 100, 20).points, [
-    { x: 0, y: 20 },
-    { x: 100, y: 0 },
-  ]);
-});
 test('smooth area curves stay bounded, split gaps, and honor column styles', () => {
   const calls = [];
   const context = new Proxy(

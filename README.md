@@ -16,6 +16,10 @@ Every Acheron feature and optional module is intended to remain open source and 
 
 ## Status
 
+The next release candidate is **0.2.0 development preview**, covering all eight packages.
+It is not yet published; use matching source tarballs until the release workflow finishes.
+See [0.2.0 changes, migration and acceptance limits](RELEASE-0.2.0.md).
+
 See the [1.0 contract and acceptance policy](guides/v1-readiness.md). Current source is for integration
 evaluation; manual/device and production-host acceptance remain open. No stable version is announced.
 

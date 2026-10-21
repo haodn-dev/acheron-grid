@@ -211,6 +211,45 @@ test('whole-column selection opens column actions from a data cell', async ({ pa
   await expect(page.getByRole('columnheader', { name: 'b', exact: true })).toBeVisible();
 });
 
+test('context menu Space activates the focused action without starting a search', async ({ page }) => {
+  await setup(page);
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (text) => {
+          window.menuCopied = text;
+        },
+      },
+    });
+  });
+  const viewport = page.getByLabel(/^Data grid viewport/);
+  await viewport.click({ button: 'right', position: { x: 24, y: 20 } });
+  const menu = page.getByRole('menu', { name: 'Cell actions' });
+  const copy = menu.getByRole('menuitem', { name: 'Copy', exact: true });
+  await expect(copy).toBeFocused();
+  await copy.press('Space');
+  await expect(menu).toHaveCount(0);
+  expect(await page.evaluate(() => window.menuCopied)).toBe('Bold and italic');
+});
+
+test('context menu Escape after no matches restores focus to a visible action', async ({ page }) => {
+  await setup(page);
+  const viewport = page.getByLabel(/^Data grid viewport/);
+  await viewport.click({ button: 'right', position: { x: 24, y: 20 } });
+  const menu = page.getByRole('menu', { name: 'Cell actions' });
+  await page.keyboard.type('no such action');
+  const filter = menu.getByRole('searchbox', { name: 'Filter actions' });
+  await expect(menu.getByRole('status')).toHaveText('No matching actions');
+  await filter.press('Escape');
+  await expect(filter).toBeHidden();
+  await expect(menu.getByRole('menuitem', { name: 'Select row', exact: true })).toBeVisible();
+  await expect(menu.locator('button:not(:disabled):not([hidden])').first()).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  await expect(viewport).toBeFocused();
+});
+
 test('context actions filter by typing, preserve keyboard navigation and keep focus inside separated rows', async ({
   page,
 }) => {
@@ -424,4 +463,19 @@ test('long tooltips stay inside a narrow viewport', async ({ page }) => {
   expect(box.y).toBeGreaterThanOrEqual(8);
   expect(box.x + box.width).toBeLessThanOrEqual(312);
   expect(box.y + box.height).toBeLessThanOrEqual(472);
+  const help = page.getByRole('button', { name: 'Help', exact: true });
+  await expect(help).toHaveAttribute('aria-description', 'Long tooltip '.repeat(15));
+  await expect(help).not.toHaveAttribute('title');
+  await help.click();
+  await expect(tip).toBeHidden();
+  await page.mouse.move(0, 0);
+  await help.hover();
+  await expect(tip).toBeVisible();
+  await page.mouse.move(0, 0);
+  await expect(tip).toBeHidden();
+  // Destroy while the delayed tooltip is pending; no detached timer may reopen it.
+  await help.hover();
+  await page.evaluate(() => window.grid.destroy());
+  await page.waitForTimeout(500);
+  await expect(page.getByRole('tooltip')).toHaveCount(0);
 });

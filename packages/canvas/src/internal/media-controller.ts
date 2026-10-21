@@ -237,9 +237,7 @@ export function createMediaController(context: MediaControllerContext) {
     dialog.append(title, list, close);
     context.root.append(dialog);
     dialog.addEventListener('close', () => {
-      dialog.remove();
-      if (context.overlay.activeDialog === dialog) context.overlay.activeDialog = null;
-      if (!context.destroyed) context.scroller.focus({ preventScroll: true });
+      context.overlay.finishDialogClose(dialog);
     });
     dialog.showModal();
     close.focus();

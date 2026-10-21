@@ -172,11 +172,15 @@ export function createAccessibility(context: AccessibilityContext) {
       context.activeRow.removeAttribute('aria-rowindex');
       context.activeCell.removeAttribute('aria-colindex');
       context.activeCell.removeAttribute('aria-readonly');
+      context.activeCell.removeAttribute('aria-invalid');
+      context.activeCell.removeAttribute('aria-description');
       context.scroller.removeAttribute('aria-activedescendant');
       context.scroller.setAttribute('aria-label', context.viewportLabel);
       return;
     }
     const value = context.engine.getValue(selection.rowIndex, selection.columnKey);
+    const invalid = context.validationMessage(value, selection.columnIndex);
+    context.activeCell.setAttribute('aria-invalid', String(!!invalid));
     context.activeRow.setAttribute(
       'aria-rowindex',
       String(selection.rowIndex + (context.viewportAccessibility ? context.headers.levels + 1 : 1)),
@@ -194,6 +198,7 @@ export function createAccessibility(context: AccessibilityContext) {
       'aria-description',
       [
         ...stateLabels(selection.rowIndex, selection.columnIndex).map((label) => context.t(label)),
+        ...(invalid ? [invalid] : []),
         ...(context.linksForValue(
           value,
           selection.columnKey,

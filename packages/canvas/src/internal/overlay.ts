@@ -23,6 +23,17 @@ export function createOverlay(context: OverlayContext) {
   let activeDialog: HTMLDialogElement | null = null;
   let linkHoverTimer = 0;
   let linkHoverKey = '';
+  function finishDialogClose(dialog: HTMLDialogElement): void {
+    dialog.remove();
+    if (activeDialog === dialog) activeDialog = null;
+    // A native close event can arrive after another control has taken focus.
+    if (
+      !context.destroyed &&
+      !activeDialog?.open &&
+      (context.doc.activeElement === context.doc.body || context.doc.activeElement === context.scroller)
+    )
+      context.scroller.focus({ preventScroll: true });
+  }
   function closeMenu(focus = false): void {
     previewAbort?.abort();
     previewAbort = undefined;
@@ -176,6 +187,7 @@ export function createOverlay(context: OverlayContext) {
     if (focus) popup.querySelector('a')?.focus();
   }
   return {
+    finishDialogClose,
     closeMenu,
     cancelLinkPreviewHover,
     openLinks,

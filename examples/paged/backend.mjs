@@ -7,14 +7,24 @@ export function createPagedDemoHandler() {
   let revision = 1,
     mode = 'normal';
   const queryRows = (query) => {
-    const filter = query.filters?.[0];
-    if (filter && (filter.columnKey !== 'title' || filter.operator !== 'contains' || typeof filter.query !== 'string'))
+    if (!query || typeof query !== 'object' || Array.isArray(query)) throw Error('Invalid query');
+    if (query.filters !== undefined && !Array.isArray(query.filters)) throw Error('Invalid filters');
+    const filters = query.filters ?? [];
+    if (
+      filters.some(
+        (filter) =>
+          !filter || filter.columnKey !== 'title' || filter.operator !== 'contains' || typeof filter.query !== 'string',
+      )
+    )
       throw Error('Invalid filter');
-    if (query.sort && (query.sort.columnKey !== 'title' || !['asc', 'desc'].includes(query.sort.direction)))
+    if (
+      query.sort !== undefined &&
+      (!query.sort || query.sort.columnKey !== 'title' || !['asc', 'desc'].includes(query.sort.direction))
+    )
       throw Error('Invalid sort');
-    const result = filter
-      ? rows.filter((row) => row.values.title.toLowerCase().includes(filter.query.toLowerCase()))
-      : rows.slice();
+    const result = rows.filter((row) =>
+      filters.every((filter) => row.values.title.toLowerCase().includes(filter.query.toLowerCase())),
+    );
     if (query.sort)
       result.sort(
         (a, b) =>

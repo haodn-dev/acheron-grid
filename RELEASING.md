@@ -1,5 +1,9 @@
 # Release preparation
 
+The current candidate is **0.2.0 development preview** for all eight packages. Follow
+[the candidate notes](RELEASE-0.2.0.md) and the channel workflow below. Registry publication
+and verification have not completed; the original 0.1.0 release remains immutable.
+
 This file retains the original 0.1.0 preparation procedure. The six original 0.1.0 packages are now
 published previews; later source APIs are unreleased. Before selecting a future stable version, close
 the [1.0 contract and acceptance gates](guides/v1-readiness.md). The current publisher aligns all eight

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGridEngine, LocalDataSource } from '@acheron-grid/core';
+import { createGridEngine, LocalDataSource, encodeBlocks } from '@acheron-grid/core';
 import { exportSelectionXlsx } from '../dist/index.js';
 import { unzipSync, strFromU8 } from 'fflate';
 function fixture(rows, permissions) {
@@ -68,5 +68,35 @@ test('XLSX enforces permissions, XML/name/text limits and merge placeholders', (
     const invalid = fixture([{ text, value: 0 }]);
     assert.throws(() => exportSelectionXlsx(invalid));
     invalid.destroy();
+  }
+});
+
+test('XLSX enforces column and escaped XML budgets and names the last supported column', () => {
+  let reads = 0;
+  const columns = Array.from({ length: 16385 }, (_, index) => ({ key: `c${index}`, title: `C${index}` }));
+  const source = {
+    columns,
+    getSelectionRanges: () => [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: columns.length - 1 }],
+    copySelectionBlocks: () => encodeBlocks([{ row: 0, column: 0, values: [columns.map(() => 'x')] }]),
+    getValue: () => {
+      reads++;
+      return 'x';
+    },
+  };
+  assert.throws(() => exportSelectionXlsx(source), /Excel sheet dimensions exceeded/);
+  assert.equal(reads, 0);
+  columns.pop();
+  const files = unzipSync(exportSelectionXlsx(source));
+  assert.match(strFromU8(files['xl/worksheets/sheet1.xml']), /r="XFD1"/);
+  assert.equal(reads, 16384);
+  columns.length = 1400;
+  for (const column of columns) column.title = 'あ'.repeat(10000);
+  assert.throws(() => exportSelectionXlsx(source, { includeHeaders: true }), /XLSX byte budget exceeded/);
+  const engine = fixture(Array.from({ length: 125 }, () => ({ text: '&'.repeat(32760), value: 1 })));
+  try {
+    assert.throws(() => exportSelectionXlsx(engine), /XLSX XML budget exceeded/);
+    assert.equal(engine.canUndo(), false);
+  } finally {
+    engine.destroy();
   }
 });

@@ -332,6 +332,61 @@ const stateIconSvg = {
 export function createGrid(options: GridOptions): Grid {
   const { container, dataSource } = options;
   const t = createCanvasTranslator(options.locale, options.messages);
+  const builtinColumnTypes: readonly ColumnType[] = [
+    {
+      key: 'text',
+      label: t('Text'),
+      create: (input) => ({
+        column: { key: input.key, title: input.title, editable: true, defaultValue: input.defaultText },
+      }),
+    },
+    {
+      key: 'number',
+      label: t('Number'),
+      create: (input) => {
+        const parse = (text: string) => {
+          if (!text.trim()) return null;
+          const value = Number(text);
+          if (!Number.isFinite(value)) throw new Error('Enter a finite number.');
+          return value;
+        };
+        return {
+          column: { key: input.key, title: input.title, editable: true, parse, defaultValue: parse(input.defaultText) },
+        };
+      },
+    },
+    {
+      key: 'checkbox',
+      label: t('Checkbox'),
+      create: (input) => {
+        const parse = (text: string) => {
+          if (text === '' || text === 'false') return false;
+          if (text === 'true') return true;
+          throw new Error('Use true or false.');
+        };
+        return {
+          column: { key: input.key, title: input.title, editable: true, parse, defaultValue: parse(input.defaultText) },
+          editor: { type: 'checkbox' },
+        };
+      },
+    },
+  ];
+  const creationTypes = options.columnTypes ?? builtinColumnTypes;
+  if (
+    !Array.isArray(creationTypes) ||
+    !creationTypes.length ||
+    Array.from(creationTypes).some(
+      (type) =>
+        !type ||
+        typeof type.key !== 'string' ||
+        !type.key ||
+        typeof type.label !== 'string' ||
+        !type.label ||
+        typeof type.create !== 'function',
+    ) ||
+    new Set(creationTypes.map((type) => type.key)).size !== creationTypes.length
+  )
+    throw new TypeError('Invalid column types.');
   const gridContext: GridContext = {
     options,
     get engine() {
@@ -1945,53 +2000,6 @@ export function createGrid(options: GridOptions): Grid {
       return gridContext.appearance.theme;
     },
   });
-
-  const builtinColumnTypes: readonly ColumnType[] = [
-    {
-      key: 'text',
-      label: gridContext.env.t('Text'),
-      create: (input) => ({
-        column: { key: input.key, title: input.title, editable: true, defaultValue: input.defaultText },
-      }),
-    },
-    {
-      key: 'number',
-      label: gridContext.env.t('Number'),
-      create: (input) => {
-        const parse = (text: string) => {
-          if (!text.trim()) return null;
-          const value = Number(text);
-          if (!Number.isFinite(value)) throw new Error('Enter a finite number.');
-          return value;
-        };
-        return {
-          column: { key: input.key, title: input.title, editable: true, parse, defaultValue: parse(input.defaultText) },
-        };
-      },
-    },
-    {
-      key: 'checkbox',
-      label: gridContext.env.t('Checkbox'),
-      create: (input) => {
-        const parse = (text: string) => {
-          if (text === '' || text === 'false') return false;
-          if (text === 'true') return true;
-          throw new Error('Use true or false.');
-        };
-        return {
-          column: { key: input.key, title: input.title, editable: true, parse, defaultValue: parse(input.defaultText) },
-          editor: { type: 'checkbox' },
-        };
-      },
-    },
-  ];
-  const creationTypes = gridContext.options.columnTypes ?? builtinColumnTypes;
-  if (
-    !creationTypes.length ||
-    new Set(creationTypes.map((type) => type.key)).size !== creationTypes.length ||
-    creationTypes.some((type) => !type.key || !type.label || typeof type.create !== 'function')
-  )
-    throw new TypeError('Invalid column types.');
 
   const getSelection = gridContext.engine.getSelection;
   const getSelectionRange = gridContext.engine.getSelectionRange;

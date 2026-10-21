@@ -1,4 +1,105 @@
 import { test, expect } from '@playwright/test';
+
+test('choice initialization errors clean up mounted controls and allow a fresh editor', async ({ page }) => {
+  await setup(page);
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  for (const kind of [
+    'height-zero',
+    'height-negative',
+    'height-nan',
+    'height-infinity',
+    'delay-negative',
+    'delay-nan',
+    'delay-infinity',
+    'attached',
+    'foreign',
+    'second-draw',
+  ]) {
+    await page.evaluate((kind) => {
+      const attached = document.createElement('span');
+      attached.id = 'host-choice';
+      attached.textContent = 'Host-owned';
+      document.body.append(attached);
+      let calls = 0;
+      const options = kind.startsWith('height')
+        ? {
+            maxHeight: { 'height-zero': 0, 'height-negative': -1, 'height-nan': NaN, 'height-infinity': Infinity }[
+              kind
+            ],
+          }
+        : kind.startsWith('delay')
+          ? { searchDelay: { 'delay-negative': -1, 'delay-nan': NaN, 'delay-infinity': Infinity }[kind] }
+          : {
+              ...(kind === 'second-draw' ? { searchDelay: 0, loadOptions: async () => [] } : {}),
+              renderOption: (_, doc) => {
+                if (kind === 'attached') return attached;
+                if (kind === 'foreign') return document.implementation.createHTMLDocument().createElement('span');
+                if (++calls === 3) throw new Error('Host renderer failed');
+                return doc.createElement('span');
+              },
+            };
+      window.grid.setColumnEditor('tags', { type: 'multiselect', values: ['a', 'b'], choiceEditor: options });
+    }, kind);
+    const viewport = page.getByRole('grid');
+    await viewport.press('Control+Home');
+    await viewport.press('Enter');
+    await expect(page.locator('select')).toHaveCount(0);
+    await expect(page.locator('[data-grid-choices]')).toHaveCount(0);
+    await expect(page.getByRole('alert').filter({ hasText: /Choice|renderer/ })).toBeVisible();
+    await expect(viewport).toBeFocused();
+    expect(await page.evaluate(() => window.source.getValue(0, 'tags'))).toBe('b, a');
+    await expect(page.locator('#host-choice')).toHaveText('Host-owned');
+    await page.evaluate(() => {
+      document.querySelector('#host-choice').remove();
+      window.grid.setColumnEditor('tags', { type: 'multiselect', values: ['a', 'b'], choiceEditor: {} });
+    });
+    await viewport.press('Enter');
+    await expect(page.locator('[data-grid-choices]')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(viewport).toBeFocused();
+  }
+  expect(errors).toEqual([]);
+});
+
+test('choice keyboard focus loops, skips disabled entries and preserves uncommitted drafts', async ({ page }) => {
+  await setup(page);
+  await page.evaluate(() =>
+    window.grid.setColumnEditor('tags', {
+      type: 'multiselect',
+      values: ['a', { value: 'blocked', disabled: true }, 'b'],
+      choiceEditor: { valueOrder: 'options' },
+    }),
+  );
+  const viewport = page.getByRole('grid');
+  await viewport.press('Control+Home');
+  await viewport.press('Enter');
+  const panel = page.locator('[data-grid-choices]');
+  const search = panel.getByRole('searchbox');
+  await search.press('Shift+Tab');
+  await expect(panel.getByRole('button', { name: 'Apply', exact: true })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(search).toBeFocused();
+  await search.press('ArrowDown');
+  await expect(panel.getByRole('checkbox', { name: 'b', exact: true })).toBeFocused();
+  await page.keyboard.press('Home');
+  await expect(panel.getByRole('checkbox', { name: 'a', exact: true })).toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(panel.getByRole('checkbox', { name: 'a', exact: true })).not.toBeChecked();
+  expect(await page.evaluate(() => window.source.getValue(0, 'tags'))).toBe('b, a');
+  await panel.evaluate((node) =>
+    node.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true })),
+  );
+  await expect(panel).toBeVisible();
+  await page.keyboard.press('Escape');
+  expect(await page.evaluate(() => window.source.getValue(0, 'tags'))).toBe('b, a');
+  await viewport.press('Enter');
+  await panel.getByRole('button', { name: 'Apply', exact: true }).click();
+  expect(await page.evaluate(() => window.source.getValue(0, 'tags'))).toBe('a, b');
+  await page.evaluate(() => window.grid.undo());
+  expect(await page.evaluate(() => window.source.getValue(0, 'tags'))).toBe('b, a');
+});
+
 async function setup(page, options = {}) {
   await page.goto('/');
   await page.evaluate(async (options) => {
@@ -110,12 +211,28 @@ test('remote option loaders cancel old requests, keep selected values and abort 
 test('invalid sparse remote options preserve the selected draft and recover without data loss', async ({ page }) => {
   await setup(page);
   await page.evaluate(() => {
+    window.remoteQueries = [];
     window.grid.setColumnEditor('tags', {
       type: 'multiselect',
       values: ['a', 'b'],
       choiceEditor: {
         searchDelay: 0,
-        loadOptions: async (query) => (query === 'recover' ? [{ value: 'c', label: 'Recovered' }] : Array(1)),
+        loadOptions: async (query) => {
+          window.remoteQueries.push(query);
+          if (query === 'recover') return [{ value: 'c', label: 'Recovered' }];
+          const invalid = [
+            null,
+            {},
+            [null],
+            [{ value: 1 }],
+            [{ value: 'c', label: 1 }],
+            [{ value: 'c', disabled: 'false' }],
+            [{ value: 'c' }, { value: 'c' }],
+            [{ value: '' }],
+            [{ value: 'c,d' }],
+          ];
+          return query.startsWith('invalid-') ? invalid[Number(query.slice(8))] : Array(1);
+        },
       },
     });
   });
@@ -129,6 +246,15 @@ test('invalid sparse remote options preserve the selected draft and recover with
   await expect(page.getByRole('checkbox', { name: 'a', exact: true })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: 'b', exact: true })).toBeChecked();
   expect(await page.evaluate(() => window.source.getValue(0, 'tags'))).toBe('b, a');
+  for (let index = 0; index < 9; index++) {
+    const query = `invalid-${index}`;
+    await page.getByRole('searchbox', { name: 'Search options' }).fill(query);
+    await expect.poll(() => page.evaluate((query) => window.remoteQueries.includes(query), query)).toBe(true);
+    await expect(page.getByText('Unable to load options. Try searching again.', { exact: true })).toBeVisible();
+    await expect(page.getByRole('checkbox', { name: 'a', exact: true })).toBeChecked();
+    await expect(page.getByRole('checkbox', { name: 'b', exact: true })).toBeChecked();
+    expect(await page.evaluate(() => window.source.getValue(0, 'tags'))).toBe('b, a');
+  }
   await page.getByRole('searchbox', { name: 'Search options' }).fill('recover');
   await page.getByRole('checkbox', { name: 'Recovered' }).check();
   await page.getByRole('button', { name: 'Apply', exact: true }).click();
