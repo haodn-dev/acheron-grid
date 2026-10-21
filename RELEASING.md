@@ -1,15 +1,15 @@
 # Release preparation
 
-The current candidate is **0.2.0 development preview** for all eight packages. Follow
-[the candidate notes](RELEASE-0.2.0.md) and the channel workflow below. Registry publication
-and verification have not completed; the original 0.1.0 release remains immutable.
+The current release is **0.2.0 development preview** for all eight packages. See
+[the release notes](RELEASE-0.2.0.md) for publication, verification and bootstrap details.
+The original 0.1.0 release remains immutable.
 
 This file retains the original 0.1.0 preparation procedure. The six original 0.1.0 packages are now
-published previews; later source APIs are unreleased. Before selecting a future stable version, close
+published previews; 0.2.0 includes the subsequent source APIs. Before selecting a future stable version, close
 the [1.0 contract and acceptance gates](guides/v1-readiness.md). The current publisher aligns all eight
 packages, so a stable subset cannot be published by that workflow without a separate tooling change.
 
-For automated develop/stable publishing and one-time account configuration, see [release channels and trusted publishing](guides/releasing.md). The source release workflow remains inactive until maintainers configure its GitHub environments/npm publishers and push the corresponding develop branch or stable tag.
+For automated develop/stable publishing and one-time account configuration, see [release channels and trusted publishing](guides/releasing.md). Production trusted publishers are configured. The develop channel requires its own publisher-policy decision before activation.
 
 Version `0.1.0` has been selected for the first release. Package manifests are prepared for public publication; the root workspace remains private. No package has been published by this preparation. This guide prepares a reviewable release; it does not authorize publishing, pushing tags or changing the license.
 

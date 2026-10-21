@@ -4,17 +4,18 @@ Package versions and documentation revisions answer different questions. The pac
 
 ## Reading channels
 
-The 0.2.0 development preview candidate includes the current eight-package source scope.
-It is not yet a registry release; see [candidate notes and migration](../RELEASE-0.2.0.md).
-Until verified publication, the frozen npm 0.1.0 and source-preview channels below retain
-their existing meanings.
+The 0.2.0 development preview is published for all eight packages; see
+[release notes and migration](../RELEASE-0.2.0.md). The repository guides describe its APIs.
+The website's frozen npm 0.1.0 channel retains its original scope; the source channel
+includes the 0.2.0 APIs and identifies its exact Git revision.
 
-| Channel        | Use it when                                            | Meaning                                                                                  |
-| -------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| npm 0.1.0      | Your application installs the published 0.1.0 packages | Frozen API scope from Git tag v0.1.0; later editorial corrections may clarify that scope |
-| Source preview | You build the revision shown by the site               | Includes Unreleased APIs and export/charts modules; not a registry release               |
+| Channel        | Use it when                                               | Meaning                                                                                  |
+| -------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| npm 0.1.0      | Your application installs the published 0.1.0 packages    | Frozen API scope from Git tag v0.1.0; later editorial corrections may clarify that scope |
+| npm 0.2.0      | Your application installs the current development preview | All eight packages; repository guides and tag v0.2.0 define the released API scope       |
+| Source preview | You build the revision shown by the site                  | Includes 0.2.0 APIs and any subsequent source changes; identify the exact revision       |
 
-The site defaults to npm 0.1.0 for an installable starting point. Switch channels explicitly for a source-only recipe. Internal dependency versions alone do not identify a source preview: also record the Git revision.
+The site currently defaults to the frozen npm 0.1.0 documentation. Switch to its source channel for APIs added after 0.1.0, including the released 0.2.0 APIs. Internal dependency versions alone do not identify a source preview: also record the Git revision.
 
 ## Per-document revisions
 
@@ -33,4 +34,4 @@ When changing an API: update its owning guide/README, record its release availab
 
 ## License transition
 
-Current source and future distributions use Apache-2.0, with copyright attribution in NOTICE. Published npm 0.1.0 and tag v0.1.0 retain MIT; the source license decision does not retroactively change those artifacts. Embedded Lucide assets (ISC/MIT), fflate/Marked and other dependencies retain their own licenses and required notices.
+Current source and 0.2.0 distributions use Apache-2.0, with copyright attribution in NOTICE. Published npm 0.1.0 and tag v0.1.0 retain MIT; the source license decision does not retroactively change those artifacts. Embedded Lucide assets (ISC/MIT), fflate/Marked and other dependencies retain their own licenses and required notices.

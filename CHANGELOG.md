@@ -2,11 +2,11 @@
 
 ## Unreleased
 
-No changes after the 0.2.0 candidate.
+No API changes after 0.2.0.
 
-## 0.2.0 — Development preview candidate
+## 0.2.0 — Development preview — 2026-10-21
 
-Not yet published. See [release notes, migration and limits](RELEASE-0.2.0.md).
+Published on npm for all eight packages. See [release notes, migration and limits](RELEASE-0.2.0.md).
 
 - Preserve trailing empty TSV rows, reject malformed inserted row values atomically and retain complete Markdown link destinations.
 - Harden editor/clipboard/media/search/accessibility lifecycles, examples and MCP boundaries; expand regression coverage.
@@ -64,13 +64,13 @@ Not yet published. See [release notes, migration and limits](RELEASE-0.2.0.md).
 - Optional XLSX export writes scalar values and literal strings to one sheet, with copy permissions, Unicode/XML checks and archive budgets. ZIP dependency stays outside core.
 
 - Read-only live cache supports stable-ID snapshots, consecutive sequences, bounded cell coalescing, atomic flush and stale/resync handling. Host owns transport and scheduling.
-- Optional free inline charts module renders line, column and horizontal bar series with gaps, signed baselines and a bounded point budget. Source preview, not yet published.
+- Optional free inline charts module renders line, column and horizontal bar series with gaps, signed baselines and a bounded point budget. Included in 0.2.0.
 
 - Host-owned remote save example covers local drafts, revision/idempotency receipts, validation/conflict preservation, explicit rollback and late-response guards without changing synchronous DataSource writes.
 
 - Async sources capture immutable server sort/filter queries per request. Validated query changes cancel old loads and clear cache; reset retains the query. Host owns backend execution and engine refresh.
 
-- Optional free CSV export module reuses core copy permissions, supports quoted text/headers/BOM and default formula-text escaping. Source preview, not yet published.
+- Optional free CSV export module reuses core copy permissions, supports quoted text/headers/BOM and default formula-text escaping. Included in 0.2.0.
 
 - MCP supports opt-in authorized row discovery, a bounded single-pass ID lookup or checked host resolver, and UTF-8 output budgets checked before write commit.
 

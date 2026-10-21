@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "40ee70f286dad2a353192aac953e0078d5dc5f9f",
+  "sourceRevision": "f67c21a965ba32ab61dcf943245f2c018e5ad2d3",
   "release": {
     "version": "0.1.0",
     "tag": "v0.1.0",
@@ -178,9 +178,9 @@
     {
       "id": "versions",
       "path": "guides/versions.md",
-      "revision": 5,
+      "revision": 6,
       "updated": "2026-10-21",
-      "sha256": "64af4c9945c3ab34ae5a24a9df5178ddcabc10e0433f6663511953e3de429f96",
+      "sha256": "4909e0eb457f265a2a8bb923fe66402c18190c795d3672bf45839aa423ccc193",
       "history": [
         {
           "revision": 1,
@@ -201,6 +201,10 @@
         {
           "revision": 5,
           "summary": "Separate package releases, source previews and per-document revisions."
+        },
+        {
+          "revision": 6,
+          "summary": "Record npm 0.2.0 availability, immutable 0.1.0 scope and the website reading channels."
         }
       ]
     },
