@@ -1,8 +1,8 @@
-# Acheron Grid 0.2.0 — development preview candidate
+# Acheron Grid 0.2.0 — development preview
 
-This is the release candidate for all eight packages. It has not yet been published to npm.
-Version 0.1.0 remains the published preview for the original six packages. Do not install
-0.2.0 from the registry until publication and registry-consumer verification complete.
+Version 0.2.0 is published on npm for all eight packages. The release workflow verified
+independent tarball consumers before publication and exact registry versions afterward.
+The original six npm 0.1.0 artifacts remain available and immutable.
 
 ## Changes since 0.1.0
 
@@ -21,8 +21,7 @@ Version 0.1.0 remains the published preview for the original six packages. Do no
 ## Packages and installation
 
 The release aligns core, canvas, markdown, react, vue, export, charts and mcp at 0.2.0.
-Until publication, build and install matching tarballs from this candidate. After publication,
-the intended browser installation is:
+Install the browser packages with:
 
 ```sh
 npm install @acheron-grid/core@0.2.0 @acheron-grid/canvas@0.2.0
@@ -42,9 +41,17 @@ third-party attribution remains applicable. Review that license transition when 
 
 ## Validation and limits
 
-Release acceptance is recorded on the exact candidate commit and in its CI run. A local test pass
-does not establish remote CI or registry publication. The release workflow tests independent
-tarball consumers before publication and exact npm versions afterward.
+Tag `v0.2.0` identifies commit `ac761dcdc908d81eeaa2d1f4c9b311b9bb41b788`.
+The [release workflow](https://github.com/haodn-dev/acheron-grid/actions/runs/39637052405)
+passed Node 22/24, Firefox and WebKit verification, independent tarball consumers and
+exact npm-version consumers. Local checks also passed 253 unit tests, 181 Chromium
+integration tests, 13 playground tests, 18 MCP tests and 2 release-tooling tests.
+
+The six original packages publish through GitHub OIDC with provenance. The first export/charts
+publication required an interactive bootstrap before npm allowed trusted-publisher setup;
+those two initial artifacts have no CI provenance. All eight packages now restrict trusted
+publishing to `haodn-dev/acheron-grid`, `release.yml` and `npm-production`, with publish and
+stage-publish permissions. No dist-tag-management permission was granted.
 
 This is a 0.x preview, not stable 1.0. Manual NVDA/VoiceOver, physical Safari/iOS/Android,
 native clipboard interoperability and representative host performance remain open. Playwright
