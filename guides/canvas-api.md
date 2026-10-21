@@ -1,6 +1,6 @@
 # Canvas API signatures
 
-Source-preview catalog generated from the exported TypeScript Grid type. Use the package guide for behavior/examples; do not copy source-only members into an npm 0.1.0 application. Coordinates are zero-based visible indices unless a contract states otherwise.
+API catalog generated from the exported TypeScript Grid type. Use the package guide for behavior/examples and match the selected documentation version to your installed packages. Coordinates are zero-based visible indices unless a contract states otherwise.
 
 [Package guide](../packages/canvas/README.md) · [Version policy](versions.md)
 

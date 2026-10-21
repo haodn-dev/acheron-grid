@@ -1,6 +1,6 @@
 # Cooperative bulk commands
 
-These APIs are available in the source preview. Published npm 0.1.0 does not include them.
+These APIs are available in npm 0.2.0.
 
 `updateCellsAsync(updates, options)`, `pasteAsync(tsv, options, pasteOptions?)`, `undoAsync(options)`,
 `redoAsync(options)` and `setViewAsync(view, options)` prepare work in chunks. They share validation,
@@ -45,7 +45,7 @@ datasets larger than the local working set.
 
 ## Optional TSV worker
 
-The source preview can decode TSV in a module Worker before the existing cooperative paste preparation.
+Version 0.2.0 can decode TSV in a module Worker before the existing cooperative paste preparation.
 The core root stays headless. Import the worker client explicitly and let your bundler emit the entry:
 
 ```ts

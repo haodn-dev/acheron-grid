@@ -1,8 +1,8 @@
 # @acheron-grid/markdown
 
-This guide targets **0.2.0 development preview** artifacts. Check [release status and migration](../../RELEASE-0.2.0.md) before registry installation. Older source-preview labels identify additions after npm 0.1.0; those APIs are included in the 0.2.0 candidate.
+Version **0.2.0** is published on npm as a development preview. See [release notes and migration](../../RELEASE-0.2.0.md).
 
-Version 0.2.0 preview scope; npm 0.1.0 has a separate frozen reference. See [documentation versions](../../guides/versions.md).
+The npm 0.1.0 archive has a separate frozen reference. See [documentation versions](../../guides/versions.md).
 
 Optional Markdown adapter for Acheron Grid. This experimental package depends on `marked`; core and Canvas do not. It does not require a DOM or import either grid package at runtime.
 

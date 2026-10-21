@@ -12,7 +12,7 @@ Every Acheron feature and optional module is intended to remain open source and 
 
 ## Start here
 
-[Getting started](guides/getting-started.md) → [Integration guide](guides/integration.md) → [Package reference](packages/core/README.md). [Documentation versions and changes](guides/versions.md) explain npm 0.1.0 versus source preview.
+[Getting started](guides/getting-started.md) → [Integration guide](guides/integration.md) → [Package reference](packages/core/README.md). [Documentation versions and changes](guides/versions.md) explain released versions and source previews.
 
 ## Status
 
