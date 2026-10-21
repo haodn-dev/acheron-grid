@@ -490,7 +490,11 @@ export function createStructure(
       throw new RangeError('Invalid row insertion.');
     if (!rows.length) return;
     const snapshots = Object.freeze(
-      rows.map((row) => Object.freeze({ id: row.id, values: Object.freeze({ ...row.values }) })),
+      Array.from(rows, (row) => {
+        if (!row || !row.values || typeof row.values !== 'object' || Array.isArray(row.values))
+          throw new TypeError('Invalid inserted row.');
+        return Object.freeze({ id: row.id, values: Object.freeze({ ...row.values }) });
+      }),
     );
     const previous = Array.from({ length: context.rowCount }, (_, i) => i),
       order = previous.slice(0, beforeIndex).concat(Array<number>(rows.length).fill(-1), previous.slice(beforeIndex));

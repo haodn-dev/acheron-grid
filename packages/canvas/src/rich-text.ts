@@ -82,7 +82,12 @@ export function richTextSource(rich: RichText, format: RichTextFormat, document:
           if (run.bold) text = '**' + text + '**';
           if (run.italic) text = '*' + text + '*';
           if (run.href && safeWebUrl(run.href))
-            text = '[' + text + '](' + run.href.replace(/[()\\]/g, (character) => encodeURIComponent(character)) + ')';
+            text =
+              '[' +
+              text +
+              '](' +
+              run.href.replace(/[()\\]/g, (character) => '%' + character.charCodeAt(0).toString(16).toUpperCase()) +
+              ')';
           return leading + text + trailing;
         })
         .join('  \n'),

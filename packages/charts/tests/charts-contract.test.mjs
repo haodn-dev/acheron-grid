@@ -152,6 +152,10 @@ for (const kind of kinds) {
 }
 
 test('geometry preserves sparse positions, input and immutable outputs', () => {
+  assert.deepEqual(chartGeometry([0, Number.MIN_VALUE], 100, 20).points, [
+    { x: 0, y: 20 },
+    { x: 100, y: 0 },
+  ]);
   const values = Object.freeze([1, , 3]);
   const domain = Object.freeze([0, 4]);
   const result = chartGeometry(values, 100, 40, 'line', domain);

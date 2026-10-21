@@ -144,7 +144,7 @@ export function createClipboard(context: ClipboardContext) {
   }
 
   function pasteSelectionBlocks(text: string, pasteOptions?: PasteOptions): void {
-    if (pasteOptions?.transpose || pasteOptions?.mode === 'formats') {
+    if (pasteOptions?.mode === 'formats') {
       if (context.destroyed || context.editor) throw new Error('Finish editing before pasting cells.');
       context.engine.pasteSelectionBlocks(text, pasteOptions);
       cancelCut();
@@ -156,6 +156,7 @@ export function createClipboard(context: ClipboardContext) {
       .sort((a, b) => a.startRow - b.startRow || a.startColumn - b.startColumn);
     const moving = !pasteOptions && pendingCutText !== undefined && text === pendingCutText;
     const original = decodeBlocks(text);
+    const transpose = pasteOptions?.transpose === true;
     const scalar =
       !moving && original.length === 1 && original[0]!.values.length === 1 && original[0]!.values[0]!.length === 1;
     if (
@@ -170,8 +171,8 @@ export function createClipboard(context: ClipboardContext) {
       scalar && ranges.length
         ? ranges.map((range) => {
             const first = original[0]!,
-              height = range.endRow - range.startRow + 1,
-              width = range.endColumn - range.startColumn + 1;
+              height = transpose ? range.endColumn - range.startColumn + 1 : range.endRow - range.startRow + 1,
+              width = transpose ? range.endRow - range.startRow + 1 : range.endColumn - range.startColumn + 1;
             return {
               ...first,
               row: 0,
@@ -193,8 +194,14 @@ export function createClipboard(context: ClipboardContext) {
       const formats = block.formats?.map((line) => line.map((format) => ({ ...format })));
       const values = block.values.map((line, row) =>
         line.map((value, col) => {
-          const rowIndex = range.startRow + row + (ranges.length === 1 ? block.row : 0),
-            columnIndex = range.startColumn + col + (ranges.length === 1 ? block.column : 0);
+          const rowIndex =
+              range.startRow +
+              (transpose ? col : row) +
+              (ranges.length === 1 ? (transpose ? block.column : block.row) : 0),
+            columnIndex =
+              range.startColumn +
+              (transpose ? row : col) +
+              (ranges.length === 1 ? (transpose ? block.row : block.column) : 0);
           if (
             formats?.[row]?.[col]?.contentFormat === 'html' &&
             rowIndex < context.rowCount &&
@@ -202,6 +209,7 @@ export function createClipboard(context: ClipboardContext) {
           ) {
             const current = context.engine.getValue(rowIndex, context.columns[columnIndex]!.key);
             if (
+              pasteOptions?.mode === 'values' ||
               typeof current === 'number' ||
               typeof current === 'boolean' ||
               context.columnEditors.has(context.columns[columnIndex]!.key)

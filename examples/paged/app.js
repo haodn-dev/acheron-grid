@@ -127,7 +127,9 @@ $('accept').onclick = () =>
     await page(0);
   });
 await run(() => page(0));
-window.addEventListener('pagehide', () => {
-  grid?.destroy();
-  source.destroy();
+window.addEventListener('pagehide', (event) => {
+  if (!event.persisted) {
+    grid?.destroy();
+    source.destroy();
+  }
 });

@@ -83,17 +83,25 @@ test('rich display rejects unsupported configuration and contains adapter failur
     );
     const display = create({
       richTextColumns: { note: 'markdown' },
-      markdownToHtml: () => {
-        throw new Error('adapter failed');
+      markdownToHtml: (value) => {
+        if (value === 'hello') throw new Error('adapter failed');
+        return '<b>Recovered</b>';
       },
     });
     const rich = display.richText('hello', 'note');
-    return { errors, unavailable: rich.unavailable, text: rich.text, fallback: display.displayedText(null, 'unknown') };
+    return {
+      errors,
+      unavailable: rich.unavailable,
+      text: rich.text,
+      recovered: display.richText('retry', 'note').text,
+      fallback: display.displayedText(null, 'unknown'),
+    };
   });
   expect(result).toEqual({
     errors: [true, true],
     unavailable: true,
     text: 'localized:Rich text unavailable',
+    recovered: 'Recovered',
     fallback: '',
   });
 });

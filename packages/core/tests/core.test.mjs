@@ -234,6 +234,16 @@ test('TSV round-trips quoted tabs, multiline values, quotes and empty fields', (
   assert.throws(() => decodeTsv('\t'.repeat(clipboardCellLimit)), RangeError);
 });
 
+test('TSV preserves trailing empty rows in single-column clipboard data', () => {
+  for (const rows of [
+    [['keep'], ['']],
+    [['keep'], [''], ['']],
+    [[''], ['']],
+  ]) {
+    assert.deepEqual(decodeTsv(encodeTsv(rows)), rows);
+  }
+});
+
 test('sparse axis geometry matches variable-size boundaries and a million rows', () => {
   const axis = new GridAxis(6, 32);
   axis.setSize(0, 64);

@@ -137,9 +137,7 @@ export function createMenus(context: MenusContext) {
     form.append(fieldLabel, actions);
     dialog.append(form);
     dialog.addEventListener('close', () => {
-      dialog.remove();
-      if (context.overlay.activeDialog === dialog) context.overlay.activeDialog = null;
-      if (!context.destroyed && !context.editors.editor) context.scroller.focus({ preventScroll: true });
+      context.overlay.finishDialogClose(dialog);
     });
     context.root.append(dialog);
     dialog.showModal();
@@ -265,9 +263,7 @@ export function createMenus(context: MenusContext) {
     clear.addEventListener('click', () => apply({ background: null, textColor: null, numberFormat: null }));
     cancel.addEventListener('click', () => dialog.close());
     dialog.addEventListener('close', () => {
-      dialog.remove();
-      if (context.overlay.activeDialog === dialog) context.overlay.activeDialog = null;
-      if (!context.destroyed && !context.editors.editor) context.scroller.focus({ preventScroll: true });
+      context.overlay.finishDialogClose(dialog);
     });
     const actions = context.doc.createElement('div');
     actions.dataset.dialogActions = '';
@@ -864,7 +860,7 @@ export function createMenus(context: MenusContext) {
         filter.value = '';
         filterActions();
         filter.hidden = true;
-        buttons[0]?.focus();
+        popup.querySelector<HTMLButtonElement>('button:not(:disabled):not([hidden])')?.focus();
       } else if (event.key === 'Escape' || event.key === 'Tab') {
         event.preventDefault();
         context.closeMenu(true);
@@ -873,7 +869,7 @@ export function createMenus(context: MenusContext) {
         !event.ctrlKey &&
         !event.metaKey &&
         !event.altKey &&
-        (event.key.length === 1 || event.key === 'Backspace')
+        ((event.key.length === 1 && event.key !== ' ') || event.key === 'Backspace')
       ) {
         event.preventDefault();
         filter.hidden = false;
@@ -1026,9 +1022,7 @@ export function createMenus(context: MenusContext) {
     );
     context.root.append(dialog);
     dialog.addEventListener('close', () => {
-      dialog.remove();
-      if (context.overlay.activeDialog === dialog) context.overlay.activeDialog = null;
-      if (!context.destroyed && !context.editors.editor) context.scroller.focus({ preventScroll: true });
+      context.overlay.finishDialogClose(dialog);
     });
     dialog.showModal();
     title.focus();
@@ -1132,9 +1126,7 @@ export function createMenus(context: MenusContext) {
     dialog.append(status, actions);
     context.root.append(dialog);
     dialog.addEventListener('close', () => {
-      dialog.remove();
-      if (context.overlay.activeDialog === dialog) context.overlay.activeDialog = null;
-      if (!context.destroyed && !context.editors.editor) context.scroller.focus({ preventScroll: true });
+      context.overlay.finishDialogClose(dialog);
     });
     dialog.showModal();
     (sort ? apply : input).focus();

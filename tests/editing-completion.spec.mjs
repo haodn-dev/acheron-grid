@@ -1,5 +1,76 @@
 import { test, expect } from './browser-fixtures.mjs';
 
+test('invalid column creation types fail before mounting or replacing container contents', async ({ page }) => {
+  await page.goto('/');
+  const results = await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    const { LocalDataSource } = await import('/core/index.js');
+    const valid = { key: 'custom', label: 'Custom', create: () => ({ column: { key: 'x', title: 'X' } }) };
+    return [
+      [],
+      Array(1),
+      [valid, , valid],
+      {},
+      [null],
+      [{ ...valid, key: 1 }],
+      [{ ...valid, label: true }],
+      [valid, valid],
+    ].map((columnTypes) => {
+      const container = document.createElement('div');
+      container.textContent = 'Host content';
+      document.body.append(container);
+      let error = '';
+      try {
+        createGrid({
+          container,
+          dataSource: new LocalDataSource([], (row) => row.id),
+          columns: [],
+          columnTypes,
+        }).destroy();
+      } catch (cause) {
+        error = cause.message;
+      }
+      const unchanged = container.textContent === 'Host content';
+      container.remove();
+      return { error, unchanged };
+    });
+  });
+  for (const result of results) expect(result).toEqual({ error: 'Invalid column types.', unchanged: true });
+});
+
+for (const mode of ['details', 'editor'])
+  test(`queued media ${mode} close preserves focus in the next cell editor`, async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(async () => {
+      const { createGrid } = await import('/canvas/index.js');
+      const { LocalDataSource } = await import('/core/index.js');
+      window.grid = createGrid({
+        container: document.querySelector('#grid'),
+        dataSource: new LocalDataSource([{ id: 1, photos: [], text: 'unchanged' }], (row) => row.id),
+        columns: [
+          { key: 'photos', title: 'Photos', editable: true },
+          { key: 'text', title: 'Text', editable: true },
+        ],
+        imageColumns: ['photos'],
+      });
+    });
+    const viewport = page.getByRole('grid');
+    await viewport.press('Control+Home');
+    await viewport.press(mode === 'details' ? 'Alt+Enter' : 'F2');
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.evaluate(() => {
+      document.querySelector('dialog').close();
+      const viewport = document.querySelector('[role="grid"]');
+      for (const key of ['ArrowRight', 'F2'])
+        viewport.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    });
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('textbox')).toBeFocused();
+    await page.getByRole('textbox').fill('retained');
+    await page.keyboard.press('Enter');
+    expect(await page.evaluate(() => grid.getValue(0, 'text'))).toBe('retained');
+  });
+
 test('queued column dialog close does not steal focus from a newly opened cell editor', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
