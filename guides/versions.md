@@ -4,6 +4,11 @@ Package versions and documentation revisions answer different questions. The pac
 
 ## Reading channels
 
+The 0.2.0 development preview candidate includes the current eight-package source scope.
+It is not yet a registry release; see [candidate notes and migration](../RELEASE-0.2.0.md).
+Until verified publication, the frozen npm 0.1.0 and source-preview channels below retain
+their existing meanings.
+
 | Channel        | Use it when                                            | Meaning                                                                                  |
 | -------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | npm 0.1.0      | Your application installs the published 0.1.0 packages | Frozen API scope from Git tag v0.1.0; later editorial corrections may clarify that scope |
