@@ -6,8 +6,8 @@ Package versions and documentation revisions answer different questions. The pac
 
 The 0.2.0 development preview is published for all eight packages; see
 [release notes and migration](../RELEASE-0.2.0.md). The repository guides describe its APIs.
-The website's frozen npm 0.1.0 channel retains its original scope; the source channel
-includes the 0.2.0 APIs and identifies its exact Git revision.
+The website defaults to npm 0.2.0. The archived npm 0.1.0 channel retains its original
+scope; Source preview follows a separately identified Git revision.
 
 | Channel        | Use it when                                               | Meaning                                                                                  |
 | -------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -15,7 +15,7 @@ includes the 0.2.0 APIs and identifies its exact Git revision.
 | npm 0.2.0      | Your application installs the current development preview | All eight packages; repository guides and tag v0.2.0 define the released API scope       |
 | Source preview | You build the revision shown by the site                  | Includes 0.2.0 APIs and any subsequent source changes; identify the exact revision       |
 
-The site currently defaults to the frozen npm 0.1.0 documentation. Switch to its source channel for APIs added after 0.1.0, including the released 0.2.0 APIs. Internal dependency versions alone do not identify a source preview: also record the Git revision.
+The site defaults to npm 0.2.0. Select npm 0.1.0 only for an application that still installs that version. Select Source preview for development after the released scope and record the exact Git revision.
 
 ## Per-document revisions
 

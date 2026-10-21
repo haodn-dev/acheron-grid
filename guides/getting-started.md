@@ -4,24 +4,24 @@ Use Canvas for an interactive browser grid. Use core alone for Node.js, a custom
 
 ## Choose your version
 
-Version 0.1.0 is available on npm for core, Canvas, React, Vue, Markdown and MCP. These are development previews, with experimental APIs. Pin the same version across packages. Export, charts, live data, multi-sort, query snapshots and find/replace are newer source previews; they are not included in npm 0.1.0.
+Version 0.2.0 is available on npm for all eight packages: core, Canvas, React, Vue, Markdown, MCP, export and charts. APIs remain experimental. Pin the same version across packages. Live data, multi-sort, query snapshots, find/replace and the documented remote-write APIs are included in 0.2.0.
 
-This guide's minimal example works with npm 0.1.0 and the current source. See [documentation versions](versions.md) before using source-only recipes.
+This guide targets npm 0.2.0. The archived npm 0.1.0 channel retains its original API scope; see [documentation versions](versions.md).
 
 ## Install
 
 Use an ESM application with a bundler. Node.js 22 or later is required for repository builds and checks; browser mounting requires Canvas 2D and ResizeObserver.
 
 ```sh
-npm install @acheron-grid/core@0.1.0 @acheron-grid/canvas@0.1.0
+npm install @acheron-grid/core@0.2.0 @acheron-grid/canvas@0.2.0
 ```
 
 For a framework, add only its adapter and supply its peer dependency:
 
 ```sh
-npm install @acheron-grid/react@0.1.0 react react-dom
+npm install @acheron-grid/react@0.2.0 react react-dom
 # Or, for Vue:
-npm install @acheron-grid/vue@0.1.0 vue
+npm install @acheron-grid/vue@0.2.0 vue
 ```
 
 React accepts React 18.3 or 19; Vue requires Vue 3.5 or later within Vue 3. Browser/framework coverage is described in [support](../SUPPORT.md).
@@ -86,7 +86,7 @@ The grid shows two records. Double-click a name or press F2 to edit; numeric tex
 
 - [Integration guide](integration.md): validation, clipboard, views, refresh, persistence and extensions.
 - [React](../packages/react/README.md) or [Vue](../packages/vue/README.md): stable options, runtime props and cleanup.
-- [Core](../packages/core/README.md): headless contracts and source-only remote/live recipes.
+- [Core](../packages/core/README.md): headless contracts and 0.2.0 remote/live recipes.
 - [Canvas](../packages/canvas/README.md): browser editors, media, layout and keyboard behavior.
 - [Security boundaries](../SECURITY.md): server authorization and trusted host callbacks.
 
@@ -95,23 +95,23 @@ The grid shows two records. Double-click a name or press F2 to edit; numeric tex
 The website identifies the exact source revision for its preview docs. Check out that revision before using source-only APIs; do not assume the default branch or npm 0.1.0 contains them.
 
 ```sh
-git clone --branch feat/core-readiness https://github.com/haodn-dev/acheron-grid.git
+git clone --branch v0.2.0 https://github.com/haodn-dev/acheron-grid.git
 cd acheron-grid
 npm ci
 npm run build
 npm run playground
 ```
 
-For a consumer project, pack and install all packages you need together so the internal 0.1.0 dependency ranges resolve to the same source artifacts:
+For a consumer project, pack and install all packages you need together so the internal 0.2.0 dependency ranges resolve to the same source artifacts:
 
 ```sh
 # In the built engine checkout:
 npm pack --workspace @acheron-grid/core --workspace @acheron-grid/canvas --pack-destination /absolute/path/to/artifacts
 # In your application:
-npm install /absolute/path/to/artifacts/acheron-grid-core-0.1.0.tgz /absolute/path/to/artifacts/acheron-grid-canvas-0.1.0.tgz
+npm install /absolute/path/to/artifacts/acheron-grid-core-0.2.0.tgz /absolute/path/to/artifacts/acheron-grid-canvas-0.2.0.tgz
 ```
 
-Create the artifacts directory first. Add export/charts/framework tarballs to the same install command when needed. Their manifest version may still read 0.1.0; the source revision, not that number alone, identifies an unreleased build.
+Create the artifacts directory first. Add export/charts/framework tarballs to the same install command when needed. For changes after v0.2.0, record the exact Git revision and use matching source artifacts; do not mix those changes with registry packages.
 
 ## Troubleshooting
 
@@ -122,4 +122,4 @@ Create the artifacts directory first. Add export/charts/framework tarballs to th
 | Numeric paste fails                      | Add a parser and validation for the typed column                          |
 | Edits disappear after a React/Vue update | Keep options identity stable; a new options object intentionally remounts |
 | External changes do not appear           | Call `refreshData()` with the correct identity mode                       |
-| API missing from npm                     | Switch docs to 0.1.0 or install a matching source build                   |
+| API missing from npm                     | Match docs to your installed version; upgrade to 0.2.0 for its APIs       |

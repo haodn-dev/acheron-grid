@@ -80,7 +80,7 @@ for (const [name, file, typeName, optionsName] of [
         `### ${symbol.name}\n\n\`\`\`ts\n${symbol.name}: ${signature}\n\`\`\`\n\n${name === 'core' ? coreContracts[symbol.name] : (descriptions[symbol.name] ?? ts.displayPartsToString(symbol.getDocumentationComment(checker)) ?? '')}\n`,
       );
   }
-  let markdown = `# ${name === 'core' ? 'Core' : 'Canvas'} API signatures\n\nSource-preview catalog generated from the exported TypeScript ${typeName} type. Use the package guide for behavior/examples; do not copy source-only members into an npm 0.1.0 application. Coordinates are zero-based visible indices unless a contract states otherwise.\n\n[Package guide](../packages/${name}/README.md) · [Version policy](versions.md)\n\n`;
+  let markdown = `# ${name === 'core' ? 'Core' : 'Canvas'} API signatures\n\nAPI catalog generated from the exported TypeScript ${typeName} type. Use the package guide for behavior/examples and match the selected documentation version to your installed packages. Coordinates are zero-based visible indices unless a contract states otherwise.\n\n[Package guide](../packages/${name}/README.md) · [Version policy](versions.md)\n\n`;
   for (const [group, entries] of grouped) if (entries.length) markdown += `## ${group}\n\n${entries.join('\n')}\n`;
   const options = checker.getDeclaredTypeOfSymbol(exported.find((symbol) => symbol.name === optionsName));
   markdown += `## Construction options\n\nCall ${name === 'core' ? 'createGridEngine' : 'createGrid'} with ${optionsName}. Required fields are marked; options are read at construction unless the package guide specifies a runtime setter.\n\n| Field | Required | Type |\n| --- | --- | --- |\n`;

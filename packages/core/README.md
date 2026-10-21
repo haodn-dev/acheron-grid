@@ -1,8 +1,8 @@
 # @acheron-grid/core
 
-This guide targets **0.2.0 development preview** artifacts. Check [release status and migration](../../RELEASE-0.2.0.md) before registry installation. Older source-preview labels identify additions after npm 0.1.0; those APIs are included in the 0.2.0 candidate.
+Version **0.2.0** is published on npm as a development preview. See [release notes and migration](../../RELEASE-0.2.0.md).
 
-Version 0.2.0 preview scope; npm 0.1.0 has a separate frozen reference. See [documentation versions](../../guides/versions.md).
+The npm 0.1.0 archive has a separate frozen reference. See [documentation versions](../../guides/versions.md).
 
 An experimental headless TypeScript data-grid engine. Core owns data access and controlled mutations, selection, layout, editing, TSV clipboard operations and history. The host owns source storage and transport. Core has no runtime dependencies or browser/framework types.
 
@@ -25,10 +25,10 @@ Use core for a custom renderer or headless data workflow. For a ready-made inter
 ### Installation
 
 ```sh
-npm install @acheron-grid/core
+npm install @acheron-grid/core@0.2.0
 ```
 
-Version 0.1.0 is available on npm as a development preview. APIs may change before 1.0. This package exports ESM JavaScript and TypeScript declarations.
+Version 0.2.0 is available on npm as a development preview. APIs may change before 1.0. This package exports ESM JavaScript and TypeScript declarations.
 
 ### Building from source
 
@@ -75,7 +75,7 @@ Build/typecheck includes a separate ES2022-only TypeScript configuration with no
 
 ### Reading the complete API contract
 
-The [core API catalog](../../guides/core-api.md) lists every engine member, construction option, public export and source interface, with behavioral notes and exported type definitions. It describes source preview; the frozen npm 0.1.0 guide is a separate channel.
+The [core API catalog](../../guides/core-api.md) lists every engine member, construction option, public export and source interface, with behavioral notes and exported type definitions. It describes npm 0.2.0; the frozen npm 0.1.0 guide is a separate channel.
 
 Capability probes are intentionally narrower than commands. `getCellPermission().writable` describes effective policy and locks, not whether a source has a setter. `canEdit()` also checks source write support and editable/value parsing capability; actual parsing and validation can still fail. `canUndo()`/`canRedo()` indicate entries, not permission to replay under current locks, identities and values. Formatting permission is independent of value write permission.
 
@@ -120,13 +120,13 @@ engine.destroy();
 
 Capture IDs **before** a structural source change. This explicit operation scans all rows; engine construction does not. Reconciliation preserves valid selection, sizes, locks and formatting by ID, and drops groups/merges that cannot remain contiguous. With no previous IDs, `refreshData()` safely drops row-dependent state. All refresh modes clear undo/redo and pending cut state because external writes are outside history. `refreshData('values')` is a host guarantee that IDs, order and count did not change; use the identity snapshot for structural changes.
 
-Source preview also drops a collapsed group when identity reconciliation moves it across the frozen boundary. Single-cell editing accepts sources exposing either `setValue` or atomic `setValues`; permissions, parsing, validation and history still apply.
+Version 0.2.0 also drops a collapsed group when identity reconciliation moves it across the frozen boundary. Single-cell editing accepts sources exposing either `setValue` or atomic `setValues`; permissions, parsing, validation and history still apply.
 
 Subscribers are independent and can unsubscribe during dispatch. Events observe committed state. Observer errors do not turn a successful mutation into a failed operation; `onObserverError` reports them and `takeObserverErrors()` drains the last ten recorded errors. Parser, permission and setter failures still fail the actual command. Notification callbacks can query state but cannot issue nested mutations.
 
 ### Async pages and cancellation
 
-Request limits described below are unreleased source changes; published 0.1.0 consumers should continue to bound requests in the host until upgrading.
+Request limits described below are changes included in 0.2.0; published 0.1.0 consumers should continue to bound requests in the host until upgrading.
 
 ```ts
 import { createAsyncDataSource, createGridEngine } from '@acheron-grid/core';
@@ -174,11 +174,11 @@ The async source reads own row properties only. It retains at most `maxPages` su
 
 Cancel/reset settles queued work without calling the loader and aborts running requests. Stale responses cannot populate the cache. Running requests keep their concurrency slots until the loader settles, even across reset; a loader that ignores abort and never settles can block later work. Host loaders should implement cancellation and a timeout. Async writes and backend query execution remain host-managed.
 
-In Source preview, a successful response that changes `total` clears previously cached positional pages and their ready statuses. An offset beyond a shrinking total must return an empty `rows` array; it updates the count and can be requested again to discover growth. Refresh the engine after loading. Responses completing later in the same query generation can still report a different total: the host must supply a consistent dataset revision across pages or reset the query when the dataset changes. Equal totals do not prove stable row identity/order. Cache recency updates on page admission and cached `loadPage` calls; synchronous cell reads do not update recency.
+In 0.2.0, a successful response that changes `total` clears previously cached positional pages and their ready statuses. An offset beyond a shrinking total must return an empty `rows` array; it updates the count and can be requested again to discover growth. Refresh the engine after loading. Responses completing later in the same query generation can still report a different total: the host must supply a consistent dataset revision across pages or reset the query when the dataset changes. Equal totals do not prove stable row identity/order. Cache recency updates on page admission and cached `loadPage` calls; synchronous cell reads do not update recency.
 
-### Server query snapshots (unreleased)
+### Server query snapshots (0.2.0)
 
-The source accepts initial `query: LocalViewOptions`. Its `query` getter exposes an immutable snapshot; every loader receives that snapshot as `request.query`. `setQuery(criteria, total = 0)` validates sort/filter criteria and row count before canceling old work and clearing cached pages/status. Each call starts a new generation, even for equal criteria. Invalid criteria leave the current source intact. `reset()` reloads the current query. These APIs are source previews and are not included in npm 0.1.0.
+The source accepts initial `query: LocalViewOptions`. Its `query` getter exposes an immutable snapshot; every loader receives that snapshot as `request.query`. `setQuery(criteria, total = 0)` validates sort/filter criteria and row count before canceling old work and clearing cached pages/status. Each call starts a new generation, even for equal criteria. Invalid criteria leave the current source intact. `reset()` reloads the current query. These APIs are included in npm 0.2.0.
 
 The host maps query criteria to authorized backend parameters and defines server collation. They do not filter the page cache locally. Keep an application revision guard for UI completions, because canceled old promises can settle after a newer query starts:
 
@@ -201,7 +201,7 @@ Import `LocalViewOptions` as a type from core. This supports read-only server so
 
 For a fixed editable local draft, see the [host-owned remote save example](../../examples/remote-save.md). It demonstrates revision checks, idempotent retry after an uncertain outcome, preserved newer edits and explicit rollback through engine history. It is a source integration example, not an async setter or a published remote-write adapter.
 
-### Read-only live cache (unreleased)
+### Read-only live cache (0.2.0)
 
 `createLiveDataSource({streamId,columnKeys,maxRows:10000,maxPendingCells:10000})` exposes a synchronous read-only cache. Host transport supplies an authoritative `replaceSnapshot({streamId,sequence,rows})` with stable IDs and all configured fields. It then calls `receive({streamId,sequence,changes:[{rowId,columnKey,value}]})` for consecutive messages and `flush()` on its chosen schedule. Multiple updates to a cell coalesce to the last value; flush is atomic and returns the number of updated cells. Apply engine `permissions: {writable:false}` to disable edit/paste explicitly.
 
@@ -213,13 +213,13 @@ Snapshots are O(rows × configured columns); rows and pending cells are bounded 
 
 ## Selection and clipboard
 
-### Bounded literal find and replace (unreleased)
+### Bounded literal find and replace (0.2.0)
 
 `engine.replaceText(search,replacement,{scope:'view',caseSensitive:true})` replaces string values in the current visible view; use `scope:'selection'` for the selected ranges. Matching and replacement are literal, including `$` sequences; user regex patterns are not executed. It reports `{changedCells,matches}`. Numeric/media values are retained. Changed cells must be editable and writable and pass column validation. The batch is one atomic history command and reuses local-view refresh and typed cell events.
 
 Processing is limited to 100,000 scanned cells, 10 million UTF-16 units of input/output text, 1,000 units of search text and 10,000 units of replacement. Expansion is checked before constructing oversized results. Empty search/selection and invalid options are rejected. This is local synchronous replacement, not server-wide search. Canvas exposes the same `replaceText` method; finish/cancel an editor draft before replacing.
 
-### Multiple sort keys (unreleased)
+### Multiple sort keys (0.2.0)
 
 `engine.setView({ sorts: [{ columnKey: 'team', direction: 'asc' }, { columnKey: 'score', direction: 'desc' }] })` applies keys in priority order. The existing `sort` object remains supported; use either `sort` or `sorts`, with no duplicate column keys. Empty `sorts` clears sorting. Nullish values stay last for both directions, and equal keys retain source order. Sorting/filtering move outline blocks together and reapply after edits/history. Criteria are isolated from caller mutations and included in state/configuration round-trips.
 
@@ -347,7 +347,7 @@ Live local views use O(rows) index memory/filter work and O(matches log matches)
 
 The last applied property wins across intersecting targets. Updating only background preserves the previous priority of text color. Multiple targets are one atomic command. Colors are sparse overlays, not per-cell arrays; static permissions need only column checks, while a dynamic resolver must validate every targeted cell. Each formatted cell lookup scans O(formatted areas), intended for modest local formatting sets. Formatting reads/writes no source values and does not reorder rows.
 
-`formatting` defaults to true and has the same false veto as other capabilities, independently of writable and value locks. Formatting and value edits share the 100-command undo/redo history, with current formatting permissions checked on style replay. `format:change` carries source api/undo/redo and frozen changes containing target/previous/value patches, after layout invalidation. Styles are local and cleared on destroy/remount unless the host restores exportState(). Source preview also supports fontWeight (normal/bold) and fontStyle (normal/italic), with null resetting either property. Arbitrary CSS, font families/sizes, borders and conditional formatting are not implemented.
+`formatting` defaults to true and has the same false veto as other capabilities, independently of writable and value locks. Formatting and value edits share the 100-command undo/redo history, with current formatting permissions checked on style replay. `format:change` carries source api/undo/redo and frozen changes containing target/previous/value patches, after layout invalidation. Styles are local and cleared on destroy/remount unless the host restores exportState(). Version 0.2.0 also supports fontWeight (normal/bold) and fontStyle (normal/italic), with null resetting either property. Arbitrary CSS, font families/sizes, borders and conditional formatting are not implemented.
 
 ## Persistence
 
@@ -387,7 +387,7 @@ Restoring a different column order checks structural permissions before committi
 
 ## Core contracts and practical limits
 
-This describes the current source, including unreleased fixes. Select the npm 0.1.0 documentation channel when integrating that package version. All modules remain open source and free to use.
+This describes the published npm 0.2.0 API. Select the npm 0.1.0 documentation channel when integrating that package version. All modules remain open source and free to use.
 
 | Component                                             | Contract                                                                                                | Cost or boundary                                                                                                                                             |
 | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -425,9 +425,9 @@ The createGrid methods and behavior remain the same; see the [Canvas guide](http
 
 Licensed under [Apache 2.0](LICENSE). Copyright (c) 2026 Hao Duong. Lucide assets belong to the separate Canvas package and are not dependencies of this headless core.
 
-## Editing and remote writes (source preview)
+## Editing and remote writes (0.2.0)
 
-Paste special (`PasteOptions`), hidden row/column geometry and `numberFormat` metadata use the shared permission/atomic/history/state pipeline. `createRemoteDataSource` adds bounded optimistic JSON snapshots, explicit commit, exact retry after an uncertain result, resync and explicit conflict adoption. The host owns transport, server authorization, atomic revision checks and durable mutation deduplication. Read-only async paging and live streams retain their existing contracts. See the [complete editing and remote guide](../../guides/editing-and-remote.md) for APIs, examples and limits. These additions are not in npm 0.1.0.
+Paste special (`PasteOptions`), hidden row/column geometry and `numberFormat` metadata use the shared permission/atomic/history/state pipeline. `createRemoteDataSource` adds bounded optimistic JSON snapshots, explicit commit, exact retry after an uncertain result, resync and explicit conflict adoption. The host owns transport, server authorization, atomic revision checks and durable mutation deduplication. Read-only async paging and live streams retain their existing contracts. See the [complete editing and remote guide](../../guides/editing-and-remote.md) for APIs, examples and limits. These additions are included in npm 0.2.0.
 
 See [cooperative bulk commands and history budgets](../../guides/bulk-commands.md) for explicit async APIs and their scheduling limits.
 
@@ -435,4 +435,4 @@ Optional `@acheron-grid/core/worker` and `@acheron-grid/core/worker-entry` subpa
 decoding for `pasteAsync` through `GridBulkOptions.tsvDecoder`. The root import creates no Worker and
 remains browser-independent. See the same guide for bundler setup, cancellation, cleanup and limits.
 
-For larger server datasets, use the source-preview [writable remote pages](../../guides/paged-remote.md) adapter rather than retaining a full snapshot. Server query/revision and cache invalidation are explicit; only loaded rows can start a draft.
+For larger server datasets, use the 0.2.0 [writable remote pages](../../guides/paged-remote.md) adapter rather than retaining a full snapshot. Server query/revision and cache invalidation are explicit; only loaded rows can start a draft.

@@ -1,8 +1,8 @@
 # @acheron-grid/canvas
 
-This guide targets **0.2.0 development preview** artifacts. Check [release status and migration](../../RELEASE-0.2.0.md) before registry installation. Older source-preview labels identify additions after npm 0.1.0; those APIs are included in the 0.2.0 candidate.
+Version **0.2.0** is published on npm as a development preview. See [release notes and migration](../../RELEASE-0.2.0.md).
 
-Version 0.2.0 preview scope; npm 0.1.0 has a separate frozen reference. See [documentation versions](../../guides/versions.md).
+The npm 0.1.0 archive has a separate frozen reference. See [documentation versions](../../guides/versions.md).
 
 An experimental Canvas browser renderer for the headless @acheron-grid/core engine.
 
@@ -12,13 +12,13 @@ An experimental Canvas browser renderer for the headless @acheron-grid/core engi
 npm install @acheron-grid/canvas@0.2.0
 ```
 
-Install core/Canvas at the same version when used. For newer APIs, use a built source checkout and install matching packed artifacts; see [Getting started](../../guides/getting-started.md).
+Install core/Canvas at the same version when used. For development changes after 0.2.0, use a built source checkout and install matching packed artifacts; see [Getting started](../../guides/getting-started.md).
 
-## Source preview additions
+## Additions in 0.2.0
 
-Unreleased: `grid.replaceText(search,replacement,options)` forwards bounded literal replacement through core editable/writable validation and one history command. `grid.getValue(rowIndex,columnKey)` reads visible coordinates; it does not replace server read authorization. Optional charts use `renderCell`; optional CSV/XLSX export uses the same copy permission pipeline.
+In 0.2.0: `grid.replaceText(search,replacement,options)` forwards bounded literal replacement through core editable/writable validation and one history command. `grid.getValue(rowIndex,columnKey)` reads visible coordinates; it does not replace server read authorization. Optional charts use `renderCell`; optional CSV/XLSX export uses the same copy permission pipeline.
 
-Image upload hooks now receive `onProgress(loaded,total?)` alongside `columnKey` and `signal`. The grid shows completed-file/byte progress and a cancel button. `mediaOptions.maxConcurrentUploads` defaults to four (1–100 allowed), scoped to one paste; host uploads must honor abort and implement timeouts. Every broadcast destination is checked for changed row identity/value before committing. Nested values remain shallow caller-owned references. The host owns durable URLs and orphan upload cleanup. These changes are source previews, not npm 0.1.0.
+Image upload hooks now receive `onProgress(loaded,total?)` alongside `columnKey` and `signal`. The grid shows completed-file/byte progress and a cancel button. `mediaOptions.maxConcurrentUploads` defaults to four (1–100 allowed), scoped to one paste; host uploads must honor abort and implement timeouts. Every broadcast destination is checked for changed row identity/value before committing. Nested values remain shallow caller-owned references. The host owns durable URLs and orphan upload cleanup. These changes are included in npm 0.2.0.
 
 ## Current capabilities
 
@@ -35,7 +35,7 @@ Image upload hooks now receive `onProgress(loaded,total?)` alongside `columnKey`
 - TSV copy/paste, atomic local batches, delta undo/redo and typed events.
 - Per-column rich text with HTML or an optional host-provided Markdown adapter.
 
-Version 0.1.0 is available on npm as a development preview; Unreleased additions require a matching source build. Explicit read-only remote paging is available through core's `createAsyncDataSource`; the host controls loading. React and Vue lifecycle adapters are available in separate packages. The active cell has a bounded ARIA grid mirror; full screen-reader coverage has not been verified. A headless render-callback benchmark is available; end-to-end frame rate has not been verified.
+Version 0.2.0 is available on npm as a development preview; The APIs in this guide are included in 0.2.0. Explicit read-only remote paging is available through core's `createAsyncDataSource`; the host controls loading. React and Vue lifecycle adapters are available in separate packages. The active cell has a bounded ARIA grid mirror; full screen-reader coverage has not been verified. A headless render-callback benchmark is available; end-to-end frame rate has not been verified.
 
 ## Build from source
 
@@ -105,7 +105,7 @@ Each grid snapshots its theme independently. Canvas cells, headers, lines and se
 
 Pass `renderCell(context, cell)` to `createGrid`. Return `true` to replace the default body text, or `false` to draw the default text. Headers, grid lines and selection remain owned by the grid.
 
-For full-cell flash or background effects, use `renderCellBackground(context, cell)`. It receives the complete cell rectangle, including the value-direction arrow gutter, and runs after the formatted background but before content and indicators. `renderCell` retains its reserved content rectangle so text cannot overlap the arrow. Both callbacks are clipped to the visible cell/pane and have isolated Canvas state; background effects must respect reduced-motion preferences supplied by the host. This callback is a source preview API.
+For full-cell flash or background effects, use `renderCellBackground(context, cell)`. It receives the complete cell rectangle, including the value-direction arrow gutter, and runs after the formatted background but before content and indicators. `renderCell` retains its reserved content rectangle so text cannot overlap the arrow. Both callbacks are clipped to the visible cell/pane and have isolated Canvas state; background effects must respect reduced-motion preferences supplied by the host. This callback is available in npm 0.2.0.
 
 ```ts
 renderCell: (ctx, cell) => {
@@ -720,11 +720,11 @@ Canvas forwards the headless refresh, state and subscription APIs. See the core 
 
 React/Vue adapters expose the grid instance through their documented ref/getGrid API. Keep construction options stable and call runtime methods on that instance; replacing factory options is not a reactive configuration update. Mount external components through `onEditorMount` and return their unmount function. Use the same hooks in vanilla, React and Vue; no framework dependency is added to core.
 
-## Paste special, visibility, numbers and localization (source preview)
+## Paste special, visibility, numbers and localization (0.2.0)
 
-Canvas exposes values-only/formats-only/transposed/skip-empty paste, hide/show rows and columns, and decimal/integer/percent/currency formats. Hidden axes retain data and positive stored sizes while painting, navigation and viewport ARIA skip them. Number display uses `Intl.NumberFormat`; editing and callbacks retain raw values. Set `locale`, `currency` and `messages` at construction; complete English/Vietnamese message inventories are exported for host language packs. Menus, dialogs, choice/media editors and accessibility share these messages. See the [complete editing and remote guide](../../guides/editing-and-remote.md). These additions are not in npm 0.1.0.
+Canvas exposes values-only/formats-only/transposed/skip-empty paste, hide/show rows and columns, and decimal/integer/percent/currency formats. Hidden axes retain data and positive stored sizes while painting, navigation and viewport ARIA skip them. Number display uses `Intl.NumberFormat`; editing and callbacks retain raw values. Set `locale`, `currency` and `messages` at construction; complete English/Vietnamese message inventories are exported for host language packs. Menus, dialogs, choice/media editors and accessibility share these messages. See the [complete editing and remote guide](../../guides/editing-and-remote.md). These additions are included in npm 0.2.0.
 
-Source-preview bulk APIs, busy/focus behavior and history budgets are documented in the [bulk guide](../../guides/bulk-commands.md).
+Version 0.2.0 bulk APIs, busy/focus behavior and history budgets are documented in the [bulk guide](../../guides/bulk-commands.md).
 
 ### Runtime motion settings
 

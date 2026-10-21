@@ -2,9 +2,9 @@
 
 ## Read first
 
-Unreleased source now includes a runnable [application-owned MCP task session](../examples/mcp/README.md) and optional host-managed dataset revisions. The session defaults to read-only, loads bounded JSON, and supports authorized status writes with read-back and stale-revision rejection. It does not connect to browser data or provide durable persistence. Its executable checks test protocol behavior; real-model evaluation remains separate and no model-quality score is claimed.
+Version 0.2.0 includes a runnable [application-owned MCP task session](../examples/mcp/README.md) and optional host-managed dataset revisions. The session defaults to read-only, loads bounded JSON, and supports authorized status writes with read-back and stale-revision rejection. It does not connect to browser data or provide durable persistence. Its executable checks test protocol behavior; real-model evaluation remains separate and no model-quality score is claimed.
 
-Read [getting-started.md](getting-started.md), then the package README files and exported TypeScript types in the version being integrated. Acheron Grid is an experimental preview; all six packages have version 0.1.0 on npm; APIs remain experimental. Read-only async paging is implemented; do not infer async writes or server-wide local queries. React and Vue adapters are implemented; read their package references for the exact contract.
+Read [getting-started.md](getting-started.md), then the package README files and exported TypeScript types in the version being integrated. Acheron Grid is an experimental preview; all eight packages have version 0.2.0 on npm; APIs remain experimental. Read-only async paging is implemented; do not infer async writes or server-wide local queries. React and Vue adapters are implemented; read their package references for the exact contract.
 
 ## Architecture
 
@@ -24,7 +24,7 @@ Use stable row IDs and column keys. Keep dimensions non-zero. Release the grid w
 
 The optional `@acheron-grid/mcp` package now provides a stdio documentation server and a host-owned GridEngine adapter. Read the [MCP package reference](/reference/mcp) for launch instructions and tool contracts.
 
-- Documentation resources: five package README snapshots in npm 0.1.0; seven in Source preview (including export and charts), no grid data by default.
+- Documentation resources: seven package README snapshots in npm 0.2.0 (including export and charts), no grid data by default.
 - Host tools: approved schema, bounded cell reads, optional atomic cell updates by row ID and column key.
 - Writes require host authorization, validation, expected-value conflict checks and core writable permissions; use normal core history.
 - No browser bridge or HTTP authentication setup is included. Running the CLI does not connect to the browser playground. Structural, view and formatting tools remain future scope.
@@ -37,7 +37,7 @@ Use [/llms.txt](/llms.txt) to discover public Markdown snapshots. Human-readable
 
 Capture row identities before source structure changes and call `refreshData(previousIds)`. Use `refreshData('values')` only for unchanged identities/order/count. Refresh clears history/cut. Multiple `subscribe` observers are supported, with isolated errors through `onObserverError` / `takeObserverErrors`.
 
-`createAsyncDataSource` is a read-only cache with explicit loading, cancellation/retries and bounded successful/error states. Hosts own visible-page loading, server queries, query identity resets and concurrency. Async setters and optimistic saves are not included.
+`createAsyncDataSource` is a read-only cache with explicit loading, cancellation/retries and bounded successful/error states. Hosts own visible-page loading, server queries, query identity resets and concurrency. This async cache has no async setter; the separate remote snapshot and paged-remote sources provide the documented optimistic write workflows.
 
 `exportConfiguration` stores a layout/view subset. `exportState` / `restoreState` also cover row identities/heights, selection, locks, formatting, groups and merges. Restore checks matching identities/schema and policies and requires an unlocked table. Data, callbacks, history, drafts and pending clipboard are excluded.
 
@@ -45,6 +45,6 @@ Capture row identities before source structure changes and call `refreshData(pre
 
 Remote choices use `loadOptions`; external editor UI uses `onEditorMount` with cleanup. Metadata uses host-owned `linkPreview.load`; `allowMetadata: false` disables requests. Canvas projection is not a general HTML sanitizer. Blob images require host uploads for durable use.
 
-MCP provides host-authorized schema/reads and optional scalar writes, not an automatic browser bridge or complete agent dataset API. Formulas, pivots, workbooks, realtime collaboration remain outside scope. Optional charts/export, multi-column sorting, live sources, query snapshots, find/replace, paste special, hidden axes, number formats, Canvas localization and bounded remote snapshot writes are implemented in Source preview, outside npm 0.1.0. Select the matching documentation channel before using them. Chromium automation does not prove complete browser, accessibility, physical touch, frame-rate or peak-memory support.
+MCP provides host-authorized schema/reads and optional scalar writes, not an automatic browser bridge or complete agent dataset API. Formulas, pivots, workbooks, realtime collaboration remain outside scope. Optional charts/export, multi-column sorting, live sources, query snapshots, find/replace, paste special, hidden axes, number formats, Canvas localization and bounded remote snapshot writes are included in npm 0.2.0. Select the matching documentation channel before using them. Chromium automation does not prove complete browser, accessibility, physical touch, frame-rate or peak-memory support.
 
-For source-only optimistic remote writes, reconnect/resync and explicit conflicts, follow the [editing and remote contract](editing-and-remote.md). Async page sources remain read-only; the host server must implement atomic revision checks, authorization and durable mutation deduplication.
+For optimistic remote writes in 0.2.0, reconnect/resync and explicit conflicts, follow the [editing and remote contract](editing-and-remote.md). createAsyncDataSource remains read-only; createPagedRemoteDataSource provides explicit writable paging. The host server must implement atomic revision checks, authorization and durable mutation deduplication.

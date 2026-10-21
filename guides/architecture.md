@@ -55,4 +55,4 @@ Read-only async paging, bounded live updates, snapshot/delta remote writes and w
 
 ### Compatibility and evidence
 
-Source-preview additions are not part of published npm 0.1.0. Public exports, generated declarations, examples, packed consumers and documentation catalogs are checked together. Benchmark callback CPU, command latency and heap checkpoints describe their actual workloads; they do not imply presented FPS, true GPU peak memory or unlimited data support. Breaking contracts need explicit migration/release decisions.
+The APIs described here are included in npm 0.2.0; the npm 0.1.0 archive retains its original scope. Public exports, generated declarations, examples, packed consumers and documentation catalogs are checked together. Benchmark callback CPU, command latency and heap checkpoints describe their actual workloads; they do not imply presented FPS, true GPU peak memory or unlimited data support. Breaking contracts need explicit migration/release decisions.

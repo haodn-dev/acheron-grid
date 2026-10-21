@@ -1,6 +1,6 @@
 # Writable remote pages
 
-`createPagedRemoteDataSource` is a source-preview API, absent from npm 0.1.0. It combines the bounded
+`createPagedRemoteDataSource` is available in npm 0.2.0. It combines the bounded
 async page loader with the remote writer's validation and exact retry protocol. Use it when the dataset
 exceeds a practical local working set. Every module remains free and open source.
 
