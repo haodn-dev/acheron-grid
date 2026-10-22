@@ -1180,7 +1180,7 @@ export function createRendering(context: RenderingContext) {
         row.setAttribute('aria-rowindex', String(level + 1));
         row.append(...headerNodes.filter((node) => Number(node.dataset.headerLevel) === level));
         return row;
-      });
+      }).filter((row) => row.childElementCount > 0);
       if (
         rows.length !== context.headerSurface.children.length ||
         rows.some((node, i) => !node.isEqualNode(context.headerSurface.children[i]!))
