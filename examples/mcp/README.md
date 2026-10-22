@@ -1,6 +1,6 @@
 # Task application over MCP
 
-Unreleased source example: an application-owned headless grid connected through SDK stdio, with controlled writes. No browser bridge or language model is included.
+Repository example using the 0.2.0 APIs: an application-owned headless grid connected through SDK stdio, with controlled writes. Run it from a built source checkout; it is not a bundled npm application. No browser bridge or language model is included.
 
 ```sh
 npm ci

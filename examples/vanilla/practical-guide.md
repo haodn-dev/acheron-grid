@@ -95,7 +95,7 @@ Search highlights displayed text without modifying formatting. Header menus expo
 
 Core-managed views retain the mount and mapped state and refresh after edits. If you supply `onViewChange`, set `viewMode: 'core'` to keep that behavior; otherwise the callback selects the legacy host-managed contract. API row coordinates describe the displayed view, while permission resolvers and non-selection domain events use source coordinates and stable IDs.
 
-Clear views before structural commands. Remove merges/groups before sorting/filtering. Local filtering scans the in-memory source and sorting costs grow with matching rows; virtualization only limits rendering work.
+Clear the local view before row changes or column insertion/deletion; column moves remain supported under a core-managed view. Sort/filter keeps merged/grouped rows in indivisible blocks, sorts by each block's first row and retains a block if any member matches. Group creation requires an expanded unsorted view. Local filtering scans the in-memory source and sorting costs grow with matching rows; virtualization only limits rendering work.
 
 ## 6. Headers, size and frozen panes
 
@@ -198,4 +198,4 @@ Client permissions and locks are UI/domain controls, not server authorization. K
 | Change missing from undo        | Direct source mutation or automatic row measurement                         |
 | Styles differ inside choices    | Share option/display palettes and honor format metadata                     |
 
-Always call `grid.destroy()` on unmount. Remote/async sources, collaboration, formulas and an MCP server are not included. Read package README files and exported contracts for detailed limits; browser security policy can affect clipboard and navigation prompts.
+Always call `grid.destroy()` on unmount. The default playground page uses a local source; separate remote/async source integrations and MCP examples have their own guides. Collaboration and formulas are outside the current engine scope. Read package README files and exported contracts for detailed limits; browser security policy can affect clipboard and navigation prompts.

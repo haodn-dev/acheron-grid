@@ -4,9 +4,9 @@ All eight packages remain public and free. CI configuration does not mean a pack
 
 ## Channels
 
-- Pushes to `develop` run the full engine CI and publish the next patch prerelease with npm tag `develop`. For source version `0.1.0`, run 123 publishes `0.1.1-dev.123`.
-- Tags `vX.Y.Z` run the same CI and publish stable packages with npm tag `latest`. The tagged commit must be on the history of `main`, and every package and internal dependency must already match `X.Y.Z`.
-- Pull requests run checks only. Package versions are aligned across all eight workspaces. Developing a breaking release requires selecting its stable version deliberately; automatic develop numbering is a preview channel, not a compatibility promise.
+- Once its publisher policy is configured, pushes to `develop` run the full engine CI and publish the next patch prerelease with npm tag `develop`. For source version `0.2.0`, run 123 would publish `0.2.1-dev.123`. The current trusted publishers target `npm-production`; the develop channel is not activated by this guide.
+- Tags `vX.Y.Z` run the same CI and publish versioned packages with npm tag `latest`. The tagged commit must be on the history of `main`, and every package and internal dependency must already match `X.Y.Z`. A `latest` tag does not make a 0.x development preview stable.
+- Pull requests run checks only. Package versions are aligned across all eight workspaces. Developing a breaking release requires selecting its version deliberately; automatic develop numbering is a preview channel, not a compatibility promise.
 
 ```sh
 npm install @acheron-grid/core@develop @acheron-grid/canvas@develop
@@ -16,16 +16,16 @@ npm install @acheron-grid/core@develop @acheron-grid/canvas@develop
 
 1. Merge `.github/workflows/ci.yml`, `.github/workflows/release.yml` and release tooling into `main` before creating `develop` from that updated commit.
 2. Create environments `npm-develop` and `npm-production`. Restrict the first to branch `develop`, and the second to tags `v*`. Add a required reviewer for production where the GitHub plan supports it.
-3. Protect `main` and `develop`: require pull requests, successful `Node 22`, `Node 24`, `Browser smoke firefox`, and `Browser smoke webkit` checks; block force pushes and deletion. Select the exact check names shown after the first CI run. Protect release tags from unauthorized creation/update/deletion as well.
+3. Protect `main` and `develop`: require pull requests, successful `Node 22`, `Node 24`, `Browser integration firefox`, and `Browser integration webkit` checks; block force pushes and deletion. Select the exact check names shown after the first CI run. Protect release tags from unauthorized creation/update/deletion as well.
 4. On npm, configure a GitHub trusted publisher on **each** package: owner `haodn-dev`, repository `acheron-grid`, workflow filename `release.yml`, environment `npm-production`. The current configurations allow publish and stage publish, without dist-tag-management permission. npm allows one publisher configuration per package; do not replace production with `npm-develop` without an explicit publisher-policy decision. No npm write token is needed. Enable GitHub Actions for the repository.
 5. If a package has never been published, an owner must bootstrap that package interactively before its package settings can be configured. Publish the intended reviewed initial version with `--access public` and the intended tag; do not assume all eight `0.1.0` packages already exist.
 6. Create `develop` only after the publisher settings are ready; its first push triggers a release. Merge changes through PRs thereafter.
 
 The release job uses Node 24, npm 11.21.0, GitHub-hosted runners and `id-token: write`. Repository metadata must match GitHub. Trusted publishing automatically creates provenance for supported public repositories. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/).
 
-## Stable release
+## Versioned release
 
-Choose the version according to the public API change, then prepare a release PR:
+Choose a new, unused version according to the public API change, then prepare a release PR. The commands below retain the 0.2.0 release example for reference; that version and tag already exist and must not be recreated or overwritten. Substitute the newly approved version before running them:
 
 ```sh
 npm run release -- prepare 0.2.0

@@ -226,15 +226,15 @@ Use grid commands for edits that belong in history. After external value changes
 
 `createAsyncDataSource` is a synchronous cache with explicit `loadPage(offset)` and inclusive `loadRange(first,last)`. Load the first page to discover total before mounting; the host coordinates visible rows, loading/errors/retry and refresh. `maxPages` bounds successful pages and recent error states separately, not concurrent requests.
 
-Source preview additionally bounds unresolved loaders with `maxConcurrentLoads` (default 4) and queued/running pages with `maxPendingLoads` (default 100). Changing totals invalidate older cached positional pages. The host must keep page responses consistent within a dataset revision and reset the query after identity/order changes, even when total is unchanged. See the [core contracts and limits](/reference/core#core-contracts-and-practical-limits).
+Version 0.2.0 bounds unresolved loaders with `maxConcurrentLoads` (default 4) and queued/running pages with `maxPendingLoads` (default 100). Changing totals invalidate older cached positional pages. The host must keep page responses consistent within a dataset revision and reset the query after identity/order changes, even when total is unchanged. See the [core contracts and limits](../packages/core/README.md#core-contracts-and-practical-limits).
 
-Unloaded values are `undefined`; default IDs are positions within one query. Reset the source and refresh without old identity state after a new server query. Local views see cached values, not all server rows. There is no async setter, optimistic save queue or persistent undo. Destroy the source separately from the grid. See the [core recipe](/reference/core#async-pages-and-cancellation).
+Unloaded values are `undefined`; default IDs are positions within one query. Reset the source and refresh without old identity state after a new server query. Local views see cached values, not all server rows. This read-only async source has no async setter, optimistic save queue or persistent undo; the separate remote adapters have their own write contracts. Destroy the source separately from the grid. See the [core recipe](../packages/core/README.md#async-pages-and-cancellation).
 
 ## Remote choices and external editors
 
 `ColumnEditor.values` accepts strings or `{ value, label, disabled }`; stored values are independent of labels. Multiselect preserves input order; `choiceEditor.valueOrder: 'options'` opts into option order. `loadOptions(query, { signal, columnKey })` supports debounce, cancellation and stale-response rejection; the host owns matching, authorization and validation.
 
-`createEditor` returns a detached native control. `onEditorMount` can mount framework UI and returns cleanup on Apply/Cancel/destroy. Parsing, validation and setters remain synchronous. Custom renderers can provide `measureCellHeight` and `getCellLabel`. See [Canvas recipes](/reference/canvas#developer-integration-recipes).
+`createEditor` returns a detached native control. `onEditorMount` can mount framework UI and returns cleanup on Apply/Cancel/destroy. Parsing, validation and setters remain synchronous. Custom renderers can provide `measureCellHeight` and `getCellLabel`. See [Canvas recipes](canvas-recipes.md#developer-integration-recipes).
 
 ## Media and metadata lifecycle
 

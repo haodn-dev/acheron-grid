@@ -11,11 +11,11 @@ packages, so a stable subset cannot be published by that workflow without a sepa
 
 For automated develop/stable publishing and one-time account configuration, see [release channels and trusted publishing](guides/releasing.md). Production trusted publishers are configured. The develop channel requires its own publisher-policy decision before activation.
 
-Version `0.1.0` has been selected for the first release. Package manifests are prepared for public publication; the root workspace remains private. No package has been published by this preparation. This guide prepares a reviewable release; it does not authorize publishing, pushing tags or changing the license.
+At the original preparation baseline, `0.1.0` was selected and package manifests were prepared without publishing. That release and 0.2.0 have since been published; the root workspace remains private. The checklist below remains a preparation procedure, not authorization to publish, push tags or change the license.
 
 ## Before release
 
-1. Confirm the agreed 0.1.0 development-preview scope, supported environments and public documentation/demo URL. Do not use the local `.test` address as a public website.
+1. Confirm the newly agreed version and scope, supported environments and public documentation/demo URL. Do not reuse an existing release version or use the local `.test` address as a public website.
 2. Review API changes, migration instructions and known limitations. Update the Unreleased section in [CHANGELOG.md](CHANGELOG.md), root/package README files, and bundled MCP documentation.
 3. Verify all package versions and local dependency ranges agree. Review package contents, licenses and Lucide attribution. The root workspace remains private; change individual publication flags only as part of an explicit package-release decision.
 4. Resolve failing checks and record actual results for the release commit. A rerun that passes does not explain an intermittent failure.

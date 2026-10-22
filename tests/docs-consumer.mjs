@@ -1,11 +1,28 @@
 import ts from 'typescript';
 import assert from 'node:assert/strict';
-import { readFile, mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { readFile, mkdir, mkdtemp, writeFile, rm, access } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { resolve, sep } from 'node:path';
+import { resolve, sep, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { coreContracts, coreExportContracts } from '../scripts/core-contracts.mjs';
 const manifest = JSON.parse(await readFile('documentation.json', 'utf8'));
+const canvasReadme = await readFile('packages/canvas/README.md', 'utf8');
+assert.ok(
+  Math.max(canvasReadme.length, Buffer.byteLength(canvasReadme)) <= 65_536,
+  'Canvas npm README must not be truncated by the registry.',
+);
+assert.ok(
+  manifest.documents.some((doc) => doc.id === 'canvas-recipes' && doc.path === 'guides/canvas-recipes.md'),
+  'Advanced Canvas recipes must remain in the canonical document catalog.',
+);
+for (const name of ['core', 'canvas', 'react', 'vue', 'markdown', 'export', 'charts']) {
+  const file = `packages/mcp/docs/${name}.md`;
+  for (const [, href] of (await readFile(file, 'utf8')).matchAll(/\]\(([^\s)]+)\)/g)) {
+    if (/^(?:https?:|acheron:|mailto:|#)/i.test(href)) continue;
+    assert.ok(!href.startsWith('/'), `MCP snapshot link needs an origin: ${file}: ${href}`);
+    await access(resolve(dirname(file), decodeURIComponent(href.split(/[?#]/)[0])));
+  }
+}
 for (const doc of manifest.documents) {
   const text = (await readFile(doc.path, 'utf8')).replaceAll('\r\n', '\n');
   assert.equal(createHash('sha256').update(text).digest('hex'), doc.sha256, `Stale docs manifest: ${doc.id}`);

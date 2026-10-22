@@ -1,8 +1,8 @@
 # @acheron-grid/markdown
 
-Version **0.2.0** is published on npm as a development preview. See [release notes and migration](../../RELEASE-0.2.0.md).
+Version **0.2.0** is published on npm as a development preview. See [release notes and migration](https://github.com/haodn-dev/acheron-grid/blob/main/RELEASE-0.2.0.md).
 
-The npm 0.1.0 archive has a separate frozen reference. See [documentation versions](../../../guides/versions.md).
+The npm 0.1.0 archive has a separate frozen reference. See [documentation versions](https://github.com/haodn-dev/acheron-grid/blob/main/guides/versions.md).
 
 Optional Markdown adapter for Acheron Grid. This experimental package depends on `marked`; core and Canvas do not. It does not require a DOM or import either grid package at runtime.
 
@@ -39,4 +39,4 @@ Licensed under Apache 2.0. Marked retains its own MIT license.
 npm install @acheron-grid/markdown@0.2.0
 ```
 
-Install core/Canvas at the same version when used. For newer APIs, use a built source checkout and install matching packed artifacts; see [Getting started](../../../guides/getting-started.md).
+Install core/Canvas at the same version when used. For newer APIs, use a built source checkout and install matching packed artifacts; see [Getting started](https://github.com/haodn-dev/acheron-grid/blob/main/guides/getting-started.md).

@@ -14,6 +14,8 @@ npm install @acheron-grid/mcp@0.2.0
 
 Install core/Canvas at the same version when used. For newer APIs, use a built source checkout and install matching packed artifacts; see [Getting started](../../guides/getting-started.md).
 
+The server currently advertises the legacy `serverInfo.version` value `0.1.0` during the MCP handshake, including when this package is installed at `0.2.0`. Use the installed package manifest or lockfile to identify the package version; the handshake field does not identify its npm artifact.
+
 ## Documentation server
 
 From the source checkout, after installing dependencies:

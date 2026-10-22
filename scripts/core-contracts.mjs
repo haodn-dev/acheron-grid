@@ -33,7 +33,7 @@ export const coreContracts = {
   updateCells:
     'Typed-value updates: resolve visible rows, validate and require writable, without editor parsing or editable checks. Duplicate cells use the last value. Multi-cell changes require atomic setValues.',
   replaceText:
-    'Source-only bounded literal replacement of string values in the view or selection. Requires editable/writable and validation; one atomic undo command. It is not a regular-expression API.',
+    'Available in 0.2.0: bounded literal replacement of string values in the view or selection. Requires editable/writable and validation; one atomic undo command. It is not a regular-expression API.',
   destroy:
     'Idempotently release engine-owned observers, history and selection. The host still owns source destruction/transport. Data/layout commands and clipboard operations reject after destruction; undo/redo return false. Do not use retained read getters as a live engine after disposal.',
   getSelection:
