@@ -1,7 +1,7 @@
 # Paged remote editing
 
 Run `npm run playground` at the repository root and visit `http://127.0.0.1:4180/paged/`.
-Build matching source-preview core/Canvas packages; npm 0.1.0 does not include writable paging.
+Build matching core/Canvas packages from the checkout. Writable paging is included in npm 0.2.0; npm 0.1.0 does not include it.
 
 The server holds 10,000 records. The source loads 20-row pages, retains two cached pages and up to 100
 dirty cells. Stage an edit, visit three other pages to force eviction, then save: the mutation and

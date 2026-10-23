@@ -22,7 +22,7 @@ Use stable row IDs and column keys. Keep dimensions non-zero. Release the grid w
 
 ## MCP adapter — implemented development preview
 
-The optional `@acheron-grid/mcp` package now provides a stdio documentation server and a host-owned GridEngine adapter. Read the [MCP package reference](/reference/mcp) for launch instructions and tool contracts.
+The optional `@acheron-grid/mcp` package provides a stdio documentation server and a host-owned GridEngine adapter. Read the [MCP package reference](../packages/mcp/README.md) for launch instructions and tool contracts.
 
 - Documentation resources: seven package README snapshots in npm 0.2.0 (including export and charts), no grid data by default.
 - Host tools: approved schema, bounded cell reads, optional atomic cell updates by row ID and column key.
@@ -31,7 +31,7 @@ The optional `@acheron-grid/mcp` package now provides a stdio documentation serv
 
 ## Machine-readable reading index
 
-Use [/llms.txt](/llms.txt) to discover public Markdown snapshots. Human-readable pages are under [/reference](/reference); source Markdown is linked on every page.
+Use the website's [llms.txt index](https://acheron-grid.haoduong.dev/llms.txt) to discover public Markdown snapshots. Human-readable pages are under [reference](https://acheron-grid.haoduong.dev/reference); source Markdown is linked on every page.
 
 ## Data and state
 

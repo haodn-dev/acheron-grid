@@ -46,7 +46,7 @@ const options = shallowRef({
 - `@event` forwards typed core events. `options.onEvent`, if supplied, also runs. Latest Vue event listeners receive events without rebuilding the grid.
 - Class, style and accessibility attributes fall through to the container. Supply a non-zero size. Slots inside the grid container are not supported.
 - `onMounted` creates the renderer; `onBeforeUnmount` destroys it. SSR returns an empty container; browser hydration mounts the renderer.
-- Update values through `grid.updateCells()`; use `grid.render()` after changing a compatible source externally, or replace `options` for an intentional reset. There is no separate controlled rows model.
+- Update values through `grid.updateCells()`; use `grid.refreshData('values')` after external value changes with unchanged row identities/order/count. Capture identities before structural changes and call `grid.refreshData(previousIds)`, or replace `options` for an intentional reset. `render()` repaints without reconciling source identity, views or history. There is no separate controlled rows model.
 
 The current source validation uses Vue 3.5.43. Custom cells/editors remain Canvas hooks, not Vue cell components. Screen-reader support follows Canvas limits.
 

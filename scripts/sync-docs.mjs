@@ -3,6 +3,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { relative } from 'node:path';
 import { coreContracts, coreExportContracts, sourceContracts } from './core-contracts.mjs';
 
 const root = new URL('../', import.meta.url);
@@ -35,7 +36,7 @@ const descriptions = {
     'Typed values; no parsing. Column validation and writable permissions run before one atomic write. Uses visible indices.',
   editCell: 'Editor-style text command: applies parsers, editable/writable permissions and validation.',
   replaceText:
-    'Source-only bounded literal replacement. One undo command; permission/validation failures leave the batch unchanged.',
+    'Available in 0.2.0: bounded literal replacement. One undo command; permission/validation failures leave the batch unchanged.',
   refreshData:
     'External writes are outside history. All refresh modes clear undo/redo; values mode requires unchanged row IDs/order/count.',
   captureRowIdentity: 'Capture before external structural changes. Explicitly scans all row IDs.',
@@ -200,6 +201,12 @@ const entries = [
     'Complete behavioral contracts for every engine member, all public exports and source interface signatures.',
   ],
   ['canvas-api', 'guides/canvas-api.md', 1, 'Generated source API signatures and construction options.'],
+  [
+    'canvas-recipes',
+    'guides/canvas-recipes.md',
+    1,
+    'Canvas rich text, structure, advanced editors, metadata and motion recipes moved out of the npm README.',
+  ],
   ...['core', 'canvas', 'react', 'vue', 'markdown', 'mcp', 'export', 'charts'].map((name) => [
     name,
     `packages/${name}/README.md`,
@@ -252,9 +259,14 @@ await writeFile(
 );
 await mkdir(new URL('packages/mcp/docs/', root), { recursive: true });
 for (const name of ['core', 'canvas', 'react', 'vue', 'markdown', 'export', 'charts']) {
-  const text = (await readFile(new URL(`packages/${name}/README.md`, root), 'utf8'))
-    .replaceAll('../../guides/', '../../../guides/')
-    .replaceAll('../../examples/', '../../../examples/');
+  const source = new URL(`packages/${name}/README.md`, root);
+  const text = (await readFile(source, 'utf8')).replace(/\]\(([^\s)]+)\)/g, (match, href) => {
+    if (/^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(href)) return match;
+    const target = new URL(href, source);
+    const path = relative(fileURLToPath(root), fileURLToPath(target)).replaceAll('\\', '/');
+    const sibling = /^packages\/(core|canvas|react|vue|markdown|export|charts)\/README\.md$/.exec(path);
+    return `](${sibling ? sibling[1] + '.md' : 'https://github.com/haodn-dev/acheron-grid/blob/main/' + path}${target.search}${target.hash})`;
+  });
   await writeFile(new URL(`packages/mcp/docs/${name}.md`, root), text);
 }
 console.log(`Synced ${documents.length} versioned documents and public API catalogs.`);

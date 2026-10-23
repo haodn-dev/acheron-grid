@@ -33,8 +33,8 @@ The original six npm 0.1.0 packages remain available and immutable. Version 0.2.
 | [@acheron-grid/react](packages/react/README.md)       | React lifecycle adapter                                                     | Canvas; React peer dependency |
 | [@acheron-grid/vue](packages/vue/README.md)           | Vue 3 lifecycle adapter                                                     | Canvas; Vue peer dependency   |
 | [@acheron-grid/mcp](packages/mcp/README.md)           | Optional documentation server and host-authorized grid tools                | MCP SDK; @acheron-grid/core   |
-| [@acheron-grid/export](packages/export/README.md)     | Optional CSV/XLSX selection export; unreleased                              | @acheron-grid/core; fflate    |
-| [@acheron-grid/charts](packages/charts/README.md)     | Optional inline line/column/bar charts; unreleased                          | @acheron-grid/canvas          |
+| [@acheron-grid/export](packages/export/README.md)     | Optional CSV/XLSX selection and authorized HTML table export                | @acheron-grid/core; fflate    |
+| [@acheron-grid/charts](packages/charts/README.md)     | Optional inline line/area/column/bar charts                                 | @acheron-grid/canvas          |
 
 Core does not import Canvas or framework code. `@acheron-grid/core/headless` remains an alias for the headless API.
 
@@ -76,10 +76,10 @@ npm run playground
 
 Open [the standalone playground](http://127.0.0.1:4180). It uses browser import maps and local packages, without a framework or CDN. Stop the server with Ctrl+C. See [the example guide](examples/vanilla/README.md).
 
-In a separate application with an ESM-capable bundler, install both built packages:
+In a separate application with an ESM-capable bundler, install matching released packages:
 
 ```sh
-npm install /path/to/acheron-grid-engine/packages/core /path/to/acheron-grid-engine/packages/canvas
+npm install @acheron-grid/core@0.2.0 @acheron-grid/canvas@0.2.0
 ```
 
 Provide a container with explicit dimensions:
@@ -155,18 +155,18 @@ Developer integration examples: [headless refresh, state and async paging](packa
 
 Run commands from the repository root after `npm ci`:
 
-| Command                   | Purpose                                                                                              |
-| ------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `npm run build`           | Build core, Canvas, optional Markdown, React and Vue adapters; ESM and TypeScript declarations       |
-| `npm run typecheck`       | Build dependency declarations, then check all packages and the headless boundary                     |
-| `npm test`                | Build and run Node.js tests                                                                          |
-| `npm run test:mcp`        | Verify MCP documentation, host authorization and grid tools                                          |
-| `npm run test:browser`    | Build and run Chromium grid integration tests                                                        |
-| `npm run test:playground` | Build and verify the standalone example                                                              |
-| `npm run test:package`    | Install six packed artifacts in an independent consumer; verify TypeScript, SSR and Canvas lifecycle |
-| `npm run benchmark`       | Measure headless Chromium render-callback cost and source reads                                      |
+| Command                   | Purpose                                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `npm run build`           | Build all eight packages, including ESM and TypeScript declarations                                    |
+| `npm run typecheck`       | Build dependency declarations, then check all packages and the headless boundary                       |
+| `npm test`                | Build and run Node.js tests                                                                            |
+| `npm run test:mcp`        | Verify MCP documentation, host authorization and grid tools                                            |
+| `npm run test:browser`    | Build and run Chromium grid integration tests                                                          |
+| `npm run test:playground` | Build and verify the standalone example                                                                |
+| `npm run test:package`    | Install eight packed artifacts in an independent consumer; verify TypeScript, SSR and Canvas lifecycle |
+| `npm run benchmark`       | Run browser workload correctness and record callback, command, Worker and memory samples               |
 
-Install the test browser with `npx playwright install chromium` before running browser tests. Benchmarks measure callback CPU time; they do not establish end-to-end FPS, GPU cost or peak memory. Browser tests and benchmarks share port 4179; the playground uses port 4180. Run suites using the same port sequentially and stop a manual playground server before its tests.
+Install the test browser with `npx playwright install chromium` before running browser tests. Benchmark methods differ by workload; callback/command timings and memory checkpoints do not establish presented FPS, GPU cost or true peak memory. Browser tests and benchmarks share port 4179; the playground uses port 4180. Run suites using the same port sequentially and stop a manual playground server before its tests.
 
 See [Contributing](CONTRIBUTING.md) for changes and bug reports.
 
@@ -182,7 +182,7 @@ synchronous; explicit cooperative engine APIs yield during preparation and keep 
 Chromium, Firefox and WebKit have automated suites; results must match the candidate revision. Complete
 assistive-technology and physical-device coverage remains unverified.
 
-Optional inline charts are available in the source charts package. Formula evaluation, pivot tables,
+Optional inline charts are available in npm 0.2.0. Formula evaluation, pivot tables,
 multi-sheet workbooks, Excel calculation compatibility and real-time collaboration are outside the current scope.
 
 ## License

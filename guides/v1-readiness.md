@@ -16,7 +16,7 @@ The current publisher aligns and publishes all eight packages together. An all-p
 requires all eight packages to pass. Releasing only a stable subset first would require a separately
 reviewed publisher/versioning change; this document does not enable that release path.
 
-Formula/workbook calculation, pivot, collaboration, worker execution, reload-persistent drafts and
+Formula/workbook calculation, pivot, collaboration, Worker execution beyond the 0.2.0 TSV decoder, reload-persistent drafts and
 editing during a remote commit are outside this acceptance scope. They are not prerequisites for 1.0
 when the limits below are explicit. Remote/MCP production integration gates apply to their support
 claims; they do not require a backend to use the headless engine with local data.

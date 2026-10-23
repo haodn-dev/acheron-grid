@@ -44,7 +44,7 @@ export function Sheet() {
 - `onEvent` receives typed core events. `options.onEvent`, if supplied, is also called. Runtime callback changes do not recreate the grid; callbacks inside `options` remain part of the mount configuration.
 - Only the adapter owns the container DOM. Do not put React children inside it. The host must provide a non-zero size.
 - Effects mount/destroy the renderer. SSR renders an empty container without DOM access; hydration mounts the browser grid. React StrictMode setup/cleanup replay is supported.
-- Use `grid.updateCells()` for value changes, `grid.render()` after externally changing a compatible source, or replace `options` to intentionally recreate. This is not a controlled `rows` component.
+- Use `grid.updateCells()` for tracked changes. After external value changes with unchanged row identities/order/count, call `grid.refreshData('values')`; capture identities before structural changes and call `grid.refreshData(previousIds)`. Replace `options` only for an intentional reset. `render()` repaints without reconciling source identity, views or history. This is not a controlled `rows` component.
 
 Tested with React/React DOM 19.1.0 and React 18-compatible type declarations; the complete React version matrix is not verified. Screen-reader support follows Canvas limits. Custom rendering and editors remain Canvas hooks, not React cell components.
 

@@ -28,7 +28,7 @@ getValue: (rowIndex: number, columnKey: string) => unknown
 replaceText: (search: string, replacement: string, options?: Parameters<GridEngine["replaceText"]>[2]) => ReturnType<GridEngine["replaceText"]>
 ```
 
-Source-only bounded literal replacement. One undo command; permission/validation failures leave the batch unchanged.
+Available in 0.2.0: bounded literal replacement. One undo command; permission/validation failures leave the batch unchanged.
 
 ### subscribe
 

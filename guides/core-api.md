@@ -108,7 +108,7 @@ Cooperative typed batch preparation with host scheduling, cancellation and optio
 replaceText: (search: string, replacement: string, options?: { readonly scope?: "view" | "selection"; readonly caseSensitive?: boolean; }) => Readonly<{ changedCells: number; matches: number; }>
 ```
 
-Source-only bounded literal replacement of string values in the view or selection. Requires editable/writable and validation; one atomic undo command. It is not a regular-expression API.
+Available in 0.2.0: bounded literal replacement of string values in the view or selection. Requires editable/writable and validation; one atomic undo command. It is not a regular-expression API.
 
 ### destroy
 

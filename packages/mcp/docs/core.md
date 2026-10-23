@@ -1,8 +1,8 @@
 # @acheron-grid/core
 
-Version **0.2.0** is published on npm as a development preview. See [release notes and migration](../../RELEASE-0.2.0.md).
+Version **0.2.0** is published on npm as a development preview. See [release notes and migration](https://github.com/haodn-dev/acheron-grid/blob/main/RELEASE-0.2.0.md).
 
-The npm 0.1.0 archive has a separate frozen reference. See [documentation versions](../../../guides/versions.md).
+The npm 0.1.0 archive has a separate frozen reference. See [documentation versions](https://github.com/haodn-dev/acheron-grid/blob/main/guides/versions.md).
 
 An experimental headless TypeScript data-grid engine. Core owns data access and controlled mutations, selection, layout, editing, TSV clipboard operations and history. The host owns source storage and transport. Core has no runtime dependencies or browser/framework types.
 
@@ -75,7 +75,7 @@ Build/typecheck includes a separate ES2022-only TypeScript configuration with no
 
 ### Reading the complete API contract
 
-The [core API catalog](../../../guides/core-api.md) lists every engine member, construction option, public export and source interface, with behavioral notes and exported type definitions. It describes npm 0.2.0; the frozen npm 0.1.0 guide is a separate channel.
+The [core API catalog](https://github.com/haodn-dev/acheron-grid/blob/main/guides/core-api.md) lists every engine member, construction option, public export and source interface, with behavioral notes and exported type definitions. It describes npm 0.2.0; the frozen npm 0.1.0 guide is a separate channel.
 
 Capability probes are intentionally narrower than commands. `getCellPermission().writable` describes effective policy and locks, not whether a source has a setter. `canEdit()` also checks source write support and editable/value parsing capability; actual parsing and validation can still fail. `canUndo()`/`canRedo()` indicate entries, not permission to replay under current locks, identities and values. Formatting permission is independent of value write permission.
 
@@ -199,7 +199,7 @@ async function changeQuery(criteria: LocalViewOptions) {
 
 Import `LocalViewOptions` as a type from core. This supports read-only server sorting/filtering; it does not provide remote saves, live subscriptions or consistent dataset revision tokens across pages.
 
-For a fixed editable local draft, see the [host-owned remote save example](../../../examples/remote-save.md). It demonstrates revision checks, idempotent retry after an uncertain outcome, preserved newer edits and explicit rollback through engine history. It is a source integration example, not an async setter or a published remote-write adapter.
+For a fixed editable local draft, see the [host-owned remote save example](https://github.com/haodn-dev/acheron-grid/blob/main/examples/remote-save.md). It demonstrates revision checks, idempotent retry after an uncertain outcome, preserved newer edits and explicit rollback through engine history. It is a source integration example, not an async setter or a published remote-write adapter.
 
 ### Read-only live cache (0.2.0)
 
@@ -406,7 +406,7 @@ This describes the published npm 0.2.0 API. Select the npm 0.1.0 documentation c
 
 Local filter evaluation and projections cost O(source rows), with O(matches log matches) sorting. Value commands in an active view reapply criteria. Identity capture, full export and refresh also scan row IDs or mappings. These operations are separate from viewport rendering; a million-row viewport check does not establish million-row sort, structural history or export performance.
 
-Integration checks should cover permission/validation rejection without partial writes, identity and value conflicts during replay, query cancellation and changing totals, selection fragmentation, frozen group reconciliation, state round trips and independent source cleanup. See [support and release evidence](../../SUPPORT.md) for browser and device limits. Async writes, formulas, collaboration and dataset revision negotiation remain separate host or future module work.
+Integration checks should cover permission/validation rejection without partial writes, identity and value conflicts during replay, query cancellation and changing totals, selection fragmentation, frozen group reconciliation, state round trips and independent source cleanup. See [support and release evidence](https://github.com/haodn-dev/acheron-grid/blob/main/SUPPORT.md) for browser and device limits. Async writes, formulas, collaboration and dataset revision negotiation remain separate host or future module work.
 
 ## Browser import migration
 
@@ -423,16 +423,16 @@ The createGrid methods and behavior remain the same; see the [Canvas guide](http
 
 ## License
 
-Licensed under [Apache 2.0](LICENSE). Copyright (c) 2026 Hao Duong. Lucide assets belong to the separate Canvas package and are not dependencies of this headless core.
+Licensed under [Apache 2.0](https://github.com/haodn-dev/acheron-grid/blob/main/packages/core/LICENSE). Copyright (c) 2026 Hao Duong. Lucide assets belong to the separate Canvas package and are not dependencies of this headless core.
 
 ## Editing and remote writes (0.2.0)
 
-Paste special (`PasteOptions`), hidden row/column geometry and `numberFormat` metadata use the shared permission/atomic/history/state pipeline. `createRemoteDataSource` adds bounded optimistic JSON snapshots, explicit commit, exact retry after an uncertain result, resync and explicit conflict adoption. The host owns transport, server authorization, atomic revision checks and durable mutation deduplication. Read-only async paging and live streams retain their existing contracts. See the [complete editing and remote guide](../../../guides/editing-and-remote.md) for APIs, examples and limits. These additions are included in npm 0.2.0.
+Paste special (`PasteOptions`), hidden row/column geometry and `numberFormat` metadata use the shared permission/atomic/history/state pipeline. `createRemoteDataSource` adds bounded optimistic JSON snapshots, explicit commit, exact retry after an uncertain result, resync and explicit conflict adoption. The host owns transport, server authorization, atomic revision checks and durable mutation deduplication. Read-only async paging and live streams retain their existing contracts. See the [complete editing and remote guide](https://github.com/haodn-dev/acheron-grid/blob/main/guides/editing-and-remote.md) for APIs, examples and limits. These additions are included in npm 0.2.0.
 
-See [cooperative bulk commands and history budgets](../../../guides/bulk-commands.md) for explicit async APIs and their scheduling limits.
+See [cooperative bulk commands and history budgets](https://github.com/haodn-dev/acheron-grid/blob/main/guides/bulk-commands.md) for explicit async APIs and their scheduling limits.
 
 Optional `@acheron-grid/core/worker` and `@acheron-grid/core/worker-entry` subpaths support off-thread TSV
 decoding for `pasteAsync` through `GridBulkOptions.tsvDecoder`. The root import creates no Worker and
 remains browser-independent. See the same guide for bundler setup, cancellation, cleanup and limits.
 
-For larger server datasets, use the 0.2.0 [writable remote pages](../../../guides/paged-remote.md) adapter rather than retaining a full snapshot. Server query/revision and cache invalidation are explicit; only loaded rows can start a draft.
+For larger server datasets, use the 0.2.0 [writable remote pages](https://github.com/haodn-dev/acheron-grid/blob/main/guides/paged-remote.md) adapter rather than retaining a full snapshot. Server query/revision and cache invalidation are explicit; only loaded rows can start a draft.

@@ -8,7 +8,7 @@ React lifecycle adapter for the Acheron Grid Canvas renderer. Current source is 
 
 ### Usage
 
-Install with `npm install @acheron-grid/core @acheron-grid/canvas @acheron-grid/react`. Supply React 18.3 or 19 as a peer dependency. This adapter does not bundle React.
+Install with `npm install @acheron-grid/core@0.2.0 @acheron-grid/canvas@0.2.0 @acheron-grid/react@0.2.0`. Supply React 18.3 or 19 as a peer dependency. This adapter does not bundle React.
 
 ```tsx
 import { useMemo, useRef } from 'react';
@@ -36,7 +36,7 @@ export function Sheet() {
 - `onEvent` receives typed core events. `options.onEvent`, if supplied, is also called. Runtime callback changes do not recreate the grid; callbacks inside `options` remain part of the mount configuration.
 - Only the adapter owns the container DOM. Do not put React children inside it. The host must provide a non-zero size.
 - Effects mount/destroy the renderer. SSR renders an empty container without DOM access; hydration mounts the browser grid. React StrictMode setup/cleanup replay is supported.
-- Use `grid.updateCells()` for value changes, `grid.render()` after externally changing a compatible source, or replace `options` to intentionally recreate. This is not a controlled `rows` component.
+- Use `grid.updateCells()` for tracked changes. After external value changes with unchanged row identities/order/count, call `grid.refreshData('values')`; capture identities before structural changes and call `grid.refreshData(previousIds)`. Replace `options` only for an intentional reset. `render()` repaints without reconciling source identity, views or history. This is not a controlled `rows` component.
 
 Tested with React/React DOM 19.1.0 and React 18-compatible type declarations; the complete React version matrix is not verified. Screen-reader support follows Canvas limits. Custom rendering and editors remain Canvas hooks, not React cell components.
 
@@ -46,7 +46,7 @@ Vue 3 lifecycle adapter for the Acheron Grid Canvas renderer. Current source is 
 
 ### Usage
 
-Install with `npm install @acheron-grid/core @acheron-grid/canvas @acheron-grid/vue`. Supply Vue 3.5 as a peer dependency. This adapter does not bundle Vue.
+Install with `npm install @acheron-grid/core@0.2.0 @acheron-grid/canvas@0.2.0 @acheron-grid/vue@0.2.0`. Supply Vue 3.5 as a peer dependency. This adapter does not bundle Vue.
 
 ```vue
 <script setup lang="ts">

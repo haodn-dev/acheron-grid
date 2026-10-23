@@ -1,8 +1,8 @@
 # @acheron-grid/vue
 
-Version **0.2.0** is published on npm as a development preview. See [release notes and migration](../../RELEASE-0.2.0.md).
+Version **0.2.0** is published on npm as a development preview. See [release notes and migration](https://github.com/haodn-dev/acheron-grid/blob/main/RELEASE-0.2.0.md).
 
-The npm 0.1.0 archive has a separate frozen reference. See [documentation versions](../../../guides/versions.md).
+The npm 0.1.0 archive has a separate frozen reference. See [documentation versions](https://github.com/haodn-dev/acheron-grid/blob/main/guides/versions.md).
 
 Vue 3 lifecycle adapter for the Acheron Grid Canvas renderer. Current source is Apache-2.0 licensed; published npm 0.1.0 retains MIT. Version 0.2.0 is available on npm as a development preview. Use matching 0.2.0 artifacts for the newer APIs.
 
@@ -12,7 +12,7 @@ Vue 3 lifecycle adapter for the Acheron Grid Canvas renderer. Current source is 
 npm install @acheron-grid/vue@0.2.0
 ```
 
-Install core/Canvas at the same version when used. For newer APIs, use a built source checkout and install matching packed artifacts; see [Getting started](../../../guides/getting-started.md).
+Install core/Canvas at the same version when used. For newer APIs, use a built source checkout and install matching packed artifacts; see [Getting started](https://github.com/haodn-dev/acheron-grid/blob/main/guides/getting-started.md).
 
 ## Usage
 
@@ -46,7 +46,7 @@ const options = shallowRef({
 - `@event` forwards typed core events. `options.onEvent`, if supplied, also runs. Latest Vue event listeners receive events without rebuilding the grid.
 - Class, style and accessibility attributes fall through to the container. Supply a non-zero size. Slots inside the grid container are not supported.
 - `onMounted` creates the renderer; `onBeforeUnmount` destroys it. SSR returns an empty container; browser hydration mounts the renderer.
-- Update values through `grid.updateCells()`; use `grid.render()` after changing a compatible source externally, or replace `options` for an intentional reset. There is no separate controlled rows model.
+- Update values through `grid.updateCells()`; use `grid.refreshData('values')` after external value changes with unchanged row identities/order/count. Capture identities before structural changes and call `grid.refreshData(previousIds)`, or replace `options` for an intentional reset. `render()` repaints without reconciling source identity, views or history. There is no separate controlled rows model.
 
 The current source validation uses Vue 3.5.43. Custom cells/editors remain Canvas hooks, not Vue cell components. Screen-reader support follows Canvas limits.
 
@@ -56,4 +56,4 @@ Get the mounted grid through `getGrid()` or the ready callback and call `grid.ex
 
 ## Custom editors, remote options and runtime state
 
-Use the mounted instance from `getGrid()` for `setColumnEditor`, `refreshData`, `subscribe`, `exportState` and `restoreState`. Remote select/multiselect search and URL metadata use the same Canvas options in both adapters. Keep construction options stable; replacing them intentionally remounts the grid. Use `onEditorMount` to mount external UI and return its unmount/cleanup function. Unsubscribe application listeners and destroy host-owned async sources on unmount. See the [Canvas developer integration recipes](../canvas/README.md#developer-integration-recipes) and [core headless recipes](../core/README.md#data-and-lifecycle) for copyable examples and limits. State snapshots do not include data or undo history.
+Use the mounted instance from `getGrid()` for `setColumnEditor`, `refreshData`, `subscribe`, `exportState` and `restoreState`. Remote select/multiselect search and URL metadata use the same Canvas options in both adapters. Keep construction options stable; replacing them intentionally remounts the grid. Use `onEditorMount` to mount external UI and return its unmount/cleanup function. Unsubscribe application listeners and destroy host-owned async sources on unmount. See the [Canvas developer integration recipes](canvas.md#developer-integration-recipes) and [core headless recipes](core.md#data-and-lifecycle) for copyable examples and limits. State snapshots do not include data or undo history.

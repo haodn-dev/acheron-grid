@@ -4,6 +4,8 @@
 
 No API changes after 0.2.0.
 
+- Omit empty virtualized header rows from the Canvas accessibility tree while retaining logical row indices and spans. This source fix is not part of the immutable npm 0.2.0 artifacts.
+
 ## 0.2.0 — Development preview — 2026-10-21
 
 Published on npm for all eight packages. See [release notes, migration and limits](RELEASE-0.2.0.md).
