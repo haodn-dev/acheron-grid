@@ -5,6 +5,11 @@ on:
   pull_request:
   workflow_dispatch:
   workflow_call:
+    inputs:
+      force_full:
+        description: Always run release verification when called by another workflow
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -14,8 +19,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  scope:
+    name: Change scope
+    runs-on: ubuntu-latest
+    outputs:
+      runtime: ${{ steps.scope.outputs.runtime }}
+      files: ${{ steps.scope.outputs.files }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - id: scope
+        run: node scripts/ci-scope.mjs
+        env:
+          FORCE_FULL: ${{ inputs.force_full || github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' }}
+  docs:
+    name: Documentation
+    needs: scope
+    if: needs.scope.outputs.runtime == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run build
+      - run: npm run test:docs
+        env:
+          CI_CHANGED_FILES: ${{ needs.scope.outputs.files }}
   browser-smoke:
     name: Browser integration ${{ matrix.browser }}
+    needs: scope
+    if: needs.scope.outputs.runtime == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -55,6 +101,8 @@ jobs:
           if-no-files-found: ignore
   verify:
     name: Node ${{ matrix.node }}
+    needs: scope
+    if: needs.scope.outputs.runtime == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -70,11 +118,14 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
+      - run: node --test tests/ci.node.mjs
       - run: npm run test:release
       - run: npm run format:check
       - run: npm run typecheck
       - run: npm test
       - run: npm run test:docs
+        env:
+          CI_CHANGED_FILES: ${{ needs.scope.outputs.files }}
       - run: npm run test:mcp
       - run: npm pack --dry-run --workspaces
       - run: npx playwright install --with-deps chromium
@@ -119,3 +170,24 @@ jobs:
             playground-report/
           retention-days: 7
           if-no-files-found: ignore
+  result:
+    name: CI result
+    if: always()
+    needs: [scope, docs, verify, browser-smoke]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every selected check to pass
+        env:
+          SCOPE: ${{ needs.scope.result }}
+          RUNTIME: ${{ needs.scope.outputs.runtime }}
+          DOCS: ${{ needs.docs.result }}
+          NODE: ${{ needs.verify.result }}
+          BROWSERS: ${{ needs.browser-smoke.result }}
+        run: |
+          test "$SCOPE" = success
+          if [ "$RUNTIME" = true ]; then
+            test "$NODE" = success
+            test "$BROWSERS" = success
+          else
+            test "$DOCS" = success
+          fi

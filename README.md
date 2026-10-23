@@ -151,7 +151,7 @@ The playground command builds the packages and starts the [standalone example](h
 
 Install Chromium with `npx playwright install chromium` before browser checks. Firefox/WebKit suites are also configured; browser integration and the standalone playground use separate servers. Build and run suites sequentially when they share generated output or ports.
 
-The current [CI workflow](.github/workflows/ci.yml) runs Node 22/24 and portable Firefox/WebKit jobs on pushes and pull requests, including documentation-only changes. It has not yet been split by changed paths. Browser failure diagnostics are retained for seven days. The separate [release workflow](.github/workflows/release.yml) publishes npm packages through trusted publishing and a protected environment.
+The [CI workflow](.github/workflows/ci.yml) classifies changed paths. Markdown, documentation metadata and README images run formatting, document/link/table checks and executable documentation examples on Node 22, without installing browsers or running benchmarks/packed consumers. Code, dependencies, build configuration and workflow changes run the full Node 22/24 and Firefox/WebKit suites. Tags, manual runs and reusable release verification always run full checks; an uncertain diff also defaults to full. The final CI result requires every selected job to pass. Browser failure diagnostics are retained for seven days. The separate [release workflow](.github/workflows/release.yml) publishes through trusted publishing and a protected environment.
 
 ## Documentation
 
