@@ -1,12 +1,12 @@
 # @acheron-grid/export
 
-Version **0.2.0** is published on npm as a development preview. See [release notes and migration](../../RELEASE-0.2.0.md).
+Version **0.2.1 development preview**. See [release notes and migration](../../RELEASE-0.2.1.md).
 
-Optional, free Apache-2.0-licensed CSV and XLSX selection export. Introduced in the 0.2.0 development preview. It uses public core APIs and requires no browser globals. The host owns saving/downloading the returned text or bytes.
+Optional, free Apache-2.0-licensed CSV and XLSX selection export. Introduced in the 0.2.1 development preview. It uses public core APIs and requires no browser globals. The host owns saving/downloading the returned text or bytes.
 
 ## Installation and complete example
 
-Install matching released packages: `npm install @acheron-grid/core@0.2.0 @acheron-grid/export@0.2.0`. For modified source, see [source installation](../../guides/getting-started.md#build-a-source-preview).
+Install matching released packages: `npm install @acheron-grid/core@0.2.1 @acheron-grid/export@0.2.1`. For modified source, see [source installation](../../guides/getting-started.md#build-a-source-preview).
 
 ```ts
 import { createGridEngine, LocalDataSource } from '@acheron-grid/core';
@@ -46,7 +46,7 @@ ZIP/UTF-8 support comes from [fflate](https://github.com/101arrowz/fflate), MIT 
 
 Default CSV escaping also covers leading control characters and full-width formula operators. Spreadsheet applications can reinterpret CSV after edits or re-saving; use XLSX inline strings for untrusted text when available. CSV escaping is not a universal spreadsheet execution guarantee. See [CSV injection guidance](https://community.owasp.org/attacks/CSV_Injection).
 
-## Semantic HTML snapshots (0.2.0)
+## Semantic HTML snapshots (0.2.1)
 
 ```ts
 import { createGridEngine, LocalDataSource } from '@acheron-grid/core';
