@@ -1,8 +1,8 @@
 # Release preparation
 
-The current release is **0.2.0 development preview** for all eight packages. See
-[the release notes](RELEASE-0.2.0.md) for publication, verification and bootstrap details.
-The original 0.1.0 release remains immutable.
+The current npm release is **0.2.1 development preview** for all eight packages. See
+[the release notes](RELEASE-0.2.1.md) for changes and migration.
+The original 0.1.0 and 0.2.0 artifacts and tags remain immutable.
 
 This file retains the original 0.1.0 preparation procedure. The six original 0.1.0 packages are now
 published previews; 0.2.0 includes the subsequent source APIs. Before selecting a future stable version, close
@@ -39,6 +39,20 @@ npm run test:package
 Run the browser/playground suites sequentially; their server ports must be available. Inspect dry-run contents for built ESM/declarations, README and license files. Dry-run success is not evidence that package installation or registry publication will succeed. Before a package release, test the packed artifacts in an independent TypeScript application, including React/Vue where relevant. The test:package script installs all eight source tarballs in a temporary independent project, typechecks public imports, renders React/Vue SSR, and mounts/updates/destroys Canvas in Chromium. Its printed temporary directory is retained for diagnosis. Verify clipboard, reduced motion and intended browser support with the integration suites. Do not infer full screen-reader coverage or FPS from the existing Chromium suite.
 
 CI checks Node 22/24 on Ubuntu and retains failed-browser diagnostics. Confirm the workflow for the intended release commit; local checks do not establish remote CI status.
+
+## GitHub Release publication
+
+Every future tagged release must have a published GitHub Release with substantive notes. Creating a Git tag or publishing npm packages alone does not complete this step. Existing tags do not need to be backfilled unless explicitly requested.
+
+Prepare the notes before tagging. After publication and registry-consumer verification, publish the GitHub Release against the verified tag and check that its page displays:
+
+- User-visible changes since the previous release, with a comparison link when available.
+- The exact package version, npm links and installation command.
+- Migration instructions, including an explicit statement when no migration is needed.
+- Checks actually passed and relevant known limitations.
+- The correct release status; 0.x development previews remain marked as prereleases.
+
+Use the version-specific release notes as the basis for the body; do not leave it empty or rely only on a raw commit list. Record the GitHub Release URL alongside npm publication evidence. This is a requirement for future releases, not a request to create or edit historical GitHub Releases now.
 
 ## Release notes template
 

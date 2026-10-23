@@ -10,6 +10,8 @@ Keep public usage documentation accurate and distinguish proposed APIs, implemen
 
 Use short-lived feat/, fix/ or docs/ branches. Run relevant checks once build tooling exists. Do not publish packages or choose a license without an agreed release/license decision.
 
+For every future tagged release, publish a GitHub Release with substantive, version-specific notes after verifying the approved artifacts. A tag alone does not complete a release. Include changes, installation, migration, verified checks and known limits; follow RELEASING.md. Do not backfill existing tags unless the user requests it.
+
 ## Mandatory verification before commit, push and pull requests
 
 1. Read applicable instructions, inspect the working tree, and identify all affected consumers before editing. Preserve unrelated user changes. Trace changed imports through package entry points, browser fixture servers, the standalone playground server and packed consumers. Do not assume one server or suite covers another.
