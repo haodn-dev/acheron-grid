@@ -200,6 +200,6 @@ See [@acheron-grid/mcp](packages/mcp/README.md) for a stdio documentation server
 
 Created by [Hao Duong](https://haoduong.dev/). See [Contributing](CONTRIBUTING.md) for bug reports and contributions. The public demo and documentation are available at [acheron-grid.haoduong.dev](https://acheron-grid.haoduong.dev/).
 
-First release preparation: [0.1.0 release notes](RELEASE-0.1.0.md).
+Current npm release: [0.2.1 development preview](RELEASE-0.2.1.md). Previous releases: [0.2.0](RELEASE-0.2.0.md) and [0.1.0](RELEASE-0.1.0.md).
 
-Current source and future distributions use Apache-2.0. Previously published npm 0.1.0 and tag v0.1.0 retain their original MIT license. Third-party licenses are unchanged; package LICENSE and NOTICE files accompany distributions.
+Current source and npm 0.2.x packages use Apache-2.0. Previously published npm 0.1.0 packages and tag v0.1.0 retain their original MIT license. Third-party licenses are unchanged; package LICENSE and NOTICE files accompany distributions.
