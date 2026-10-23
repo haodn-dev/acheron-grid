@@ -1,30 +1,82 @@
 # Acheron Grid
 
 > Your data. Your rules.
->
-> A TypeScript data grid with a headless core, Canvas rendering, and React and Vue adapters.
 
-Acheron Grid displays and edits tabular data without a framework dependency. The headless engine owns data commands, selection, permissions, layout and history. The browser package adds Canvas rendering, scrolling, editors, menus and dialogs.
+A TypeScript data grid with a headless core, Canvas rendering, and React and Vue adapters. The engine manages data commands, selection, permissions, layout and history; Canvas adds the browser interface.
 
-[Live demo and documentation](https://acheron-grid.haoduong.dev/)
+[Live demo and documentation](https://acheron-grid.haoduong.dev/) · [Getting started](guides/getting-started.md) · [Integration guide](guides/integration.md) · [Release notes](RELEASE-0.2.1.md)
 
-Every Acheron feature and optional module is intended to remain open source and free to use, with no premium feature gates or license keys. See [benchmark evidence and its limits](BENCHMARKS.md).
+[![Acheron Grid standalone playground showing frozen headers, editable records, status labels, checkboxes and avatars](assets/readme/playground.png)](https://acheron-grid.haoduong.dev/)
 
-## Start here
+_The standalone playground with local sample data. Its 10,000-row dataset is a demonstration workload, not a performance guarantee._
 
-[Getting started](guides/getting-started.md) → [Integration guide](guides/integration.md) → [Package reference](packages/core/README.md). [Documentation versions and changes](guides/versions.md) explain released versions and source previews.
+All features and optional modules are open source and free to use. There are no premium feature gates or license keys.
 
 ## Status
 
-**0.2.1 development preview** is published on npm for all eight packages.
-Versions 0.1.0 and 0.2.0 remain available and immutable.
-Install matching package versions; APIs remain experimental.
-See [0.2.1 changes, migration and acceptance limits](RELEASE-0.2.1.md).
+**0.2.1 development preview is published on npm for all eight packages.** Install matching Acheron package versions. APIs remain experimental; this is not a stable 1.0 release.
 
-See the [1.0 contract and acceptance policy](guides/v1-readiness.md). Current source is for integration
-evaluation; manual/device and production-host acceptance remain open. No stable version is announced.
+The patch includes the virtualized-header accessibility correction and audited package documentation. Public exports and type signatures are unchanged from 0.2.0. See [changes and migration](RELEASE-0.2.1.md), the [changelog](CHANGELOG.md) and the [1.0 acceptance policy](guides/v1-readiness.md).
 
-The original six npm 0.1.0 packages remain available and immutable. Version 0.2.0 includes the optional export/charts modules. APIs may change before 1.0. The project is licensed under [Apache 2.0](LICENSE).
+The [v0.2.1 release workflow](https://github.com/haodn-dev/acheron-grid/actions/runs/39924579099) passed Node 22/24, Chromium, portable Firefox/WebKit, independent package consumers and exact npm-version consumers. All eight npm artifacts have trusted-publishing provenance. Manual screen-reader, physical-device and production-host acceptance remain open.
+
+## Start here
+
+Use **core** for Node.js, a custom renderer or a headless data workflow. Add **Canvas** for an interactive browser grid. React and Vue wrap the same Canvas renderer and data contracts.
+
+The [package references](#packages) describe each module. The [practical guide](examples/vanilla/practical-guide.md) covers editing, clipboard, local views and keyboard interaction; the [integration guide](guides/integration.md) covers application lifecycle and customization. When reading the website, select the documentation channel that matches your installed version; [documentation versions](guides/versions.md) explains the distinction between released packages and source previews.
+
+## Quick start
+
+Install core and Canvas in an ESM application with a bundler:
+
+```sh
+npm install @acheron-grid/core@0.2.1 @acheron-grid/canvas@0.2.1
+```
+
+Give the container explicit dimensions:
+
+```html
+<div id="grid" style="width:100%;height:480px"></div>
+```
+
+Mount the grid from your browser entry module:
+
+```ts
+import { LocalDataSource } from '@acheron-grid/core';
+import { createGrid } from '@acheron-grid/canvas';
+
+const container = document.querySelector<HTMLElement>('#grid');
+if (!container) throw new Error('Missing #grid container.');
+
+const source = new LocalDataSource([
+  { id: 'r1', name: 'Ada' },
+  { id: 'r2', name: 'Lin' },
+], row => row.id);
+
+const grid = createGrid({
+  container,
+  columns: [{ key: 'name', title: 'Name', editable: true }],
+  dataSource: source,
+});
+
+// Call when the owning view unmounts.
+// grid.destroy();
+```
+
+Canvas requires a browser with Canvas 2D and ResizeObserver. Core can run without the DOM; `@acheron-grid/core/headless` remains an alias for its headless API. See [core setup](packages/core/README.md#quick-start) and [Canvas setup](packages/canvas/README.md).
+
+For React or Vue, add the matching adapter and supply its framework peer dependency:
+
+```sh
+npm install @acheron-grid/react@0.2.1 react react-dom
+# Or, for Vue:
+npm install @acheron-grid/vue@0.2.1 vue
+```
+
+Follow the [React](packages/react/README.md) or [Vue](packages/vue/README.md) mounting example. The adapters do not bundle their frameworks; React 18.3/19 and Vue 3.5 within Vue 3 are supported peer ranges.
+
+## Packages
 
 | Package                                               | Purpose                                                                     | Runtime dependencies          | npm                                                                                                                                            |
 | ----------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -37,169 +89,91 @@ The original six npm 0.1.0 packages remain available and immutable. Version 0.2.
 | [@acheron-grid/export](packages/export/README.md)     | Optional CSV/XLSX selection and authorized HTML table export                | @acheron-grid/core; fflate    | [![npm @acheron-grid/export](https://img.shields.io/npm/v/%40acheron-grid%2Fexport)](https://www.npmjs.com/package/@acheron-grid/export)       |
 | [@acheron-grid/charts](packages/charts/README.md)     | Optional inline line/area/column/bar charts                                 | @acheron-grid/canvas          | [![npm @acheron-grid/charts](https://img.shields.io/npm/v/%40acheron-grid%2Fcharts)](https://www.npmjs.com/package/@acheron-grid/charts)       |
 
-Core does not import Canvas or framework code. `@acheron-grid/core/headless` remains an alias for the headless API.
+Install only the modules you use. The core package has no runtime dependencies and does not import Canvas or either framework adapter.
 
 ## Implemented features
 
-- Virtualized rows and columns, sparse sizes, resize guides and runtime frozen panes.
-- A default fixed row index, whole-row/column selection, rectangular and multiple ranges, keyboard navigation and TSV clipboard operations, single-cell paste across ranges and staged same-grid cut/paste.
-- Native text/select/checkbox editors, searchable choices and multiple tags, multiline overlays, parsing/validation, single images, image galleries, people stacks, visual media editing and custom cell drawing.
-- Safe HTML rich text and optional Markdown parsing; visual editing hides markup while preserving source strings and partial formatting.
-- Structural row/column insertion, deletion and reordering, merged cells and nested manual row groups with undo/redo.
-- Searchable context menus, optional contextual suggestions and link popovers with host-controlled website metadata.
-- Bounded layout motion, reduced-motion support and single-cell/range copy feedback.
-- Versioned, validated export/restore of column order/widths, frozen counts and local sort/filters.
-- Atomic local value updates, partial cell repaint, delta undo/redo and typed domain events.
-- Capability permissions, cell/row/column/table value locks, sparse formatting and application control over formatting.
-- Local search, opt-in column sort/filter views, themes and native dialogs that tolerate host CSS resets.
-- An active-cell ARIA mirror, opt-in bounded viewport accessibility tree and keyboard status announcements. Complete screen-reader support remains unverified.
+- **Viewport and layout:** virtualized rows/columns, frozen panes, resize guides, auto-fit, hidden axes and configurable themes.
+- **Selection and clipboard:** cell/range/row/column selection, multiple ranges, keyboard navigation, TSV and structured clipboard, paste special, staged cut/paste and bounded find/replace.
+- **Editing:** text, choices, tags, checkboxes, multiline and rich-text editors; parsing and validation; media galleries, people cells and custom renderers/editors.
+- **Data commands:** atomic updates, bounded undo/redo, structural row/column commands, merged cells, manual row groups and sparse formatting.
+- **Views and persistence:** local multi-column sorting/filtering, versioned layout/domain state, external-data reconciliation and stable row identities.
+- **Remote data:** read-only async paging, bounded snapshot writes, writable paged sources, revision/query snapshots and a bounded read-only live cache.
+- **Optional modules:** Markdown parsing, CSV/XLSX and authorized HTML table export, inline line/area/column/bar charts, and MCP documentation/host tools.
+- **Browser interaction:** searchable menus, contextual suggestions, host-loaded link metadata, reduced-motion support, an active-cell ARIA mirror and an opt-in bounded viewport accessibility tree.
 
-Core-managed local sorting/filtering preserves selection, history, locks, colors and sizes and refreshes after edits. Legacy host-managed projections remain supported. Rendering virtualization does not make filtering or in-memory storage independent of dataset size.
-
-## Documentation
-
-Start with the [practical guide](examples/vanilla/practical-guide.md) for editor configuration, keyboard interactions, clipboard/history, local views, grouped headers, structural operations, rich text, permissions and troubleshooting. Package README files provide detailed contracts and limits.
-
-- [React integration](packages/react/README.md) and [Vue 3 integration](packages/vue/README.md).
-- [Portable layout/view configuration](packages/core/README.md#portable-layout-and-view-configuration).
-- [Copy feedback and motion](packages/canvas/README.md#copy-feedback-and-motion-details).
-- [Changes](CHANGELOG.md) and [release preparation](RELEASING.md).
-
-## Quick start
-
-Use Node.js 22 or later to build the repository:
-
-```sh
-npm ci
-npm run build
-npm run playground
-```
-
-Open [the standalone playground](http://127.0.0.1:4180). It uses browser import maps and local packages, without a framework or CDN. Stop the server with Ctrl+C. See [the example guide](examples/vanilla/README.md).
-
-In a separate application with an ESM-capable bundler, install matching released packages:
-
-```sh
-npm install @acheron-grid/core@0.2.1 @acheron-grid/canvas@0.2.1
-```
-
-Provide a container with explicit dimensions:
-
-```html
-<div id="grid" style="width:100%;height:480px"></div>
-```
-
-```ts
-import { createGrid } from '@acheron-grid/canvas';
-import { LocalDataSource } from '@acheron-grid/core';
-
-const dataSource = new LocalDataSource([
-  { id: 'row-1', name: 'Ada' },
-  { id: 'row-2', name: 'Lin' },
-], row => row.id);
-
-const grid = createGrid({
-  container: document.querySelector<HTMLElement>('#grid')!,
-  columns: [{ key: 'name', title: 'Name', editable: true }],
-  dataSource,
-});
-
-```
-
-Call `grid.destroy()` when the owning view unmounts to release its DOM, listeners, observer and pending work.
-
-For server-side or renderer-independent use, start with [`createGridEngine`](packages/core/README.md#quick-start). For browser options, contracts and keyboard behavior, read [the Canvas guide](packages/canvas/README.md).
+Core-managed local views preserve mapped selection, history and sparse state. Host-managed projections have a separate contract. Rendering virtualization does not remove the CPU or memory cost of storing, sorting or filtering a dataset.
 
 ## Integration examples
 
-### Input validation
+Columns provide parsing and validation; editor/paste text uses parsers, while programmatic updates accept typed values. Invalid input is rejected by default. Call `refreshData` after external source changes and `destroy` during teardown; mutating application data does not automatically refresh a mounted grid.
 
-Columns can validate typed values with `validate(value)`, returning an error message or `undefined`. Invalid values are rejected by default before any batch writes. Set `invalidInput: 'allow'` to save invalid values with a warning in Canvas. Parsing remains separate: a parser exception always prevents saving.
+Application callbacks control choices, custom drawing/editors, uploads and URL metadata. Grid permissions and locks control client interactions; authentication, server authorization, durable storage and remote validation belong to the host application. Only send authorized data to the browser.
 
-```ts
-{ key: 'name', title: 'Name', editable: true,
-  validate: value => String(value).trim() ? undefined : 'Name is required.' },
-{ key: 'website', title: 'Website', editable: true, invalidInput: 'allow',
-  validate: value => /^https?:\/\//.test(String(value)) ? undefined : 'Use an HTTP or HTTPS URL.' }
-```
+Use the focused guides for complete examples and limits:
 
-Canvas displays live editor feedback and a corner marker for saved invalid values; hover or the viewport accessibility mirror exposes the message. See the vanilla example for both policies.
-
-### Choice order, contextual actions and link previews
-
-Multiselect commits preserve the original input order by default. Newly selected values append in configured option order. `choiceEditor: { valueOrder: 'options' }` opts into configured order. Typing from an option moves focus into the filter; Space continues to toggle a choice.
-
-`contextMenuSuggestions: true` starts with up to eight enabled actions relevant to the selection. Suggested actions can be switched off in the menu; Show all actions and typing always expose the complete command list. Suggestions use deterministic selection rules, with no model, telemetry or automatic command execution.
-
-Whole-row Cut/Paste transfers cell contents and leaves record IDs and row positions intact. All source and destination cells must permit writing. Use Move rows to change record positions, including rows with read-only ID columns.
-
-Hovering a link cell opens its name and full address by default, with an external-link icon inside each entry. `linkPreview: false` (or omitted) avoids metadata requests. For optional website details, provide a host callback:
-
-```ts
-linkPreview: {
-  enabled: false, // keep the link popover; the user can enable website details
-  load: async (href, signal) => {
-    const response = await fetch('/api/link-preview?url=' + encodeURIComponent(href), { signal });
-    if (!response.ok) throw new Error('Preview unavailable');
-    return response.json(); // { title?, description?, image? }
-  }
-}
-```
-
-Use `linkPreview: false` to omit the loader entirely, or set `allowMetadata: false` on the configuration object to prohibit loading and hide the user toggle. `enabled: false` only sets the initial state and still allows the user to enable website details. Enforce permitted destinations on the backend as well.
-
-Canvas aborts pending previews on close and preserves the link on failure. The host controls trusted domains, metadata caching and network access; core performs no network requests.
-
-Developer integration examples: [headless refresh, state and async paging](packages/core/README.md#data-and-lifecycle), [remote choices, custom editor cleanup and URL metadata](packages/canvas/README.md#developer-integration-recipes).
-
-## Development and verification
-
-Run commands from the repository root after `npm ci`:
-
-| Command                   | Purpose                                                                                                |
-| ------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `npm run build`           | Build all eight packages, including ESM and TypeScript declarations                                    |
-| `npm run typecheck`       | Build dependency declarations, then check all packages and the headless boundary                       |
-| `npm test`                | Build and run Node.js tests                                                                            |
-| `npm run test:mcp`        | Verify MCP documentation, host authorization and grid tools                                            |
-| `npm run test:browser`    | Build and run Chromium grid integration tests                                                          |
-| `npm run test:playground` | Build and verify the standalone example                                                                |
-| `npm run test:package`    | Install eight packed artifacts in an independent consumer; verify TypeScript, SSR and Canvas lifecycle |
-| `npm run benchmark`       | Run browser workload correctness and record callback, command, Worker and memory samples               |
-
-Install the test browser with `npx playwright install chromium` before running browser tests. Benchmark methods differ by workload; callback/command timings and memory checkpoints do not establish presented FPS, GPU cost or true peak memory. Browser tests and benchmarks share port 4179; the playground uses port 4180. Run suites using the same port sequentially and stop a manual playground server before its tests.
-
-See [Contributing](CONTRIBUTING.md) for changes and bug reports.
-
-[CI](.github/workflows/ci.yml) checks Node 22 and 24 on Ubuntu for pushes and pull requests: type checking, Node/SSR and MCP tests, package dry runs, Chromium integration, the standalone playground and independent packed-package consumers. Failed browser runs retain traces, screenshots and reports for seven days. The workflow does not publish packages.
-
-## Limits and planned work
-
-Engine reads and validation are synchronous; the optional async source loads remote pages into a synchronous read-only cache. Rows and columns can change through structural commands with state remapping and undo/redo; external source changes reconcile through `captureRowIdentity` / `refreshData`. Local values, user state and history are in memory. Version-1 configuration exports a subset of layout/view state for initialization; storage, backend authorization and schema migration belong to the application. `exportState` additionally persists row heights, groups, merges, formatting, locks and selection; data, policies and history are excluded.
-
-Native browser scroll dimensions impose practical limits. Read-only async paging, bounded remote writes,
-writable remote paging and local multi-column sorting are implemented in source. DataSource setters remain
-synchronous; explicit cooperative engine APIs yield during preparation and keep a synchronous final commit.
-Chromium, Firefox and WebKit have automated suites; results must match the candidate revision. Complete
-assistive-technology and physical-device coverage remains unverified.
-
-Optional inline charts are available in npm 0.2.0. Formula evaluation, pivot tables,
-multi-sheet workbooks, Excel calculation compatibility and real-time collaboration are outside the current scope.
-
-## License
-
-Acheron Grid is available under the [Apache 2.0 License](LICENSE). Copyright (c) 2026 Hao Duong. You may use, modify and redistribute it, including in commercial applications, subject to the license terms and preservation of the required notices.
-
-The Canvas package embeds Lucide SVG assets under their existing ISC/MIT terms. Their attribution and license text are included in [LICENSE.lucide](packages/canvas/LICENSE.lucide); these terms cover those assets, not the entire project.
+- [Core data and lifecycle](packages/core/README.md#data-and-lifecycle) and [integration](guides/integration.md).
+- [Canvas recipes](guides/canvas-recipes.md): editors, media, menus, link previews and cleanup.
+- [Editing and remote writes](guides/editing-and-remote.md) and [writable paged sources](guides/paged-remote.md).
+- [Cooperative bulk commands and TSV Worker decoding](guides/bulk-commands.md).
+- [Export](packages/export/README.md), [inline charts](packages/charts/README.md) and [MCP](packages/mcp/README.md).
 
 ## Optional MCP adapter
 
-See [@acheron-grid/mcp](packages/mcp/README.md) for a stdio documentation server and host-controlled read/update tools. It is separate from core and does not automatically connect to a browser playground.
+`@acheron-grid/mcp` provides a stdio documentation CLI and a factory for host-authorized grid tools. The CLI exposes bundled package documentation; it does not expose application data or automatically connect to a browser grid.
+
+A host must supply the engine, connection identity and authorization. Writes additionally require explicit opt-in and validation. No authentication service is started. The 0.2.1 artifact still advertises the legacy MCP `serverInfo.version` value `0.1.0`; identify the installed artifact using its package manifest/lockfile. See the [MCP contract](packages/mcp/README.md).
+
+## Development and verification
+
+Use Node.js 22 or later for repository builds and checks:
+
+```sh
+npm ci
+npm run playground
+```
+
+The playground command builds the packages and starts the [standalone example](http://127.0.0.1:4180). It serves local modules and sample data. Stop it before running playground tests on the same port.
+
+| Command                                  | Purpose                                                     |
+| ---------------------------------------- | ----------------------------------------------------------- |
+| `npm run build`                          | Build all eight packages and TypeScript declarations        |
+| `npm run typecheck`                      | Build and check package types and the headless boundary     |
+| `npm test`                               | Build and run unit/SSR checks                               |
+| `npm run test:mcp`                       | Check MCP documentation and host-tool contracts             |
+| `npm run test:browser -- --workers=1`    | Build and run Chromium integration tests                    |
+| `npm run test:playground -- --workers=1` | Build and test the standalone example                       |
+| `npm run test:package`                   | Verify eight packages in independent consumers              |
+| `npm run test:release`                   | Check release tooling                                       |
+| `npm run test:docs`                      | Check document hashes, API catalogs and executable examples |
+| `npm run format:check`                   | Check repository formatting                                 |
+| `npm run benchmark`                      | Run browser workload correctness and collect samples        |
+
+Install Chromium with `npx playwright install chromium` before browser checks. Firefox/WebKit suites are also configured; browser integration and the standalone playground use separate servers. Build and run suites sequentially when they share generated output or ports.
+
+The current [CI workflow](.github/workflows/ci.yml) runs Node 22/24 and portable Firefox/WebKit jobs on pushes and pull requests, including documentation-only changes. It has not yet been split by changed paths. Browser failure diagnostics are retained for seven days. The separate [release workflow](.github/workflows/release.yml) publishes npm packages through trusted publishing and a protected environment.
+
+## Documentation
+
+Package references and guides in this repository are canonical consumer documentation. The website imports identified snapshots; archived channels retain their released API scope. The original npm 0.1.0 and 0.2.0 artifacts/tags remain available and immutable.
+
+Use [release notes](RELEASE-0.2.1.md) for package migration, [documentation versions](guides/versions.md) for channel selection and [release procedures](RELEASING.md) for publishing. [Contributing](CONTRIBUTING.md) describes bug reports and contributions.
+
+## Limits and planned work
+
+- This is a 0.x development preview. Automated Chromium/Firefox/WebKit checks do not certify all browser versions, physical Safari/iOS/Android, native clipboard interoperability or manual screen-reader behavior. See [support evidence](SUPPORT.md) and the [manual validation protocol](guides/manual-validation.md).
+- DataSource reads/setters and final atomic commits remain synchronous. Cooperative APIs yield during preparation; optional Worker decoding moves TSV parsing off-thread, not rendering, sorting or the entire engine. Structural changes and view reprojection can still block.
+- Browser scroll dimensions, loaded-data caches and retained history have bounds. The sample row count does not establish frame rate, true peak memory or a production workload budget. See [benchmark evidence and measurement limits](BENCHMARKS.md).
+- Remote sources require application transport, authorization, server validation, atomic revisions and durable idempotency. Backend/MCP-host acceptance and reload-persistent drafts remain application work.
+- State exports contain supported layout/domain state, not row data, authorization policies or undo history. Persistence, schema migration and external subscriptions remain host-owned.
+- Formula evaluation, pivots, multi-sheet workbooks, Excel calculation compatibility and real-time collaborative editing are outside the current scope.
+
+## License
+
+Current source and npm 0.2.x packages use [Apache-2.0](LICENSE), with copyright attribution in [NOTICE](NOTICE). You may use, modify and redistribute them, including commercially, subject to the license and required notices. All Acheron features and optional modules remain free and open source.
+
+Previously published npm 0.1.0 packages and tag `v0.1.0` retain their original MIT license. This source license does not retroactively change those artifacts. Embedded Lucide assets retain their ISC/MIT terms; see [LICENSE.lucide](packages/canvas/LICENSE.lucide). Other third-party licenses and package notices remain applicable.
 
 ## Author
 
-Created by [Hao Duong](https://haoduong.dev/). See [Contributing](CONTRIBUTING.md) for bug reports and contributions. The public demo and documentation are available at [acheron-grid.haoduong.dev](https://acheron-grid.haoduong.dev/).
-
-First release preparation: [0.1.0 release notes](RELEASE-0.1.0.md).
-
-Current source and future distributions use Apache-2.0. Previously published npm 0.1.0 and tag v0.1.0 retain their original MIT license. Third-party licenses are unchanged; package LICENSE and NOTICE files accompany distributions.
+Created by [Hao Duong](https://haoduong.dev/). For bugs and contributions, see [Contributing](CONTRIBUTING.md). Try the [public demo and documentation](https://acheron-grid.haoduong.dev/).
