@@ -5,6 +5,53 @@ import { createHash } from 'node:crypto';
 import { resolve, sep, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { coreContracts, coreExportContracts } from '../scripts/core-contracts.mjs';
+import { marked } from 'marked';
+
+const changed = JSON.parse(process.env.CI_CHANGED_FILES ?? '[]');
+for (const path of new Set(['README.md', ...changed.filter((file) => file.endsWith('.md'))])) {
+  try {
+    await access(path);
+  } catch (error) {
+    if (error.code === 'ENOENT' && path !== 'README.md') continue;
+    throw error;
+  }
+  const tokens = marked.lexer(await readFile(path, 'utf8'));
+  const links = [];
+  marked.walkTokens(tokens, (token) => {
+    if (token.type === 'link' || token.type === 'image') links.push(token.href);
+  });
+  for (const href of links) {
+    if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(href)) continue;
+    const [file, hash] = href.split('#');
+    const target = resolve(dirname(path), decodeURIComponent(file.split('?')[0] || '.'));
+    const targetFile = file ? target : resolve(path);
+    await access(targetFile);
+    if (hash && targetFile.endsWith('.md')) {
+      const headings = marked.lexer(await readFile(targetFile, 'utf8')).filter((token) => token.type === 'heading');
+      const slugs = headings.map((token) =>
+        token.text
+          .toLowerCase()
+          .replace(/[`*_]/g, '')
+          .replace(/[^\p{L}\p{N}\s-]/gu, '')
+          .replace(/\s/g, '-'),
+      );
+      assert.ok(slugs.includes(decodeURIComponent(hash)), `${path}: broken heading ${href}`);
+    }
+  }
+  if (path === 'README.md') {
+    const tables = tokens.filter((token) => token.type === 'table');
+    const packages = tables.find((table) => table.header[0].text === 'Package');
+    const commands = tables.find((table) => table.header[0].text === 'Command');
+    assert.equal(packages?.header.length, 4, 'Package table must render separate npm badge cells.');
+    assert.equal(commands?.header.length, 2, 'Command table must render as a two-column table.');
+    assert.equal(packages.rows.length, 8, 'Keep all eight package references.');
+    for (const row of packages.rows)
+      assert.ok(
+        row[3].tokens.some((token) => token.type === 'link'),
+        'Missing linked npm badge.',
+      );
+  }
+}
 const manifest = JSON.parse(await readFile('documentation.json', 'utf8'));
 const canvasReadme = await readFile('packages/canvas/README.md', 'utf8');
 assert.ok(
@@ -38,7 +85,12 @@ await mkdir('test-results', { recursive: true });
 const directory = await mkdtemp('test-results/docs-consumer-');
 try {
   const files = [];
-  for (const path of ['guides/getting-started.md', 'packages/export/README.md', 'packages/charts/README.md']) {
+  for (const path of [
+    'README.md',
+    'guides/getting-started.md',
+    'packages/export/README.md',
+    'packages/charts/README.md',
+  ]) {
     const text = await readFile(path, 'utf8');
     const code = [...text.matchAll(/```ts\n([\s\S]*?)```/g)][0][1];
     const file = directory + '/' + path.replaceAll('/', '-') + '.ts';
@@ -119,7 +171,7 @@ try {
   const publicCatalog = await readFile('guides/core-api.md', 'utf8');
   for (const contract of Object.values(coreExportContracts)) assert.ok(publicCatalog.includes(contract));
   console.log(
-    'PASS: document hashes, six complete TypeScript examples, executable HTML/core lifecycle and core/Canvas API catalogs.',
+    'PASS: Markdown links/tables/images, document hashes, seven TypeScript examples, executable HTML/core lifecycle and core/Canvas API catalogs.',
   );
 } finally {
   assert.ok(resolve(directory).startsWith(resolve('test-results') + sep));
