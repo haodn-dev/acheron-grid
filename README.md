@@ -153,6 +153,8 @@ Install Chromium with `npx playwright install chromium` before browser checks. F
 
 The [CI workflow](.github/workflows/ci.yml) classifies changed paths. Markdown, documentation metadata and README images run formatting, document/link/table checks and executable documentation examples on Node 22, without installing browsers or running benchmarks/packed consumers. Code, dependencies, build configuration and workflow changes run the full Node 22/24 and Firefox/WebKit suites. Tags, manual runs and reusable release verification always run full checks; an uncertain diff also defaults to full. The final CI result requires every selected job to pass. Browser failure diagnostics are retained for seven days. The separate [release workflow](.github/workflows/release.yml) publishes through trusted publishing and a protected environment.
 
+Documentation checks validate local Markdown links, heading anchors and image targets without fetching external websites.
+
 ## Documentation
 
 Package references and guides in this repository are canonical consumer documentation. The website imports identified snapshots; archived channels retain their released API scope. The original npm 0.1.0 and 0.2.0 artifacts/tags remain available and immutable.
