@@ -2,9 +2,15 @@
 
 ## Unreleased
 
-No API changes after 0.2.0.
+No changes after 0.2.1 are recorded yet.
 
-- Omit empty virtualized header rows from the Canvas accessibility tree while retaining logical row indices and spans. This source fix is not part of the immutable npm 0.2.0 artifacts.
+## 0.2.1 — Development preview — 2026-10-23
+
+No public API changes from 0.2.0.
+
+- Omit empty virtualized header rows from the Canvas accessibility tree while retaining logical row indices and spans. Included in 0.2.1; the immutable npm 0.2.0 artifacts are unchanged.
+- Keep the Canvas npm README below the registry truncation limit; preserve existing heading anchors and move advanced material into the canonical Canvas recipes guide.
+- Correct copied MCP documentation links, version/install/support guidance and adapter refreshData instructions.
 
 ## 0.2.0 — Development preview — 2026-10-21
 

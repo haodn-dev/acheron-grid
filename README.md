@@ -16,9 +16,10 @@ Every Acheron feature and optional module is intended to remain open source and 
 
 ## Status
 
-**0.2.0 development preview** is published on npm for all eight packages.
+The repository targets **0.2.1 development preview** for all eight packages.
+Version 0.2.0 remains published while the 0.2.1 release is verified.
 Install matching package versions; APIs remain experimental.
-See [0.2.0 changes, migration and acceptance limits](RELEASE-0.2.0.md).
+See [0.2.1 changes, migration and acceptance limits](RELEASE-0.2.1.md).
 
 See the [1.0 contract and acceptance policy](guides/v1-readiness.md). Current source is for integration
 evaluation; manual/device and production-host acceptance remain open. No stable version is announced.
@@ -79,7 +80,7 @@ Open [the standalone playground](http://127.0.0.1:4180). It uses browser import 
 In a separate application with an ESM-capable bundler, install matching released packages:
 
 ```sh
-npm install @acheron-grid/core@0.2.0 @acheron-grid/canvas@0.2.0
+npm install @acheron-grid/core@0.2.1 @acheron-grid/canvas@0.2.1
 ```
 
 Provide a container with explicit dimensions:

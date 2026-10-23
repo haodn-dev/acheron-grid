@@ -1,6 +1,6 @@
 {
   "name": "@acheron-grid/canvas",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Canvas browser renderer for Acheron Grid",
   "files": [
@@ -22,7 +22,7 @@
     "dev": "tsc -p tsconfig.json --watch"
   },
   "dependencies": {
-    "@acheron-grid/core": "0.2.0"
+    "@acheron-grid/core": "0.2.1"
   },
   "license": "Apache-2.0",
   "repository": {

@@ -1,6 +1,6 @@
 # @acheron-grid/mcp
 
-Version **0.2.0** is published on npm as a development preview. See [release notes and migration](../../RELEASE-0.2.0.md).
+Version **0.2.1 development preview**. See [release notes and migration](../../RELEASE-0.2.1.md).
 
 The npm 0.1.0 archive has a separate frozen reference. See [documentation versions](../../guides/versions.md).
 
@@ -9,12 +9,12 @@ Optional Model Context Protocol adapter. Core and Canvas do not depend on the MC
 ## Installation
 
 ```sh
-npm install @acheron-grid/mcp@0.2.0
+npm install @acheron-grid/mcp@0.2.1
 ```
 
 Install core/Canvas at the same version when used. For newer APIs, use a built source checkout and install matching packed artifacts; see [Getting started](../../guides/getting-started.md).
 
-The server currently advertises the legacy `serverInfo.version` value `0.1.0` during the MCP handshake, including when this package is installed at `0.2.0`. Use the installed package manifest or lockfile to identify the package version; the handshake field does not identify its npm artifact.
+The server currently advertises the legacy `serverInfo.version` value `0.1.0` during the MCP handshake, including when this package is installed at `0.2.1`. Use the installed package manifest or lockfile to identify the package version; the handshake field does not identify its npm artifact.
 
 ## Documentation server
 
@@ -25,7 +25,7 @@ npm run build
 node packages/mcp/src/cli.mjs
 ```
 
-Configure your MCP client to launch that command over stdio, using an absolute path. The npm 0.2.0 CLI exposes seven bundled package README snapshots as `acheron://docs/core`, `canvas`, `react`, `vue`, `markdown`, `export` and `charts`. The npm 0.1.0 archive exposes the original five resources; npm 0.2.0 includes export/charts resources. It exposes no grid data or write tools. stdout belongs to the protocol; no HTTP listener or authentication service is started.
+Configure your MCP client to launch that command over stdio, using an absolute path. The npm 0.2.1 CLI exposes seven bundled package README snapshots as `acheron://docs/core`, `canvas`, `react`, `vue`, `markdown`, `export` and `charts`. The npm 0.1.0 archive exposes the original five resources; npm 0.2.1 includes export/charts resources. It exposes no grid data or write tools. stdout belongs to the protocol; no HTTP listener or authentication service is started.
 
 ## Connect a host-owned grid
 
@@ -52,9 +52,9 @@ The application must authorize every schema/read/write request for the connected
 
 ## Tools
 
-The discovery and budget options below are changes included in 0.2.0.
+The discovery and budget options below are changes included in 0.2.1.
 
-- `grid_schema`: approved column keys/titles and visible row count by default. In 0.2.0, `schemaRowCount: 'omit'` excludes the count without reading it; a synchronous host callback can return a nonnegative safe integer or null to omit it. The callback must be pure. This policy covers schema only: disable discovery if positional cursors would disclose restricted cardinality.
+- `grid_schema`: approved column keys/titles and visible row count by default. In 0.2.1, `schemaRowCount: 'omit'` excludes the count without reading it; a synchronous host callback can return a nonnegative safe integer or null to omit it. The callback must be pure. This policy covers schema only: disable discovery if positional cursors would disclose restricted cardinality.
 - `grid_read`: `{ cells: [{ rowId, columnKey }] }`, 1–100 cells.
 - `grid_rows`: opt-in with `allowDiscovery: true`; `{ cursor?: number, limit?: number }` returns authorized `rowIds` and `nextCursor`. Limit defaults to 100 and cannot exceed 100. Requires both `discover` and `schema` authorization, plus row-level `read` approval for every returned ID. The CLI keeps discovery disabled.
 - `grid_update`: `{ cells: [{ rowId, columnKey, expected, value }] }`, 1–100 cells. Requires read/write host permission and core writable permission; host validation runs before one atomic `updateCells` call. Undo uses normal core history.
@@ -63,15 +63,15 @@ Stable IDs are resolved in the current visible view, not stale row indices. Rows
 
 ## Dataset revisions and application example
 
-The 0.2.0 option `getRevision: () => string` enables host-managed consistency. Return a non-empty opaque token of at most 256 characters, synchronously and without side effects. Never reuse a token within a session: change it on dataset replacement, data, query/order or permission changes, including undo. The adapter does not infer backend revisions.
+The 0.2.1 option `getRevision: () => string` enables host-managed consistency. Return a non-empty opaque token of at most 256 characters, synchronously and without side effects. Never reuse a token within a session: change it on dataset replacement, data, query/order or permission changes, including undo. The adapter does not infer backend revisions.
 
-With this option, schema/discovery/read responses include `revision`; all tools accept `expectedRevision`. Writes require it in addition to each cell's `expected` value. Discovery continuation (`cursor > 0`) also requires it. A mismatch fails before values or mutations are returned; a changing token during a read fails before returning its result. Version 0.2.0 write receipts retain the pre-write `checkedRevision` and include the post-write `revision`. If the provider fails or the post-write token exceeds the output budget, the committed receipt has `revisionUnavailable: true`: read again when possible, do not retry an already committed write. A bounded fallback receipt is checked before mutation. Without the option, successful response shapes remain unchanged, and `expectedRevision` is rejected rather than silently ignored.
+With this option, schema/discovery/read responses include `revision`; all tools accept `expectedRevision`. Writes require it in addition to each cell's `expected` value. Discovery continuation (`cursor > 0`) also requires it. A mismatch fails before values or mutations are returned; a changing token during a read fails before returning its result. Version 0.2.1 write receipts retain the pre-write `checkedRevision` and include the post-write `revision`. If the provider fails or the post-write token exceeds the output budget, the committed receipt has `revisionUnavailable: true`: read again when possible, do not retry an already committed write. A bounded fallback receipt is checked before mutation. Without the option, successful response shapes remain unchanged, and `expectedRevision` is rejected rather than silently ignored.
 
-## Structured tool errors — 0.2.0
+## Structured tool errors — 0.2.1
 
 Errors retain `isError: true` and text content. `structuredContent.error` adds `{code, message, retryable}`. Codes are `INVALID_ARGUMENT`, `ACCESS_DENIED`, `CELL_UNAVAILABLE`, `CONFLICT`, `BUDGET_EXCEEDED`, `TOOL_UNAVAILABLE`, `HOST_ERROR`, `VALIDATION_FAILED` and `OPERATION_FAILED`. Only `CONFLICT` is marked retryable, meaning reread/reconcile first; never blindly repeat a write. Host validation messages must be safe for the caller. Error codes are assigned at adapter boundaries, not inferred from arbitrary host error text.
 
-Implementation and CLI are TypeScript; build generates package declarations into dist. Source `.mjs` shims keep existing checkout examples working after build. The package factory name and existing options remain available; the new policy and error type are included in 0.2.0.
+Implementation and CLI are TypeScript; build generates package declarations into dist. Source `.mjs` shims keep existing checkout examples working after build. The package factory name and existing options remain available; the new policy and error type are included in 0.2.1.
 
 This is optimistic detection, not an immutable snapshot or remote transaction. The host must keep callbacks pure and cover all state changes in the token. Backend compare-and-swap and authorization remain mandatory for remote persistence.
 

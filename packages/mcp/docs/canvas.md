@@ -1,6 +1,6 @@
 # @acheron-grid/canvas
 
-Version **0.2.0** is published on npm as a development preview. See [release notes and migration](https://github.com/haodn-dev/acheron-grid/blob/main/RELEASE-0.2.0.md).
+Version **0.2.1 development preview**. See [release notes and migration](https://github.com/haodn-dev/acheron-grid/blob/main/RELEASE-0.2.1.md).
 
 The npm 0.1.0 archive has a separate frozen reference. See [documentation versions](https://github.com/haodn-dev/acheron-grid/blob/main/guides/versions.md).
 
@@ -9,18 +9,18 @@ An experimental Canvas browser renderer for the headless @acheron-grid/core engi
 ## Installation
 
 ```sh
-npm install @acheron-grid/canvas@0.2.0
+npm install @acheron-grid/canvas@0.2.1
 ```
 
-Install core/Canvas at the same version when used. For development changes after 0.2.0, use a built source checkout and install matching packed artifacts; see [Getting started](https://github.com/haodn-dev/acheron-grid/blob/main/guides/getting-started.md).
+Install core/Canvas at the same version when used. For development changes after 0.2.1, use a built source checkout and install matching packed artifacts; see [Getting started](https://github.com/haodn-dev/acheron-grid/blob/main/guides/getting-started.md).
 
-The source checkout includes the post-0.2.0 fix that omits empty virtualized accessibility header rows. That fix does not change the immutable npm 0.2.0 artifact. See [support evidence](https://github.com/haodn-dev/acheron-grid/blob/main/SUPPORT.md).
+The source checkout includes the post-0.2.1 fix that omits empty virtualized accessibility header rows. That fix does not change the immutable npm 0.2.1 artifact. See [support evidence](https://github.com/haodn-dev/acheron-grid/blob/main/SUPPORT.md).
 
-## Additions in 0.2.0
+## Additions in 0.2.1
 
-In 0.2.0: `grid.replaceText(search,replacement,options)` forwards bounded literal replacement through core editable/writable validation and one history command. `grid.getValue(rowIndex,columnKey)` reads visible coordinates; it does not replace server read authorization. Optional charts use `renderCell`; optional CSV/XLSX export uses the same copy permission pipeline.
+In 0.2.1: `grid.replaceText(search,replacement,options)` forwards bounded literal replacement through core editable/writable validation and one history command. `grid.getValue(rowIndex,columnKey)` reads visible coordinates; it does not replace server read authorization. Optional charts use `renderCell`; optional CSV/XLSX export uses the same copy permission pipeline.
 
-Image upload hooks now receive `onProgress(loaded,total?)` alongside `columnKey` and `signal`. The grid shows completed-file/byte progress and a cancel button. `mediaOptions.maxConcurrentUploads` defaults to four (1–100 allowed), scoped to one paste; host uploads must honor abort and implement timeouts. Every broadcast destination is checked for changed row identity/value before committing. Nested values remain shallow caller-owned references. The host owns durable URLs and orphan upload cleanup. These changes are included in npm 0.2.0.
+Image upload hooks now receive `onProgress(loaded,total?)` alongside `columnKey` and `signal`. The grid shows completed-file/byte progress and a cancel button. `mediaOptions.maxConcurrentUploads` defaults to four (1–100 allowed), scoped to one paste; host uploads must honor abort and implement timeouts. Every broadcast destination is checked for changed row identity/value before committing. Nested values remain shallow caller-owned references. The host owns durable URLs and orphan upload cleanup. These changes are included in npm 0.2.1.
 
 ## Current capabilities
 
@@ -37,7 +37,7 @@ Image upload hooks now receive `onProgress(loaded,total?)` alongside `columnKey`
 - TSV copy/paste, atomic local batches, delta undo/redo and typed events.
 - Per-column rich text with HTML or an optional host-provided Markdown adapter.
 
-Version 0.2.0 is available on npm as a development preview; The APIs in this guide are included in 0.2.0. Explicit read-only remote paging is available through core's `createAsyncDataSource`; the host controls loading. React and Vue lifecycle adapters are available in separate packages. The active cell has a bounded ARIA grid mirror; full screen-reader coverage has not been verified. A headless render-callback benchmark is available; end-to-end frame rate has not been verified.
+Version 0.2.1 is available on npm as a development preview; The APIs in this guide are included in 0.2.1. Explicit read-only remote paging is available through core's `createAsyncDataSource`; the host controls loading. React and Vue lifecycle adapters are available in separate packages. The active cell has a bounded ARIA grid mirror; full screen-reader coverage has not been verified. A headless render-callback benchmark is available; end-to-end frame rate has not been verified.
 
 ## Build from source
 
@@ -107,7 +107,7 @@ Each grid snapshots its theme independently. Canvas cells, headers, lines and se
 
 Pass `renderCell(context, cell)` to `createGrid`. Return `true` to replace the default body text, or `false` to draw the default text. Headers, grid lines and selection remain owned by the grid.
 
-For full-cell flash or background effects, use `renderCellBackground(context, cell)`. It receives the complete cell rectangle, including the value-direction arrow gutter, and runs after the formatted background but before content and indicators. `renderCell` retains its reserved content rectangle so text cannot overlap the arrow. Both callbacks are clipped to the visible cell/pane and have isolated Canvas state; background effects must respect reduced-motion preferences supplied by the host. This callback is available in npm 0.2.0.
+For full-cell flash or background effects, use `renderCellBackground(context, cell)`. It receives the complete cell rectangle, including the value-direction arrow gutter, and runs after the formatted background but before content and indicators. `renderCell` retains its reserved content rectangle so text cannot overlap the arrow. Both callbacks are clipped to the visible cell/pane and have isolated Canvas state; background effects must respect reduced-motion preferences supplied by the host. This callback is available in npm 0.2.1.
 
 ```ts
 renderCell: (ctx, cell) => {
@@ -488,9 +488,9 @@ See [Link popup and optional website metadata](https://github.com/haodn-dev/ache
 
 See [Other extension points and ownership](https://github.com/haodn-dev/acheron-grid/blob/main/guides/canvas-recipes.md#other-extension-points-and-ownership) in the advanced Canvas guide.
 
-## Paste special, visibility, numbers and localization (0.2.0)
+## Paste special, visibility, numbers and localization (0.2.1)
 
-See [Paste special, visibility, numbers and localization (0.2.0)](https://github.com/haodn-dev/acheron-grid/blob/main/guides/canvas-recipes.md#paste-special-visibility-numbers-and-localization-020) in the advanced Canvas guide.
+See [Paste special, visibility, numbers and localization (0.2.1)](https://github.com/haodn-dev/acheron-grid/blob/main/guides/canvas-recipes.md#paste-special-visibility-numbers-and-localization-020) in the advanced Canvas guide.
 
 ### Runtime motion settings
 
