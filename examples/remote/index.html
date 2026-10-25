@@ -41,7 +41,9 @@
       <div id="grid"></div>
       <p>
         Edits pause while saving. Reapply only after reviewing the server snapshot; save again to submit the new draft.
-        Reload refuses unsaved or uncertain writes.
+        Reload refuses unsaved or uncertain writes. This source example stores its synthetic mutation checkpoint in this
+        browser before sending. After a reload, review the recovered draft and choose Save / retry to resend the same
+        mutation; it never sends on startup.
       </p>
       <a href="/">Back to local playground</a>
     </main>

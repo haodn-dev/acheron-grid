@@ -3,11 +3,38 @@ import type { AsyncDataSourceOptions } from './async-data-source.js';
 import type { CellUpdate, DataRow, LocalViewOptions, RowId } from './data-source.js';
 import { LocalDataSource } from './data-source.js';
 import { createRemoteDataSource } from './remote-data-source.js';
-import type { RemoteMutation, RemoteSnapshot, RemoteWriteResult } from './remote-data-source.js';
+import type {
+  RemoteMutation,
+  RemoteSnapshot,
+  RemoteWriteResult,
+  RemoteMutationCheckpoint,
+} from './remote-data-source.js';
 import { jsonSnapshot } from './internal/remote-json.js';
 import { clipboardCellLimit } from './tsv.js';
 
 export type PagedRemoteWriteResult = RemoteWriteResult & { readonly total: number };
+export interface PagedRemoteMutationCheckpoint {
+  readonly version: 1;
+  readonly query: Readonly<LocalViewOptions>;
+  readonly total: number;
+  readonly positions: readonly { readonly rowIndex: number; readonly rowId: RowId }[];
+  readonly writer: RemoteMutationCheckpoint;
+}
+export interface PagedRemoteDraftSnapshot {
+  readonly version: 1;
+  readonly datasetId: string;
+  readonly revision: string;
+  readonly query: Readonly<LocalViewOptions>;
+  readonly columnKeys: readonly string[];
+  readonly total: number;
+  readonly changes: readonly {
+    readonly rowIndex: number;
+    readonly rowId: RowId;
+    readonly columnKey: string;
+    readonly previous: unknown;
+    readonly value: unknown;
+  }[];
+}
 export interface PagedRemoteDataSourceOptions<S> extends Pick<
   AsyncDataSourceOptions<S>,
   'rowCount' | 'pageSize' | 'maxPages' | 'maxConcurrentLoads' | 'maxPendingLoads' | 'query' | 'createAbortController'
@@ -29,6 +56,7 @@ export interface PagedRemoteDataSourceOptions<S> extends Pick<
     signal: S,
     query: Readonly<LocalViewOptions>,
   ) => Promise<PagedRemoteWriteResult>;
+  readonly persistMutation?: (checkpoint: PagedRemoteMutationCheckpoint) => void | Promise<void>;
 }
 
 /** Bounded page cache plus stable-ID drafts. Server owns global query ordering and write authority. */
@@ -42,7 +70,8 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
     new Set(keys).size !== keys.length ||
     keys.some((key) => typeof key !== 'string' || !key) ||
     !Number.isSafeInteger(maxPendingCells) ||
-    maxPendingCells < 1
+    maxPendingCells < 1 ||
+    (options.persistMutation !== undefined && typeof options.persistMutation !== 'function')
   )
     throw new TypeError('Invalid paged remote options.');
   const identity = Symbol('row identity'),
@@ -50,7 +79,8 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
   let revision: string | null = null,
     generation = 0,
     destroyed = false,
-    preparing = false;
+    preparing = false,
+    restoring = false;
   let writer: ReturnType<typeof createRemoteDataSource<S>> | undefined;
   let receiptTotal: number | undefined;
   let authoritativeTotal: number | null = null;
@@ -129,7 +159,7 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
   }
   function idle(): void {
     alive();
-    if (preparing || (writer && writer.status !== 'ready'))
+    if (preparing || restoring || (writer && writer.status !== 'ready'))
       throw new Error('Resolve the pending remote operation first.');
   }
   function pendingCount(staged = drafts): number {
@@ -176,9 +206,119 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
     writer = undefined;
     drafts = staged;
   }
+  function mutationCheckpoint(checkpoint: RemoteMutationCheckpoint): PagedRemoteMutationCheckpoint {
+    return jsonSnapshot({
+      version: 1,
+      query: cache.query,
+      total: cache.getRowCount(),
+      positions: [...drafts].map(([rowIndex, row]) => ({ rowIndex, rowId: row.id })),
+      writer: checkpoint,
+    });
+  }
+  function createWriter(snapshot: RemoteSnapshot) {
+    return createRemoteDataSource({
+      datasetId: options.datasetId,
+      columnKeys: keys,
+      maxRows: maxPendingCells,
+      maxPendingCells,
+      createAbortController: options.createAbortController,
+      createMutationId: options.createMutationId,
+      load: async () => snapshot,
+      ...(options.persistMutation
+        ? {
+            persistMutation: (checkpoint: RemoteMutationCheckpoint) =>
+              options.persistMutation!(mutationCheckpoint(checkpoint)),
+          }
+        : {}),
+      write: async (mutation, signal) => {
+        const result = jsonSnapshot(await options.write(mutation, signal, cache.query));
+        if (!result || !Number.isSafeInteger(result.total) || result.total < 0)
+          throw new TypeError('Invalid remote total.');
+        receiptTotal = result.total;
+        return result;
+      },
+    });
+  }
+  function exportMutation(): PagedRemoteMutationCheckpoint {
+    alive();
+    if (!writer) throw new Error('No uncertain paged mutation to export.');
+    return mutationCheckpoint(writer.exportMutation());
+  }
+  function restoreMutation(input: unknown): void {
+    idle();
+    if (revision !== null || writer || drafts.size) throw new Error('Restore a mutation into a new paged source.');
+    const checkpoint = jsonSnapshot(input) as Partial<PagedRemoteMutationCheckpoint> | null;
+    if (
+      !checkpoint ||
+      typeof checkpoint !== 'object' ||
+      Array.isArray(checkpoint) ||
+      checkpoint.version !== 1 ||
+      JSON.stringify(checkpoint.query) !== JSON.stringify(cache.query) ||
+      !Number.isSafeInteger(checkpoint.total) ||
+      checkpoint.total! < 0 ||
+      !Array.isArray(checkpoint.positions) ||
+      !checkpoint.positions.length ||
+      checkpoint.positions.length > maxPendingCells ||
+      !checkpoint.writer
+    )
+      throw new TypeError('Invalid paged mutation checkpoint.');
+    const positions = new Map<RowId, number>(),
+      indices = new Set<number>();
+    for (const position of checkpoint.positions) {
+      if (
+        !position ||
+        !Number.isSafeInteger(position.rowIndex) ||
+        position.rowIndex < 0 ||
+        position.rowIndex >= checkpoint.total! ||
+        !(
+          (typeof position.rowId === 'string' && !position.rowId.startsWith(unloadedPrefix)) ||
+          (typeof position.rowId === 'number' && Number.isFinite(position.rowId))
+        ) ||
+        positions.has(position.rowId) ||
+        indices.has(position.rowIndex)
+      )
+        throw new TypeError('Invalid checkpoint positions.');
+      positions.set(position.rowId, position.rowIndex);
+      indices.add(position.rowIndex);
+    }
+    const restored = createWriter(checkpoint.writer.snapshot);
+    try {
+      restored.restoreMutation(checkpoint.writer);
+      const edits = new Map<RowId, Map<string, unknown>>();
+      for (const change of restored.getPendingChanges()) {
+        if (!edits.has(change.rowId)) edits.set(change.rowId, new Map());
+        edits.get(change.rowId)!.set(change.columnKey, change.value);
+      }
+      if (restored.getRowCount() !== positions.size || edits.size !== positions.size)
+        throw new TypeError('Incomplete checkpoint cohort.');
+      const staged = new Map<number, Draft>();
+      for (const row of checkpoint.writer.snapshot.rows) {
+        if (!positions.has(row.id) || !edits.has(row.id)) throw new TypeError('Checkpoint row identity mismatch.');
+        staged.set(positions.get(row.id)!, {
+          id: row.id,
+          values: Object.freeze(Object.fromEntries(keys.map((key) => [key, row.values[key]]))),
+          edits: edits.get(row.id)!,
+        });
+      }
+      preparing = true;
+      try {
+        invalidate(checkpoint.total!);
+        alive();
+        revision = restored.revision;
+        authoritativeTotal = checkpoint.total!;
+        drafts = staged;
+        writer = restored;
+      } finally {
+        preparing = false;
+      }
+    } catch (error) {
+      restored.destroy();
+      throw error;
+    }
+  }
   async function commit(): Promise<void> {
     alive();
-    if (preparing) throw new Error('Remote operation is already running.');
+    if (preparing || restoring) throw new Error('Remote operation is already running.');
     if (!drafts.size) return;
     preparing = true;
     cache.cancel();
@@ -192,22 +332,7 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
         );
         const rows: DataRow[] = captured.map((row) => ({ id: row.id, values: row.values }));
         const snapshot = { datasetId: options.datasetId, revision, rows };
-        writer = createRemoteDataSource({
-          datasetId: options.datasetId,
-          columnKeys: keys,
-          maxRows: maxPendingCells,
-          maxPendingCells,
-          createAbortController: options.createAbortController,
-          createMutationId: options.createMutationId,
-          load: async () => snapshot,
-          write: async (mutation, signal) => {
-            const result = jsonSnapshot(await options.write(mutation, signal, cache.query));
-            if (!result || !Number.isSafeInteger(result.total) || result.total < 0)
-              throw new TypeError('Invalid remote total.');
-            receiptTotal = result.total;
-            return result;
-          },
-        });
+        writer = createWriter(snapshot);
         await writer.resync();
         if (token !== generation || destroyed) return;
         writer.setValues(
@@ -226,6 +351,105 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
       }
     } finally {
       preparing = false;
+    }
+  }
+  function exportDrafts(): PagedRemoteDraftSnapshot {
+    idle();
+    if (revision === null) throw new Error('Load a page before exporting drafts.');
+    return jsonSnapshot({
+      version: 1,
+      datasetId: options.datasetId,
+      revision,
+      query: cache.query,
+      columnKeys: keys,
+      total: cache.getRowCount(),
+      changes: [...drafts].flatMap(([rowIndex, row]) =>
+        [...row.edits].map(([columnKey, value]) => ({
+          rowIndex,
+          rowId: row.id,
+          columnKey,
+          previous: row.values[columnKey],
+          value,
+        })),
+      ),
+    });
+  }
+  async function restoreDrafts(input: unknown): Promise<void> {
+    idle();
+    if (drafts.size || writer) throw new Error('Restore drafts into an empty source.');
+    const snapshot = jsonSnapshot(input) as Partial<PagedRemoteDraftSnapshot> | null;
+    if (
+      !snapshot ||
+      typeof snapshot !== 'object' ||
+      Array.isArray(snapshot) ||
+      snapshot.version !== 1 ||
+      snapshot.datasetId !== options.datasetId ||
+      typeof snapshot.revision !== 'string' ||
+      !snapshot.revision ||
+      JSON.stringify(snapshot.columnKeys) !== JSON.stringify(keys) ||
+      JSON.stringify(snapshot.query) !== JSON.stringify(cache.query) ||
+      !Number.isSafeInteger(snapshot.total) ||
+      snapshot.total! < 0 ||
+      !Array.isArray(snapshot.changes) ||
+      snapshot.changes.length > maxPendingCells
+    )
+      throw new TypeError('Invalid or incompatible draft checkpoint.');
+    const seen = new Set<string>();
+    for (const change of snapshot.changes) {
+      if (
+        !change ||
+        typeof change !== 'object' ||
+        !Number.isSafeInteger(change.rowIndex) ||
+        change.rowIndex < 0 ||
+        change.rowIndex >= snapshot.total! ||
+        !keys.includes(change.columnKey) ||
+        !Object.hasOwn(change, 'previous') ||
+        !Object.hasOwn(change, 'value') ||
+        !(
+          (typeof change.rowId === 'string' && !change.rowId.startsWith(unloadedPrefix)) ||
+          (typeof change.rowId === 'number' && Number.isFinite(change.rowId))
+        )
+      )
+        throw new TypeError('Invalid draft checkpoint change.');
+      const key = JSON.stringify([change.rowIndex, change.columnKey]);
+      if (seen.has(key)) throw new TypeError('Duplicate draft checkpoint cell.');
+      seen.add(key);
+    }
+    const staged = new Map<number, Draft>();
+    const indices = new Map<RowId, number>();
+    const token = generation;
+    restoring = true;
+    try {
+      const changes = [...snapshot.changes].sort((a, b) => a.rowIndex - b.rowIndex);
+      let page = -1;
+      for (const change of changes) {
+        const offset = Math.floor(change.rowIndex / cache.pageSize) * cache.pageSize;
+        if (offset !== page) {
+          await cache.loadPage(offset);
+          page = offset;
+        }
+        if (destroyed || token !== generation) throw new Error('Draft restoration canceled.');
+        if (
+          revision !== snapshot.revision ||
+          cache.getRowCount() !== snapshot.total ||
+          cache.getRowId(change.rowIndex) !== change.rowId ||
+          JSON.stringify(cache.getValue(change.rowIndex, change.columnKey)) !== JSON.stringify(change.previous)
+        )
+          throw new Error('Draft checkpoint no longer matches the server.');
+        if (indices.has(change.rowId) && indices.get(change.rowId) !== change.rowIndex)
+          throw new TypeError('Duplicate draft row ID.');
+        const prior = staged.get(change.rowIndex);
+        const values =
+          prior?.values ??
+          Object.freeze(Object.fromEntries(keys.map((key) => [key, cache.getValue(change.rowIndex, key)])));
+        const edits = new Map(prior?.edits);
+        edits.set(change.columnKey, change.value);
+        staged.set(change.rowIndex, { id: change.rowId, values, edits });
+        indices.set(change.rowId, change.rowIndex);
+      }
+      drafts = staged;
+    } finally {
+      restoring = false;
     }
   }
   function resetQuery(next?: LocalViewOptions, total = 0): void {
@@ -247,7 +471,7 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
       return revision;
     },
     get status() {
-      return destroyed ? 'destroyed' : preparing ? 'committing' : (writer?.status ?? 'ready');
+      return destroyed ? 'destroyed' : restoring ? 'loading' : preparing ? 'committing' : (writer?.status ?? 'ready');
     },
     get lastError() {
       return writer?.lastError;
@@ -270,6 +494,10 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
     setValues,
     setValue: (rowIndex: number, columnKey: string, value: unknown) => setValues([{ rowIndex, columnKey, value }]),
     commit,
+    exportDrafts,
+    restoreDrafts,
+    exportMutation,
+    restoreMutation,
     getPendingChanges: () =>
       Object.freeze(
         [...drafts.values()].flatMap((row) =>

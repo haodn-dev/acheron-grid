@@ -29,7 +29,8 @@
       <div>
         <button id="previous">Previous page</button><button id="next">Next page</button
         ><button id="stage">Stage first row</button><button id="save">Save / retry</button
-        ><button id="reload">Reload server data</button>
+        ><button id="reload">Reload server data</button> <button id="checkpoint">Save draft locally</button
+        ><button id="restore">Restore saved draft</button>
       </div>
       <label
         >Server response
@@ -46,6 +47,12 @@
         <pre id="review"></pre>
         <button id="accept">Accept server and discard draft</button>
       </section>
+      <p>
+        Source builds journal this example's synthetic request before sending. Reload restores its query and dirty rows
+        without fetching an old revision; choose Save / retry to resend the original request. Save draft locally stores
+        this example's unsent data in this browser. After reloading, choose Restore saved draft; incompatible server
+        revisions are rejected. It does not save uncertain write receipts.
+      </p>
       <p>
         This local demo has process-local storage and receipt deduplication. Production authorization, durable
         transactions and storage belong to the host.

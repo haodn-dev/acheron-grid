@@ -6,6 +6,89 @@ async function expectFirstCell(page, text) {
   await expect(page.getByRole('gridcell')).toContainText(text);
 }
 
+test('paged draft checkpoint survives a browser reload and rejects a stale checkpoint without writing', async ({
+  page,
+}) => {
+  const writes = [];
+  page.on('request', (request) => {
+    if (request.url().endsWith('/paged/api/write')) writes.push(request);
+  });
+  await page.goto('/paged/');
+  await expect(page.locator('#status')).toContainText('ready');
+  await page.getByRole('grid').click({ position: { x: 100, y: 16 } });
+  await page.getByRole('grid').press('F2');
+  await page.getByRole('textbox').fill('Reloaded draft');
+  await page.getByRole('textbox').press('Enter');
+  await page.getByRole('button', { name: 'Save draft locally' }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('acheron-paged-draft-v1'))).not.toBeNull();
+  await page.reload();
+  await expect(page.locator('#status')).toContainText('0 pending cells');
+  await page.getByRole('button', { name: 'Restore saved draft' }).click();
+  await expect(page.locator('#status')).toContainText('1 pending cells');
+  await expectFirstCell(page, 'Reloaded draft');
+  expect(writes).toHaveLength(0);
+  await page.reload();
+  await expect(page.locator('#status')).toContainText('ready');
+  await page.getByRole('button', { name: 'Simulate external edit' }).click();
+  await page.getByRole('button', { name: 'Reload server data' }).click();
+  await expect(page.locator('#status')).toContainText('ready');
+  await page.getByRole('button', { name: 'Restore saved draft' }).click();
+  await expect(page.locator('#status')).toContainText('no longer matches');
+  await expect(page.locator('#status')).toContainText('0 pending cells');
+  expect(writes).toHaveLength(0);
+});
+
+test('paged uncertain request restores query and cohort after reload without loading the old revision', async ({
+  page,
+  request,
+}) => {
+  const writes = [],
+    loads = [],
+    errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('request', (req) => {
+    if (req.url().endsWith('/paged/api/write')) writes.push(req.postDataJSON());
+    if (req.url().includes('/paged/api/page?')) loads.push(req.url());
+  });
+  await page.goto('/paged/');
+  await expect(page.locator('#status')).toContainText('ready');
+  await page.getByLabel('Order').selectOption('desc');
+  await page.getByLabel('Search tasks').fill('Task 8');
+  await page.getByRole('button', { name: 'Apply server query' }).click();
+  await expectFirstCell(page, 'Task 8999');
+  await page.getByRole('grid').press('F2');
+  await page.getByRole('textbox').fill('Recovered paged value');
+  await page.getByRole('textbox').press('Enter');
+  await page.getByLabel('Server response').selectOption('drop');
+  await page.getByRole('button', { name: 'Save / retry' }).click();
+  await expect(page.locator('#status')).toContainText('disconnected');
+  const checkpoint = await page.evaluate(() => JSON.parse(localStorage.getItem('acheron-paged-mutation-v1')));
+  expect(checkpoint.writer.mutation).toEqual(writes[0].mutation);
+  expect(checkpoint.query).toEqual(writes[0].query);
+  const url =
+    '/paged/api/page?' + new URLSearchParams({ offset: '0', limit: '20', query: JSON.stringify(checkpoint.query) });
+  const before = await (await request.get(url)).json();
+  expect(before.total).toBe(checkpoint.total - 1);
+  const priorLoads = loads.length;
+  await page.reload();
+  await expect(page.locator('#status')).toContainText('disconnected');
+  await expect(page.locator('#status')).toContainText('1 pending cells');
+  await expectFirstCell(page, 'Recovered paged value');
+  await expect(page.getByLabel('Order')).toHaveValue('desc');
+  await expect(page.getByLabel('Search tasks')).toHaveValue('Task 8');
+  await expect(page.getByRole('button', { name: 'Next page' })).toBeDisabled();
+  expect(loads).toHaveLength(priorLoads);
+  expect(writes).toHaveLength(1);
+  await page.getByRole('button', { name: 'Save / retry' }).click();
+  await expect(page.locator('#status')).toContainText('0 pending cells');
+  await expect(page.locator('#status')).toContainText(before.total + ' records');
+  expect(writes).toHaveLength(2);
+  expect(writes[1]).toEqual(writes[0]);
+  expect((await (await request.get(url)).json()).revision).toBe(before.revision);
+  expect(await page.evaluate(() => localStorage.getItem('acheron-paged-mutation-v1'))).toBeNull();
+  expect(errors).toEqual([]);
+});
+
 test('paged HTTP writes survive eviction, retry exactly and query the server globally', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));

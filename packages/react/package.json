@@ -1,6 +1,6 @@
 {
   "name": "@acheron-grid/react",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "type": "module",
   "description": "React lifecycle adapter for Acheron Grid",
   "files": [
@@ -21,7 +21,7 @@
     "dev": "tsc -p tsconfig.json --watch"
   },
   "dependencies": {
-    "@acheron-grid/canvas": "0.2.1"
+    "@acheron-grid/canvas": "0.3.0"
   },
   "license": "Apache-2.0",
   "repository": {

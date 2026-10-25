@@ -6,8 +6,16 @@ Stage an edit, then save. Edits pause during loading/commit. A rejected response
 
 The lost-receipt mode applies the write, stores its receipt, then returns HTTP 503 to model a gateway failure after commit. The client cannot infer whether the write succeeded. Explicit retry sends the same mutation ID/payload, and the backend returns the stored receipt without advancing its revision again. Browsers may transparently retry connection resets, so a 503 makes this demonstration observable and deterministic.
 
+Version 0.3.0 adds a host-owned mutation journal. This example uses localStorage for
+synthetic data: `persistMutation` saves the checkpoint before HTTP write; a storage failure prevents
+transport. Reload restores the original bounded snapshot and uncertain request without loading a newer
+revision or submitting automatically. Choose Save / retry to resend the original ID/payload. Accepted or
+definitely rejected requests and explicit conflict adoption remove the journal. Corrupt checkpoints are
+retained for manual review; they are not silently discarded or submitted. Unsent drafts before commit
+are a separate persistence contract. Handle storage quota/privacy/atomicity in a real host.
+
 The backend validates dataset/row/field/value bounds, checks expected revision and previous values, preflights the entire batch and rejects reuse of an ID with a different payload. Requests cap at 16 KiB/100 changes; title values cap at 200 characters and receipts cap at 100. It binds through the loopback playground server and denies cross-origin JSON writes. Simulation endpoints are demonstration controls, never production endpoints.
 
-For production, implement principal authentication, per-dataset/row/field authorization, durable atomic storage/CAS and durable idempotency receipts, transport deadlines and safe error messages. In-memory receipts cannot protect retries across server restarts. Add endpoint integration evidence before claiming backend support. Paged writes, persisted drafts across reload and concurrent editing during commit are separate contracts and are not implemented here.
+For production, implement principal authentication, per-dataset/row/field authorization, durable atomic storage/CAS and durable idempotency receipts, transport deadlines and safe error messages. In-memory receipts cannot protect retries across server restarts. Add endpoint integration evidence before claiming backend support. Paged mutation recovery, unsent-draft persistence and concurrent editing during commit are separate contracts and are not implemented here.
 
 The playground suite exercises pending, rejection, conflict review, idempotent retry and axe scans at desktop/mobile viewport sizes. Browser emulation and axe do not establish screen-reader, physical touch or OS clipboard support. See the [manual acceptance protocol](../../guides/manual-validation.md).

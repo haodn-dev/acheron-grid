@@ -67,6 +67,95 @@ Successful commit does **not** fetch the dataset or even automatically reload a 
 for the visible working set. A write may change the query total or ordering, so it invalidates all cached
 pages rather than pretending to patch a globally sorted query locally.
 
+## Draft checkpoints (0.3.0 preview)
+
+Version 0.3.0 adds `exportDrafts()` and `restoreDrafts(unknown)`. These methods are not
+available in the immutable 0.2.1 artifacts. The checkpoint is versioned JSON containing dataset ID,
+revision, query, column keys/order, total, source positions, stable row IDs and previous/new values.
+The host owns storage, privacy, quota errors and when to save; core has no browser/storage dependency.
+
+```ts
+import type { createPagedRemoteDataSource, PagedRemoteDraftSnapshot } from '@acheron-grid/core';
+
+export function saveDraft(source: ReturnType<typeof createPagedRemoteDataSource<AbortSignal>>): string {
+  const checkpoint: PagedRemoteDraftSnapshot = source.exportDrafts();
+  return JSON.stringify(checkpoint);
+}
+
+export async function restoreDraft(
+  source: ReturnType<typeof createPagedRemoteDataSource<AbortSignal>>,
+  stored: string,
+): Promise<void> {
+  await source.restoreDrafts(JSON.parse(stored));
+}
+```
+
+Export requires a loaded idle source; definitely rejected drafts can be exported, but in-flight,
+uncertain or conflicting writes must be resolved first. This is not an idempotency/receipt log.
+Restore requires no existing drafts/writer and an exactly matching query and column-key order.
+It validates the bounded JSON payload, then loads affected pages sequentially (even with a one-page
+cache) and checks server revision/total, stable IDs and serialized previous values. Only after all
+checks succeed are the drafts installed together. Mismatch, transport error, cancel or destroy installs
+no drafts; pages loaded during validation may remain cached. Changed query/schema/revision needs
+explicit host reconciliation, not automatic positional migration.
+
+Restore before mounting the engine, or remount/clear history afterward. Direct source restore, like
+source setters, does not enforce application permissions or column validators. Treat storage as
+untrusted, recheck current policies/values before committing and always enforce authorization/validation
+on the server. Clear the stored checkpoint after an accepted commit; retain it when storage/restore
+fails so the user can recover it. The runnable paged example has explicit save/restore buttons and uses
+localStorage only for synthetic demo data; it does not autosave or restore on startup.
+
+## Mutation recovery (0.3.0 preview)
+
+Version 0.3.0 adds `PagedRemoteMutationCheckpoint`, optional `persistMutation`,
+`exportMutation()` and `restoreMutation(unknown)`. These are not in immutable npm 0.2.1 artifacts.
+The paged envelope contains version 1, the exact query, original total and unique source-index/stable-ID
+positions around the bounded writer's original dirty-cohort snapshot and immutable request. It retains
+only dirty rows, not the entire dataset or page cache.
+
+```ts
+import type { createPagedRemoteDataSource, PagedRemoteMutationCheckpoint } from '@acheron-grid/core';
+
+export function persistPagedMutation(key: string, checkpoint: PagedRemoteMutationCheckpoint): void {
+  localStorage.setItem(key, JSON.stringify(checkpoint));
+}
+
+export function recoverPagedMutation(
+  key: string,
+  source: ReturnType<typeof createPagedRemoteDataSource<AbortSignal>>,
+): boolean {
+  const stored = localStorage.getItem(key);
+  if (stored === null) return false;
+  source.restoreMutation(JSON.parse(stored));
+  return true;
+}
+```
+
+Configure `persistMutation: checkpoint => persistPagedMutation(key, checkpoint)` at construction.
+Scope the key/checkpoint to the authenticated principal and dataset; authenticate before displaying
+cached data. The hook is awaited before each write/retry. Storage errors prevent transport; destroying
+the source while awaiting storage prevents a late send. As before, `cancel()` cancels page loads and
+does not cancel an uncertain write. Core does not select storage or delete journals.
+
+On startup, create a new source with the same authorized query and schema, then restore **before**
+loading pages or mounting the engine. The loader must not fetch a newer revision first: the server may
+already have accepted the original mutation. Restore validates bounded JSON, query/schema, writer
+request, unique positions/IDs and complete dirty-cohort coverage before installing anything. It restores
+the optimistic dirty rows and original total in disconnected state; placeholders for other rows remain
+unloaded. Show this as recovery data, not a fresh server snapshot. No load/write or new mutation ID is
+created. Block editing/navigation until the user chooses `commit()` to retry the exact request/query.
+
+Accepted receipts use the existing validator, adopt the new query total and invalidate all pages before
+the host reloads its visible working set. A write can remove rows from the query or reorder them.
+Rejected/conflict results keep their existing correction/adoption paths; reconcile/remount history and
+reload the page before editing a rejected restored cohort. Clear the journal only after a definite
+accepted/rejected result or explicit server adoption. Keep it after transport/receipt/storage errors.
+The HTTP example restores its query controls and demonstrates lost ACK + reload + retry with unchanged
+server revision on replay. Its localStorage data is synthetic and server receipts are process-local;
+production authorization, durable CAS/receipts, storage privacy/atomicity and retention remain host-owned.
+See [the bounded writer recovery contract](editing-and-remote.md#uncertain-mutation-recovery-030-preview).
+
 ## Query, identity and lifecycle
 
 `setQuery(criteria, rowCount?)` and `reset(rowCount?)` validate before clearing pages/revision and cancel
@@ -85,6 +174,6 @@ The example uses a bounded page adapter and remounts. Infinite viewport hosts sh
 clear stale history/row metadata and explicitly handle identity changes; positional placeholders are not
 a substitute for stable IDs. Do not apply local sort/filter to a partly loaded dataset.
 
-Draft persistence across reload, editing during commit, row insertion/deletion transport, automatic
-resync after server changes and production backend certification are outside this adapter. Memory bounds
+Editing during commit, row insertion/deletion transport, automatic resync after
+server changes and production backend certification are separate contracts. Memory bounds
 cover page/draft counts, not arbitrary value byte sizes or exact browser heap usage.

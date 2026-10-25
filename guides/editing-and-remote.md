@@ -127,4 +127,57 @@ Accepted deltas preserve row identity/order and update only the supplied cells. 
 
 For conflict review, capture `getPendingChanges()` and engine identity **before** `acceptServer()`, refresh afterward, then reapply chosen changes through engine validation by finding each stable row ID in the new view. Do not blindly replay previous coordinates or overwrite newer server data. Undo during unsent drafts can remove a pending value by restoring its original value. Engine refresh after accepted/server/resync snapshots clears old history and pending cut; saved metadata follows captured IDs. Refresh is application-owned, never automatic from the transport cache.
 
-Subscribe to status changes for UI; `lastError`, `revision`, `pendingCellCount` and `conflict` expose the lifecycle. Observer errors are isolated and bounded. The host owns transport deadlines, backoff, online/offline scheduling, connectivity and retry controls. This module does not silently discard uncertain writes, choose winners, merge edits across users or persist drafts through process reload. The existing [remote save example](../examples/remote-save.md) remains a separate host-owned recipe for a fixed local draft.
+Subscribe to status changes for UI; `lastError`, `revision`, `pendingCellCount` and `conflict` expose the lifecycle. Observer errors are isolated and bounded. The host owns transport deadlines, backoff, online/offline scheduling, connectivity and retry controls. This module does not silently discard uncertain writes, choose winners or merge edits across users. The existing [remote save example](../examples/remote-save.md) remains a separate host-owned recipe for a fixed local draft.
+
+## Uncertain mutation recovery (0.3.0 preview)
+
+Version 0.3.0 adds `RemoteMutationCheckpoint`, `exportMutation()` and
+`restoreMutation(unknown)` to the bounded remote source. These are not in the immutable npm 0.2.1
+artifacts and are separate from paged draft storage. A version 1 checkpoint contains the original
+bounded snapshot, configured column keys/order and the exact immutable mutation ID/payload. It is
+data, not proof of authorization or successful server persistence.
+
+Set optional `persistMutation(checkpoint)` at construction to save the checkpoint in host-owned storage.
+Core awaits it before every transport write, including retry. Storage rejection/quota failure prevents
+the write and retains the same request for retry. Disconnect/destroy while awaiting storage prevents a
+later send. The callback must finish only when the host's required durability has been reached; core
+does not choose a storage system or clear records. The default path has no persistence callback.
+
+```ts
+import type { createRemoteDataSource, RemoteMutationCheckpoint } from '@acheron-grid/core';
+
+export function persistMutation(checkpoint: RemoteMutationCheckpoint): void {
+  localStorage.setItem('people-mutation-v1', JSON.stringify(checkpoint));
+}
+
+export function recoverMutation(source: ReturnType<typeof createRemoteDataSource<AbortSignal>>): boolean {
+  const stored = localStorage.getItem('people-mutation-v1');
+  if (stored === null) return false;
+  source.restoreMutation(JSON.parse(stored));
+  return true;
+}
+```
+
+Pass `persistMutation` as the construction option. On startup, create a new source and call
+`recoverMutation(source)` **before** any `resync()` or engine mount. If it returns false, load normally.
+If true, show the recovered optimistic draft as disconnected/read-only and let an authorized user choose
+`commit()` to retry. Restoration does not load the server, send a request or create a new ID: the server
+may already have advanced its revision after accepting the original write. Exact retry must retrieve
+the durable receipt instead of applying the mutation twice. Continue to generate globally unique IDs
+for subsequent new writes.
+
+Restoration validates JSON limits, version/schema/dataset/revision, row IDs/columns, previous values,
+duplicate cells and row/pending budgets before installing anything. It requires a new, unloaded source;
+it never overwrites working drafts. Malformed input leaves the source unchanged. Export is available
+only while there is an in-flight/uncertain request; conflicts need explicit review/adoption.
+
+Clear the host journal only after a validated accepted or definite rejected result, or explicit conflict
+adoption. A storage cleanup failure should be reported after reconciling engine identity/history; an old
+accepted journal can still be retried safely if server idempotency is durable. Retain journals after
+transport/receipt failures. Rejected drafts can be corrected in the current session but unsent-draft
+storage is a separate contract. Corrupt storage needs explicit recovery/review, not blind deletion.
+The HTTP example demonstrates reload and exact retry with synthetic localStorage data; its in-memory
+server receipts do not provide restart durability or production authorization. Host policies and the
+server must authorize/validate writes again; never trust storage to grant permissions. Checkpoint export
+captures the bounded working snapshot, so its time/size scales with rows and columns and must fit the
+same JSON payload limit. Paged-query recovery has a separate [paged checkpoint contract](paged-remote.md#mutation-recovery-030-preview); editing during commit remains separate work.

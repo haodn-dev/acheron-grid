@@ -4,7 +4,7 @@
 
 A TypeScript data grid with a headless core, Canvas rendering, and React and Vue adapters. The engine manages data commands, selection, permissions, layout and history; Canvas adds the browser interface.
 
-[Live demo and documentation](https://acheron-grid.haoduong.dev/) · [Getting started](guides/getting-started.md) · [Integration guide](guides/integration.md) · [Release notes](RELEASE-0.2.1.md)
+[Live demo and documentation](https://acheron-grid.haoduong.dev/) · [Getting started](guides/getting-started.md) · [Integration guide](guides/integration.md) · [Release notes](RELEASE-0.3.0.md)
 
 [![Acheron Grid standalone playground showing frozen headers, editable records, status labels, checkboxes and avatars](assets/readme/playground.png)](https://acheron-grid.haoduong.dev/)
 
@@ -14,9 +14,9 @@ All features and optional modules are open source and free to use. There are no 
 
 ## Status
 
-**0.2.1 development preview is published on npm for all eight packages.** Install matching Acheron package versions. APIs remain experimental; this is not a stable 1.0 release.
+**0.3.0 development preview is being verified for all eight packages.** npm 0.2.1 remains published until this candidate completes release verification. Install matching Acheron package versions. APIs remain experimental; this is not a stable 1.0 release.
 
-The patch includes the virtualized-header accessibility correction and audited package documentation. Public exports and type signatures are unchanged from 0.2.0. See [changes and migration](RELEASE-0.2.1.md), the [changelog](CHANGELOG.md) and the [1.0 acceptance policy](guides/v1-readiness.md).
+The candidate adds unsent draft checkpoints and exact remote mutation recovery with host persistence before transport. Existing APIs/export paths remain; the new APIs are additive. See [changes and migration](RELEASE-0.3.0.md), the [changelog](CHANGELOG.md) and the [1.0 acceptance policy](guides/v1-readiness.md).
 
 The [v0.2.1 release workflow](https://github.com/haodn-dev/acheron-grid/actions/runs/39924579099) passed Node 22/24, Chromium, portable Firefox/WebKit, independent package consumers and exact npm-version consumers. All eight npm artifacts have trusted-publishing provenance. Manual screen-reader, physical-device and production-host acceptance remain open.
 
@@ -31,7 +31,7 @@ The [package references](#packages) describe each module. The [practical guide](
 Install core and Canvas in an ESM application with a bundler:
 
 ```sh
-npm install @acheron-grid/core@0.2.1 @acheron-grid/canvas@0.2.1
+npm install @acheron-grid/core@0.3.0 @acheron-grid/canvas@0.3.0
 ```
 
 Give the container explicit dimensions:
@@ -69,9 +69,9 @@ Canvas requires a browser with Canvas 2D and ResizeObserver. Core can run withou
 For React or Vue, add the matching adapter and supply its framework peer dependency:
 
 ```sh
-npm install @acheron-grid/react@0.2.1 react react-dom
+npm install @acheron-grid/react@0.3.0 react react-dom
 # Or, for Vue:
-npm install @acheron-grid/vue@0.2.1 vue
+npm install @acheron-grid/vue@0.3.0 vue
 ```
 
 Follow the [React](packages/react/README.md) or [Vue](packages/vue/README.md) mounting example. The adapters do not bundle their frameworks; React 18.3/19 and Vue 3.5 within Vue 3 are supported peer ranges.
@@ -159,7 +159,7 @@ Documentation checks validate local Markdown links, heading anchors and image ta
 
 Package references and guides in this repository are canonical consumer documentation. The website imports identified snapshots; archived channels retain their released API scope. The original npm 0.1.0 and 0.2.0 artifacts/tags remain available and immutable.
 
-Use [release notes](RELEASE-0.2.1.md) for package migration, [documentation versions](guides/versions.md) for channel selection and [release procedures](RELEASING.md) for publishing. [Contributing](CONTRIBUTING.md) describes bug reports and contributions.
+Use [release notes](RELEASE-0.3.0.md) for package migration, [documentation versions](guides/versions.md) for channel selection and [release procedures](RELEASING.md) for publishing. [Contributing](CONTRIBUTING.md) describes bug reports and contributions.
 
 ## Limits and planned work
 

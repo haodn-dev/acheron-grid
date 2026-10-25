@@ -2,7 +2,15 @@
 
 ## Unreleased
 
-No changes after 0.2.1 are recorded yet.
+No changes after the 0.3.0 candidate are recorded yet.
+
+## 0.3.0 — Development preview — 2026-10-25
+
+- Extend exact mutation recovery to paged sources with query/total/stable-position validation and a dirty-cohort journal. The HTTP example restores recovery data without page loads or automatic writes; explicit retry preserves request/query and handles changed query totals. Included in the 0.3.0 candidate.
+
+- Add bounded remote mutation checkpoints and a host persistence hook awaited before transport. Restore validates the original snapshot/request and preserves exact retry across reload. Included in the 0.3.0 candidate. Includes HTTP/localStorage recovery example and regression coverage.
+
+- Add paged remote JSON draft checkpoints with bounded validation and atomic restore after verifying affected server pages. Includes explicit browser save/restore in the paged example. Included in the 0.3.0 candidate. Uncertain mutations/receipts are not persisted.
 
 ## 0.2.1 — Development preview — 2026-10-23
 
