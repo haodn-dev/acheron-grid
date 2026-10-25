@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-No changes after the 0.3.0 candidate are recorded yet.
+- Add an internal headless grouping foundation for ordered retained rows, scalar keys and count/sum snapshots, with cooperative preparation through the existing bulk runner. This is not a public grouping API or a grouped Canvas view.
 
 ## 0.3.0 — Development preview — 2026-10-25
 
