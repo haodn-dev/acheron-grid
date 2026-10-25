@@ -105,6 +105,13 @@ try {
   const remoteFile = directory + '/remote-lifecycle.ts';
   await writeFile(remoteFile, remoteCode);
   files.push(remoteFile);
+  const recoveryCode = [...remoteGuide.matchAll(/```ts\n([\s\S]*?)```/g)].find(([, code]) =>
+    code.includes('RemoteMutationCheckpoint'),
+  )?.[1];
+  assert.ok(recoveryCode);
+  const recoveryFile = directory + '/remote-recovery.ts';
+  await writeFile(recoveryFile, recoveryCode);
+  files.push(recoveryFile);
   const core = await readFile('packages/core/README.md', 'utf8');
   const exportGuide = await readFile('packages/export/README.md', 'utf8');
   const htmlCode = [...exportGuide.matchAll(/```ts\n([\s\S]*?)```/g)].find(([, code]) =>
@@ -171,7 +178,7 @@ try {
   const publicCatalog = await readFile('guides/core-api.md', 'utf8');
   for (const contract of Object.values(coreExportContracts)) assert.ok(publicCatalog.includes(contract));
   console.log(
-    'PASS: Markdown links/tables/images, document hashes, seven TypeScript examples, executable HTML/core lifecycle and core/Canvas API catalogs.',
+    'PASS: Markdown links/tables/images, document hashes, eight TypeScript examples, executable HTML/core lifecycle and core/Canvas API catalogs.',
   );
 } finally {
   assert.ok(resolve(directory).startsWith(resolve('test-results') + sep));

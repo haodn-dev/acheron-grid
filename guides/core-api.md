@@ -751,6 +751,7 @@ The root and headless alias expose the same API. Source interfaces use their own
 | RemoteDelta | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | RemoteChange | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | RemoteMutation | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| RemoteMutationCheckpoint | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | RemoteWriteResult | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | RemoteStatus | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | LiveUpdate | Type | live-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
@@ -957,6 +958,8 @@ lastError: unknown
 getPendingChanges: () => readonly RemoteChange[]
 conflict: RemoteSnapshot | null
 commit: () => Promise<void>
+exportMutation: () => RemoteMutationCheckpoint
+restoreMutation: (input: unknown) => void
 resync: (discardPending?: boolean) => Promise<void>
 reconnect: () => Promise<void>
 disconnect: () => void
@@ -980,6 +983,8 @@ destroy: () => void
 | getPendingChanges | Return frozen remote draft entries keyed by stable row ID and column key. Preserve these before explicitly accepting a conflicting server snapshot. |
 | conflict | Validated remote server snapshot on conflict, or null. Draft values remain in the cache until explicit adoption. |
 | commit | Commit one immutable mutation against expectedRevision. Bounded remote concurrent calls share the promise; paged concurrent calls reject. Lost responses retain the exact request for retry. Acceptance clears drafts; paged acceptance invalidates pages without fetching them. Rejection retains correctable drafts; conflict blocks editing. |
+| exportMutation | Source preview: export a bounded immutable JSON checkpoint of an in-flight/uncertain bounded remote request, original snapshot and column schema. Preserve the exact mutation ID/payload; conflicts require their own resolution. |
+| restoreMutation | Source preview: validate a checkpoint into a new bounded remote source and atomically restore its optimistic cache plus exact uncertain request, disconnected. Does not load/write or create a new mutation ID. Retry only through commit; storage is not authorization. |
 | resync | Load a fresh bounded remote snapshot. Unsent drafts require explicit discardPending=true; an uncertain mutation cannot be discarded. Capture engine identity first and refresh afterward. |
 | reconnect | Remote resync without discarding drafts; retry an uncertain commit first. Transport reconnection itself belongs to the host. |
 | disconnect | Remote: abort/invalidate the active generation but retain drafts and uncertain mutation for exact retry. Live: mark the live source stale and discard buffered updates; does not itself reconnect transport or remove retained rows. |
@@ -1156,6 +1161,8 @@ export interface RemoteDataSourceOptions<S> {
   readonly load: (signal: S) => Promise<RemoteSnapshot>;
   /** Server must check the revision and apply the complete batch atomically, deduplicated by mutationId. */
   readonly write: (mutation: RemoteMutation, signal: S) => Promise<RemoteWriteResult>;
+  /** Complete host-owned durable storage before transport. Retried with the same immutable mutation. */
+  readonly persistMutation?: (checkpoint: RemoteMutationCheckpoint) => void | Promise<void>;
 }
 ```
 
@@ -1200,6 +1207,17 @@ export interface RemoteMutation {
   readonly mutationId: string;
   readonly expectedRevision: string;
   readonly changes: readonly RemoteChange[];
+}
+```
+
+### Type RemoteMutationCheckpoint
+
+```ts
+export interface RemoteMutationCheckpoint {
+  readonly version: 1;
+  readonly columnKeys: readonly string[];
+  readonly snapshot: RemoteSnapshot;
+  readonly mutation: RemoteMutation;
 }
 ```
 

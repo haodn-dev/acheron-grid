@@ -20,6 +20,12 @@ export interface RemoteMutation {
   readonly expectedRevision: string;
   readonly changes: readonly RemoteChange[];
 }
+export interface RemoteMutationCheckpoint {
+  readonly version: 1;
+  readonly columnKeys: readonly string[];
+  readonly snapshot: RemoteSnapshot;
+  readonly mutation: RemoteMutation;
+}
 export interface RemoteDelta {
   readonly datasetId: string;
   readonly baseRevision: string;
@@ -43,6 +49,8 @@ export interface RemoteDataSourceOptions<S> {
   readonly load: (signal: S) => Promise<RemoteSnapshot>;
   /** Server must check the revision and apply the complete batch atomically, deduplicated by mutationId. */
   readonly write: (mutation: RemoteMutation, signal: S) => Promise<RemoteWriteResult>;
+  /** Complete host-owned durable storage before transport. Retried with the same immutable mutation. */
+  readonly persistMutation?: (checkpoint: RemoteMutationCheckpoint) => void | Promise<void>;
 }
 
 /** Bounded optimistic snapshot cache. Engine validation/history stay synchronous; transport stays host-owned. */
@@ -57,7 +65,8 @@ export function createRemoteDataSource<S>(options: RemoteDataSourceOptions<S>) {
     !keys.size ||
     keys.size !== options.columnKeys.length ||
     [...keys].some((key) => typeof key !== 'string' || !key) ||
-    ![maxRows, maxPendingCells].every((n) => Number.isSafeInteger(n) && n > 0)
+    ![maxRows, maxPendingCells].every((n) => Number.isSafeInteger(n) && n > 0) ||
+    (options.persistMutation !== undefined && typeof options.persistMutation !== 'function')
   )
     throw new TypeError('Invalid remote source options.');
   let source = new LocalDataSource<Record<string, unknown>>([], (_, i) => i);
@@ -204,6 +213,90 @@ export function createRemoteDataSource<S>(options: RemoteDataSourceOptions<S>) {
     emit('disconnected');
     current?.abort();
   }
+  function exportMutation(): RemoteMutationCheckpoint {
+    alive();
+    if (!request || status === 'conflict') throw new Error('No uncertain mutation to export.');
+    const previous = new Map(
+      request.changes.map((change) => [JSON.stringify([change.rowId, change.columnKey]), change.previous]),
+    );
+    const rows = Array.from({ length: source.getRowCount() }, (_, index) => {
+      const id = source.getRowId(index);
+      return {
+        id,
+        values: Object.fromEntries(
+          [...keys].map((key) => {
+            const cell = JSON.stringify([id, key]);
+            return [key, previous.has(cell) ? previous.get(cell) : source.getValue(index, key)];
+          }),
+        ),
+      };
+    });
+    return jsonSnapshot({
+      version: 1,
+      columnKeys: [...keys],
+      snapshot: { datasetId: options.datasetId, revision: request.expectedRevision, rows },
+      mutation: request,
+    });
+  }
+  function restoreMutation(input: unknown): void {
+    alive();
+    if (active || revision !== null || pending.size || request || status !== 'disconnected')
+      throw new Error('Restore a mutation into a new remote source.');
+    const checkpoint = jsonSnapshot(input) as Partial<RemoteMutationCheckpoint> | null;
+    if (
+      !checkpoint ||
+      typeof checkpoint !== 'object' ||
+      Array.isArray(checkpoint) ||
+      checkpoint.version !== 1 ||
+      JSON.stringify(checkpoint.columnKeys) !== JSON.stringify([...keys])
+    )
+      throw new TypeError('Invalid mutation checkpoint.');
+    const valid = readSnapshot(checkpoint.snapshot!);
+    const mutation = checkpoint.mutation;
+    if (
+      !mutation ||
+      mutation.datasetId !== options.datasetId ||
+      typeof mutation.mutationId !== 'string' ||
+      !mutation.mutationId ||
+      mutation.expectedRevision !== valid.snapshot.revision ||
+      Object.keys(mutation).length !== 4 ||
+      !Array.isArray(mutation.changes) ||
+      !mutation.changes.length ||
+      mutation.changes.length > maxPendingCells
+    )
+      throw new TypeError('Invalid checkpoint mutation.');
+    const indices = new Map(valid.snapshot.rows.map((row, index) => [row.id, index]));
+    const staged = new Map<string, RemoteChange>();
+    const updates: CellUpdate[] = [];
+    for (const change of mutation.changes) {
+      if (
+        !change ||
+        !indices.has(change.rowId) ||
+        !keys.has(change.columnKey) ||
+        !Object.hasOwn(change, 'previous') ||
+        !Object.hasOwn(change, 'value') ||
+        Object.keys(change).length !== 4
+      )
+        throw new TypeError('Invalid checkpoint change.');
+      const rowIndex = indices.get(change.rowId)!;
+      const key = JSON.stringify([change.rowId, change.columnKey]);
+      if (
+        staged.has(key) ||
+        JSON.stringify(valid.source.getValue(rowIndex, change.columnKey)) !== JSON.stringify(change.previous)
+      )
+        throw new TypeError('Duplicate or mismatched checkpoint change.');
+      staged.set(key, change);
+      updates.push({ rowIndex, columnKey: change.columnKey, value: change.value });
+    }
+    valid.source.setValues(updates);
+    source = valid.source;
+    rowIndices = indices;
+    revision = valid.snapshot.revision;
+    pending = staged;
+    request = mutation;
+    lastError = undefined;
+    emit('disconnected');
+  }
   function resync(discardPending = false): Promise<void> {
     alive();
     if (typeof discardPending !== 'boolean') throw new TypeError('Invalid resync option.');
@@ -260,8 +353,12 @@ export function createRemoteDataSource<S>(options: RemoteDataSourceOptions<S>) {
       abort = options.createAbortController();
     controller = abort;
     emit('committing');
+    const send = () =>
+      token === generation && status !== 'destroyed' ? options.write(mutation, abort.signal) : undefined;
     const operation = Promise.resolve()
-      .then(() => options.write(mutation, abort.signal))
+      .then(() =>
+        options.persistMutation ? Promise.resolve(options.persistMutation(exportMutation())).then(send) : send(),
+      )
       .then((result) => {
         if (token !== generation || status === 'destroyed') return;
         if (
@@ -343,6 +440,8 @@ export function createRemoteDataSource<S>(options: RemoteDataSourceOptions<S>) {
       return conflict ?? null;
     },
     commit,
+    exportMutation,
+    restoreMutation,
     resync,
     reconnect: () => resync(),
     disconnect,

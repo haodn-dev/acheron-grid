@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-No changes after 0.2.1 are recorded yet.
+- Add bounded remote mutation checkpoints and a host persistence hook awaited before transport. Restore validates the original snapshot/request and preserves exact retry across reload. Source preview only; npm 0.2.1 is unchanged. Includes HTTP/localStorage recovery example and regression coverage.
 
 ## 0.2.1 — Development preview — 2026-10-23
 

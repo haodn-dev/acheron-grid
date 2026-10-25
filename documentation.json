@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "114ff0a3e35cc4bc8ab762c27baa036c585305b8",
+  "sourceRevision": "3af07cdbc308f5b984ee29513db495029c3a0210",
   "release": {
     "version": "0.2.1",
     "tag": "v0.2.1",
@@ -284,9 +284,9 @@
     {
       "id": "core-api",
       "path": "guides/core-api.md",
-      "revision": 13,
-      "updated": "2026-10-22",
-      "sha256": "1c324a23d6ed0387fe18e18506e7053eb0f34d1b103fbaa7d29587b114e4444a",
+      "revision": 14,
+      "updated": "2026-10-25",
+      "sha256": "9e347383ed1a307f545212f9ecb6d7bffb11885ed4687e14afb3a7e870e7126b",
       "history": [
         {
           "revision": 1,
@@ -338,6 +338,10 @@
         },
         {
           "revision": 13,
+          "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
+        },
+        {
+          "revision": 14,
           "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
         }
       ]
@@ -399,9 +403,9 @@
     {
       "id": "core",
       "path": "packages/core/README.md",
-      "revision": 13,
-      "updated": "2026-10-23",
-      "sha256": "19712eea05a770afbb07fb040d40562d3144ae0012c1d807e5cb4559a9c973ce",
+      "revision": 14,
+      "updated": "2026-10-25",
+      "sha256": "64dc341f668b108c8f08c6d5aa151f0364a6a29b2ad3913c593430b33ae511e5",
       "history": [
         {
           "revision": 1,
@@ -453,6 +457,10 @@
         },
         {
           "revision": 13,
+          "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
+        },
+        {
+          "revision": 14,
           "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
         }
       ]
@@ -869,9 +877,9 @@
     {
       "id": "editing-and-remote",
       "path": "guides/editing-and-remote.md",
-      "revision": 6,
-      "updated": "2026-10-21",
-      "sha256": "c77cb175c961471fecf800542b3522f70ba8361bdba7a9579b90742f6fb5253d",
+      "revision": 7,
+      "updated": "2026-10-25",
+      "sha256": "4c779b2331073f5bfc3d44a34006d03a3a1663dc1f2cf9eb7800ade3e0240357",
       "history": [
         {
           "revision": 1,
@@ -895,6 +903,10 @@
         },
         {
           "revision": 6,
+          "summary": "Paste special, hidden axes, number formats, Canvas localization and bounded remote write lifecycle."
+        },
+        {
+          "revision": 7,
           "summary": "Paste special, hidden axes, number formats, Canvas localization and bounded remote write lifecycle."
         }
       ]

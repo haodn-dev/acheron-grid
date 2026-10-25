@@ -37,6 +37,7 @@ test('remote option, snapshot and row validation reject malformed transport data
     { columnKeys: [1] },
     { maxRows: 0 },
     { maxPendingCells: 0.5 },
+    { persistMutation: true },
   ])
     assert.throws(() => fixture(undefined, extra), TypeError);
   for (const value of [
@@ -71,6 +72,227 @@ test('remote option, snapshot and row validation reject malformed transport data
     await assert.rejects(limited.resync(), /snapshot/);
   } finally {
     limited.destroy();
+  }
+});
+
+test('mutation checkpoint reload retries the exact accepted request without loading or creating another ID', async () => {
+  let journal,
+    request,
+    writes = 0,
+    loads = 0,
+    ids = 0;
+  const first = fixture(
+    async (mutation) => {
+      request = mutation;
+      writes++;
+      throw Error('Lost ACK');
+    },
+    {
+      persistMutation: (checkpoint) => {
+        journal = JSON.parse(JSON.stringify(checkpoint));
+      },
+    },
+  );
+  await first.resync();
+  const value = { nested: ['draft'] };
+  first.setValue(0, 'name', value);
+  const operation = first.commit();
+  value.nested[0] = 'changed after commit entry';
+  await assert.rejects(operation, /Lost ACK/);
+  assert.deepEqual(journal.mutation, request);
+  assert.equal(journal.snapshot.rows[0].values.name, 'old');
+  const exported = first.exportMutation();
+  assert.ok(Object.isFrozen(exported.mutation.changes[0].value.nested));
+  first.destroy();
+  const restored = fixture(
+    async (mutation) => {
+      writes++;
+      assert.deepEqual(mutation, request);
+      return accepted(mutation);
+    },
+    {
+      createMutationId: () => {
+        ids++;
+        return 'different';
+      },
+      load: async () => {
+        loads++;
+        return snapshot('99', 'newer server');
+      },
+    },
+  );
+  restored.restoreMutation(journal);
+  journal.mutation.changes[0].value.nested[0] = 'tampered';
+  assert.equal(restored.status, 'disconnected');
+  assert.deepEqual(restored.getValue(0, 'name'), { nested: ['draft'] });
+  assert.throws(() => restored.setValue(0, 'name', 'other'), /ready/);
+  assert.throws(() => restored.resync(true), /uncertain/);
+  await restored.commit();
+  assert.equal(restored.status, 'ready');
+  assert.equal(restored.pendingCellCount, 0);
+  assert.equal(restored.revision, '1');
+  assert.equal(writes, 2);
+  assert.equal(loads, 0);
+  assert.equal(ids, 0);
+  assert.throws(() => restored.exportMutation(), /No uncertain/);
+  restored.destroy();
+});
+
+test('persistence failure and disconnect or destroy while persisting cannot start transport', async () => {
+  let writes = 0;
+  const source = fixture(
+    async (mutation) => {
+      writes++;
+      return accepted(mutation);
+    },
+    {
+      persistMutation: () => {
+        throw Error('Quota');
+      },
+    },
+  );
+  await source.resync();
+  source.setValue(0, 'name', 'draft');
+  await assert.rejects(source.commit(), /Quota/);
+  assert.equal(writes, 0);
+  assert.equal(source.status, 'disconnected');
+  assert.equal(source.pendingCellCount, 1);
+  assert.equal(source.exportMutation().mutation.mutationId, 'm-1');
+  source.destroy();
+  for (const action of ['disconnect', 'destroy']) {
+    let release, started;
+    const waiting = new Promise((done) => {
+      started = done;
+    });
+    const remote = fixture(
+      async (mutation) => {
+        writes++;
+        return accepted(mutation);
+      },
+      {
+        persistMutation: () => {
+          started();
+          return new Promise((done) => {
+            release = done;
+          });
+        },
+      },
+    );
+    await remote.resync();
+    remote.setValue(0, 'name', 'draft');
+    const operation = remote.commit();
+    await waiting;
+    remote[action]();
+    release();
+    await operation;
+    assert.equal(writes, 0);
+    if (action === 'disconnect') assert.equal(remote.pendingCellCount, 1);
+    remote.destroy();
+  }
+});
+
+test('mutation recovery rejects malformed or incompatible checkpoints atomically', async () => {
+  const original = fixture(async () => {
+    throw Error('Lost ACK');
+  });
+  await original.resync();
+  original.setValue(0, 'name', 'draft');
+  await assert.rejects(original.commit());
+  const checkpoint = original.exportMutation();
+  const corruptions = [
+    (x) => {
+      x.version = 2;
+    },
+    (x) => {
+      x.columnKeys = ['other'];
+    },
+    (x) => {
+      x.snapshot.datasetId = 'other';
+    },
+    (x) => {
+      x.mutation.datasetId = 'other';
+    },
+    (x) => {
+      x.mutation.expectedRevision = 'other';
+    },
+    (x) => {
+      x.mutation.mutationId = '';
+    },
+    (x) => {
+      x.mutation.changes = [];
+    },
+    (x) => {
+      x.mutation.changes.push(x.mutation.changes[0]);
+    },
+    (x) => {
+      x.mutation.changes[0].rowId = 'unknown';
+    },
+    (x) => {
+      x.mutation.changes[0].columnKey = 'other';
+    },
+    (x) => {
+      x.mutation.changes[0].previous = 'wrong';
+    },
+    (x) => {
+      delete x.mutation.changes[0].value;
+    },
+    (x) => {
+      x.mutation.extra = true;
+    },
+    (x) => {
+      x.mutation.changes[0].extra = true;
+    },
+    (x) => {
+      x.mutation.changes[0].value = Infinity;
+    },
+  ];
+  for (const corrupt of corruptions) {
+    const saved = JSON.parse(JSON.stringify(checkpoint));
+    corrupt(saved);
+    const remote = fixture();
+    assert.throws(() => remote.restoreMutation(saved));
+    assert.equal(remote.getRowCount(), 0);
+    assert.equal(remote.revision, null);
+    assert.equal(remote.pendingCellCount, 0);
+    remote.restoreMutation(checkpoint);
+    assert.equal(remote.pendingCellCount, 1);
+    remote.destroy();
+  }
+  const small = fixture(undefined, { maxRows: 1 });
+  assert.throws(() => small.restoreMutation(checkpoint), /snapshot/);
+  small.destroy();
+  assert.throws(() => original.restoreMutation(checkpoint), /new remote/);
+  original.destroy();
+});
+
+test('restored mutations keep existing conflict and definite rejection resolution', async () => {
+  const original = fixture(async () => {
+    throw Error('Lost ACK');
+  });
+  await original.resync();
+  original.setValue(0, 'name', 'draft');
+  await assert.rejects(original.commit());
+  const saved = original.exportMutation();
+  original.destroy();
+  for (const kind of ['conflict', 'rejected']) {
+    const remote = fixture(async (mutation) =>
+      kind === 'conflict'
+        ? { mutationId: mutation.mutationId, status: kind, snapshot: snapshot('2', 'server') }
+        : { datasetId: 'people', mutationId: mutation.mutationId, status: kind, message: 'Denied' },
+    );
+    remote.restoreMutation(saved);
+    await remote.commit();
+    if (kind === 'conflict') {
+      assert.equal(remote.status, 'conflict');
+      assert.throws(() => remote.exportMutation(), /No uncertain/);
+      remote.acceptServer();
+      assert.equal(remote.getValue(0, 'name'), 'server');
+    } else {
+      assert.equal(remote.status, 'ready');
+      assert.equal(remote.pendingCellCount, 1);
+      remote.setValue(0, 'name', 'corrected');
+    }
+    remote.destroy();
   }
 });
 

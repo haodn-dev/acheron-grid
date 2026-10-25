@@ -244,6 +244,10 @@ export const sourceContracts = {
   lastError: 'Most recent remote load/transport/validation rejection; a valid installed snapshot clears it.',
   getPendingChanges:
     'Return frozen remote draft entries keyed by stable row ID and column key. Preserve these before explicitly accepting a conflicting server snapshot.',
+  exportMutation:
+    'Source preview: export a bounded immutable JSON checkpoint of an in-flight/uncertain bounded remote request, original snapshot and column schema. Preserve the exact mutation ID/payload; conflicts require their own resolution.',
+  restoreMutation:
+    'Source preview: validate a checkpoint into a new bounded remote source and atomically restore its optimistic cache plus exact uncertain request, disconnected. Does not load/write or create a new mutation ID. Retry only through commit; storage is not authorization.',
   conflict:
     'Validated remote server snapshot on conflict, or null. Draft values remain in the cache until explicit adoption.',
   commit:

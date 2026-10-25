@@ -1,6 +1,41 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
+test('uncertain remote mutation survives reload and retries the original request exactly once', async ({
+  page,
+  request,
+}) => {
+  const writes = [];
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('request', (req) => {
+    if (req.url().endsWith('/remote/api/write')) writes.push(req.postDataJSON());
+  });
+  await page.goto('/remote/');
+  await expect(page.locator('#status')).toContainText('ready');
+  await page.getByLabel('First task title').fill('Recovered after reload');
+  await page.getByRole('button', { name: 'Stage edit', exact: true }).click();
+  await page.getByLabel('Next server response').selectOption('drop');
+  await page.getByRole('button', { name: 'Save / retry', exact: true }).click();
+  await expect(page.locator('#status')).toContainText('disconnected');
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('acheron-remote-mutation-v1')));
+  expect(saved.mutation).toEqual(writes[0]);
+  const server = await (await request.get('/remote/api/snapshot')).json();
+  await page.reload();
+  await expect(page.locator('#status')).toContainText('disconnected');
+  await expect(page.locator('#status')).toContainText('1 pending');
+  await expect(page.getByRole('button', { name: 'Stage edit', exact: true })).toBeDisabled();
+  expect(writes).toHaveLength(1);
+  await page.getByRole('button', { name: 'Save / retry', exact: true }).click();
+  await expect(page.locator('#status')).toContainText('ready');
+  await expect(page.locator('#status')).toContainText('0 pending');
+  expect(writes).toHaveLength(2);
+  expect(writes[1]).toEqual(writes[0]);
+  expect((await (await request.get('/remote/api/snapshot')).json()).revision).toBe(server.revision);
+  expect(await page.evaluate(() => localStorage.getItem('acheron-remote-mutation-v1'))).toBeNull();
+  expect(errors).toEqual([]);
+});
+
 for (const kind of ['remote', 'paged']) {
   test(`${kind} example retries its initial HTTP failure without a partial grid`, async ({ page }) => {
     const errors = [];

@@ -14,6 +14,7 @@ export type {
   RemoteDelta,
   RemoteChange,
   RemoteMutation,
+  RemoteMutationCheckpoint,
   RemoteWriteResult,
   RemoteStatus,
 } from './remote-data-source.js';

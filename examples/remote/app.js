@@ -1,6 +1,7 @@
 import { createRemoteDataSource } from '/core/index.js';
 import { createGrid } from '/canvas/index.js';
 const $ = (id) => document.getElementById(id);
+const journalKey = 'acheron-remote-mutation-v1';
 async function request(path, body, signal) {
   const response = await fetch('/remote/api/' + path, {
     signal,
@@ -18,6 +19,7 @@ const remote = createRemoteDataSource({
   createMutationId: () => crypto.randomUUID(),
   load: (signal) => request('snapshot', undefined, signal),
   write: (mutation, signal) => request('write', mutation, signal),
+  persistMutation: (checkpoint) => localStorage.setItem(journalKey, JSON.stringify(checkpoint)),
 });
 let grid,
   operationPending = false;
@@ -56,7 +58,9 @@ async function run(operation) {
   }
 }
 async function initializeGrid() {
-  await remote.resync();
+  const saved = localStorage.getItem(journalKey);
+  if (saved !== null) remote.restoreMutation(JSON.parse(saved));
+  else await remote.resync();
   grid = createGrid({
     container: $('grid'),
     columns: [
@@ -85,6 +89,7 @@ $('save').addEventListener('click', () =>
     const ids = grid.captureRowIdentity();
     await remote.commit();
     if (remote.status === 'ready' && !remote.pendingCellCount) grid.refreshData(ids);
+    if (remote.status === 'ready') localStorage.removeItem(journalKey);
   }),
 );
 $('reload').addEventListener('click', () =>
@@ -115,6 +120,7 @@ function resolve(keep) {
     });
     grid.updateCells(updates);
   }
+  localStorage.removeItem(journalKey);
   update();
 }
 $('server').addEventListener('click', () => run(() => resolve(false)));
