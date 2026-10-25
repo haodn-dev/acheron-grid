@@ -1,3 +1,4 @@
+import type { DisplayRow, LocalGroupingOptions, GroupKey } from './grouping.js';
 import { GridAxis } from '../axis.js';
 import type { GridHistoryLimits } from './history-budget.js';
 import type { CellUpdate, DataSource, LocalViewOptions, RowId, RowSplice } from '../data-source.js';
@@ -111,7 +112,10 @@ export interface EngineContext {
   orderedFormats: FormatEntry[];
   formatOrder: number;
   view: Readonly<LocalViewOptions>;
-  projection: number[] | null;
+  projection: DisplayRow[] | null;
+  grouping: Readonly<LocalGroupingOptions> | null;
+  collapsedGroupingKeys: Set<GroupKey>;
+  groupFocus: { key: GroupKey } | null;
   reverseProjection: Map<number, number>;
   projectedAxis: GridAxis | null;
   cachedRanges: SelectionRange[] | null;

@@ -75,6 +75,10 @@ export function createGridMcpServer({
       throw new ToolFailure('HOST_ERROR', 'Invalid dataset revision.');
     return token;
   }
+  function rowIdAt(index: number): RowId | undefined {
+    const row = engine?.getRowMetadata?.(index);
+    return row?.kind === 'group' ? undefined : (row?.rowId ?? engine?.getRowId(index));
+  }
   function result(value: unknown): import('@modelcontextprotocol/sdk/types.js').CallToolResult {
     const text = JSON.stringify(value);
     if (new TextEncoder().encode(text).byteLength > maxOutputBytes)
@@ -220,8 +224,10 @@ export function createGridMcpServer({
         let next = cursor,
           scanned = 0;
         while (next < engine.rowCount && rowIds.length < limit && scanned < maxRowScan) {
-          const rowId = engine.getRowId(next++);
+          const index = next++;
           scanned++;
+          const rowId = rowIdAt(index);
+          if (rowId === undefined) continue;
           if (authorize({ operation: 'read', rowId }) === true) rowIds.push(rowId);
         }
         return readResult({ rowIds, nextCursor: next < engine.rowCount ? next : null });
@@ -261,7 +267,7 @@ export function createGridMcpServer({
             Number.isSafeInteger(index) &&
             index >= 0 &&
             index < engine.rowCount &&
-            Object.is(engine.getRowId(index), rowId)
+            Object.is(rowIdAt(index), rowId)
           )
             rows.set(rowId, index);
         }
@@ -269,7 +275,8 @@ export function createGridMcpServer({
         const wanted = new Set(cells.map((cell) => cell.rowId));
         let scanned = 0;
         for (; scanned < Math.min(engine.rowCount, maxRowScan) && rows.size < wanted.size; scanned++) {
-          const rowId = engine.getRowId(scanned);
+          const rowId = rowIdAt(scanned);
+          if (rowId === undefined) continue;
           if (wanted.has(rowId)) rows.set(rowId, scanned);
         }
         if (rows.size < wanted.size && scanned < engine.rowCount)

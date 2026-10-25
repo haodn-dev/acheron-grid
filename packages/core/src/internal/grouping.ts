@@ -1,10 +1,20 @@
 import type { DataSource, RowId } from '../data-source.js';
 import type { BulkSteps } from './bulk.js';
 
-type GroupKey = string | number | boolean | null;
+export type GroupKey = string | number | boolean | null;
+export interface GroupDisplayRow extends LocalGroup {
+  readonly kind: 'group';
+  readonly expanded: boolean;
+}
+export type DisplayRow = number | GroupDisplayRow;
 export interface LocalGroupingOptions {
   readonly columnKey: string;
   readonly sumColumns?: readonly string[];
+}
+export interface GroupingState {
+  readonly version: 1;
+  readonly grouping: Readonly<LocalGroupingOptions> | null;
+  readonly collapsedKeys: readonly GroupKey[];
 }
 export interface LocalGroup {
   readonly key: GroupKey;

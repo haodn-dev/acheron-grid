@@ -24,6 +24,7 @@ export function createStructure(
     | 'lockedCells'
     | 'formats'
     | 'merges'
+    | 'grouping'
     | 'groups'
     | 'activeParts'
     | 'displayAnchor'
@@ -304,6 +305,7 @@ export function createStructure(
     )
       return false;
     if (
+      context.grouping ||
       context.destroyed ||
       (context.projection && !(request.axis === 'column' && request.kind === 'move')) ||
       context.tableLocked ||

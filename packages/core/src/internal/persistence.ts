@@ -1,3 +1,4 @@
+import type { DisplayRow } from './grouping.js';
 import type { GridConfiguration } from '../configuration.js';
 import { restoreGridConfiguration } from '../configuration.js';
 import type { LocalViewOptions, RowId } from '../data-source.js';
@@ -53,10 +54,10 @@ export function createPersistence(
       spans?: readonly Readonly<SelectionRange>[],
       outlines?: readonly Readonly<RowGroup>[],
       frozen?: number,
-    ) => number[] | null;
-    installProjection: (next: number[] | null) => void;
+    ) => DisplayRow[] | null;
+    installProjection: (next: DisplayRow[] | null) => void;
     notify: (change: GridInvalidation, event: GridEvent) => void;
-    displayRow: (row: number) => number;
+    displayRow: (row: DisplayRow) => number;
     snapshotStructure: (rowIds?: readonly RowId[]) => StructureState;
     mappedState: (
       before: StructureState,
@@ -157,7 +158,9 @@ export function createPersistence(
     dependencies.notify(
       {
         type: 'structure',
-        rowMap: oldDisplay.map((row) => (rowMap[row]! < 0 ? -1 : dependencies.displayRow(rowMap[row]!))),
+        rowMap: oldDisplay.map((row) =>
+          typeof row !== 'number' || rowMap[row]! < 0 ? -1 : dependencies.displayRow(rowMap[row]!),
+        ),
         columnMap: columnsMap,
       },
       Object.freeze({

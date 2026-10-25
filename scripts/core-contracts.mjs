@@ -1,5 +1,20 @@
 // Behavioral notes for the generated public API catalog.
 export const coreContracts = {
+  setGrouping:
+    'Source preview, headless only: filter complete local records, group by one scalar key and optionally sum finite numeric values; sort leaves within each group. Reject incompatible row layout/history before installing. Null clears grouping. No source writes.',
+  grouping:
+    'Frozen current local grouping criteria, or null. Grouping is separate from LocalViewOptions and server queries.',
+  getRowMetadata:
+    'Discriminated group/leaf metadata for a visible row. Only leaves have real sourceIndex and rowId; group metadata contains key, count, sums, retained source indices and expanded state. Legacy getRowId/getRowSourceIndex reject group rows.',
+  focusGroup:
+    'Focus a group header and clear all data selection/cut targets. Returns false for a leaf. Group focus is separate from CellSelection.',
+  getFocusedGroup: 'Visible index of the focused group header, or -1. No synthetic CellSelection or RowId is created.',
+  setDataGroupExpanded:
+    'Expand/collapse a typed visible group key without changing source values, aggregates or data history. Clears leaf selection and focuses the header.',
+  exportGroupingState:
+    'Frozen version-1 criteria/collapsed-key view snapshot, separate from legacy GridState/GridConfiguration. Contains no data, authorization or history; apply only to a matching host-owned dataset.',
+  restoreGroupingState:
+    'Validate unknown version-1 grouping state and schema/layout before installing atomically. Typed collapsed keys survive local filters. Does not restore source data or permissions.',
   updateCellsAsync:
     'Cooperative typed batch preparation with host scheduling, cancellation and optional external revision guard. One final synchronous atomic write; other engine mutations are blocked while pending.',
   pasteAsync:

@@ -17,6 +17,7 @@ export function createValues(
     notify: (change: GridInvalidation, event: GridEvent) => void;
     assertAlive: () => void;
     requirePermission: (rowIndex: number, columnIndex: number, key: keyof CellPermission) => void;
+    prepareValues?: (updates: readonly CellUpdate[]) => (() => void) | undefined;
     writeFormats: (changes: readonly FormatChange[]) => void;
     notifyFormats: (changes: readonly FormatChange[], source: 'api' | 'paste' | 'undo' | 'redo') => void;
     mergeAt: (row: number, col: number) => Readonly<SelectionRange> | undefined;
@@ -24,6 +25,7 @@ export function createValues(
     displaySelectionRanges: () => SelectionRange[];
     visibleRowCount: () => number;
     sourceRow: (index: number) => number;
+    isDataRow: (index: number) => boolean;
   },
 ) {
   function notifyCells(changes: readonly Change[], source: GridChangeSource): void {
@@ -104,10 +106,24 @@ export function createValues(
     if (finalCheck) yield* finalCheck();
     const entry = { kind: 'values' as const, changes, formats: formatChanges };
     assertHistoryCapacity(context, entry);
+    const prepared = changes.length ? dependencies.prepareValues?.(changes) : undefined;
+    if (prepared && cooperative) {
+      yield { phase: 'validate', completed: changes.length, total: changes.length };
+      for (const change of changes) {
+        if (
+          context.dataSource.getRowId(change.rowIndex) !== change.rowId ||
+          !Object.is(context.dataSource.getValue(change.rowIndex, change.columnKey), change.previous)
+        )
+          throw new Error('Grouped preparation conflicts with external data.');
+        dependencies.requirePermission(change.rowIndex, context.columnIndices.get(change.columnKey)!, 'writable');
+      }
+      if (finalCheck) yield* finalCheck();
+    }
     if (changes.length) write(changes);
     dependencies.writeFormats(formatChanges);
     recordHistory(context, entry);
     context.future.length = 0;
+    prepared?.();
     if (changes.length) notifyCells(changes, source);
     if (formatChanges.length) dependencies.notifyFormats(formatChanges, source === 'paste' ? 'paste' : 'api');
   }
@@ -204,6 +220,7 @@ export function createValues(
     for (const range of ranges)
       for (let row = range.startRow; row <= range.endRow; row++)
         for (let col = range.startColumn; col <= range.endColumn; col++) {
+          if (!dependencies.isDataRow(row)) continue;
           const canonical = dependencies.sourceRow(row),
             column = context.columns[col]!,
             key = JSON.stringify([canonical, column.key]);

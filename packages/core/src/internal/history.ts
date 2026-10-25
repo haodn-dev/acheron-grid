@@ -1,3 +1,4 @@
+import type { DisplayRow } from './grouping.js';
 import type { CellUpdate } from '../data-source.js';
 import type { GridInvalidation } from '../engine.js';
 import type { GridChangeSource, GridEvent } from '../events.js';
@@ -36,7 +37,7 @@ export function createHistory(
     ) => void;
     layoutAllowed: (request: LayoutRequest) => boolean;
     validateMergeFreeze: (spans: readonly Readonly<SelectionRange>[], rows?: number, cols?: number) => void;
-    notifyOutline: (kind: 'merge' | 'group', old: readonly number[], source: 'api' | 'undo' | 'redo') => void;
+    notifyOutline: (kind: 'merge' | 'group', old: readonly DisplayRow[], source: 'api' | 'undo' | 'redo') => void;
     replayStructure: (entry: Extract<HistoryCommand, { kind: 'structure' }>, redo: boolean) => void;
     notifyStructure: (
       entry: Extract<HistoryCommand, { kind: 'structure' }>,
@@ -45,6 +46,7 @@ export function createHistory(
     ) => void;
     notify: (change: GridInvalidation, event: GridEvent) => void;
     requireFormatPermission: (bounds: SelectionRange) => void;
+    prepareValues?: (updates: readonly CellUpdate[]) => (() => void) | undefined;
     writeFormats: (changes: readonly FormatChange[]) => void;
     notifyFormats: (changes: readonly FormatChange[], source: 'api' | 'paste' | 'undo' | 'redo') => void;
     requirePermission: (rowIndex: number, columnIndex: number, key: keyof CellPermission) => void;
@@ -242,6 +244,18 @@ export function createHistory(
         dependencies.requirePermission(change.rowIndex, context.columnIndices.get(change.columnKey)!, 'writable');
         if (guarded && ++completed % 256 === 0) yield { phase: 'validate', completed, total: changes.length };
       }
+    const prepared = updates.length ? dependencies.prepareValues?.(updates) : undefined;
+    if (prepared && cooperative) {
+      yield { phase: 'validate', completed: updates.length, total: updates.length };
+      for (const change of updates) {
+        if (
+          context.dataSource.getRowId(change.rowIndex) !== change.rowId ||
+          !Object.is(context.dataSource.getValue(change.rowIndex, change.columnKey), change.previous)
+        )
+          throw new Error('Grouped preparation conflicts with external data.');
+        dependencies.requirePermission(change.rowIndex, context.columnIndices.get(change.columnKey)!, 'writable');
+      }
+    }
     if (updates.length) dependencies.write(updates);
     const formatChanges = (entry.formats ?? []).map((change) => ({
       ...change,
@@ -251,6 +265,7 @@ export function createHistory(
     dependencies.writeFormats(formatChanges);
     from.pop();
     to.push(entry);
+    prepared?.();
     if (updates.length) dependencies.notifyCells(updates, redo ? 'redo' : 'undo');
     if (formatChanges.length) dependencies.notifyFormats(formatChanges, redo ? 'redo' : 'undo');
     return true;

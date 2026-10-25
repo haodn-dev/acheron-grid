@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "86a3f103a10c6ca54d72aae9c785036376743144",
+  "sourceRevision": "c0508cdf94851b88a53f8d897a89d10e73a41b0c",
   "release": {
     "documentationRevision": "6e5d6a408ea3f6f089b013b2d2d0e0c698ccd9ee",
     "tag": "v0.3.0",
@@ -320,9 +320,9 @@
     {
       "id": "core-api",
       "path": "guides/core-api.md",
-      "revision": 16,
+      "revision": 17,
       "updated": "2026-10-25",
-      "sha256": "483b83b4751055c5cab73635780b2650bbda3efdbe8bdc1f0921cb23ce61a73b",
+      "sha256": "d02d3f2e885373a3b5a771b230b8d62a9dd010a2dcabba5fe11032cb0dc5d684",
       "history": [
         {
           "revision": 1,
@@ -387,6 +387,10 @@
         {
           "revision": 16,
           "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
+        },
+        {
+          "revision": 17,
+          "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
         }
       ]
     },
@@ -447,9 +451,9 @@
     {
       "id": "core",
       "path": "packages/core/README.md",
-      "revision": 16,
+      "revision": 17,
       "updated": "2026-10-25",
-      "sha256": "16731d3782aed7e00b059d8c0610ac9828d025bb4d274258389f6271f3b8b672",
+      "sha256": "94963b6c1450f368483b719d466f431b1a9bedf6a663f1095217ea7f8b1ce79c",
       "history": [
         {
           "revision": 1,
@@ -513,6 +517,10 @@
         },
         {
           "revision": 16,
+          "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
+        },
+        {
+          "revision": 17,
           "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
         }
       ]

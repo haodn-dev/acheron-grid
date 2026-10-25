@@ -10,6 +10,32 @@ const columns = [
 const source = (rows) => ({ columns, rowCount: rows.length, getValue: (row, key) => rows[row][key] });
 const allowed = { authorize: () => true };
 
+test('grouped HTML includes visible records only and never authorizes synthetic headers', () => {
+  const engine = createGridEngine({
+    columns,
+    dataSource: new LocalDataSource(
+      [
+        { id: 1, name: 'A', score: 2 },
+        { id: 2, name: 'B', score: 3 },
+      ],
+      (row) => row.id,
+    ),
+    grouping: { columnKey: 'name', sumColumns: ['score'] },
+  });
+  const authorized = [];
+  const html = renderHtmlTable(engine, {
+    authorize: (row) => {
+      assert.equal(engine.getRowMetadata(row).kind, 'leaf');
+      authorized.push(row);
+      return true;
+    },
+  });
+  assert.equal((html.match(/<tbody><tr>|<\/tr><tr>/g) ?? []).length, 2);
+  assert.deepEqual(authorized, [1, 1, 3, 3]);
+  engine.setDataGroupExpanded('A', false);
+  assert.doesNotMatch(renderHtmlTable(engine, allowed), /<td>A<\/td>/);
+});
+
 test('HTML rejects null page bounds, sparse column selections and ambiguous source keys before reading', () => {
   let reads = 0;
   const data = {

@@ -1,7 +1,7 @@
 import type { Column, GridEngine } from '@acheron-grid/core';
 
 export type HtmlTableSource = Pick<GridEngine, 'columns' | 'rowCount' | 'getValue'> &
-  Partial<Pick<GridEngine, 'getCellPermission' | 'isRowHidden' | 'isColumnHidden' | 'getMerge'>>;
+  Partial<Pick<GridEngine, 'getCellPermission' | 'isRowHidden' | 'isColumnHidden' | 'getMerge' | 'getRowMetadata'>>;
 
 export interface HtmlTableOptions {
   /** Host authorization is required, including for sources without engine permissions. */
@@ -54,6 +54,7 @@ export function renderHtmlTable(source: HtmlTableSource, options: HtmlTableOptio
   const rows: number[] = [];
   if (columns.length)
     for (let row = offset; row < end; row++) {
+      if (source.getRowMetadata?.(row).kind === 'group') continue;
       if (source.isRowHidden?.(row)) continue;
       for (const { column, index } of columns) {
         if (

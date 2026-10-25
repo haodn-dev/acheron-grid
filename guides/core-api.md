@@ -284,6 +284,70 @@ Whether a live engine has a redo entry. Replay still checks current policies and
 
 ## Views and persistence
 
+### setGrouping
+
+```ts
+setGrouping: (next: LocalGroupingOptions | null) => void
+```
+
+Source preview, headless only: filter complete local records, group by one scalar key and optionally sum finite numeric values; sort leaves within each group. Reject incompatible row layout/history before installing. Null clears grouping. No source writes.
+
+### exportGroupingState
+
+```ts
+exportGroupingState: () => GroupingState
+```
+
+Frozen version-1 criteria/collapsed-key view snapshot, separate from legacy GridState/GridConfiguration. Contains no data, authorization or history; apply only to a matching host-owned dataset.
+
+### restoreGroupingState
+
+```ts
+restoreGroupingState: (state: unknown) => void
+```
+
+Validate unknown version-1 grouping state and schema/layout before installing atomically. Typed collapsed keys survive local filters. Does not restore source data or permissions.
+
+### grouping
+
+```ts
+grouping: Readonly<LocalGroupingOptions> | null
+```
+
+Frozen current local grouping criteria, or null. Grouping is separate from LocalViewOptions and server queries.
+
+### getRowMetadata
+
+```ts
+getRowMetadata: (row: number) => GroupDisplayRow | Readonly<{ kind: "leaf"; sourceIndex: number; rowId: RowId; }>
+```
+
+Discriminated group/leaf metadata for a visible row. Only leaves have real sourceIndex and rowId; group metadata contains key, count, sums, retained source indices and expanded state. Legacy getRowId/getRowSourceIndex reject group rows.
+
+### focusGroup
+
+```ts
+focusGroup: (row: number) => boolean
+```
+
+Focus a group header and clear all data selection/cut targets. Returns false for a leaf. Group focus is separate from CellSelection.
+
+### getFocusedGroup
+
+```ts
+getFocusedGroup: () => number
+```
+
+Visible index of the focused group header, or -1. No synthetic CellSelection or RowId is created.
+
+### setDataGroupExpanded
+
+```ts
+setDataGroupExpanded: (key: GroupKey, expanded: boolean) => void
+```
+
+Expand/collapse a typed visible group key without changing source values, aggregates or data history. Clears leaf selection and focuses the header.
+
 ### exportState
 
 ```ts
@@ -704,6 +768,7 @@ Call createGridEngine with GridEngineOptions. Required fields are marked; option
 
 | Field | Required | Type |
 | --- | --- | --- |
+| grouping | No | `LocalGroupingOptions \| undefined` |
 | historyLimits | No | `GridHistoryLimits \| undefined` |
 | onObserverError | No | `((error: unknown) => void) \| undefined` |
 | allowMerging | No | `boolean \| undefined` |
@@ -735,6 +800,10 @@ The root and headless alias expose the same API. Source interfaces use their own
 | GridEngine | Type | engine.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | GridEngineOptions | Type | engine.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | GridInvalidation | Type | engine.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| LocalGroupingOptions | Type | grouping.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| GroupKey | Type | grouping.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| GroupDisplayRow | Type | grouping.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| GroupingState | Type | grouping.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | GridBulkOptions | Type | bulk.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | GridBulkProgress | Type | bulk.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | GridHistoryLimits | Type | history-budget.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
@@ -1085,6 +1154,40 @@ export type GridInvalidation =
   | { readonly type: 'selection'; readonly changed: boolean; readonly rangeChanged: boolean }
   | { readonly type: 'layout' }
   | { readonly type: 'structure'; readonly rowMap: readonly number[]; readonly columnMap: readonly number[] };
+```
+
+### Type LocalGroupingOptions
+
+```ts
+export interface LocalGroupingOptions {
+  readonly columnKey: string;
+  readonly sumColumns?: readonly string[];
+}
+```
+
+### Type GroupKey
+
+```ts
+export type GroupKey = string | number | boolean | null;
+```
+
+### Type GroupDisplayRow
+
+```ts
+export interface GroupDisplayRow extends LocalGroup {
+  readonly kind: 'group';
+  readonly expanded: boolean;
+}
+```
+
+### Type GroupingState
+
+```ts
+export interface GroupingState {
+  readonly version: 1;
+  readonly grouping: Readonly<LocalGroupingOptions> | null;
+  readonly collapsedKeys: readonly GroupKey[];
+}
 ```
 
 ### Type GridBulkOptions

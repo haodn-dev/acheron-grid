@@ -22,6 +22,7 @@ export function createLayout(
     | 'columns'
     | 'frozenRows'
     | 'merges'
+    | 'grouping'
     | 'groups'
   >,
   dependencies: {
@@ -51,12 +52,12 @@ export function createLayout(
       hitTest(x: number, y: number) {
         const hit = viewport.hitTest(x, y);
         if (!hit) return null;
-        const span = dependencies.mergeAt(dependencies.sourceRow(hit.row), hit.col);
+        const span = context.grouping ? undefined : dependencies.mergeAt(dependencies.sourceRow(hit.row), hit.col);
         return span ? { row: dependencies.displayRow(span.startRow), col: span.startColumn } : hit;
       },
       cellRect(row: number, col: number) {
         const base = viewport.cellRect(row, col),
-          span = dependencies.mergeAt(dependencies.sourceRow(row), col);
+          span = context.grouping ? undefined : dependencies.mergeAt(dependencies.sourceRow(row), col);
         if (!span) return base;
         const first = dependencies.displayRow(span.startRow),
           last = dependencies.displayRow(span.endRow),
@@ -71,6 +72,7 @@ export function createLayout(
   }
   function resize(axis: GridAxis, index: number, size: number, history = true): void {
     dependencies.assertAlive();
+    if (context.grouping && axis === context.rowAxis) throw new Error('Row resizing is unavailable while grouping.');
     if (!history && context.manualRows.has(index)) return;
     const previous = axis.storedSize(index),
       previousManual = axis === context.rowAxis && context.manualRows.has(index);
@@ -118,6 +120,7 @@ export function createLayout(
     )
       throw new RangeError('Invalid visibility request.');
     requireVisibilityPolicy(axis, indices, hidden);
+    if (context.grouping && axis === 'row') throw new Error('Row hiding is unavailable while grouping.');
     const before = new Set(layout.hiddenIndices()),
       changed = indices.filter((index) => before.has(index) !== hidden);
     if (!changed.length) return;
@@ -149,6 +152,7 @@ export function createLayout(
       columnCount > context.columns.length
     )
       throw new RangeError('Invalid frozen row or column count.');
+    if (context.grouping && rows) throw new Error('Frozen rows are unavailable while grouping.');
     if (rows === context.frozenRows && columnCount === context.frozenColumns) return;
     dependencies.validateMergeFreeze(context.merges, rows, columnCount);
     if (context.groups.some((group) => group.collapsed && group.startRow < rows && group.endRow >= rows))
