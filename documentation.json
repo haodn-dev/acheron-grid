@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "sourceRevision": "1e86c3dcc5647eab73d66cf114deb092b01b39ac",
+  "sourceRevision": "114ff0a3e35cc4bc8ab762c27baa036c585305b8",
   "release": {
-    "version": "0.2.0",
-    "tag": "v0.2.0",
-    "revision": "ac761dcdc908d81eeaa2d1f4c9b311b9bb41b788",
-    "documentationRevision": "cfd56960a1c665c1d31a5383e6735778d2641995"
+    "version": "0.2.1",
+    "tag": "v0.2.1",
+    "revision": "15e5a986b552710d389e7253286be48079264b59",
+    "documentationRevision": "114ff0a3e35cc4bc8ab762c27baa036c585305b8"
   },
   "documents": [
     {
@@ -956,6 +956,12 @@
       "tag": "v0.2.0",
       "revision": "ac761dcdc908d81eeaa2d1f4c9b311b9bb41b788",
       "documentationRevision": "cfd56960a1c665c1d31a5383e6735778d2641995"
+    },
+    "0.2.1": {
+      "version": "0.2.1",
+      "tag": "v0.2.1",
+      "revision": "15e5a986b552710d389e7253286be48079264b59",
+      "documentationRevision": "114ff0a3e35cc4bc8ab762c27baa036c585305b8"
     }
   }
 }
