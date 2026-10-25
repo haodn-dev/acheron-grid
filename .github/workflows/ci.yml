@@ -32,7 +32,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: '>=22.23.4 <23'
+          check-latest: true
           package-manager-cache: false
       - id: scope
         run: node scripts/ci-scope.mjs
@@ -50,7 +51,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: '>=22.23.4 <23'
+          check-latest: true
           cache: npm
       - run: npm ci
       - run: npm run format:check
@@ -73,7 +75,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: '>=22.23.4 <23'
+          check-latest: true
           cache: npm
       - run: npm ci
       - run: npm run build
@@ -99,6 +102,7 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
   verify:
+    name: verify (${{ matrix.node }})
     needs: scope
     if: needs.scope.outputs.runtime == 'true'
     runs-on: ubuntu-latest
@@ -106,14 +110,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [22, 24]
+        include:
+          - node: 22
+            version: '>=22.23.4 <23'
+          - node: 24
+            version: '>=24.22.1 <25'
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
-          node-version: ${{ matrix.node }}
+          node-version: ${{ matrix.version }}
+          check-latest: true
           cache: npm
       - run: npm ci
       - run: node --test tests/ci.node.mjs
