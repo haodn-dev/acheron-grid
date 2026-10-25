@@ -486,6 +486,10 @@ export function createGrid(options: GridOptions): Grid {
   const managesView =
     gridContext.options.viewMode === 'core' ||
     (gridContext.options.viewMode !== 'host' && !gridContext.options.onViewChange);
+  function requireGroupingView(): void {
+    if (!managesView) throw new Error('Grouping requires a core-managed local view.');
+  }
+  if (gridContext.options.grouping) requireGroupingView();
   let currentView = gridContext.options.view;
   const activeBorderWidth = gridContext.options.selectionStyle?.activeBorderWidth ?? 1;
   const rangeBorderWidth = gridContext.options.selectionStyle?.rangeBorderWidth ?? 1;
@@ -2239,7 +2243,10 @@ export function createGrid(options: GridOptions): Grid {
         gridContext.engine.setView(view);
         gridContext.layout.currentView = gridContext.engine.view;
       }, 'row'),
-    setGrouping: (grouping) => structureAction(() => gridContext.engine.setGrouping(grouping), 'row'),
+    setGrouping: (grouping) => {
+      if (grouping) requireGroupingView();
+      structureAction(() => gridContext.engine.setGrouping(grouping), 'row');
+    },
     get grouping() {
       return gridContext.engine.grouping;
     },
@@ -2255,7 +2262,10 @@ export function createGrid(options: GridOptions): Grid {
     setDataGroupExpanded: (key, expanded) =>
       structureAction(() => gridContext.engine.setDataGroupExpanded(key, expanded), 'row'),
     exportGroupingState: gridContext.engine.exportGroupingState,
-    restoreGroupingState: (state) => structureAction(() => gridContext.engine.restoreGroupingState(state), 'row'),
+    restoreGroupingState: (state) => {
+      requireGroupingView();
+      structureAction(() => gridContext.engine.restoreGroupingState(state), 'row');
+    },
     get view() {
       return managesView ? gridContext.engine.view : (gridContext.layout.currentView ?? {});
     },

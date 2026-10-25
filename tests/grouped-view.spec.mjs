@@ -39,6 +39,21 @@ for (const accessibility of ['active', 'viewport']) {
     await expect(page.locator('[data-grid-data-group="0"]')).toHaveAttribute('aria-expanded', 'true');
     expect(await page.evaluate(() => window.grid.takeObserverErrors().length)).toBe(0);
     expect(await page.evaluate(() => window.grid.rowCount)).toBe(5);
+    await page.locator('[data-grid-header-cell="1"]').press('Shift+F10');
+    await expect(page.getByRole('menuitem', { name: 'Sort descending…', exact: true })).toBeVisible();
+    await page.getByRole('menuitem', { name: 'Sort descending…', exact: true }).click();
+    await page
+      .getByRole('dialog', { name: 'Change row view', exact: true })
+      .getByRole('button', { name: 'Apply view', exact: true })
+      .click();
+    await expect.poll(() => page.evaluate(() => window.grid.getRowMetadata(1).rowId)).toBe('b');
+    await page.evaluate(() => window.grid.setView({}));
+    await grid.press('Control+Home');
+    await grid.press('ArrowDown');
+    await grid.press('Control+Space');
+    await grid.press('Shift+F10');
+    await expect(page.getByRole('menuitem', { name: 'Sort ascending…', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
     const bounds = await grid.boundingBox();
     await page.mouse.move(bounds.x + 80, bounds.y + 48);
     await page.mouse.down();
@@ -171,4 +186,50 @@ test('grouped viewport accessibility stays bounded while scrolling a complete lo
   expect(await page.evaluate(() => window.reads)).toBeLessThan(1000);
   expect(await page.evaluate(() => window.grid.rowCount)).toBe(11_000);
   expect(await page.evaluate(() => window.grid.takeObserverErrors().length)).toBe(0);
+});
+
+test('host-managed views reject grouping before mounting or changing view state', async ({ page }) => {
+  await page.goto('/');
+  const results = await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    return [{ viewMode: 'host' }, { onViewChange: () => {} }].map((view) => {
+      const container = document.createElement('div');
+      container.style.cssText = 'width:400px;height:240px';
+      document.body.append(container);
+      const options = {
+        ...view,
+        container,
+        columns: [{ key: 'team', title: 'Team' }],
+        dataSource: { getRowCount: () => 1, getRowId: () => 1, getValue: () => 'A' },
+      };
+      const message = (action) => {
+        try {
+          action();
+          return null;
+        } catch (error) {
+          return error.message;
+        }
+      };
+      const initial = message(() => createGrid({ ...options, grouping: { columnKey: 'team' } }));
+      const clean = container.children.length === 0;
+      const grid = createGrid(options);
+      const change = message(() => grid.setGrouping({ columnKey: 'team' }));
+      const restore = message(() =>
+        grid.restoreGroupingState({ version: 1, grouping: { columnKey: 'team' }, collapsedKeys: [] }),
+      );
+      const unchanged = grid.grouping === null && grid.rowCount === 1;
+      grid.destroy();
+      container.remove();
+      return { initial, change, restore, clean, unchanged };
+    });
+  });
+  for (const result of results) {
+    expect(result).toEqual({
+      initial: 'Grouping requires a core-managed local view.',
+      change: 'Grouping requires a core-managed local view.',
+      restore: 'Grouping requires a core-managed local view.',
+      clean: true,
+      unchanged: true,
+    });
+  }
 });

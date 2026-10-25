@@ -1,6 +1,9 @@
 export type CanvasTranslator = (message: string, ...values: readonly unknown[]) => string;
 
 export const canvasVietnameseMessages: Readonly<Record<string, string>> = Object.freeze({
+  'Sort orders records within each group. Filters update group counts and sums.':
+    'Sắp xếp các bản ghi trong từng nhóm. Bộ lọc cập nhật số lượng và tổng của nhóm.',
+  'Grouping requires a core-managed local view.': 'Gom nhóm yêu cầu chế độ xem cục bộ do core quản lý.',
   'Group {0}, {1} records': 'Nhóm {0}, {1} bản ghi',
   'Missing value': 'Chưa có giá trị',
   Expanded: 'Đã mở',
@@ -406,6 +409,9 @@ export function createCanvasTranslator(
 
 /** Complete default message inventory for application-owned locale packs. */
 export const canvasEnglishMessages: Readonly<Record<string, string>> = Object.freeze({
+  'Sort orders records within each group. Filters update group counts and sums.':
+    'Sort orders records within each group. Filters update group counts and sums.',
+  'Grouping requires a core-managed local view.': 'Grouping requires a core-managed local view.',
   'Group {0}, {1} records': 'Group {0}, {1} records',
   'Missing value': 'Missing value',
   Expanded: 'Expanded',
