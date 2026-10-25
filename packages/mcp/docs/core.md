@@ -436,3 +436,5 @@ decoding for `pasteAsync` through `GridBulkOptions.tsvDecoder`. The root import 
 remains browser-independent. See the same guide for bundler setup, cancellation, cleanup and limits.
 
 For larger server datasets, use the 0.2.1 [writable remote pages](https://github.com/haodn-dev/acheron-grid/blob/main/guides/paged-remote.md) adapter rather than retaining a full snapshot. Server query/revision and cache invalidation are explicit; only loaded rows can start a draft.
+
+Source preview after npm 0.2.1 adds paged `exportDrafts()` / `restoreDrafts(unknown)` checkpoints for host-owned storage. Restore validates affected server pages before atomically staging unsent edits; it does not persist uncertain mutations, create undo history or replace application/server authorization. See [checkpoint storage and recovery](https://github.com/haodn-dev/acheron-grid/blob/main/guides/paged-remote.md#draft-checkpoints-source-preview).

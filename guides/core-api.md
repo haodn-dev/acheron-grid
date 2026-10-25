@@ -746,6 +746,7 @@ The root and headless alias expose the same API. Source interfaces use their own
 | createPagedRemoteDataSource | Runtime | paged-remote-data-source.ts | Create a bounded writable page cache with stable-ID drafts, server-owned query/revision, dirty-cohort receipts, exact uncertain retry and whole-cache invalidation after accepted writes. Load only required pages; reconcile engine identity/history after cache changes. |
 | PagedRemoteDataSourceOptions | Type | paged-remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | PagedRemoteWriteResult | Type | paged-remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| PagedRemoteDraftSnapshot | Type | paged-remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | RemoteDataSourceOptions | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | RemoteSnapshot | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | RemoteDelta | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
@@ -1004,6 +1005,8 @@ getValue: (index: number, key: string) => unknown
 setValues: (updates: readonly CellUpdate[]) => void
 setValue: (rowIndex: number, columnKey: string, value: unknown) => void
 commit: () => Promise<void>
+exportDrafts: () => PagedRemoteDraftSnapshot
+restoreDrafts: (input: unknown) => Promise<void>
 getPendingChanges: () => readonly Readonly<{ rowId: RowId; columnKey: string; previous: unknown; value: unknown; }>[]
 setQuery: (next: LocalViewOptions, total?: number) => void
 reset: (total?: number) => void
@@ -1038,6 +1041,8 @@ spliceRows?: ((splices: readonly RowSplice[]) => void) | undefined
 | setValues | Remote: bounded atomic optimistic JSON-safe staging only while ready. Local atomic batch, or an optional mapped view batch when the underlying source supports it. Direct source changes require engine refresh and remain outside engine history. |
 | setValue | Remote: stage one optimistic value only while ready. Local atomic single-value replacement, or an optional delegated view setter when the underlying source supports it. No engine permissions/history are applied by direct source writes. |
 | commit | Commit one immutable mutation against expectedRevision. Bounded remote concurrent calls share the promise; paged concurrent calls reject. Lost responses retain the exact request for retry. Acceptance clears drafts; paged acceptance invalidates pages without fetching them. Rejection retains correctable drafts; conflict blocks editing. |
+| exportDrafts | Source preview: export a bounded immutable JSON v1 checkpoint of unsent/rejected paged drafts with dataset/revision/query/schema/total and previous values. Requires a loaded idle source; uncertain writes/conflicts must be resolved first. Host owns storage and privacy. |
+| restoreDrafts | Source preview: validate an unknown checkpoint into an empty paged source, load affected pages sequentially and check revision/total/identity/previous values before atomically installing drafts. No server writes or undo history. Failure/cancel/destroy installs no drafts; host reapplies current permissions/validation and remounts the engine. |
 | getPendingChanges | Return frozen remote draft entries keyed by stable row ID and column key. Preserve these before explicitly accepting a conflicting server snapshot. |
 | setQuery | Validate new criteria/count, clear cache/statuses and cancel the previous generation. The host must reconcile the engine and identity after a query change. |
 | reset | Async: clear cache/statuses and cancel generation, retaining query with the supplied count. Live: change stream, clear pending changes and mark stale; retain old data until a matching snapshot. |
@@ -1140,6 +1145,26 @@ export interface PagedRemoteDataSourceOptions<S> extends Pick<
 
 ```ts
 export type PagedRemoteWriteResult = RemoteWriteResult & { readonly total: number };
+```
+
+### Type PagedRemoteDraftSnapshot
+
+```ts
+export interface PagedRemoteDraftSnapshot {
+  readonly version: 1;
+  readonly datasetId: string;
+  readonly revision: string;
+  readonly query: Readonly<LocalViewOptions>;
+  readonly columnKeys: readonly string[];
+  readonly total: number;
+  readonly changes: readonly {
+    readonly rowIndex: number;
+    readonly rowId: RowId;
+    readonly columnKey: string;
+    readonly previous: unknown;
+    readonly value: unknown;
+  }[];
+}
 ```
 
 ### Type RemoteDataSourceOptions

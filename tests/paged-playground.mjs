@@ -6,6 +6,38 @@ async function expectFirstCell(page, text) {
   await expect(page.getByRole('gridcell')).toContainText(text);
 }
 
+test('paged draft checkpoint survives a browser reload and rejects a stale checkpoint without writing', async ({
+  page,
+}) => {
+  const writes = [];
+  page.on('request', (request) => {
+    if (request.url().endsWith('/paged/api/write')) writes.push(request);
+  });
+  await page.goto('/paged/');
+  await expect(page.locator('#status')).toContainText('ready');
+  await page.getByRole('grid').click({ position: { x: 100, y: 16 } });
+  await page.getByRole('grid').press('F2');
+  await page.getByRole('textbox').fill('Reloaded draft');
+  await page.getByRole('textbox').press('Enter');
+  await page.getByRole('button', { name: 'Save draft locally' }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('acheron-paged-draft-v1'))).not.toBeNull();
+  await page.reload();
+  await expect(page.locator('#status')).toContainText('0 pending cells');
+  await page.getByRole('button', { name: 'Restore saved draft' }).click();
+  await expect(page.locator('#status')).toContainText('1 pending cells');
+  await expectFirstCell(page, 'Reloaded draft');
+  expect(writes).toHaveLength(0);
+  await page.reload();
+  await expect(page.locator('#status')).toContainText('ready');
+  await page.getByRole('button', { name: 'Simulate external edit' }).click();
+  await page.getByRole('button', { name: 'Reload server data' }).click();
+  await expect(page.locator('#status')).toContainText('ready');
+  await page.getByRole('button', { name: 'Restore saved draft' }).click();
+  await expect(page.locator('#status')).toContainText('no longer matches');
+  await expect(page.locator('#status')).toContainText('0 pending cells');
+  expect(writes).toHaveLength(0);
+});
+
 test('paged HTTP writes survive eviction, retry exactly and query the server globally', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));

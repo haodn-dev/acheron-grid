@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "114ff0a3e35cc4bc8ab762c27baa036c585305b8",
+  "sourceRevision": "3af07cdbc308f5b984ee29513db495029c3a0210",
   "release": {
     "version": "0.2.1",
     "tag": "v0.2.1",
@@ -78,9 +78,9 @@
     {
       "id": "paged-remote",
       "path": "guides/paged-remote.md",
-      "revision": 3,
-      "updated": "2026-10-21",
-      "sha256": "bfe282c15b60315188addcc8382fa9b00d938a8d91be45326363e92cecf50e5f",
+      "revision": 4,
+      "updated": "2026-10-25",
+      "sha256": "2f0fd8e1aa6de46ac1d287ca59a38050e3a140e0d8f4f28af19c1b656426cbd7",
       "history": [
         {
           "revision": 1,
@@ -92,6 +92,10 @@
         },
         {
           "revision": 3,
+          "summary": "Stable-ID writable paging, query/revision lifecycle, dirty-cohort receipts and runnable HTTP example."
+        },
+        {
+          "revision": 4,
           "summary": "Stable-ID writable paging, query/revision lifecycle, dirty-cohort receipts and runnable HTTP example."
         }
       ]
@@ -284,9 +288,9 @@
     {
       "id": "core-api",
       "path": "guides/core-api.md",
-      "revision": 13,
-      "updated": "2026-10-22",
-      "sha256": "1c324a23d6ed0387fe18e18506e7053eb0f34d1b103fbaa7d29587b114e4444a",
+      "revision": 14,
+      "updated": "2026-10-25",
+      "sha256": "c274d9bd01dafb0603835020f04545a2513b75f8504c8a4891a087bc09f2fed6",
       "history": [
         {
           "revision": 1,
@@ -338,6 +342,10 @@
         },
         {
           "revision": 13,
+          "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
+        },
+        {
+          "revision": 14,
           "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
         }
       ]
@@ -399,9 +407,9 @@
     {
       "id": "core",
       "path": "packages/core/README.md",
-      "revision": 13,
-      "updated": "2026-10-23",
-      "sha256": "19712eea05a770afbb07fb040d40562d3144ae0012c1d807e5cb4559a9c973ce",
+      "revision": 15,
+      "updated": "2026-10-25",
+      "sha256": "5f353fb6fb10d6b1ee32d51a4e95a3a15415ab6aa170b8e94685b819ee46e20e",
       "history": [
         {
           "revision": 1,
@@ -453,6 +461,14 @@
         },
         {
           "revision": 13,
+          "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
+        },
+        {
+          "revision": 14,
+          "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
+        },
+        {
+          "revision": 15,
           "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
         }
       ]

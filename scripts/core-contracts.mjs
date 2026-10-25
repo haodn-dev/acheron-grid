@@ -244,6 +244,10 @@ export const sourceContracts = {
   lastError: 'Most recent remote load/transport/validation rejection; a valid installed snapshot clears it.',
   getPendingChanges:
     'Return frozen remote draft entries keyed by stable row ID and column key. Preserve these before explicitly accepting a conflicting server snapshot.',
+  exportDrafts:
+    'Source preview: export a bounded immutable JSON v1 checkpoint of unsent/rejected paged drafts with dataset/revision/query/schema/total and previous values. Requires a loaded idle source; uncertain writes/conflicts must be resolved first. Host owns storage and privacy.',
+  restoreDrafts:
+    'Source preview: validate an unknown checkpoint into an empty paged source, load affected pages sequentially and check revision/total/identity/previous values before atomically installing drafts. No server writes or undo history. Failure/cancel/destroy installs no drafts; host reapplies current permissions/validation and remounts the engine.',
   conflict:
     'Validated remote server snapshot on conflict, or null. Draft values remain in the cache until explicit adoption.',
   commit:

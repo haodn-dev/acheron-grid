@@ -7,7 +7,11 @@ export { createAsyncDataSource } from './async-data-source.js';
 export { createLiveDataSource } from './live-data-source.js';
 export { createRemoteDataSource } from './remote-data-source.js';
 export { createPagedRemoteDataSource } from './paged-remote-data-source.js';
-export type { PagedRemoteDataSourceOptions, PagedRemoteWriteResult } from './paged-remote-data-source.js';
+export type {
+  PagedRemoteDataSourceOptions,
+  PagedRemoteWriteResult,
+  PagedRemoteDraftSnapshot,
+} from './paged-remote-data-source.js';
 export type {
   RemoteDataSourceOptions,
   RemoteSnapshot,

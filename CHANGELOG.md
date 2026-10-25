@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-No changes after 0.2.1 are recorded yet.
+- Add paged remote JSON draft checkpoints with bounded validation and atomic restore after verifying affected server pages. Includes explicit browser save/restore in the paged example. Source only; npm 0.2.1 remains unchanged. Uncertain mutations/receipts are not persisted.
 
 ## 0.2.1 — Development preview — 2026-10-23
 
