@@ -2,6 +2,283 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGridEngine, createPagedRemoteDataSource } from '../dist/index.js';
 
+test('paged mutation journal recovers evicted rows and query without loads or new IDs', async () => {
+  const query = { sort: { columnKey: 'title', direction: 'desc' } };
+  let saved,
+    original,
+    ids = 0,
+    writes = 0;
+  const first = fixture({
+    query,
+    persistMutation: (checkpoint) => {
+      saved = JSON.parse(JSON.stringify(checkpoint));
+    },
+    write: async (mutation, signal, criteria) => {
+      writes++;
+      original = mutation;
+      assert.deepEqual(criteria, query);
+      throw Error('Lost ACK');
+    },
+  }).source;
+  await first.loadPage(0);
+  first.setValue(0, 'title', 'zero');
+  await first.loadPage(4);
+  first.setValue(4, 'title', 'four');
+  await assert.rejects(first.commit(), /Lost ACK/);
+  assert.deepEqual(saved.positions, [
+    { rowIndex: 0, rowId: 0 },
+    { rowIndex: 4, rowId: 4 },
+  ]);
+  assert.deepEqual(first.exportMutation(), saved);
+  first.destroy();
+  const fixture2 = fixture({
+    query,
+    createMutationId: () => {
+      ids++;
+      return 'new-id';
+    },
+    write: async (mutation, signal, criteria) => {
+      writes++;
+      assert.deepEqual(mutation, original);
+      assert.deepEqual(criteria, query);
+      return {
+        mutationId: mutation.mutationId,
+        status: 'accepted',
+        total: 7,
+        delta: {
+          datasetId: 'tasks',
+          baseRevision: '1',
+          revision: '2',
+          cells: mutation.changes.map((change) => ({
+            rowId: change.rowId,
+            columnKey: change.columnKey,
+            value: change.value,
+          })),
+        },
+      };
+    },
+  });
+  const source = fixture2.source;
+  source.restoreMutation(saved);
+  saved.writer.mutation.changes[0].value = 'tampered';
+  assert.equal(source.status, 'disconnected');
+  assert.equal(source.getRowCount(), 10000);
+  assert.equal(source.pendingCellCount, 2);
+  assert.equal(source.getValue(0, 'title'), 'zero');
+  assert.equal(source.getValue(4, 'title'), 'four');
+  assert.equal(fixture2.loads(), 0);
+  assert.equal(ids, 0);
+  assert.throws(() => source.setValue(0, 'title', 'new'), /pending/);
+  assert.throws(() => source.setQuery({}), /pending/);
+  await source.commit();
+  assert.equal(writes, 2);
+  assert.equal(fixture2.loads(), 0);
+  assert.equal(ids, 0);
+  assert.equal(source.getRowCount(), 7);
+  assert.equal(source.revision, '2');
+  assert.equal(source.pendingCellCount, 0);
+  assert.equal(source.getPageState(0), null);
+  assert.throws(() => source.exportMutation(), /No uncertain/);
+  source.destroy();
+});
+
+test('paged mutation restoration rejects malformed envelopes and row coverage before changing state', async () => {
+  const original = fixture({
+    write: async () => {
+      throw Error('Lost ACK');
+    },
+  }).source;
+  await original.loadPage(0);
+  original.setValue(0, 'title', 'zero');
+  await original.loadPage(4);
+  original.setValue(4, 'title', 'four');
+  await assert.rejects(original.commit());
+  const saved = original.exportMutation();
+  for (const corrupt of [
+    (x) => {
+      x.version = 2;
+    },
+    (x) => {
+      x.total = -1;
+    },
+    (x) => {
+      x.query = { sort: { columnKey: 'title', direction: 'desc' } };
+    },
+    (x) => {
+      x.positions = [];
+    },
+    (x) => {
+      x.positions[0].rowIndex = x.total;
+    },
+    (x) => {
+      x.positions[1].rowIndex = 0;
+    },
+    (x) => {
+      x.positions[1].rowId = 0;
+    },
+    (x) => {
+      x.positions[0].rowId = 'other';
+    },
+    (x) => {
+      x.positions[0].rowId = '\0acheron-unloaded:0';
+    },
+    (x) => {
+      x.writer.mutation.changes.pop();
+    },
+    (x) => {
+      x.writer.columnKeys = ['other'];
+    },
+    (x) => {
+      x.writer.mutation.changes[0].previous = 'wrong';
+    },
+    (x) => {
+      x.writer.snapshot.datasetId = 'other';
+    },
+    (x) => {
+      x.writer.mutation.mutationId = '';
+    },
+  ]) {
+    const value = JSON.parse(JSON.stringify(saved));
+    corrupt(value);
+    const source = fixture().source;
+    assert.throws(() => source.restoreMutation(value));
+    assert.equal(source.revision, null);
+    assert.equal(source.getRowCount(), 0);
+    assert.equal(source.pendingCellCount, 0);
+    source.restoreMutation(saved);
+    assert.equal(source.pendingCellCount, 2);
+    source.destroy();
+  }
+  const bounded = fixture({ maxPendingCells: 1 }).source;
+  assert.throws(() => bounded.restoreMutation(saved), /checkpoint/);
+  bounded.destroy();
+  assert.throws(() => original.restoreMutation(saved), /pending|new paged/);
+  original.destroy();
+});
+
+test('paged persistence failures and destroy while saving cannot send a late write', async () => {
+  let writes = 0;
+  const source = fixture({
+    persistMutation: () => {
+      throw Error('Quota');
+    },
+    write: async () => {
+      writes++;
+    },
+  }).source;
+  await source.loadPage(0);
+  source.setValue(0, 'title', 'draft');
+  await assert.rejects(source.commit(), /Quota/);
+  assert.equal(writes, 0);
+  assert.equal(source.status, 'disconnected');
+  assert.equal(source.pendingCellCount, 1);
+  source.destroy();
+  let started, release;
+  const waiting = new Promise((done) => {
+    started = done;
+  });
+  const destroying = fixture({
+    persistMutation: () => {
+      started();
+      return new Promise((done) => {
+        release = done;
+      });
+    },
+    write: async () => {
+      writes++;
+    },
+  }).source;
+  await destroying.loadPage(0);
+  destroying.setValue(0, 'title', 'draft');
+  const operation = destroying.commit();
+  await waiting;
+  destroying.destroy();
+  release();
+  await operation;
+  assert.equal(writes, 0);
+});
+
+test('paged restored rejected/conflict requests preserve existing resolution and ignore old page generations', async () => {
+  const original = fixture({
+    write: async () => {
+      throw Error('Lost ACK');
+    },
+  }).source;
+  await original.loadPage(0);
+  original.setValue(0, 'title', 'draft');
+  await assert.rejects(original.commit());
+  const saved = original.exportMutation();
+  original.destroy();
+  for (const kind of ['rejected', 'conflict']) {
+    const source = fixture({
+      write: async (mutation) =>
+        kind === 'rejected'
+          ? { datasetId: 'tasks', mutationId: mutation.mutationId, status: kind, message: 'Denied', total: 10000 }
+          : {
+              mutationId: mutation.mutationId,
+              status: kind,
+              total: 9,
+              snapshot: { datasetId: 'tasks', revision: '2', rows: [{ id: 0, values: { title: 'server' } }] },
+            },
+    }).source;
+    source.restoreMutation(saved);
+    await source.commit();
+    if (kind === 'rejected') {
+      assert.equal(source.status, 'ready');
+      source.setValue(0, 'title', 'corrected');
+      assert.equal(source.pendingCellCount, 1);
+    } else {
+      assert.equal(source.status, 'conflict');
+      source.acceptServer();
+      assert.equal(source.getRowCount(), 9);
+      assert.equal(source.pendingCellCount, 0);
+    }
+    source.destroy();
+  }
+  let resolve;
+  const source = fixture({
+    load: () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  }).source;
+  const pending = source.loadPage(0);
+  await new Promise((done) => setImmediate(done));
+  source.restoreMutation(saved);
+  resolve({
+    datasetId: 'tasks',
+    revision: 'stale',
+    total: 2,
+    rows: [0, 1].map((id) => ({ id, values: { title: 'late' } })),
+  });
+  await pending;
+  assert.equal(source.revision, '1');
+  assert.equal(source.getRowCount(), 10000);
+  assert.equal(source.getValue(0, 'title'), 'draft');
+  source.destroy();
+  let finish;
+  const reentrant = fixture({
+    load: ({ signal }) => {
+      signal.addEventListener('abort', () => reentrant.destroy());
+      return new Promise((done) => {
+        finish = done;
+      });
+    },
+  }).source;
+  const loading = reentrant.loadPage(0);
+  await new Promise((done) => setImmediate(done));
+  assert.throws(() => reentrant.restoreMutation(saved), /destroyed/);
+  finish({
+    datasetId: 'tasks',
+    revision: 'late',
+    total: 2,
+    rows: [0, 1].map((id) => ({ id, values: { title: 'late' } })),
+  });
+  await loading;
+  assert.equal(reentrant.status, 'destroyed');
+  assert.equal(reentrant.pendingCellCount, 0);
+});
+
 test('paged object drafts preserve engine history references and freeze write intent at commit entry', async () => {
   const requests = [];
   const { source } = fixture({

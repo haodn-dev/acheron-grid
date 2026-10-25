@@ -90,6 +90,7 @@ try {
     'guides/getting-started.md',
     'packages/export/README.md',
     'packages/charts/README.md',
+    'guides/paged-remote.md',
   ]) {
     const text = await readFile(path, 'utf8');
     const code = [...text.matchAll(/```ts\n([\s\S]*?)```/g)][0][1];
@@ -178,7 +179,7 @@ try {
   const publicCatalog = await readFile('guides/core-api.md', 'utf8');
   for (const contract of Object.values(coreExportContracts)) assert.ok(publicCatalog.includes(contract));
   console.log(
-    'PASS: Markdown links/tables/images, document hashes, eight TypeScript examples, executable HTML/core lifecycle and core/Canvas API catalogs.',
+    'PASS: Markdown links/tables/images, document hashes, nine TypeScript examples, executable HTML/core lifecycle and core/Canvas API catalogs.',
   );
 } finally {
   assert.ok(resolve(directory).startsWith(resolve('test-results') + sep));

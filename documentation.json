@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "0bff47b063f24c49c9513bafbc14b279c7555ff3",
+  "sourceRevision": "6883814f12cb6e26113fa92217552f4e3bcb2460",
   "release": {
     "version": "0.2.1",
     "tag": "v0.2.1",
@@ -78,9 +78,9 @@
     {
       "id": "paged-remote",
       "path": "guides/paged-remote.md",
-      "revision": 3,
-      "updated": "2026-10-21",
-      "sha256": "bfe282c15b60315188addcc8382fa9b00d938a8d91be45326363e92cecf50e5f",
+      "revision": 4,
+      "updated": "2026-10-25",
+      "sha256": "2536be3e4f6a4bcbf1bbb300efeb00fc4709212cf99e2ec75a2dcf0e7ddad951",
       "history": [
         {
           "revision": 1,
@@ -92,6 +92,10 @@
         },
         {
           "revision": 3,
+          "summary": "Stable-ID writable paging, query/revision lifecycle, dirty-cohort receipts and runnable HTTP example."
+        },
+        {
+          "revision": 4,
           "summary": "Stable-ID writable paging, query/revision lifecycle, dirty-cohort receipts and runnable HTTP example."
         }
       ]
@@ -284,9 +288,9 @@
     {
       "id": "core-api",
       "path": "guides/core-api.md",
-      "revision": 14,
+      "revision": 15,
       "updated": "2026-10-25",
-      "sha256": "9e347383ed1a307f545212f9ecb6d7bffb11885ed4687e14afb3a7e870e7126b",
+      "sha256": "ad27bd0df9e0fb905e9d0bd2d891c8e089de187650492993e97d6c8bf1384894",
       "history": [
         {
           "revision": 1,
@@ -342,6 +346,10 @@
         },
         {
           "revision": 14,
+          "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
+        },
+        {
+          "revision": 15,
           "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
         }
       ]
@@ -403,9 +411,9 @@
     {
       "id": "core",
       "path": "packages/core/README.md",
-      "revision": 14,
+      "revision": 15,
       "updated": "2026-10-25",
-      "sha256": "64dc341f668b108c8f08c6d5aa151f0364a6a29b2ad3913c593430b33ae511e5",
+      "sha256": "a3380c8e3584395700fe7f8978f3ccbb337a580d80566a2415f62b4eed389b85",
       "history": [
         {
           "revision": 1,
@@ -461,6 +469,10 @@
         },
         {
           "revision": 14,
+          "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
+        },
+        {
+          "revision": 15,
           "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
         }
       ]
@@ -877,9 +889,9 @@
     {
       "id": "editing-and-remote",
       "path": "guides/editing-and-remote.md",
-      "revision": 7,
+      "revision": 8,
       "updated": "2026-10-25",
-      "sha256": "4c779b2331073f5bfc3d44a34006d03a3a1663dc1f2cf9eb7800ade3e0240357",
+      "sha256": "574af2b6eed78a3ab7c235d259f392adb59ad46533f61d41de4b11ac33cee5b5",
       "history": [
         {
           "revision": 1,
@@ -907,6 +919,10 @@
         },
         {
           "revision": 7,
+          "summary": "Paste special, hidden axes, number formats, Canvas localization and bounded remote write lifecycle."
+        },
+        {
+          "revision": 8,
           "summary": "Paste special, hidden axes, number formats, Canvas localization and bounded remote write lifecycle."
         }
       ]

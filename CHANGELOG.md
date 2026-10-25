@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Extend exact mutation recovery to paged sources with query/total/stable-position validation and a dirty-cohort journal. The HTTP example restores recovery data without page loads or automatic writes; explicit retry preserves request/query and handles changed query totals. Source preview only.
+
 - Add bounded remote mutation checkpoints and a host persistence hook awaited before transport. Restore validates the original snapshot/request and preserves exact retry across reload. Source preview only; npm 0.2.1 is unchanged. Includes HTTP/localStorage recovery example and regression coverage.
 
 ## 0.2.1 — Development preview — 2026-10-23
