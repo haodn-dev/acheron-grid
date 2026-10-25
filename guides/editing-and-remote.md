@@ -180,4 +180,4 @@ The HTTP example demonstrates reload and exact retry with synthetic localStorage
 server receipts do not provide restart durability or production authorization. Host policies and the
 server must authorize/validate writes again; never trust storage to grant permissions. Checkpoint export
 captures the bounded working snapshot, so its time/size scales with rows and columns and must fit the
-same JSON payload limit. Paged-query recovery and editing during commit remain separate work.
+same JSON payload limit. Paged-query recovery has a separate [paged checkpoint contract](paged-remote.md#mutation-recovery-source-preview); editing during commit remains separate work.

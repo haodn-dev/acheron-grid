@@ -3,11 +3,23 @@ import type { AsyncDataSourceOptions } from './async-data-source.js';
 import type { CellUpdate, DataRow, LocalViewOptions, RowId } from './data-source.js';
 import { LocalDataSource } from './data-source.js';
 import { createRemoteDataSource } from './remote-data-source.js';
-import type { RemoteMutation, RemoteSnapshot, RemoteWriteResult } from './remote-data-source.js';
+import type {
+  RemoteMutation,
+  RemoteSnapshot,
+  RemoteWriteResult,
+  RemoteMutationCheckpoint,
+} from './remote-data-source.js';
 import { jsonSnapshot } from './internal/remote-json.js';
 import { clipboardCellLimit } from './tsv.js';
 
 export type PagedRemoteWriteResult = RemoteWriteResult & { readonly total: number };
+export interface PagedRemoteMutationCheckpoint {
+  readonly version: 1;
+  readonly query: Readonly<LocalViewOptions>;
+  readonly total: number;
+  readonly positions: readonly { readonly rowIndex: number; readonly rowId: RowId }[];
+  readonly writer: RemoteMutationCheckpoint;
+}
 export interface PagedRemoteDataSourceOptions<S> extends Pick<
   AsyncDataSourceOptions<S>,
   'rowCount' | 'pageSize' | 'maxPages' | 'maxConcurrentLoads' | 'maxPendingLoads' | 'query' | 'createAbortController'
@@ -29,6 +41,7 @@ export interface PagedRemoteDataSourceOptions<S> extends Pick<
     signal: S,
     query: Readonly<LocalViewOptions>,
   ) => Promise<PagedRemoteWriteResult>;
+  readonly persistMutation?: (checkpoint: PagedRemoteMutationCheckpoint) => void | Promise<void>;
 }
 
 /** Bounded page cache plus stable-ID drafts. Server owns global query ordering and write authority. */
@@ -42,7 +55,8 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
     new Set(keys).size !== keys.length ||
     keys.some((key) => typeof key !== 'string' || !key) ||
     !Number.isSafeInteger(maxPendingCells) ||
-    maxPendingCells < 1
+    maxPendingCells < 1 ||
+    (options.persistMutation !== undefined && typeof options.persistMutation !== 'function')
   )
     throw new TypeError('Invalid paged remote options.');
   const identity = Symbol('row identity'),
@@ -176,6 +190,116 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
     writer = undefined;
     drafts = staged;
   }
+  function mutationCheckpoint(checkpoint: RemoteMutationCheckpoint): PagedRemoteMutationCheckpoint {
+    return jsonSnapshot({
+      version: 1,
+      query: cache.query,
+      total: cache.getRowCount(),
+      positions: [...drafts].map(([rowIndex, row]) => ({ rowIndex, rowId: row.id })),
+      writer: checkpoint,
+    });
+  }
+  function createWriter(snapshot: RemoteSnapshot) {
+    return createRemoteDataSource({
+      datasetId: options.datasetId,
+      columnKeys: keys,
+      maxRows: maxPendingCells,
+      maxPendingCells,
+      createAbortController: options.createAbortController,
+      createMutationId: options.createMutationId,
+      load: async () => snapshot,
+      ...(options.persistMutation
+        ? {
+            persistMutation: (checkpoint: RemoteMutationCheckpoint) =>
+              options.persistMutation!(mutationCheckpoint(checkpoint)),
+          }
+        : {}),
+      write: async (mutation, signal) => {
+        const result = jsonSnapshot(await options.write(mutation, signal, cache.query));
+        if (!result || !Number.isSafeInteger(result.total) || result.total < 0)
+          throw new TypeError('Invalid remote total.');
+        receiptTotal = result.total;
+        return result;
+      },
+    });
+  }
+  function exportMutation(): PagedRemoteMutationCheckpoint {
+    alive();
+    if (!writer) throw new Error('No uncertain paged mutation to export.');
+    return mutationCheckpoint(writer.exportMutation());
+  }
+  function restoreMutation(input: unknown): void {
+    idle();
+    if (revision !== null || writer || drafts.size) throw new Error('Restore a mutation into a new paged source.');
+    const checkpoint = jsonSnapshot(input) as Partial<PagedRemoteMutationCheckpoint> | null;
+    if (
+      !checkpoint ||
+      typeof checkpoint !== 'object' ||
+      Array.isArray(checkpoint) ||
+      checkpoint.version !== 1 ||
+      JSON.stringify(checkpoint.query) !== JSON.stringify(cache.query) ||
+      !Number.isSafeInteger(checkpoint.total) ||
+      checkpoint.total! < 0 ||
+      !Array.isArray(checkpoint.positions) ||
+      !checkpoint.positions.length ||
+      checkpoint.positions.length > maxPendingCells ||
+      !checkpoint.writer
+    )
+      throw new TypeError('Invalid paged mutation checkpoint.');
+    const positions = new Map<RowId, number>(),
+      indices = new Set<number>();
+    for (const position of checkpoint.positions) {
+      if (
+        !position ||
+        !Number.isSafeInteger(position.rowIndex) ||
+        position.rowIndex < 0 ||
+        position.rowIndex >= checkpoint.total! ||
+        !(
+          (typeof position.rowId === 'string' && !position.rowId.startsWith(unloadedPrefix)) ||
+          (typeof position.rowId === 'number' && Number.isFinite(position.rowId))
+        ) ||
+        positions.has(position.rowId) ||
+        indices.has(position.rowIndex)
+      )
+        throw new TypeError('Invalid checkpoint positions.');
+      positions.set(position.rowId, position.rowIndex);
+      indices.add(position.rowIndex);
+    }
+    const restored = createWriter(checkpoint.writer.snapshot);
+    try {
+      restored.restoreMutation(checkpoint.writer);
+      const edits = new Map<RowId, Map<string, unknown>>();
+      for (const change of restored.getPendingChanges()) {
+        if (!edits.has(change.rowId)) edits.set(change.rowId, new Map());
+        edits.get(change.rowId)!.set(change.columnKey, change.value);
+      }
+      if (restored.getRowCount() !== positions.size || edits.size !== positions.size)
+        throw new TypeError('Incomplete checkpoint cohort.');
+      const staged = new Map<number, Draft>();
+      for (const row of checkpoint.writer.snapshot.rows) {
+        if (!positions.has(row.id) || !edits.has(row.id)) throw new TypeError('Checkpoint row identity mismatch.');
+        staged.set(positions.get(row.id)!, {
+          id: row.id,
+          values: Object.freeze(Object.fromEntries(keys.map((key) => [key, row.values[key]]))),
+          edits: edits.get(row.id)!,
+        });
+      }
+      preparing = true;
+      try {
+        invalidate(checkpoint.total!);
+        alive();
+        revision = restored.revision;
+        authoritativeTotal = checkpoint.total!;
+        drafts = staged;
+        writer = restored;
+      } finally {
+        preparing = false;
+      }
+    } catch (error) {
+      restored.destroy();
+      throw error;
+    }
+  }
   async function commit(): Promise<void> {
     alive();
     if (preparing) throw new Error('Remote operation is already running.');
@@ -192,22 +316,7 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
         );
         const rows: DataRow[] = captured.map((row) => ({ id: row.id, values: row.values }));
         const snapshot = { datasetId: options.datasetId, revision, rows };
-        writer = createRemoteDataSource({
-          datasetId: options.datasetId,
-          columnKeys: keys,
-          maxRows: maxPendingCells,
-          maxPendingCells,
-          createAbortController: options.createAbortController,
-          createMutationId: options.createMutationId,
-          load: async () => snapshot,
-          write: async (mutation, signal) => {
-            const result = jsonSnapshot(await options.write(mutation, signal, cache.query));
-            if (!result || !Number.isSafeInteger(result.total) || result.total < 0)
-              throw new TypeError('Invalid remote total.');
-            receiptTotal = result.total;
-            return result;
-          },
-        });
+        writer = createWriter(snapshot);
         await writer.resync();
         if (token !== generation || destroyed) return;
         writer.setValues(
@@ -270,6 +379,8 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
     setValues,
     setValue: (rowIndex: number, columnKey: string, value: unknown) => setValues([{ rowIndex, columnKey, value }]),
     commit,
+    exportMutation,
+    restoreMutation,
     getPendingChanges: () =>
       Object.freeze(
         [...drafts.values()].flatMap((row) =>

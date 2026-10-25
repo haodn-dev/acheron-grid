@@ -13,6 +13,14 @@ mutation. Simulate an external edit to review a conflict, then explicitly adopt 
 Search and ordering run on the complete server dataset. This demo supports one title contains filter
 and one title sort; it is not a general query server.
 
+Source preview after npm 0.2.1 adds paged mutation recovery. The example journals its synthetic query,
+total, dirty-row positions and exact writer checkpoint in localStorage before HTTP write. Reload restores
+only that dirty cohort, without loading the old server revision or sending automatically. Choose Save /
+retry to reuse the same request and query. Accepted receipts invalidate the cache and update the query
+total/order before reloading the visible page. Navigation/editing stays blocked while uncertain; definite
+rejection reloads the current page before enabling edits. Storage/restore errors retain the journal for
+explicit recovery. This is not production auth, durable server receipts or unsent-draft autosave.
+
 The UI uses a bounded page adapter and remounts Canvas after page/query changes or accepted writes.
 That clears local history and row metadata at each boundary. It is a pagination example, not an
 infinite-scroll renderer or durable draft store. Query/refresh is disabled while drafts remain; edits

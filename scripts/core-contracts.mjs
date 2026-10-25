@@ -245,9 +245,9 @@ export const sourceContracts = {
   getPendingChanges:
     'Return frozen remote draft entries keyed by stable row ID and column key. Preserve these before explicitly accepting a conflicting server snapshot.',
   exportMutation:
-    'Source preview: export a bounded immutable JSON checkpoint of an in-flight/uncertain bounded remote request, original snapshot and column schema. Preserve the exact mutation ID/payload; conflicts require their own resolution.',
+    'Source preview: export an immutable in-flight/uncertain request checkpoint. Bounded sources include their original snapshot/schema; paged sources add query/total/stable positions around the dirty-cohort writer. Preserve the exact mutation ID/payload; conflicts require their own resolution.',
   restoreMutation:
-    'Source preview: validate a checkpoint into a new bounded remote source and atomically restore its optimistic cache plus exact uncertain request, disconnected. Does not load/write or create a new mutation ID. Retry only through commit; storage is not authorization.',
+    'Source preview: validate a checkpoint into a new source and atomically restore optimistic rows plus the exact disconnected request. Paged query/schema/positions/cohort must match; no server load/write or new mutation ID. Retry through commit; storage is not authorization.',
   conflict:
     'Validated remote server snapshot on conflict, or null. Draft values remain in the cache until explicit adoption.',
   commit:

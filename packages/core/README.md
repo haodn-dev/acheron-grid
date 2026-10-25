@@ -437,6 +437,8 @@ remains browser-independent. See the same guide for bundler setup, cancellation,
 
 For larger server datasets, use the 0.2.1 [writable remote pages](../../guides/paged-remote.md) adapter rather than retaining a full snapshot. Server query/revision and cache invalidation are explicit; only loaded rows can start a draft.
 
+Source preview after npm 0.2.1 adds [paged mutation recovery](../../guides/paged-remote.md#mutation-recovery-source-preview): host-persisted query/total/positions plus the exact dirty-cohort request. Restore does not load an old revision or resend automatically; accepted receipts invalidate pages and update query membership before reload.
+
 Source preview after npm 0.2.1 adds bounded `exportMutation()` / `restoreMutation(unknown)` checkpoints
 and a host-owned `persistMutation` hook before transport. Reload can recover the exact uncertain request
 without a new mutation ID or server load. This is separate from paged/unsent draft storage and still

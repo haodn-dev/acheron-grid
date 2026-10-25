@@ -1,6 +1,7 @@
 import { createPagedRemoteDataSource } from '/core/index.js';
 import { createGrid } from '/canvas/index.js';
 const $ = (id) => document.getElementById(id);
+const journalKey = 'acheron-paged-mutation-v1';
 async function request(path, body, signal) {
   const response = await fetch('/paged/api/' + path, {
     signal,
@@ -32,6 +33,7 @@ const source = createPagedRemoteDataSource({
       signal,
     ),
   write: (mutation, signal, query) => request('write', { mutation, query }, signal),
+  persistMutation: (checkpoint) => localStorage.setItem(journalKey, JSON.stringify(checkpoint)),
 });
 let offset = 0,
   grid,
@@ -51,6 +53,7 @@ function mount() {
         source.setValues(updates.map((update) => ({ ...update, rowIndex: start + update.rowIndex }))),
     },
     onEvent: update,
+    resolveCellPermission: () => ({ writable: source.status === 'ready' }),
   });
 }
 function update() {
@@ -60,11 +63,12 @@ function update() {
     `${source.status} · ${source.pendingCellCount} pending cells · revision ${source.revision ?? 'none'} · page ${offset / 20 + 1} · ${source.getRowCount()} records${source.lastError ? ' · ' + String(source.lastError) : ''}`;
   for (const id of ['previous', 'next', 'stage', 'save', 'reload', 'query', 'external', 'mode', 'accept'])
     $(id).disabled = busy;
-  $('previous').disabled = busy || offset === 0;
-  $('next').disabled = busy || offset + 20 >= source.getRowCount();
+  $('previous').disabled = busy || source.status !== 'ready' || offset === 0;
+  $('next').disabled = busy || source.status !== 'ready' || offset + 20 >= source.getRowCount();
   $('stage').disabled = busy || source.status !== 'ready' || offset >= source.getRowCount();
   $('save').disabled = busy || !source.pendingCellCount || source.status === 'conflict';
   for (const id of ['query', 'reload']) $(id).disabled = busy || !!source.pendingCellCount;
+  $('query').disabled ||= !grid;
   $('conflict').hidden = source.status !== 'conflict';
   if (source.conflict)
     $('review').textContent = JSON.stringify(
@@ -104,10 +108,15 @@ $('save').onclick = () =>
     if (!source.pendingCellCount) {
       offset = Math.min(offset, Math.max(0, Math.ceil(source.getRowCount() / 20) - 1) * 20);
       await page(offset);
-    }
+    } else if (source.status === 'ready') await page(offset);
+    if (source.status === 'ready') localStorage.removeItem(journalKey);
   });
 $('reload').onclick = () =>
   run(async () => {
+    if (!grid) {
+      await initialize();
+      return;
+    }
     source.reset();
     await page(0);
   });
@@ -125,8 +134,23 @@ $('accept').onclick = () =>
   run(async () => {
     source.acceptServer();
     await page(0);
+    localStorage.removeItem(journalKey);
   });
-await run(() => page(0));
+async function initialize() {
+  const stored = localStorage.getItem(journalKey);
+  if (stored === null) {
+    await page(0);
+    return;
+  }
+  const checkpoint = JSON.parse(stored);
+  source.setQuery(checkpoint.query);
+  source.restoreMutation(checkpoint);
+  offset = Math.floor(checkpoint.positions[0].rowIndex / source.pageSize) * source.pageSize;
+  $('order').value = source.query.sort?.direction ?? 'asc';
+  $('search').value = source.query.filters?.[0]?.query ?? '';
+  mount();
+}
+await run(initialize);
 window.addEventListener('pagehide', (event) => {
   if (!event.persisted) {
     grid?.destroy();
