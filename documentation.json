@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "59464bf2463b1d2cc59668a0d67b98fabcafeed1",
+  "sourceRevision": "e592c4f2d2211bceb7c220fc1074707bab77ecbf",
   "release": {
     "version": "0.2.1",
     "tag": "v0.2.1",
@@ -11,9 +11,9 @@
     {
       "id": "v1-readiness",
       "path": "guides/v1-readiness.md",
-      "revision": 3,
-      "updated": "2026-10-22",
-      "sha256": "313224ca8ac4b402218da1334fa4d971ad8cec71ba450850a0413070711aed09",
+      "revision": 4,
+      "updated": "2026-10-25",
+      "sha256": "e480029995aef2def583854e167068dff7b2b9f4fbe5f216196db8762e8d0aed",
       "history": [
         {
           "revision": 1,
@@ -25,6 +25,10 @@
         },
         {
           "revision": 3,
+          "summary": "Selected 1.0 contracts, compatibility policy and evidence gates; not a release announcement."
+        },
+        {
+          "revision": 4,
           "summary": "Selected 1.0 contracts, compatibility policy and evidence gates; not a release announcement."
         }
       ]
@@ -222,9 +226,9 @@
     {
       "id": "ai",
       "path": "guides/ai-integration.md",
-      "revision": 7,
-      "updated": "2026-10-22",
-      "sha256": "79be142a403dc17dd49fb09b4e96cee8cb9e77b7e2c535387850a902b7d3bd97",
+      "revision": 8,
+      "updated": "2026-10-25",
+      "sha256": "8082e8a4c07ea402cb8a2b957194183f79b31202cbefca2bcf8f6ed4018ecb04",
       "history": [
         {
           "revision": 1,
@@ -253,15 +257,19 @@
         {
           "revision": 7,
           "summary": "Canonical public integration and host boundaries."
+        },
+        {
+          "revision": 8,
+          "summary": "Canonical public integration and host boundaries."
         }
       ]
     },
     {
       "id": "versions",
       "path": "guides/versions.md",
-      "revision": 10,
+      "revision": 11,
       "updated": "2026-10-25",
-      "sha256": "6d5b1fd08369a3709f9e607b2d1f4e7155e33e4bc0abd6111967ee61393884bb",
+      "sha256": "538dfbd4c756ec1f9f80346d0eb4a4a354655ee14ac60451a6de4b564abacfe4",
       "history": [
         {
           "revision": 1,
@@ -301,6 +309,10 @@
         },
         {
           "revision": 10,
+          "summary": "Separate package releases, source previews and per-document revisions."
+        },
+        {
+          "revision": 11,
           "summary": "Separate package releases, source previews and per-document revisions."
         }
       ]
@@ -876,9 +888,9 @@
     {
       "id": "support",
       "path": "SUPPORT.md",
-      "revision": 16,
+      "revision": 17,
       "updated": "2026-10-25",
-      "sha256": "e2b0becd34c4e225bfbb18edf6c819c4cfa3460933a2bde500898d0ca7dcdbef",
+      "sha256": "9144bbfa6cc2803fdd0db70a3d8fc5287f6921b8e525d95e1647cd2657f8a3f3",
       "history": [
         {
           "revision": 1,
@@ -942,6 +954,10 @@
         },
         {
           "revision": 16,
+          "summary": "Verified environments and practical limits."
+        },
+        {
+          "revision": 17,
           "summary": "Verified environments and practical limits."
         }
       ]

@@ -1,6 +1,6 @@
 # Acheron Grid 0.3.0 — development preview
 
-This minor release adds recovery APIs for unsent drafts and uncertain remote writes across all eight aligned packages. It is being verified for publication; npm 0.2.1 remains available until publication completes. Earlier artifacts and tags remain immutable.
+This minor release adds recovery APIs for unsent drafts and uncertain remote writes across all eight aligned packages. All eight packages are published on npm at 0.3.0, with trusted-publishing provenance and verified exact registry consumers. Earlier artifacts and tags remain immutable.
 
 ## Changes since 0.2.1
 
@@ -22,7 +22,7 @@ Hosts must scope storage to the authenticated principal/dataset, authorize befor
 
 ## Validation and known limits
 
-The integrated candidate is checked with typecheck, Node tests, Chromium and portable Firefox/WebKit integration, standalone playground, eight independent packed consumers, MCP/release tooling, documentation examples and formatting. Exact revision, counts, CI and registry results are recorded after verification completes; configuration alone is not a pass.
+Tag `v0.3.0` identifies commit `e592c4f2d2211bceb7c220fc1074707bab77ecbf`. The [release workflow](https://github.com/haodn-dev/acheron-grid/actions/runs/40192814508) passed Node22/24, Chromium, portable Firefox/WebKit, playground, package consumers and exact registry consumers. Local checks passed typecheck, 266 Node tests, 182 Chromium integration tests, 16 playground tests, 18 MCP tests, 2 release-tooling tests, eight packed consumers, 24 document hashes/10 TypeScript examples and formatting. WebKit passed 178 integration tests with four existing Chromium-only exclusions and 16 playground tests. Firefox could not launch on the local Windows host; Linux CI supplies its evidence. Eight export maps are unchanged and 73 declarations were compared with npm0.2.1; only the three checkpoint-related declarations changed.
 
 This remains a 0.x development preview, not stable 1.0. Screen-reader/physical-device/native clipboard acceptance is deferred to users and remains unverified. Production backend/MCP-host acceptance remains host-owned. Editing during commit, query/schema migration, collaboration and worker execution outside TSV remain separate work. Bounded mutation checkpoints capture the bounded working snapshot; paged checkpoints capture the dirty cohort. Both must fit the JSON payload/depth limits. Storage callbacks must settle; transport/storage deadlines and privacy belong to the host.
 

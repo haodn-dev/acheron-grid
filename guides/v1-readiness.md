@@ -1,7 +1,7 @@
 # Version 1.0 contracts and acceptance
 
 This is the selected acceptance policy for a future 1.0, not a stable release announcement.
-Current packages remain 0.x/source previews. Stable 1.0 publication remains postponed; npm 0.2.0 development previews are available. All features and optional
+Current packages remain 0.x/source previews. Stable 1.0 publication remains postponed; npm 0.3.0 development previews are available. All features and optional
 modules remain free and open source; stability is evaluated separately for each package.
 
 ## Scope and compatibility
@@ -16,7 +16,7 @@ The current publisher aligns and publishes all eight packages together. An all-p
 requires all eight packages to pass. Releasing only a stable subset first would require a separately
 reviewed publisher/versioning change; this document does not enable that release path.
 
-Formula/workbook calculation, pivot, collaboration, Worker execution beyond the 0.2.0 TSV decoder, reload-persistent drafts and
+Formula/workbook calculation, pivot, collaboration, Worker execution beyond the 0.2.0 TSV decoder and
 editing during a remote commit are outside this acceptance scope. They are not prerequisites for 1.0
 when the limits below are explicit. Remote/MCP production integration gates apply to their support
 claims; they do not require a backend to use the headless engine with local data.

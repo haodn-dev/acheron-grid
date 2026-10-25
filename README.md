@@ -14,11 +14,11 @@ All features and optional modules are open source and free to use. There are no 
 
 ## Status
 
-**0.3.0 development preview is being verified for all eight packages.** npm 0.2.1 remains published until this candidate completes release verification. Install matching Acheron package versions. APIs remain experimental; this is not a stable 1.0 release.
+**0.3.0 development preview is published on npm for all eight packages.** Earlier artifacts remain available and immutable. Install matching Acheron package versions. APIs remain experimental; this is not a stable 1.0 release.
 
 The candidate adds unsent draft checkpoints and exact remote mutation recovery with host persistence before transport. Existing APIs/export paths remain; the new APIs are additive. See [changes and migration](RELEASE-0.3.0.md), the [changelog](CHANGELOG.md) and the [1.0 acceptance policy](guides/v1-readiness.md).
 
-The [v0.2.1 release workflow](https://github.com/haodn-dev/acheron-grid/actions/runs/39924579099) passed Node 22/24, Chromium, portable Firefox/WebKit, independent package consumers and exact npm-version consumers. All eight npm artifacts have trusted-publishing provenance. Manual screen-reader, physical-device and production-host acceptance remain open.
+The [v0.3.0 release workflow](https://github.com/haodn-dev/acheron-grid/actions/runs/40192814508) passed Node 22/24, Chromium, portable Firefox/WebKit, independent package consumers and exact npm-version consumers. All eight npm artifacts have trusted-publishing provenance. Manual screen-reader, physical-device and production-host acceptance remain open.
 
 ## Start here
 
@@ -122,7 +122,7 @@ Use the focused guides for complete examples and limits:
 
 `@acheron-grid/mcp` provides a stdio documentation CLI and a factory for host-authorized grid tools. The CLI exposes bundled package documentation; it does not expose application data or automatically connect to a browser grid.
 
-A host must supply the engine, connection identity and authorization. Writes additionally require explicit opt-in and validation. No authentication service is started. The 0.2.1 artifact still advertises the legacy MCP `serverInfo.version` value `0.1.0`; identify the installed artifact using its package manifest/lockfile. See the [MCP contract](packages/mcp/README.md).
+A host must supply the engine, connection identity and authorization. Writes additionally require explicit opt-in and validation. No authentication service is started. The 0.3.0 artifact still advertises the legacy MCP `serverInfo.version` value `0.1.0`; identify the installed artifact using its package manifest/lockfile. See the [MCP contract](packages/mcp/README.md).
 
 ## Development and verification
 
