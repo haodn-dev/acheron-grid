@@ -4,19 +4,19 @@ Package versions and documentation revisions answer different questions. The pac
 
 ## Reading channels
 
-The 0.2.0 development preview is published for all eight packages. The repository is preparing
-the compatible 0.2.1 patch; see [patch changes and migration](../RELEASE-0.2.1.md).
-The website defaults to npm 0.2.0. The archived npm 0.1.0 channel retains its original
+The 0.2.1 development preview is published for all eight packages; see
+[patch changes and migration](../RELEASE-0.2.1.md). The 0.1.0 and 0.2.0 archives retain their original scope.
+The website release channel targets npm 0.2.1. The archived npm 0.1.0 channel retains its original
 scope; Source preview follows a separately identified Git revision.
 
-| Channel           | Use it when                                               | Meaning                                                                                              |
-| ----------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| npm 0.1.0         | Your application installs the published 0.1.0 packages    | Frozen API scope from Git tag v0.1.0; later editorial corrections may clarify that scope             |
-| npm 0.2.0         | Your application installs the current development preview | All eight packages; repository guides and tag v0.2.0 define the released API scope                   |
-| 0.2.1 preparation | You evaluate the patch source before publication          | Same public API as 0.2.0, with ARIA and documentation corrections; not yet a published-channel claim |
-| Source preview    | You build the revision shown by the site                  | Includes 0.2.0 APIs and any subsequent source changes; identify the exact revision                   |
+| Channel        | Use it when                                            | Meaning                                                                                  |
+| -------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| npm 0.1.0      | Your application installs the published 0.1.0 packages | Frozen API scope from Git tag v0.1.0; later editorial corrections may clarify that scope |
+| npm 0.2.0      | Your application installs the archived 0.2.0 packages  | Frozen 0.2.0 API scope and editorial snapshot                                            |
+| npm 0.2.1      | Your application installs the current patch preview    | All eight packages, ARIA correction and complete audited documentation                   |
+| Source preview | You build the revision shown by the site               | Includes 0.2.0 APIs and any subsequent source changes; identify the exact revision       |
 
-The site defaults to npm 0.2.0. Select npm 0.1.0 only for an application that still installs that version. Select Source preview for development after the released scope and record the exact Git revision.
+The site release channel targets npm 0.2.1. Select an archived channel only for an application that still installs that version. Select Source preview for development after the released scope and record the exact Git revision.
 
 ## Per-document revisions
 
