@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "sourceRevision": "15e5a986b552710d389e7253286be48079264b59",
+  "sourceRevision": "114ff0a3e35cc4bc8ab762c27baa036c585305b8",
   "release": {
-    "version": "0.2.0",
-    "tag": "v0.2.0",
-    "revision": "ac761dcdc908d81eeaa2d1f4c9b311b9bb41b788",
-    "documentationRevision": "cfd56960a1c665c1d31a5383e6735778d2641995"
+    "version": "0.2.1",
+    "tag": "v0.2.1",
+    "revision": "15e5a986b552710d389e7253286be48079264b59",
+    "documentationRevision": "114ff0a3e35cc4bc8ab762c27baa036c585305b8"
   },
   "documents": [
     {
@@ -235,9 +235,9 @@
     {
       "id": "versions",
       "path": "guides/versions.md",
-      "revision": 8,
-      "updated": "2026-10-23",
-      "sha256": "3cd31d5f0b5af9f74b4d1576e20c4eb899ffa1381515be1af8dadb9351dd933e",
+      "revision": 10,
+      "updated": "2026-10-25",
+      "sha256": "6d5b1fd08369a3709f9e607b2d1f4e7155e33e4bc0abd6111967ee61393884bb",
       "history": [
         {
           "revision": 1,
@@ -269,6 +269,14 @@
         },
         {
           "revision": 8,
+          "summary": "Separate package releases, source previews and per-document revisions."
+        },
+        {
+          "revision": 9,
+          "summary": "Separate package releases, source previews and per-document revisions."
+        },
+        {
+          "revision": 10,
           "summary": "Separate package releases, source previews and per-document revisions."
         }
       ]
@@ -788,9 +796,9 @@
     {
       "id": "support",
       "path": "SUPPORT.md",
-      "revision": 15,
-      "updated": "2026-10-22",
-      "sha256": "c211327fe8a03bfdc79a3661ebf25a3707f0f8d6ea44357e801980e6c33424df",
+      "revision": 16,
+      "updated": "2026-10-25",
+      "sha256": "e2b0becd34c4e225bfbb18edf6c819c4cfa3460933a2bde500898d0ca7dcdbef",
       "history": [
         {
           "revision": 1,
@@ -850,6 +858,10 @@
         },
         {
           "revision": 15,
+          "summary": "Verified environments and practical limits."
+        },
+        {
+          "revision": 16,
           "summary": "Verified environments and practical limits."
         }
       ]
@@ -944,6 +956,12 @@
       "tag": "v0.2.0",
       "revision": "ac761dcdc908d81eeaa2d1f4c9b311b9bb41b788",
       "documentationRevision": "cfd56960a1c665c1d31a5383e6735778d2641995"
+    },
+    "0.2.1": {
+      "version": "0.2.1",
+      "tag": "v0.2.1",
+      "revision": "15e5a986b552710d389e7253286be48079264b59",
+      "documentationRevision": "114ff0a3e35cc4bc8ab762c27baa036c585305b8"
     }
   }
 }
