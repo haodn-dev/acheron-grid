@@ -4,7 +4,7 @@
 
 Version 0.2.0 includes a runnable [application-owned MCP task session](../examples/mcp/README.md) and optional host-managed dataset revisions. The session defaults to read-only, loads bounded JSON, and supports authorized status writes with read-back and stale-revision rejection. It does not connect to browser data or provide durable persistence. Its executable checks test protocol behavior; real-model evaluation remains separate and no model-quality score is claimed.
 
-Read [getting-started.md](getting-started.md), then the package README files and exported TypeScript types in the version being integrated. Acheron Grid is an experimental preview; all eight packages have version 0.2.0 on npm; APIs remain experimental. Read-only async paging is implemented; do not infer async writes or server-wide local queries. React and Vue adapters are implemented; read their package references for the exact contract.
+Read [getting-started.md](getting-started.md), then the package README files and exported TypeScript types in the version being integrated. Acheron Grid is an experimental preview; all eight packages have version 0.3.0 on npm; APIs remain experimental. Read-only async paging is implemented; do not infer async writes or server-wide local queries. React and Vue adapters are implemented; read their package references for the exact contract.
 
 ## Architecture
 
@@ -24,7 +24,7 @@ Use stable row IDs and column keys. Keep dimensions non-zero. Release the grid w
 
 The optional `@acheron-grid/mcp` package provides a stdio documentation server and a host-owned GridEngine adapter. Read the [MCP package reference](../packages/mcp/README.md) for launch instructions and tool contracts.
 
-- Documentation resources: seven package README snapshots in npm 0.2.0 (including export and charts), no grid data by default.
+- Documentation resources: seven package README snapshots in npm 0.3.0 (including export and charts), no grid data by default.
 - Host tools: approved schema, bounded cell reads, optional atomic cell updates by row ID and column key.
 - Writes require host authorization, validation, expected-value conflict checks and core writable permissions; use normal core history.
 - No browser bridge or HTTP authentication setup is included. Running the CLI does not connect to the browser playground. Structural, view and formatting tools remain future scope.

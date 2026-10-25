@@ -1,8 +1,8 @@
 # Release preparation
 
-The current npm release is **0.2.1 development preview** for all eight packages. See
-[the release notes](RELEASE-0.2.1.md) for changes and migration.
-The original 0.1.0 and 0.2.0 artifacts and tags remain immutable.
+The current npm release is **0.3.0 development preview** for all eight packages. See
+[the release notes](RELEASE-0.3.0.md) for changes and migration.
+The original 0.1.0, 0.2.0 and 0.2.1 artifacts and tags remain immutable.
 
 This file retains the original 0.1.0 preparation procedure. The six original 0.1.0 packages are now
 published previews; 0.2.0 includes the subsequent source APIs. Before selecting a future stable version, close
