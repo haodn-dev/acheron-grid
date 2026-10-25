@@ -11,6 +11,7 @@ export type {
   PagedRemoteDataSourceOptions,
   PagedRemoteWriteResult,
   PagedRemoteMutationCheckpoint,
+  PagedRemoteDraftSnapshot,
 } from './paged-remote-data-source.js';
 export type {
   RemoteDataSourceOptions,

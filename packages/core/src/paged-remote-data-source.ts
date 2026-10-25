@@ -20,6 +20,21 @@ export interface PagedRemoteMutationCheckpoint {
   readonly positions: readonly { readonly rowIndex: number; readonly rowId: RowId }[];
   readonly writer: RemoteMutationCheckpoint;
 }
+export interface PagedRemoteDraftSnapshot {
+  readonly version: 1;
+  readonly datasetId: string;
+  readonly revision: string;
+  readonly query: Readonly<LocalViewOptions>;
+  readonly columnKeys: readonly string[];
+  readonly total: number;
+  readonly changes: readonly {
+    readonly rowIndex: number;
+    readonly rowId: RowId;
+    readonly columnKey: string;
+    readonly previous: unknown;
+    readonly value: unknown;
+  }[];
+}
 export interface PagedRemoteDataSourceOptions<S> extends Pick<
   AsyncDataSourceOptions<S>,
   'rowCount' | 'pageSize' | 'maxPages' | 'maxConcurrentLoads' | 'maxPendingLoads' | 'query' | 'createAbortController'
@@ -64,7 +79,8 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
   let revision: string | null = null,
     generation = 0,
     destroyed = false,
-    preparing = false;
+    preparing = false,
+    restoring = false;
   let writer: ReturnType<typeof createRemoteDataSource<S>> | undefined;
   let receiptTotal: number | undefined;
   let authoritativeTotal: number | null = null;
@@ -143,7 +159,7 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
   }
   function idle(): void {
     alive();
-    if (preparing || (writer && writer.status !== 'ready'))
+    if (preparing || restoring || (writer && writer.status !== 'ready'))
       throw new Error('Resolve the pending remote operation first.');
   }
   function pendingCount(staged = drafts): number {
@@ -302,7 +318,7 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
   }
   async function commit(): Promise<void> {
     alive();
-    if (preparing) throw new Error('Remote operation is already running.');
+    if (preparing || restoring) throw new Error('Remote operation is already running.');
     if (!drafts.size) return;
     preparing = true;
     cache.cancel();
@@ -337,6 +353,105 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
       preparing = false;
     }
   }
+  function exportDrafts(): PagedRemoteDraftSnapshot {
+    idle();
+    if (revision === null) throw new Error('Load a page before exporting drafts.');
+    return jsonSnapshot({
+      version: 1,
+      datasetId: options.datasetId,
+      revision,
+      query: cache.query,
+      columnKeys: keys,
+      total: cache.getRowCount(),
+      changes: [...drafts].flatMap(([rowIndex, row]) =>
+        [...row.edits].map(([columnKey, value]) => ({
+          rowIndex,
+          rowId: row.id,
+          columnKey,
+          previous: row.values[columnKey],
+          value,
+        })),
+      ),
+    });
+  }
+  async function restoreDrafts(input: unknown): Promise<void> {
+    idle();
+    if (drafts.size || writer) throw new Error('Restore drafts into an empty source.');
+    const snapshot = jsonSnapshot(input) as Partial<PagedRemoteDraftSnapshot> | null;
+    if (
+      !snapshot ||
+      typeof snapshot !== 'object' ||
+      Array.isArray(snapshot) ||
+      snapshot.version !== 1 ||
+      snapshot.datasetId !== options.datasetId ||
+      typeof snapshot.revision !== 'string' ||
+      !snapshot.revision ||
+      JSON.stringify(snapshot.columnKeys) !== JSON.stringify(keys) ||
+      JSON.stringify(snapshot.query) !== JSON.stringify(cache.query) ||
+      !Number.isSafeInteger(snapshot.total) ||
+      snapshot.total! < 0 ||
+      !Array.isArray(snapshot.changes) ||
+      snapshot.changes.length > maxPendingCells
+    )
+      throw new TypeError('Invalid or incompatible draft checkpoint.');
+    const seen = new Set<string>();
+    for (const change of snapshot.changes) {
+      if (
+        !change ||
+        typeof change !== 'object' ||
+        !Number.isSafeInteger(change.rowIndex) ||
+        change.rowIndex < 0 ||
+        change.rowIndex >= snapshot.total! ||
+        !keys.includes(change.columnKey) ||
+        !Object.hasOwn(change, 'previous') ||
+        !Object.hasOwn(change, 'value') ||
+        !(
+          (typeof change.rowId === 'string' && !change.rowId.startsWith(unloadedPrefix)) ||
+          (typeof change.rowId === 'number' && Number.isFinite(change.rowId))
+        )
+      )
+        throw new TypeError('Invalid draft checkpoint change.');
+      const key = JSON.stringify([change.rowIndex, change.columnKey]);
+      if (seen.has(key)) throw new TypeError('Duplicate draft checkpoint cell.');
+      seen.add(key);
+    }
+    const staged = new Map<number, Draft>();
+    const indices = new Map<RowId, number>();
+    const token = generation;
+    restoring = true;
+    try {
+      const changes = [...snapshot.changes].sort((a, b) => a.rowIndex - b.rowIndex);
+      let page = -1;
+      for (const change of changes) {
+        const offset = Math.floor(change.rowIndex / cache.pageSize) * cache.pageSize;
+        if (offset !== page) {
+          await cache.loadPage(offset);
+          page = offset;
+        }
+        if (destroyed || token !== generation) throw new Error('Draft restoration canceled.');
+        if (
+          revision !== snapshot.revision ||
+          cache.getRowCount() !== snapshot.total ||
+          cache.getRowId(change.rowIndex) !== change.rowId ||
+          JSON.stringify(cache.getValue(change.rowIndex, change.columnKey)) !== JSON.stringify(change.previous)
+        )
+          throw new Error('Draft checkpoint no longer matches the server.');
+        if (indices.has(change.rowId) && indices.get(change.rowId) !== change.rowIndex)
+          throw new TypeError('Duplicate draft row ID.');
+        const prior = staged.get(change.rowIndex);
+        const values =
+          prior?.values ??
+          Object.freeze(Object.fromEntries(keys.map((key) => [key, cache.getValue(change.rowIndex, key)])));
+        const edits = new Map(prior?.edits);
+        edits.set(change.columnKey, change.value);
+        staged.set(change.rowIndex, { id: change.rowId, values, edits });
+        indices.set(change.rowId, change.rowIndex);
+      }
+      drafts = staged;
+    } finally {
+      restoring = false;
+    }
+  }
   function resetQuery(next?: LocalViewOptions, total = 0): void {
     idle();
     if (drafts.size) throw new Error('Resolve or discard drafts before changing the query.');
@@ -356,7 +471,7 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
       return revision;
     },
     get status() {
-      return destroyed ? 'destroyed' : preparing ? 'committing' : (writer?.status ?? 'ready');
+      return destroyed ? 'destroyed' : restoring ? 'loading' : preparing ? 'committing' : (writer?.status ?? 'ready');
     },
     get lastError() {
       return writer?.lastError;
@@ -379,6 +494,8 @@ export function createPagedRemoteDataSource<S>(options: PagedRemoteDataSourceOpt
     setValues,
     setValue: (rowIndex: number, columnKey: string, value: unknown) => setValues([{ rowIndex, columnKey, value }]),
     commit,
+    exportDrafts,
+    restoreDrafts,
     exportMutation,
     restoreMutation,
     getPendingChanges: () =>

@@ -245,9 +245,14 @@ export const sourceContracts = {
   getPendingChanges:
     'Return frozen remote draft entries keyed by stable row ID and column key. Preserve these before explicitly accepting a conflicting server snapshot.',
   exportMutation:
-    'Source preview: export an immutable in-flight/uncertain request checkpoint. Bounded sources include their original snapshot/schema; paged sources add query/total/stable positions around the dirty-cohort writer. Preserve the exact mutation ID/payload; conflicts require their own resolution.',
+    'Available in 0.3.0: export an immutable in-flight/uncertain request checkpoint. Bounded sources include their original snapshot/schema; paged sources add query/total/stable positions around the dirty-cohort writer. Preserve the exact mutation ID/payload; conflicts require their own resolution.',
   restoreMutation:
-    'Source preview: validate a checkpoint into a new source and atomically restore optimistic rows plus the exact disconnected request. Paged query/schema/positions/cohort must match; no server load/write or new mutation ID. Retry through commit; storage is not authorization.',
+    'Available in 0.3.0: validate a checkpoint into a new source and atomically restore optimistic rows plus the exact disconnected request. Paged query/schema/positions/cohort must match; no server load/write or new mutation ID. Retry through commit; storage is not authorization.',
+
+  exportDrafts:
+    'Available in 0.3.0: export a bounded immutable JSON v1 checkpoint of unsent/rejected paged drafts with dataset/revision/query/schema/total and previous values. Requires a loaded idle source; uncertain writes/conflicts must be resolved first. Host owns storage and privacy.',
+  restoreDrafts:
+    'Available in 0.3.0: validate an unknown checkpoint into an empty paged source, load affected pages sequentially and check revision/total/identity/previous values before atomically installing drafts. No server writes or undo history. Failure/cancel/destroy installs no drafts; host reapplies current permissions/validation and remounts the engine.',
   conflict:
     'Validated remote server snapshot on conflict, or null. Draft values remain in the cache until explicit adoption.',
   commit:

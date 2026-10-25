@@ -61,12 +61,26 @@ function update() {
   $('grid').setAttribute('aria-busy', String(busy));
   $('status').textContent =
     `${source.status} · ${source.pendingCellCount} pending cells · revision ${source.revision ?? 'none'} · page ${offset / 20 + 1} · ${source.getRowCount()} records${source.lastError ? ' · ' + String(source.lastError) : ''}`;
-  for (const id of ['previous', 'next', 'stage', 'save', 'reload', 'query', 'external', 'mode', 'accept'])
+  for (const id of [
+    'previous',
+    'next',
+    'stage',
+    'save',
+    'reload',
+    'query',
+    'external',
+    'mode',
+    'accept',
+    'checkpoint',
+    'restore',
+  ])
     $(id).disabled = busy;
   $('previous').disabled = busy || source.status !== 'ready' || offset === 0;
   $('next').disabled = busy || source.status !== 'ready' || offset + 20 >= source.getRowCount();
   $('stage').disabled = busy || source.status !== 'ready' || offset >= source.getRowCount();
   $('save').disabled = busy || !source.pendingCellCount || source.status === 'conflict';
+  $('checkpoint').disabled = busy || source.status !== 'ready';
+  $('restore').disabled = busy || source.status !== 'ready' || !!source.pendingCellCount;
   for (const id of ['query', 'reload']) $(id).disabled = busy || !!source.pendingCellCount;
   $('query').disabled ||= !grid;
   $('conflict').hidden = source.status !== 'conflict';
@@ -102,10 +116,20 @@ $('stage').onclick = () => {
   grid.updateCells([{ rowIndex: 0, columnKey: 'title', value: 'Updated task' }]);
   update();
 };
+$('checkpoint').onclick = () =>
+  run(() => localStorage.setItem('acheron-paged-draft-v1', JSON.stringify(source.exportDrafts())));
+$('restore').onclick = () =>
+  run(async () => {
+    const saved = localStorage.getItem('acheron-paged-draft-v1');
+    if (saved === null) throw Error('No saved draft.');
+    await source.restoreDrafts(JSON.parse(saved));
+    await page(0);
+  });
 $('save').onclick = () =>
   run(async () => {
     await source.commit();
     if (!source.pendingCellCount) {
+      localStorage.removeItem('acheron-paged-draft-v1');
       offset = Math.min(offset, Math.max(0, Math.ceil(source.getRowCount() / 20) - 1) * 20);
       await page(offset);
     } else if (source.status === 'ready') await page(offset);

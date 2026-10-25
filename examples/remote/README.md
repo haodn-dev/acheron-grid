@@ -6,7 +6,7 @@ Stage an edit, then save. Edits pause during loading/commit. A rejected response
 
 The lost-receipt mode applies the write, stores its receipt, then returns HTTP 503 to model a gateway failure after commit. The client cannot infer whether the write succeeded. Explicit retry sends the same mutation ID/payload, and the backend returns the stored receipt without advancing its revision again. Browsers may transparently retry connection resets, so a 503 makes this demonstration observable and deterministic.
 
-Source preview after npm 0.2.1 adds a host-owned mutation journal. This example uses localStorage for
+Version 0.3.0 adds a host-owned mutation journal. This example uses localStorage for
 synthetic data: `persistMutation` saves the checkpoint before HTTP write; a storage failure prevents
 transport. Reload restores the original bounded snapshot and uncertain request without loading a newer
 revision or submitting automatically. Choose Save / retry to resend the original ID/payload. Accepted or

@@ -90,12 +90,19 @@ try {
     'guides/getting-started.md',
     'packages/export/README.md',
     'packages/charts/README.md',
-    'guides/paged-remote.md',
   ]) {
     const text = await readFile(path, 'utf8');
     const code = [...text.matchAll(/```ts\n([\s\S]*?)```/g)][0][1];
     const file = directory + '/' + path.replaceAll('/', '-') + '.ts';
     await writeFile(file, code);
+    files.push(file);
+  }
+  const pagedGuide = await readFile('guides/paged-remote.md', 'utf8');
+  const pagedExamples = [...pagedGuide.matchAll(/```ts\n([\s\S]*?)```/g)];
+  assert.equal(pagedExamples.length, 2);
+  for (const [index, match] of pagedExamples.entries()) {
+    const file = directory + '/paged-' + index + '.ts';
+    await writeFile(file, match[1]);
     files.push(file);
   }
   const remoteGuide = await readFile('guides/editing-and-remote.md', 'utf8');
@@ -179,7 +186,7 @@ try {
   const publicCatalog = await readFile('guides/core-api.md', 'utf8');
   for (const contract of Object.values(coreExportContracts)) assert.ok(publicCatalog.includes(contract));
   console.log(
-    'PASS: Markdown links/tables/images, document hashes, nine TypeScript examples, executable HTML/core lifecycle and core/Canvas API catalogs.',
+    'PASS: Markdown links/tables/images, document hashes, ten TypeScript examples, executable HTML/core lifecycle and core/Canvas API catalogs.',
   );
 } finally {
   assert.ok(resolve(directory).startsWith(resolve('test-results') + sep));

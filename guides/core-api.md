@@ -747,6 +747,7 @@ The root and headless alias expose the same API. Source interfaces use their own
 | PagedRemoteDataSourceOptions | Type | paged-remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | PagedRemoteWriteResult | Type | paged-remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | PagedRemoteMutationCheckpoint | Type | paged-remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| PagedRemoteDraftSnapshot | Type | paged-remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | RemoteDataSourceOptions | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | RemoteSnapshot | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | RemoteDelta | Type | remote-data-source.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
@@ -984,8 +985,8 @@ destroy: () => void
 | getPendingChanges | Return frozen remote draft entries keyed by stable row ID and column key. Preserve these before explicitly accepting a conflicting server snapshot. |
 | conflict | Validated remote server snapshot on conflict, or null. Draft values remain in the cache until explicit adoption. |
 | commit | Commit one immutable mutation against expectedRevision. Bounded remote concurrent calls share the promise; paged concurrent calls reject. Lost responses retain the exact request for retry. Acceptance clears drafts; paged acceptance invalidates pages without fetching them. Rejection retains correctable drafts; conflict blocks editing. |
-| exportMutation | Source preview: export an immutable in-flight/uncertain request checkpoint. Bounded sources include their original snapshot/schema; paged sources add query/total/stable positions around the dirty-cohort writer. Preserve the exact mutation ID/payload; conflicts require their own resolution. |
-| restoreMutation | Source preview: validate a checkpoint into a new source and atomically restore optimistic rows plus the exact disconnected request. Paged query/schema/positions/cohort must match; no server load/write or new mutation ID. Retry through commit; storage is not authorization. |
+| exportMutation | Available in 0.3.0: export an immutable in-flight/uncertain request checkpoint. Bounded sources include their original snapshot/schema; paged sources add query/total/stable positions around the dirty-cohort writer. Preserve the exact mutation ID/payload; conflicts require their own resolution. |
+| restoreMutation | Available in 0.3.0: validate a checkpoint into a new source and atomically restore optimistic rows plus the exact disconnected request. Paged query/schema/positions/cohort must match; no server load/write or new mutation ID. Retry through commit; storage is not authorization. |
 | resync | Load a fresh bounded remote snapshot. Unsent drafts require explicit discardPending=true; an uncertain mutation cannot be discarded. Capture engine identity first and refresh afterward. |
 | reconnect | Remote resync without discarding drafts; retry an uncertain commit first. Transport reconnection itself belongs to the host. |
 | disconnect | Remote: abort/invalidate the active generation but retain drafts and uncertain mutation for exact retry. Live: mark the live source stale and discard buffered updates; does not itself reconnect transport or remove retained rows. |
@@ -1010,6 +1011,8 @@ getValue: (index: number, key: string) => unknown
 setValues: (updates: readonly CellUpdate[]) => void
 setValue: (rowIndex: number, columnKey: string, value: unknown) => void
 commit: () => Promise<void>
+exportDrafts: () => PagedRemoteDraftSnapshot
+restoreDrafts: (input: unknown) => Promise<void>
 exportMutation: () => PagedRemoteMutationCheckpoint
 restoreMutation: (input: unknown) => void
 getPendingChanges: () => readonly Readonly<{ rowId: RowId; columnKey: string; previous: unknown; value: unknown; }>[]
@@ -1046,8 +1049,10 @@ spliceRows?: ((splices: readonly RowSplice[]) => void) | undefined
 | setValues | Remote: bounded atomic optimistic JSON-safe staging only while ready. Local atomic batch, or an optional mapped view batch when the underlying source supports it. Direct source changes require engine refresh and remain outside engine history. |
 | setValue | Remote: stage one optimistic value only while ready. Local atomic single-value replacement, or an optional delegated view setter when the underlying source supports it. No engine permissions/history are applied by direct source writes. |
 | commit | Commit one immutable mutation against expectedRevision. Bounded remote concurrent calls share the promise; paged concurrent calls reject. Lost responses retain the exact request for retry. Acceptance clears drafts; paged acceptance invalidates pages without fetching them. Rejection retains correctable drafts; conflict blocks editing. |
-| exportMutation | Source preview: export an immutable in-flight/uncertain request checkpoint. Bounded sources include their original snapshot/schema; paged sources add query/total/stable positions around the dirty-cohort writer. Preserve the exact mutation ID/payload; conflicts require their own resolution. |
-| restoreMutation | Source preview: validate a checkpoint into a new source and atomically restore optimistic rows plus the exact disconnected request. Paged query/schema/positions/cohort must match; no server load/write or new mutation ID. Retry through commit; storage is not authorization. |
+| exportDrafts | Available in 0.3.0: export a bounded immutable JSON v1 checkpoint of unsent/rejected paged drafts with dataset/revision/query/schema/total and previous values. Requires a loaded idle source; uncertain writes/conflicts must be resolved first. Host owns storage and privacy. |
+| restoreDrafts | Available in 0.3.0: validate an unknown checkpoint into an empty paged source, load affected pages sequentially and check revision/total/identity/previous values before atomically installing drafts. No server writes or undo history. Failure/cancel/destroy installs no drafts; host reapplies current permissions/validation and remounts the engine. |
+| exportMutation | Available in 0.3.0: export an immutable in-flight/uncertain request checkpoint. Bounded sources include their original snapshot/schema; paged sources add query/total/stable positions around the dirty-cohort writer. Preserve the exact mutation ID/payload; conflicts require their own resolution. |
+| restoreMutation | Available in 0.3.0: validate a checkpoint into a new source and atomically restore optimistic rows plus the exact disconnected request. Paged query/schema/positions/cohort must match; no server load/write or new mutation ID. Retry through commit; storage is not authorization. |
 | getPendingChanges | Return frozen remote draft entries keyed by stable row ID and column key. Preserve these before explicitly accepting a conflicting server snapshot. |
 | setQuery | Validate new criteria/count, clear cache/statuses and cancel the previous generation. The host must reconcile the engine and identity after a query change. |
 | reset | Async: clear cache/statuses and cancel generation, retaining query with the supplied count. Live: change stream, clear pending changes and mark stale; retain old data until a matching snapshot. |
@@ -1162,6 +1167,26 @@ export interface PagedRemoteMutationCheckpoint {
   readonly total: number;
   readonly positions: readonly { readonly rowIndex: number; readonly rowId: RowId }[];
   readonly writer: RemoteMutationCheckpoint;
+}
+```
+
+### Type PagedRemoteDraftSnapshot
+
+```ts
+export interface PagedRemoteDraftSnapshot {
+  readonly version: 1;
+  readonly datasetId: string;
+  readonly revision: string;
+  readonly query: Readonly<LocalViewOptions>;
+  readonly columnKeys: readonly string[];
+  readonly total: number;
+  readonly changes: readonly {
+    readonly rowIndex: number;
+    readonly rowId: RowId;
+    readonly columnKey: string;
+    readonly previous: unknown;
+    readonly value: unknown;
+  }[];
 }
 ```
 

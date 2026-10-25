@@ -2,6 +2,194 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGridEngine, createPagedRemoteDataSource } from '../dist/index.js';
 
+test('integrated draft recovery transitions to uncertain journal recovery and adopts canonical data once', async () => {
+  const first = fixture().source;
+  await first.loadPage(0);
+  first.setValue(0, 'title', 'integrated');
+  const draft = JSON.parse(JSON.stringify(first.exportDrafts()));
+  first.destroy();
+  let journal, sent;
+  const second = fixture({
+    persistMutation: (value) => {
+      journal = JSON.parse(JSON.stringify(value));
+    },
+    write: async (mutation) => {
+      sent = mutation;
+      throw Error('Lost ACK');
+    },
+  }).source;
+  await second.restoreDrafts(draft);
+  await assert.rejects(second.commit(), /Lost ACK/);
+  assert.throws(() => second.exportDrafts(), /pending/);
+  assert.equal(second.pendingCellCount, 1);
+  second.destroy();
+  const { source, requests } = fixture();
+  source.restoreMutation(journal);
+  await source.commit();
+  assert.deepEqual(requests[0], sent);
+  assert.equal(source.pendingCellCount, 0);
+  assert.equal(source.revision, '2');
+  await source.loadPage(0);
+  assert.equal(source.getValue(0, 'title'), 'INTEGRATED');
+  await assert.rejects(source.restoreDrafts(draft), /no longer matches/);
+  assert.equal(source.pendingCellCount, 0);
+  source.destroy();
+});
+
+test('draft checkpoints survive reload and eviction, validate pages and commit one restored cohort', async () => {
+  const first = fixture().source;
+  await first.loadPage(0);
+  first.setValue(0, 'title', { nested: ['saved'] });
+  await first.loadPage(4);
+  first.setValue(4, 'title', 'four');
+  const saved = first.exportDrafts();
+  assert.ok(Object.isFrozen(saved.changes[0].value.nested));
+  const snapshot = JSON.parse(JSON.stringify(saved));
+  first.destroy();
+  const { source, requests } = fixture();
+  await source.restoreDrafts(snapshot);
+  assert.equal(source.pendingCellCount, 2);
+  assert.deepEqual(source.getValue(0, 'title'), { nested: ['saved'] });
+  assert.equal(source.getValue(4, 'title'), 'four');
+  assert.equal(source.getPageState(0), null);
+  assert.equal(requests.length, 0);
+  snapshot.changes[0].value.nested[0] = 'mutated';
+  assert.deepEqual(source.getValue(0, 'title'), { nested: ['saved'] });
+  await source.commit();
+  assert.equal(requests.length, 1);
+  assert.deepEqual(
+    requests[0].changes.map((change) => [change.rowId, change.columnKey, change.previous]),
+    [
+      [0, 'title', '0'],
+      [4, 'title', '4'],
+    ],
+  );
+  assert.equal(source.pendingCellCount, 0);
+  source.destroy();
+});
+
+test('checkpoint admission and stale rows fail without installing partial drafts', async () => {
+  const original = fixture().source;
+  await original.loadPage(0);
+  original.setValue(0, 'title', 'zero');
+  await original.loadPage(4);
+  original.setValue(4, 'title', 'four');
+  const saved = original.exportDrafts();
+  for (const mutate of [
+    (value) => {
+      value.version = 2;
+    },
+    (value) => {
+      value.datasetId = 'other';
+    },
+    (value) => {
+      value.columnKeys = ['other'];
+    },
+    (value) => {
+      value.query = { sort: { columnKey: 'title', direction: 'desc' } };
+    },
+    (value) => {
+      value.changes.push(value.changes[0]);
+    },
+    (value) => {
+      value.changes[0].rowIndex = -1;
+    },
+    (value) => {
+      value.changes[0].rowId = null;
+    },
+    (value) => {
+      delete value.changes[0].previous;
+    },
+    (value) => {
+      value.changes[0].columnKey = 'other';
+    },
+    (value) => {
+      value.changes[0].value = Infinity;
+    },
+    (value) => {
+      value.revision = 'old';
+    },
+    (value) => {
+      value.total = 9999;
+    },
+    (value) => {
+      value.changes[1].rowId = 0;
+    },
+    (value) => {
+      value.changes[1].previous = 'changed';
+    },
+  ]) {
+    const copy = JSON.parse(JSON.stringify(saved));
+    mutate(copy);
+    const { source, requests } = fixture();
+    await assert.rejects(source.restoreDrafts(copy));
+    assert.equal(source.pendingCellCount, 0);
+    assert.equal(requests.length, 0);
+    assert.equal(source.status, 'ready');
+    source.destroy();
+  }
+  const bounded = fixture({ maxPendingCells: 1 }).source;
+  await assert.rejects(bounded.restoreDrafts(saved), /checkpoint/);
+  assert.equal(bounded.revision, null);
+  bounded.destroy();
+  await assert.rejects(original.restoreDrafts(saved), /empty/);
+  assert.equal(original.pendingCellCount, 2);
+  original.destroy();
+});
+
+test('restore guards concurrent commands and cancellation or destroy never installs drafts', async () => {
+  const original = fixture().source;
+  await original.loadPage(0);
+  original.setValue(0, 'title', 'draft');
+  const saved = original.exportDrafts();
+  original.destroy();
+  for (const action of ['cancel', 'destroy']) {
+    let resolve;
+    const source = fixture({
+      load: () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    }).source;
+    const restoring = source.restoreDrafts(saved);
+    await new Promise((done) => setImmediate(done));
+    assert.equal(source.status, 'loading');
+    assert.throws(() => source.setValue(0, 'title', 'other'), /operation/);
+    assert.throws(() => source.exportDrafts(), /operation/);
+    assert.throws(() => source.setQuery({}), /operation/);
+    await assert.rejects(source.restoreDrafts(saved), /operation/);
+    await assert.rejects(source.commit(), /operation/);
+    source[action]();
+    resolve({
+      datasetId: 'tasks',
+      revision: '1',
+      total: 10000,
+      rows: [0, 1].map((id) => ({ id, values: { title: String(id) } })),
+    });
+    await assert.rejects(restoring, /canceled|generation/);
+    assert.equal(source.pendingCellCount, 0);
+    source.destroy();
+  }
+});
+
+test('checkpoint export refuses uncertain writes while preserving exact retry', async () => {
+  const requests = [];
+  const source = fixture({
+    write: async (mutation) => {
+      requests.push(mutation);
+      throw Error('Lost ACK');
+    },
+  }).source;
+  await source.loadPage(0);
+  source.setValue(0, 'title', 'draft');
+  await assert.rejects(source.commit(), /Lost ACK/);
+  assert.throws(() => source.exportDrafts(), /pending/);
+  await assert.rejects(source.restoreDrafts({}), /pending/);
+  await assert.rejects(source.commit(), /Lost ACK/);
+  assert.equal(requests[0], requests[1]);
+  source.destroy();
+});
+
 test('paged mutation journal recovers evicted rows and query without loads or new IDs', async () => {
   const query = { sort: { columnKey: 'title', direction: 'desc' } };
   let saved,

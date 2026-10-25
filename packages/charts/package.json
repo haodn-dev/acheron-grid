@@ -1,6 +1,6 @@
 {
   "name": "@acheron-grid/charts",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "type": "module",
   "description": "Optional inline line and column charts for Acheron Grid Canvas",
   "license": "Apache-2.0",
@@ -18,7 +18,7 @@
     }
   },
   "dependencies": {
-    "@acheron-grid/canvas": "0.2.1"
+    "@acheron-grid/canvas": "0.3.0"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

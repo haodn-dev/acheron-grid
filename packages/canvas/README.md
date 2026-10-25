@@ -1,6 +1,6 @@
 # @acheron-grid/canvas
 
-Version **0.2.1 development preview**. See [release notes and migration](../../RELEASE-0.2.1.md).
+Version **0.3.0 development preview**. See [release notes and migration](../../RELEASE-0.3.0.md).
 
 The npm 0.1.0 archive has a separate frozen reference. See [documentation versions](../../guides/versions.md).
 
@@ -9,7 +9,7 @@ An experimental Canvas browser renderer for the headless @acheron-grid/core engi
 ## Installation
 
 ```sh
-npm install @acheron-grid/canvas@0.2.1
+npm install @acheron-grid/canvas@0.3.0
 ```
 
 Install core/Canvas at the same version when used. For development changes after 0.2.1, use a built source checkout and install matching packed artifacts; see [Getting started](../../guides/getting-started.md).

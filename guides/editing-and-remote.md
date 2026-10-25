@@ -129,9 +129,9 @@ For conflict review, capture `getPendingChanges()` and engine identity **before*
 
 Subscribe to status changes for UI; `lastError`, `revision`, `pendingCellCount` and `conflict` expose the lifecycle. Observer errors are isolated and bounded. The host owns transport deadlines, backoff, online/offline scheduling, connectivity and retry controls. This module does not silently discard uncertain writes, choose winners or merge edits across users. The existing [remote save example](../examples/remote-save.md) remains a separate host-owned recipe for a fixed local draft.
 
-## Uncertain mutation recovery (source preview)
+## Uncertain mutation recovery (0.3.0 preview)
 
-Source builds after npm 0.2.1 add `RemoteMutationCheckpoint`, `exportMutation()` and
+Version 0.3.0 adds `RemoteMutationCheckpoint`, `exportMutation()` and
 `restoreMutation(unknown)` to the bounded remote source. These are not in the immutable npm 0.2.1
 artifacts and are separate from paged draft storage. A version 1 checkpoint contains the original
 bounded snapshot, configured column keys/order and the exact immutable mutation ID/payload. It is
@@ -180,4 +180,4 @@ The HTTP example demonstrates reload and exact retry with synthetic localStorage
 server receipts do not provide restart durability or production authorization. Host policies and the
 server must authorize/validate writes again; never trust storage to grant permissions. Checkpoint export
 captures the bounded working snapshot, so its time/size scales with rows and columns and must fit the
-same JSON payload limit. Paged-query recovery has a separate [paged checkpoint contract](paged-remote.md#mutation-recovery-source-preview); editing during commit remains separate work.
+same JSON payload limit. Paged-query recovery has a separate [paged checkpoint contract](paged-remote.md#mutation-recovery-030-preview); editing during commit remains separate work.

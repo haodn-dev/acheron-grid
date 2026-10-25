@@ -1,15 +1,15 @@
 # @acheron-grid/react
 
-Version **0.2.1 development preview**. See [release notes and migration](../../RELEASE-0.2.1.md).
+Version **0.3.0 development preview**. See [release notes and migration](../../RELEASE-0.3.0.md).
 
 The npm 0.1.0 archive has a separate frozen reference. See [documentation versions](../../guides/versions.md).
 
-React lifecycle adapter for the Acheron Grid Canvas renderer. Current source is Apache-2.0 licensed; published npm 0.1.0 retains MIT. This guide targets matching 0.2.1 development preview artifacts. Use matching 0.2.1 artifacts for the newer APIs.
+React lifecycle adapter for the Acheron Grid Canvas renderer. Current source is Apache-2.0 licensed; published npm 0.1.0 retains MIT. This guide targets matching 0.3.0 development preview artifacts. Use matching 0.3.0 artifacts for the newer APIs.
 
 ## Installation
 
 ```sh
-npm install @acheron-grid/react@0.2.1
+npm install @acheron-grid/react@0.3.0
 ```
 
 Install core/Canvas at the same version when used. For newer APIs, use a built source checkout and install matching packed artifacts; see [Getting started](../../guides/getting-started.md).

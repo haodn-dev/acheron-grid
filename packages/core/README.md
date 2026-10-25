@@ -1,6 +1,6 @@
 # @acheron-grid/core
 
-Version **0.2.1 development preview**. See [release notes and migration](../../RELEASE-0.2.1.md).
+Version **0.3.0 development preview**. See [release notes and migration](../../RELEASE-0.3.0.md).
 
 The npm 0.1.0 archive has a separate frozen reference. See [documentation versions](../../guides/versions.md).
 
@@ -25,10 +25,10 @@ Use core for a custom renderer or headless data workflow. For a ready-made inter
 ### Installation
 
 ```sh
-npm install @acheron-grid/core@0.2.1
+npm install @acheron-grid/core@0.3.0
 ```
 
-This guide targets matching 0.2.1 development preview artifacts. APIs may change before 1.0. This package exports ESM JavaScript and TypeScript declarations.
+This guide targets matching 0.3.0 development preview artifacts. APIs may change before 1.0. This package exports ESM JavaScript and TypeScript declarations.
 
 ### Building from source
 
@@ -437,9 +437,11 @@ remains browser-independent. See the same guide for bundler setup, cancellation,
 
 For larger server datasets, use the 0.2.1 [writable remote pages](../../guides/paged-remote.md) adapter rather than retaining a full snapshot. Server query/revision and cache invalidation are explicit; only loaded rows can start a draft.
 
-Source preview after npm 0.2.1 adds [paged mutation recovery](../../guides/paged-remote.md#mutation-recovery-source-preview): host-persisted query/total/positions plus the exact dirty-cohort request. Restore does not load an old revision or resend automatically; accepted receipts invalidate pages and update query membership before reload.
+Version 0.3.0 adds [paged mutation recovery](../../guides/paged-remote.md#mutation-recovery-030-preview): host-persisted query/total/positions plus the exact dirty-cohort request. Restore does not load an old revision or resend automatically; accepted receipts invalidate pages and update query membership before reload.
 
-Source preview after npm 0.2.1 adds bounded `exportMutation()` / `restoreMutation(unknown)` checkpoints
+Version 0.3.0 adds bounded `exportMutation()` / `restoreMutation(unknown)` checkpoints
 and a host-owned `persistMutation` hook before transport. Reload can recover the exact uncertain request
 without a new mutation ID or server load. This is separate from paged/unsent draft storage and still
-requires server authorization, durable CAS/idempotency and explicit retry. See [mutation recovery](../../guides/editing-and-remote.md#uncertain-mutation-recovery-source-preview).
+requires server authorization, durable CAS/idempotency and explicit retry. See [mutation recovery](../../guides/editing-and-remote.md#uncertain-mutation-recovery-030-preview).
+
+Version 0.3.0 adds paged `exportDrafts()` / `restoreDrafts(unknown)` checkpoints for host-owned storage. Restore validates affected server pages before atomically staging unsent edits; it does not persist uncertain mutations, create undo history or replace application/server authorization. See [checkpoint storage and recovery](../../guides/paged-remote.md#draft-checkpoints-030-preview).
