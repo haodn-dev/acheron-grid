@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "2662a1feea212ab965e1f34fcffa28fb94f2ad49",
+  "sourceRevision": "1996277cd9af394a68e207661d08c816d696c50f",
   "release": {
     "documentationRevision": "6e5d6a408ea3f6f089b013b2d2d0e0c698ccd9ee",
     "tag": "v0.3.0",
@@ -320,9 +320,9 @@
     {
       "id": "core-api",
       "path": "guides/core-api.md",
-      "revision": 17,
+      "revision": 18,
       "updated": "2026-10-25",
-      "sha256": "d02d3f2e885373a3b5a771b230b8d62a9dd010a2dcabba5fe11032cb0dc5d684",
+      "sha256": "0dc5dabf3f30ad271d468e74d787f56782ae1e5406a0d2ac3c324b8f311fe303",
       "history": [
         {
           "revision": 1,
@@ -391,15 +391,19 @@
         {
           "revision": 17,
           "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
+        },
+        {
+          "revision": 18,
+          "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
         }
       ]
     },
     {
       "id": "canvas-api",
       "path": "guides/canvas-api.md",
-      "revision": 8,
-      "updated": "2026-10-22",
-      "sha256": "63fbdaed85e550d56ff25164eb6288c9aeece56b18bf903188f23b7f661b0574",
+      "revision": 9,
+      "updated": "2026-10-25",
+      "sha256": "ba27bd46e13f4df34ed31847c9ced1d9ef10a0e5b2b27b9e77ec930799d4bd2c",
       "history": [
         {
           "revision": 1,
@@ -431,6 +435,10 @@
         },
         {
           "revision": 8,
+          "summary": "Generated source API signatures and construction options."
+        },
+        {
+          "revision": 9,
           "summary": "Generated source API signatures and construction options."
         }
       ]
@@ -451,9 +459,9 @@
     {
       "id": "core",
       "path": "packages/core/README.md",
-      "revision": 17,
+      "revision": 18,
       "updated": "2026-10-25",
-      "sha256": "94963b6c1450f368483b719d466f431b1a9bedf6a663f1095217ea7f8b1ce79c",
+      "sha256": "fa33da134b2c95c3ba499017c2cad1c598f51aec9ac498cfef516e317acb3ac8",
       "history": [
         {
           "revision": 1,
@@ -522,15 +530,19 @@
         {
           "revision": 17,
           "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
+        },
+        {
+          "revision": 18,
+          "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
         }
       ]
     },
     {
       "id": "canvas",
       "path": "packages/canvas/README.md",
-      "revision": 14,
+      "revision": 15,
       "updated": "2026-10-25",
-      "sha256": "f03b90649c997d7b771db4d181c60bddc02268fe06065fc54eb16628ee3ec749",
+      "sha256": "65508a8c8dd89f12c5a1bd55371a83dc7a0f2588885d2a58aa57092e31ae9a39",
       "history": [
         {
           "revision": 1,
@@ -586,6 +598,10 @@
         },
         {
           "revision": 14,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 15,
           "summary": "Align publication status, installation and current source contracts."
         }
       ]

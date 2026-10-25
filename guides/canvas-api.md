@@ -244,6 +244,70 @@ Reapply a previously undone command under current identity/value/permission chec
 
 ## Views and persistence
 
+### setGrouping
+
+```ts
+setGrouping: (next: LocalGroupingOptions | null) => void
+```
+
+Source preview: filter complete local records, group by one scalar key and optionally sum finite numeric values; sort leaves within each group. Reject incompatible row layout/history before installing. Null clears grouping. No source writes.
+
+### grouping
+
+```ts
+grouping: Readonly<LocalGroupingOptions> | null
+```
+
+Frozen current local grouping criteria, or null. Grouping is separate from LocalViewOptions and server queries.
+
+### getRowMetadata
+
+```ts
+getRowMetadata: (row: number) => import("D:/Work/acheron/acheron-grid-engine/packages/core/dist/index").GroupDisplayRow | Readonly<{ kind: "leaf"; sourceIndex: number; rowId: RowId; }>
+```
+
+Discriminated group/leaf metadata for a visible row. Only leaves have real sourceIndex and rowId; group metadata contains key, count, sums, retained source indices and expanded state. Legacy getRowId/getRowSourceIndex reject group rows.
+
+### focusGroup
+
+```ts
+focusGroup: (row: number) => boolean
+```
+
+Focus a group header and clear all data selection/cut targets. Returns false for a leaf. Group focus is separate from CellSelection.
+
+### getFocusedGroup
+
+```ts
+getFocusedGroup: () => number
+```
+
+Visible index of the focused group header, or -1. No synthetic CellSelection or RowId is created.
+
+### setDataGroupExpanded
+
+```ts
+setDataGroupExpanded: (key: GroupKey, expanded: boolean) => void
+```
+
+Expand/collapse a typed visible group key without changing source values, aggregates or data history. Clears leaf selection and focuses the header.
+
+### exportGroupingState
+
+```ts
+exportGroupingState: () => GroupingState
+```
+
+Frozen version-1 criteria/collapsed-key view snapshot, separate from legacy GridState/GridConfiguration. Contains no data, authorization or history; apply only to a matching host-owned dataset.
+
+### restoreGroupingState
+
+```ts
+restoreGroupingState: (state: unknown) => void
+```
+
+Validate unknown version-1 grouping state and schema/layout before installing atomically. Typed collapsed keys survive local filters. Does not restore source data or permissions.
+
 ### setViewAsync
 
 ```ts
@@ -679,6 +743,7 @@ Call createGrid with GridOptions. Required fields are marked; options are read a
 | indexColumn | No | `boolean \| undefined` |
 | permissions | No | `Partial<CellPermission> \| undefined` |
 | canChangeStructure | No | `((request: Readonly<StructureRequest>) => boolean) \| undefined` |
+| grouping | No | `LocalGroupingOptions \| undefined` |
 | frozenRows | No | `number \| undefined` |
 | frozenColumns | No | `number \| undefined` |
 | resolveCellPermission | No | `CellPermissionResolver \| undefined` |

@@ -718,7 +718,11 @@ export function createGridEngine(options: GridEngineOptions) {
       Object.freeze({ type: 'view:change', view, rowCount: visibleRowCount(), sourceRowCount: rowCount }),
     );
   }
-  function setGrouping(next: LocalGroupingOptions | null, collapsedKeys: readonly GroupKey[] = []): void {
+  function setGrouping(
+    next: LocalGroupingOptions | null,
+    collapsedKeys: readonly GroupKey[] = [],
+    initial = false,
+  ): void {
     assertAlive();
     if (next !== null && (!next || typeof next !== 'object' || Array.isArray(next)))
       throw new TypeError('Invalid grouping.');
@@ -757,7 +761,8 @@ export function createGridEngine(options: GridEngineOptions) {
     );
     context.grouping = criteria;
     context.collapsedGroupingKeys = new Set(collapsedKeys);
-    groupingChanged(nextProjection);
+    if (initial) installProjection(nextProjection);
+    else groupingChanged(nextProjection);
   }
   function focusGroup(row: number): boolean {
     const entry = displayEntry(row);
@@ -786,7 +791,7 @@ export function createGridEngine(options: GridEngineOptions) {
     const index = projection?.findIndex((row) => typeof row !== 'number' && Object.is(row.key, key)) ?? -1;
     if (index >= 0) focusGroup(index);
   }
-  if (options.grouping !== undefined) setGrouping(options.grouping);
+  if (options.grouping !== undefined) setGrouping(options.grouping, [], true);
   return Object.freeze({
     setGrouping: (next: LocalGroupingOptions | null) => command(() => setGrouping(next)),
     exportGroupingState: (): GroupingState =>

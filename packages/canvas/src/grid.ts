@@ -152,6 +152,7 @@ export interface GridOptions extends Pick<
   | 'columnWidths'
   | 'canChangeVisibility'
   | 'historyLimits'
+  | 'grouping'
 > {
   allowMerging?: boolean;
   allowRowGrouping?: boolean;
@@ -239,6 +240,14 @@ export interface GridOptions extends Pick<
   indexColumn?: boolean;
 }
 export interface Grid {
+  setGrouping: GridEngine['setGrouping'];
+  readonly grouping: GridEngine['grouping'];
+  getRowMetadata: GridEngine['getRowMetadata'];
+  focusGroup: GridEngine['focusGroup'];
+  getFocusedGroup: GridEngine['getFocusedGroup'];
+  setDataGroupExpanded: GridEngine['setDataGroupExpanded'];
+  exportGroupingState: GridEngine['exportGroupingState'];
+  restoreGroupingState: GridEngine['restoreGroupingState'];
   getMotion: () => Readonly<Required<MotionOptions>>;
   setMotion: (value: boolean | MotionOptions) => void;
   updateCellsAsync: GridEngine['updateCellsAsync'];
@@ -747,6 +756,9 @@ export function createGrid(options: GridOptions): Grid {
     get syncAccessibleCell() {
       return syncAccessibleCell;
     },
+    get announceSelection() {
+      return announceSelection;
+    },
     get t() {
       return gridContext.env.t;
     },
@@ -793,6 +805,7 @@ export function createGrid(options: GridOptions): Grid {
         : column,
     ),
     dataSource,
+    ...(gridContext.options.grouping !== undefined ? { grouping: gridContext.options.grouping } : {}),
     ...(gridContext.options.historyLimits ? { historyLimits: gridContext.options.historyLimits } : {}),
     ...(gridContext.options.allowMerging === undefined ? {} : { allowMerging: gridContext.options.allowMerging }),
     ...(gridContext.options.allowRowGrouping === undefined
@@ -929,6 +942,7 @@ export function createGrid(options: GridOptions): Grid {
             String(gridContext.layout.rowCount + (viewportAccessibility ? gridContext.layout.headers.levels : 0)),
           );
           scroller.setAttribute('aria-colcount', String(gridContext.layout.columns.length));
+          scroller.setAttribute('role', gridContext.engine.grouping ? 'treegrid' : 'grid');
           if (!searchBar.hidden) refreshSearch();
           syncAccessibleCell();
           gridContext.options.onSelectionChange?.(gridContext.engine.getSelection());
@@ -1102,7 +1116,7 @@ export function createGrid(options: GridOptions): Grid {
   scroller.tabIndex = 0;
   scroller.setAttribute('aria-label', viewportLabel);
   scroller.setAttribute('aria-keyshortcuts', 'Shift+F8 Control+f Meta+f Control+a Meta+a Alt+Enter');
-  scroller.setAttribute('role', 'grid');
+  scroller.setAttribute('role', engine.grouping ? 'treegrid' : 'grid');
   scroller.setAttribute(
     'aria-rowcount',
     String(gridContext.layout.rowCount + (viewportAccessibility ? gridContext.layout.headers.levels : 0)),
@@ -2225,6 +2239,23 @@ export function createGrid(options: GridOptions): Grid {
         gridContext.engine.setView(view);
         gridContext.layout.currentView = gridContext.engine.view;
       }, 'row'),
+    setGrouping: (grouping) => structureAction(() => gridContext.engine.setGrouping(grouping), 'row'),
+    get grouping() {
+      return gridContext.engine.grouping;
+    },
+    getRowMetadata: gridContext.engine.getRowMetadata,
+    focusGroup: (row) => {
+      if (!finishEdit(true)) return false;
+      const changed = gridContext.engine.focusGroup(row);
+      announceSelection();
+      scroller.focus({ preventScroll: true });
+      return changed;
+    },
+    getFocusedGroup: gridContext.engine.getFocusedGroup,
+    setDataGroupExpanded: (key, expanded) =>
+      structureAction(() => gridContext.engine.setDataGroupExpanded(key, expanded), 'row'),
+    exportGroupingState: gridContext.engine.exportGroupingState,
+    restoreGroupingState: (state) => structureAction(() => gridContext.engine.restoreGroupingState(state), 'row'),
     get view() {
       return managesView ? gridContext.engine.view : (gridContext.layout.currentView ?? {});
     },

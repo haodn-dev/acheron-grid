@@ -12,6 +12,7 @@ import type { CellLink } from '../links.js';
 import type { RichText } from '../rich-text.js';
 import { layoutRichText } from '../rich-text.js';
 import { createEditors } from './editors.js';
+import { dataGroupLabelColumn } from './display.js';
 import type { GridContext } from './grid-context.js';
 import { createOverlay } from './overlay.js';
 import { axisCellRect, reorderInsertionIndex } from './reorder-geometry.js';
@@ -612,6 +613,8 @@ export function createInteraction(context: InteractionContext) {
 
   function select(rowIndex: number, columnIndex: number, extend = false, reveal = true, add = false): void {
     if (context.destroyed || context.rowCount === 0 || context.columns.length === 0) return;
+    if (extend && !reveal && context.engine.grouping && context.engine.getRowMetadata(rowIndex).kind === 'group')
+      return;
     axisAnchor = null;
     const previous = context.engine.getSelection();
     const changed = previous?.rowIndex !== rowIndex || previous?.columnIndex !== columnIndex;
@@ -812,6 +815,20 @@ export function createInteraction(context: InteractionContext) {
     if (!cell) return;
     event.preventDefault();
     if (!context.finishEdit(true)) return;
+    const metadata = context.engine.grouping ? context.engine.getRowMetadata(cell.row) : null;
+    if (metadata?.kind === 'group') {
+      context.scroller.focus({ preventScroll: true });
+      select(cell.row, cell.col);
+      const rect = context.viewport().cellRect(cell.row, cell.col);
+      if (
+        cell.col === dataGroupLabelColumn(context.engine) &&
+        event.clientX - context.scroller.getBoundingClientRect().left - rect.x < 28
+      ) {
+        context.structureAction(() => context.engine.setDataGroupExpanded(metadata.key, !metadata.expanded), 'row');
+        context.announceSelection();
+      }
+      return;
+    }
     if (!context.engine.getCellPermission(cell.row, cell.col).selectable) return;
     context.scroller.focus({ preventScroll: true });
     if (event.clientX - context.scroller.getBoundingClientRect().left < 10) {
@@ -968,6 +985,48 @@ export function createInteraction(context: InteractionContext) {
   }
 
   function onKeyDown(event: KeyboardEvent): void {
+    const groupIndex = context.engine.getFocusedGroup();
+    if (groupIndex >= 0 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      const group = context.engine.getRowMetadata(groupIndex);
+      if (group.kind === 'group' && ['ArrowLeft', 'ArrowRight', 'Enter', ' '].includes(event.key)) {
+        event.preventDefault();
+        if (context.finishEdit(true))
+          context.structureAction(
+            () =>
+              context.engine.setDataGroupExpanded(
+                group.key,
+                event.key === 'ArrowRight' ? true : event.key === 'ArrowLeft' ? false : !group.expanded,
+              ),
+            'row',
+          );
+        context.announceSelection();
+        return;
+      }
+      if (['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) {
+        event.preventDefault();
+        select(
+          Math.max(
+            0,
+            Math.min(
+              context.rowCount - 1,
+              event.key === 'Home'
+                ? 0
+                : event.key === 'End'
+                  ? context.rowCount - 1
+                  : groupIndex + (event.key === 'ArrowUp' ? -1 : 1),
+            ),
+          ),
+          0,
+        );
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        context.engine.clearSelection();
+        context.announceSelection();
+        return;
+      }
+    }
     const selection = context.engine.getSelection();
     if (
       (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) &&

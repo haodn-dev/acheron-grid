@@ -2,7 +2,7 @@
 
 ## Local grouping (source preview)
 
-The current source adds headless grouping; npm 0.3.0 does not contain these APIs. Canvas, React and Vue do not expose grouped rendering yet.
+The current source adds local grouping; npm 0.3.0 does not contain these APIs. Canvas exposes grouped rendering and interaction; React and Vue inherit its construction options and grid handle.
 
 ```ts
 engine.setGrouping({ columnKey: 'team', sumColumns: ['amount'] });

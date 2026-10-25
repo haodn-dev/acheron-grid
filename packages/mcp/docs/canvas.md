@@ -6,6 +6,14 @@ The npm 0.1.0 archive has a separate frozen reference. See [documentation versio
 
 An experimental Canvas browser renderer for the headless @acheron-grid/core engine.
 
+## Local grouping (source preview)
+
+This checkout adds grouped Canvas rendering; published npm 0.3.0 does not include it. Pass `grouping: { columnKey: 'team', sumColumns: ['amount'] }` to `createGrid`, or call `grid.setGrouping(...)`. React and Vue inherit the same construction option and expose the methods through their grid handle. See the [standalone example](https://github.com/haodn-dev/acheron-grid/blob/main/examples/grouping/README.md) and [core grouping contract](core.md#local-grouping-source-preview).
+
+Group headers display a key, retained record count and numeric sums. Use either chevron to expand/collapse. Enter/Space toggle a focused group, Left/Right close/open it, and Up/Down traverse visible rows. Group focus clears data selection and never creates a synthetic record ID. `getRowMetadata`, `getFocusedGroup`, `setDataGroupExpanded`, `exportGroupingState` and `restoreGroupingState` delegate to the core. The accessible container becomes a treegrid; viewport mode retains bounded visible rows with level/expanded metadata.
+
+Headers use the existing header theme and bypass custom record renderers, editors, media and validation. Leaf editors still update aggregates through normal commands and undo/redo. Grouped rows keep their fixed configured height even when `autoRowHeight` is enabled; row resize/reorder handles and record menus are unavailable on headers. Group transitions use immediate layout updates. If the key column is hidden, the first visible column carries the label and preserves its numeric sum. The local working-set, clipboard, state and layout limits from the core guide still apply.
+
 ## Installation
 
 ```sh

@@ -1,7 +1,7 @@
 // Behavioral notes for the generated public API catalog.
 export const coreContracts = {
   setGrouping:
-    'Source preview, headless only: filter complete local records, group by one scalar key and optionally sum finite numeric values; sort leaves within each group. Reject incompatible row layout/history before installing. Null clears grouping. No source writes.',
+    'Source preview: filter complete local records, group by one scalar key and optionally sum finite numeric values; sort leaves within each group. Reject incompatible row layout/history before installing. Null clears grouping. No source writes.',
   grouping:
     'Frozen current local grouping criteria, or null. Grouping is separate from LocalViewOptions and server queries.',
   getRowMetadata:

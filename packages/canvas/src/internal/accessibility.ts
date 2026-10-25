@@ -3,6 +3,7 @@ import type { CellLink } from '../links.js';
 import { mediaItems } from '../media.js';
 import type { GridContext } from './grid-context.js';
 import { createInteraction } from './interaction.js';
+import { dataGroupLabel, dataGroupCellText } from './display.js';
 
 interface AccessibilityContext
   extends
@@ -43,11 +44,20 @@ interface AccessibilityContext
 export function createAccessibility(context: AccessibilityContext) {
   const accessibleCells = new Map<string, HTMLElement>();
   function announceSelection(): void {
+    const focused = context.engine.getFocusedGroup();
+    if (focused >= 0) {
+      const group = context.engine.getRowMetadata(focused);
+      if (group.kind === 'group') {
+        context.selectionStatus.textContent = `${dataGroupLabel(group, context.t)}. ${context.t(group.expanded ? 'Expanded' : 'Collapsed')}.`;
+        return;
+      }
+    }
     const selection = context.engine.getSelection();
     context.selectionStatus.textContent = `${selection ? context.t('Row {0}, {1}. {2} selected range(s).', selection.rowIndex + 1, context.columns[selection.columnIndex]!.title, context.getSelectionRanges().length) : context.t('Selection cleared.')}${context.interaction.addNextSelection ? context.t(' Next click or navigation adds a range.') : ''}`;
   }
 
   function stateLabels(row: number | null, col: number): string[] {
+    if (row !== null && context.engine.grouping && context.engine.getRowMetadata(row).kind === 'group') return [];
     const labels: string[] = [];
     if (context.engine.isLocked({ scope: 'table' })) labels.push('Table locked');
     if (context.engine.isLocked({ scope: 'column', columnIndex: col })) labels.push('Column locked');
@@ -96,6 +106,8 @@ export function createAccessibility(context: AccessibilityContext) {
   }
 
   function accessibleText(row: number, col: number, value: unknown): string {
+    const metadata = context.engine.grouping ? context.engine.getRowMetadata(row) : null;
+    if (metadata?.kind === 'group') return dataGroupCellText(context.engine, metadata, col, context.t);
     const column = context.columns[col]!;
     const label = context.options.getCellLabel?.(row, column.key, value);
     if (label !== undefined) return label;
@@ -135,7 +147,10 @@ export function createAccessibility(context: AccessibilityContext) {
     const span = context.engine.getMerge(row, col);
     node.setAttribute('aria-rowspan', String(span ? span.endRow - span.startRow + 1 : 1));
     node.setAttribute('aria-colspan', String(span ? span.endColumn - span.startColumn + 1 : 1));
-    const invalid = context.validationMessage(value, col);
+    const invalid =
+      context.engine.grouping && context.engine.getRowMetadata(row).kind === 'group'
+        ? undefined
+        : context.validationMessage(value, col);
     node.setAttribute('aria-invalid', String(!!invalid));
     node.setAttribute('aria-readonly', String(!context.engine.canEdit(row, col)));
     node.setAttribute(
@@ -165,6 +180,37 @@ export function createAccessibility(context: AccessibilityContext) {
   }
 
   function syncAccessibleCell(): void {
+    const focused = context.engine.getFocusedGroup();
+    const group = focused < 0 ? null : context.engine.getRowMetadata(focused);
+    if (group?.kind === 'group') {
+      context.activeRow.hidden = false;
+      context.activeRow.setAttribute(
+        'aria-rowindex',
+        String(focused + (context.viewportAccessibility ? context.headers.levels + 1 : 1)),
+      );
+      context.activeRow.setAttribute('aria-level', '1');
+      context.activeRow.setAttribute('aria-expanded', String(group.expanded));
+      context.activeCell.setAttribute('aria-colindex', '1');
+      context.activeCell.setAttribute('aria-readonly', 'true');
+      context.activeCell.setAttribute('aria-invalid', 'false');
+      context.activeCell.setAttribute('aria-rowspan', '1');
+      context.activeCell.setAttribute('aria-colspan', '1');
+      context.activeCell.removeAttribute('aria-description');
+      context.activeCell.textContent = dataGroupLabel(group, context.t);
+      context.scroller.setAttribute('aria-activedescendant', context.activeCell.id);
+      context.scroller.setAttribute('aria-label', `${context.viewportLabel}: ${dataGroupLabel(group, context.t)}`);
+      if (context.viewportAccessibility) {
+        const visible = [...accessibleCells.entries()].find(([key]) => key.startsWith(`${focused}:`))?.[1];
+        if (visible) {
+          context.activeRow.hidden = true;
+          context.scroller.setAttribute('aria-activedescendant', visible.id);
+        }
+      }
+      return;
+    }
+    context.activeRow.removeAttribute('aria-expanded');
+    if (context.engine.grouping) context.activeRow.setAttribute('aria-level', '2');
+    else context.activeRow.removeAttribute('aria-level');
     const selection = context.engine.getSelection();
     context.activeRow.hidden = !selection;
     if (!selection) {

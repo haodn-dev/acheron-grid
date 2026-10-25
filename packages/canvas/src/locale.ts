@@ -1,6 +1,10 @@
 export type CanvasTranslator = (message: string, ...values: readonly unknown[]) => string;
 
 export const canvasVietnameseMessages: Readonly<Record<string, string>> = Object.freeze({
+  'Group {0}, {1} records': 'Nhóm {0}, {1} bản ghi',
+  'Missing value': 'Chưa có giá trị',
+  Expanded: 'Đã mở',
+  Collapsed: 'Đã thu gọn',
   start: 'đầu',
   end: 'cuối',
   Checkbox: 'Hộp kiểm',
@@ -402,6 +406,10 @@ export function createCanvasTranslator(
 
 /** Complete default message inventory for application-owned locale packs. */
 export const canvasEnglishMessages: Readonly<Record<string, string>> = Object.freeze({
+  'Group {0}, {1} records': 'Group {0}, {1} records',
+  'Missing value': 'Missing value',
+  Expanded: 'Expanded',
+  Collapsed: 'Collapsed',
   start: 'start',
   end: 'end',
   Checkbox: 'Checkbox',

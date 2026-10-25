@@ -1,5 +1,36 @@
 import { test, expect } from '@playwright/test';
 
+test('React and Vue pass grouped construction options and expose the same grouping handle', async ({ page }) => {
+  await page.goto('/');
+  await page.addScriptTag({ type: 'module', url: '/adapters.js' });
+  for (const framework of ['react', 'vue']) {
+    const host = page.locator('#' + framework);
+    await expect(host.getByRole('grid')).toHaveCount(1);
+    await page.evaluate(
+      (name) =>
+        window.adapters[name === 'react' ? 'updateReact' : 'updateVue']({
+          options: {
+            columns: [{ key: 'name', title: 'Name' }],
+            dataSource: { getRowCount: () => 2, getRowId: (index) => index, getValue: () => 'A' },
+            accessibility: 'viewport',
+            grouping: { columnKey: 'name' },
+          },
+        }),
+      framework,
+    );
+    await expect(host.getByRole('treegrid')).toHaveCount(1);
+    expect(await page.evaluate((name) => window.adapters[name].getRowMetadata(0).count, framework)).toBe(2);
+    await page.evaluate((name) => window.adapters[name].setDataGroupExpanded('A', false), framework);
+    await expect.poll(() => page.evaluate((name) => window.adapters[name].rowCount, framework)).toBe(1);
+    expect(await page.evaluate((name) => window.adapters[name].takeObserverErrors().length, framework)).toBe(0);
+  }
+  await page.evaluate(() => {
+    window.adapters.unmountReact();
+    window.adapters.unmountVue();
+  });
+  await expect(page.getByRole('treegrid')).toHaveCount(0);
+});
+
 test('adapter initialization failures destroy the created grid before reporting errors', async ({ page }) => {
   await page.goto('/');
   await page.addScriptTag({ type: 'module', url: '/adapters.js' });

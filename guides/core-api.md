@@ -290,7 +290,7 @@ Whether a live engine has a redo entry. Replay still checks current policies and
 setGrouping: (next: LocalGroupingOptions | null) => void
 ```
 
-Source preview, headless only: filter complete local records, group by one scalar key and optionally sum finite numeric values; sort leaves within each group. Reject incompatible row layout/history before installing. Null clears grouping. No source writes.
+Source preview: filter complete local records, group by one scalar key and optionally sum finite numeric values; sort leaves within each group. Reject incompatible row layout/history before installing. Null clears grouping. No source writes.
 
 ### exportGroupingState
 
