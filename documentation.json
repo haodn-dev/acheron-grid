@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "sourceRevision": "e592c4f2d2211bceb7c220fc1074707bab77ecbf",
+  "sourceRevision": "6e5d6a408ea3f6f089b013b2d2d0e0c698ccd9ee",
   "release": {
-    "version": "0.2.1",
-    "tag": "v0.2.1",
-    "revision": "15e5a986b552710d389e7253286be48079264b59",
-    "documentationRevision": "114ff0a3e35cc4bc8ab762c27baa036c585305b8"
+    "documentationRevision": "6e5d6a408ea3f6f089b013b2d2d0e0c698ccd9ee",
+    "tag": "v0.3.0",
+    "revision": "e592c4f2d2211bceb7c220fc1074707bab77ecbf",
+    "version": "0.3.0"
   },
   "documents": [
     {
@@ -1070,6 +1070,12 @@
       "tag": "v0.2.1",
       "revision": "15e5a986b552710d389e7253286be48079264b59",
       "documentationRevision": "114ff0a3e35cc4bc8ab762c27baa036c585305b8"
+    },
+    "0.3.0": {
+      "documentationRevision": "6e5d6a408ea3f6f089b013b2d2d0e0c698ccd9ee",
+      "tag": "v0.3.0",
+      "revision": "e592c4f2d2211bceb7c220fc1074707bab77ecbf",
+      "version": "0.3.0"
     }
   }
 }
