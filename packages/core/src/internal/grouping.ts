@@ -6,6 +6,13 @@ export interface GroupDisplayRow extends LocalGroup {
   readonly kind: 'group';
   readonly expanded: boolean;
 }
+export type GridRowMetadata =
+  | GroupDisplayRow
+  | Readonly<{
+      kind: 'leaf';
+      sourceIndex: number;
+      rowId: RowId;
+    }>;
 export type DisplayRow = number | GroupDisplayRow;
 export interface LocalGroupingOptions {
   readonly columnKey: string;

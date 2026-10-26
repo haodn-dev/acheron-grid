@@ -165,6 +165,11 @@ try {
   );
   for (const name of ['core', 'canvas']) {
     const catalog = await readFile(`guides/${name}-api.md`, 'utf8');
+    assert.doesNotMatch(
+      catalog,
+      /import\(["'](?:[A-Za-z]:|\/|file:)/,
+      'API catalogs must not contain machine-specific import paths.',
+    );
     for (const method of ['updateCells', 'refreshData', 'exportState', 'destroy'])
       assert.ok(catalog.includes('### ' + method));
     if (name === 'core') {

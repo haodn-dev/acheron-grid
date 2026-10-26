@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "fd3195b75a0c4110f6f1b6bbd33af33150ac5bc4",
+  "sourceRevision": "ea734f67ab13edb39122a81fdc88d0d5b7bbaba3",
   "release": {
     "documentationRevision": "6e5d6a408ea3f6f089b013b2d2d0e0c698ccd9ee",
     "tag": "v0.3.0",
@@ -320,9 +320,9 @@
     {
       "id": "core-api",
       "path": "guides/core-api.md",
-      "revision": 18,
+      "revision": 19,
       "updated": "2026-10-25",
-      "sha256": "0dc5dabf3f30ad271d468e74d787f56782ae1e5406a0d2ac3c324b8f311fe303",
+      "sha256": "74039b180cf7096faf2504413c1657f1c125a2ec362580d1abca2d5225022436",
       "history": [
         {
           "revision": 1,
@@ -395,15 +395,19 @@
         {
           "revision": 18,
           "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
+        },
+        {
+          "revision": 19,
+          "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
         }
       ]
     },
     {
       "id": "canvas-api",
       "path": "guides/canvas-api.md",
-      "revision": 9,
+      "revision": 10,
       "updated": "2026-10-25",
-      "sha256": "ba27bd46e13f4df34ed31847c9ced1d9ef10a0e5b2b27b9e77ec930799d4bd2c",
+      "sha256": "a923a4f4d6886944b4f9b72a4cbce7f992087409814d41ebc34b5ac91841ad86",
       "history": [
         {
           "revision": 1,
@@ -439,6 +443,10 @@
         },
         {
           "revision": 9,
+          "summary": "Generated source API signatures and construction options."
+        },
+        {
+          "revision": 10,
           "summary": "Generated source API signatures and construction options."
         }
       ]

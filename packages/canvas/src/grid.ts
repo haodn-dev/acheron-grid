@@ -39,6 +39,7 @@ import type {
   GridConfiguration,
   GridState,
   GridEngine,
+  GridRowMetadata,
   ClipboardBlock,
   RowId,
   PasteOptions,
@@ -242,7 +243,7 @@ export interface GridOptions extends Pick<
 export interface Grid {
   setGrouping: GridEngine['setGrouping'];
   readonly grouping: GridEngine['grouping'];
-  getRowMetadata: GridEngine['getRowMetadata'];
+  getRowMetadata: (row: number) => GridRowMetadata;
   focusGroup: GridEngine['focusGroup'];
   getFocusedGroup: GridEngine['getFocusedGroup'];
   setDataGroupExpanded: GridEngine['setDataGroupExpanded'];

@@ -1,4 +1,10 @@
-import type { DisplayRow, GroupKey, LocalGroupingOptions, GroupingState } from './internal/grouping.js';
+import type {
+  DisplayRow,
+  GroupKey,
+  LocalGroupingOptions,
+  GroupingState,
+  GridRowMetadata,
+} from './internal/grouping.js';
 import { createPersistence } from './internal/persistence.js';
 import { createClipboard } from './internal/clipboard.js';
 import { createSelection } from './internal/selection.js';
@@ -859,7 +865,7 @@ export function createGridEngine(options: GridEngineOptions) {
     get grouping() {
       return context.grouping;
     },
-    getRowMetadata: (row: number) => {
+    getRowMetadata: (row: number): GridRowMetadata => {
       const entry = displayEntry(row);
       return typeof entry === 'number'
         ? Object.freeze({ kind: 'leaf' as const, sourceIndex: entry, rowId: dataSource.getRowId(entry) })

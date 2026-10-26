@@ -263,7 +263,7 @@ Frozen current local grouping criteria, or null. Grouping is separate from Local
 ### getRowMetadata
 
 ```ts
-getRowMetadata: (row: number) => import("D:/Work/acheron/acheron-grid-engine/packages/core/dist/index").GroupDisplayRow | Readonly<{ kind: "leaf"; sourceIndex: number; rowId: RowId; }>
+getRowMetadata: (row: number) => GridRowMetadata
 ```
 
 Discriminated group/leaf metadata for a visible row. Only leaves have real sourceIndex and rowId; group metadata contains key, count, sums, retained source indices and expanded state. Legacy getRowId/getRowSourceIndex reject group rows.
