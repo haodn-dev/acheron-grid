@@ -284,6 +284,54 @@ Whether a live engine has a redo entry. Replay still checks current policies and
 
 ## Views and persistence
 
+### setTree
+
+```ts
+setTree: (next: LocalTreeOptions | null) => void
+```
+
+Headless source preview: validate a complete local parent-ID forest, retain filter matches and ancestors, and sort siblings. Reject invalid IDs, parents, cycles, depth above 4096 and incompatible grouping/row layout/history before installing. Null clears tree; no source writes.
+
+### tree
+
+```ts
+tree: Readonly<LocalTreeOptions> | null
+```
+
+Frozen current parent-column criteria, or null. Tree projection is separate from LocalViewOptions and remote queries.
+
+### getTreeRowMetadata
+
+```ts
+getTreeRowMetadata: (row: number) => LocalTreeRow | null
+```
+
+Frozen metadata for a visible real tree record: sourceIndex, rowId, parentId, 1-based level, retained hasChildren and expanded. Null outside tree mode. No synthetic row ID.
+
+### setTreeExpanded
+
+```ts
+setTreeExpanded: (rowId: RowId, expanded: boolean) => void
+```
+
+Expand/collapse a visible branch by its real typed row ID, outside data undo. Reduce selection to its active visible cell or affected parent if hidden; discard hidden ranges. Unknown branches reject; unchanged expansion is a no-op.
+
+### exportTreeState
+
+```ts
+exportTreeState: () => TreeState
+```
+
+Frozen version-1 parent-column criteria and typed collapsed IDs. Contains no dataset provenance, records, permissions or history; the host selects the matching complete dataset.
+
+### restoreTreeState
+
+```ts
+restoreTreeState: (state: unknown) => void
+```
+
+Validate unknown version-1 state, schema, layout and collapsed IDs against the current forest before replacing tree projection atomically. Clears selection; does not restore source data or authority.
+
 ### setGrouping
 
 ```ts
@@ -768,6 +816,7 @@ Call createGridEngine with GridEngineOptions. Required fields are marked; option
 
 | Field | Required | Type |
 | --- | --- | --- |
+| tree | No | `LocalTreeOptions \| undefined` |
 | grouping | No | `LocalGroupingOptions \| undefined` |
 | historyLimits | No | `GridHistoryLimits \| undefined` |
 | onObserverError | No | `((error: unknown) => void) \| undefined` |
@@ -797,6 +846,9 @@ The root and headless alias expose the same API. Source interfaces use their own
 | Export | Kind | Defined in | Contract |
 | --- | --- | --- | --- |
 | createGridEngine | Runtime | engine.ts | Create the headless domain instance from application-owned columns/source/policies. See the member contracts and construction options above. |
+| LocalTreeOptions | Type | tree.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| LocalTreeRow | Type | tree.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| TreeState | Type | tree.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | GridEngine | Type | engine.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | GridEngineOptions | Type | engine.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | GridInvalidation | Type | engine.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
@@ -1146,6 +1198,37 @@ spliceRows?: ((splices: readonly RowSplice[]) => void) | undefined
 ## Exported type definitions
 
 These declaration excerpts describe compile-time contracts, not executable examples or runtime validators. GridEngine members and GridEngineOptions are catalogued above. Unknown persisted/clipboard input still requires its validation API; never trust a TypeScript assertion as validation.
+
+### Type LocalTreeOptions
+
+```ts
+export interface LocalTreeOptions {
+  readonly parentColumnKey: string;
+}
+```
+
+### Type LocalTreeRow
+
+```ts
+export interface LocalTreeRow {
+  readonly sourceIndex: number;
+  readonly rowId: RowId;
+  readonly parentId: RowId | null;
+  readonly level: number;
+  readonly hasChildren: boolean;
+  readonly expanded: boolean;
+}
+```
+
+### Type TreeState
+
+```ts
+export interface TreeState {
+  readonly version: 1;
+  readonly tree: Readonly<LocalTreeOptions> | null;
+  readonly collapsedIds: readonly RowId[];
+}
+```
 
 ### Type GridInvalidation
 

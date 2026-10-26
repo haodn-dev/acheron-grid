@@ -42,6 +42,12 @@ await writeFile(
   join(consumer, 'index.ts'),
   `
 import {createGridEngine,LocalDataSource,createAsyncDataSource} from '@acheron-grid/core';
+import type {LocalTreeOptions,LocalTreeRow,TreeState} from '@acheron-grid/core';
+const treeOptions: LocalTreeOptions = {parentColumnKey:'parent'};
+const treeEngine=createGridEngine({dataSource:new LocalDataSource([{id:'root',parent:null}],row=>row.id),columns:[{key:'parent',title:'Parent'}],tree:treeOptions});
+const treeRow: LocalTreeRow|null=treeEngine.getTreeRowMetadata(0);
+const treeState: TreeState=treeEngine.exportTreeState();
+treeEngine.restoreTreeState(treeState);void treeRow;treeEngine.destroy();
 import {createTsvWorker} from '@acheron-grid/core/worker';
 if (false) {
 const decoder = createTsvWorker(() => new Worker(new URL('@acheron-grid/core/worker-entry', import.meta.url), {type:'module'}));

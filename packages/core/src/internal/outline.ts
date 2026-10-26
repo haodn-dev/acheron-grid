@@ -23,6 +23,7 @@ export function createOutline(
     | 'view'
     | 'projection'
     | 'grouping'
+    | 'tree'
     | 'groups'
     | 'past'
     | 'future'
@@ -92,7 +93,7 @@ export function createOutline(
       throw new Error('A merged cell cannot cross a frozen boundary.');
   }
   function layoutAllowed(request: LayoutRequest): boolean {
-    if (context.grouping) return false;
+    if (context.grouping || context.tree) return false;
     dependencies.assertAlive();
     if (!request || !['merge', 'unmerge', 'group', 'ungroup', 'collapse', 'expand'].includes(request.kind))
       return false;

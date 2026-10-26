@@ -8,6 +8,7 @@ export function createPermissions(
   context: Pick<
     EngineContext,
     | 'rowCount'
+    | 'tree'
     | 'columns'
     | 'dataSource'
     | 'permissions'
@@ -49,7 +50,8 @@ export function createPermissions(
         context.permissions,
         column.permissions,
         context.resolver?.(cell),
-        context.tableLocked ||
+        column.key === context.tree?.parentColumnKey ||
+          context.tableLocked ||
           context.lockedRows.has(rowIndex) ||
           context.lockedColumns.has(columnIndex) ||
           context.lockedCells.has(`${rowIndex}:${columnIndex}`)

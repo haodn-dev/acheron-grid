@@ -1,5 +1,17 @@
 import type { DataSource, RowId } from '../data-source.js';
 import type { BulkSteps } from './bulk.js';
+import { snapshotLocalView } from '../data-source.js';
+import type { LocalViewOptions } from '../data-source.js';
+import { localViewSteps } from './local-view-steps.js';
+
+export interface LocalTreeOptions {
+  readonly parentColumnKey: string;
+}
+export interface TreeState {
+  readonly version: 1;
+  readonly tree: Readonly<LocalTreeOptions> | null;
+  readonly collapsedIds: readonly RowId[];
+}
 
 export interface LocalTreeRow {
   readonly sourceIndex: number;
@@ -19,7 +31,10 @@ export function* localTreeRowsSteps(
   columnKeys: readonly string[],
   parentColumnKey: string,
   collapsedIds: readonly RowId[] = [],
+  view: LocalViewOptions = {},
+  cooperative = false,
 ): BulkSteps<readonly LocalTreeRow[]> {
+  const criteria = snapshotLocalView(view);
   const count = source.getRowCount();
   if (!Number.isSafeInteger(count) || count < 0) throw new RangeError('Invalid tree source count.');
   if (
@@ -63,6 +78,34 @@ export function* localTreeRowsSteps(
     if ((index + 1) % 256 === 0) yield { phase: 'validate', completed: index + 1, total: count };
   }
 
+  const retained = criteria.filters?.length
+    ? new Set(yield* localViewSteps(source, { filters: criteria.filters }, cooperative))
+    : null;
+  if (retained)
+    for (const index of retained) {
+      let parent = parents[index]!;
+      while (parent !== null) {
+        const ancestor = positions.get(parent)!;
+        if (retained.has(ancestor)) break;
+        retained.add(ancestor);
+        parent = parents[ancestor]!;
+      }
+    }
+  if (criteria.sort || criteria.sorts?.length)
+    for (const siblings of [roots, ...children]) {
+      if (siblings.length < 2) continue;
+      const order = yield* localViewSteps(
+        {
+          getRowCount: () => siblings.length,
+          getRowId: (i) => ids[siblings[i]!]!,
+          getValue: (i, key) => source.getValue(siblings[i]!, key),
+        },
+        { ...(criteria.sort ? { sort: criteria.sort } : {}), ...(criteria.sorts ? { sorts: criteria.sorts } : {}) },
+        cooperative,
+      );
+      const sorted = order.map((i) => siblings[i]!);
+      for (let i = 0; i < sorted.length; i++) siblings[i] = sorted[i]!;
+    }
   const rows: LocalTreeRow[] = [];
   const stack = [{ siblings: roots, next: 0, level: 1, visible: true }];
   let visited = 0;
@@ -75,11 +118,11 @@ export function* localTreeRowsSteps(
     const index = frame.siblings[frame.next++]!,
       rowId = ids[index]!,
       descendants = children[index]!,
-      hasChildren = descendants.length > 0,
+      hasChildren = descendants.some((child) => !retained || retained.has(child)),
       expanded = hasChildren && !collapsed.has(rowId);
     // Bound pathological ancestry independently of expansion; traversal never uses the JS call stack.
     if (frame.level > 4096) throw new RangeError('Tree depth exceeds 4096 levels.');
-    if (frame.visible)
+    if (frame.visible && (!retained || retained.has(index)))
       rows.push(
         Object.freeze({
           sourceIndex: index,
@@ -91,7 +134,7 @@ export function* localTreeRowsSteps(
         }),
       );
     visited++;
-    if (hasChildren)
+    if (descendants.length)
       stack.push({ siblings: descendants, next: 0, level: frame.level + 1, visible: frame.visible && expanded });
     if (visited % 256 === 0) yield { phase: 'validate', completed: visited, total: count };
   }

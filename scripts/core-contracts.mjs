@@ -1,5 +1,16 @@
 // Behavioral notes for the generated public API catalog.
 export const coreContracts = {
+  setTree:
+    'Headless source preview: validate a complete local parent-ID forest, retain filter matches and ancestors, and sort siblings. Reject invalid IDs, parents, cycles, depth above 4096 and incompatible grouping/row layout/history before installing. Null clears tree; no source writes.',
+  tree: 'Frozen current parent-column criteria, or null. Tree projection is separate from LocalViewOptions and remote queries.',
+  getTreeRowMetadata:
+    'Frozen metadata for a visible real tree record: sourceIndex, rowId, parentId, 1-based level, retained hasChildren and expanded. Null outside tree mode. No synthetic row ID.',
+  setTreeExpanded:
+    'Expand/collapse a visible branch by its real typed row ID, outside data undo. Reduce selection to its active visible cell or affected parent if hidden; discard hidden ranges. Unknown branches reject; unchanged expansion is a no-op.',
+  exportTreeState:
+    'Frozen version-1 parent-column criteria and typed collapsed IDs. Contains no dataset provenance, records, permissions or history; the host selects the matching complete dataset.',
+  restoreTreeState:
+    'Validate unknown version-1 state, schema, layout and collapsed IDs against the current forest before replacing tree projection atomically. Clears selection; does not restore source data or authority.',
   setGrouping:
     'Source preview: filter complete local records, group by one scalar key and optionally sum finite numeric values; sort leaves within each group. Reject incompatible row layout/history before installing. Null clears grouping. No source writes.',
   grouping:

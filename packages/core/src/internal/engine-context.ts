@@ -1,4 +1,5 @@
 import type { DisplayRow, LocalGroupingOptions, GroupKey } from './grouping.js';
+import type { LocalTreeOptions } from './tree.js';
 import { GridAxis } from '../axis.js';
 import type { GridHistoryLimits } from './history-budget.js';
 import type { CellUpdate, DataSource, LocalViewOptions, RowId, RowSplice } from '../data-source.js';
@@ -114,6 +115,8 @@ export interface EngineContext {
   view: Readonly<LocalViewOptions>;
   projection: DisplayRow[] | null;
   grouping: Readonly<LocalGroupingOptions> | null;
+  tree: Readonly<LocalTreeOptions> | null;
+  collapsedTreeIds: Set<RowId>;
   collapsedGroupingKeys: Set<GroupKey>;
   groupFocus: { key: GroupKey } | null;
   reverseProjection: Map<number, number>;
