@@ -274,6 +274,7 @@ export interface Grid {
   takeObserverErrors: GridEngine['takeObserverErrors'];
   captureRowIdentity(): readonly RowId[];
   refreshData(previousRowIds?: readonly RowId[] | 'values'): void;
+  refreshRows: GridEngine['refreshRows'];
   exportState(): GridState;
   restoreState(state: unknown): void;
   setColumnEditor(key: string, editor: ColumnEditor | null): void;
@@ -880,9 +881,17 @@ export function createGrid(options: GridOptions): Grid {
           (menu.dataset.gridMenuHeader !== 'true' && change.rowMap[row] !== row)
         )
           closeMenu();
-      } else if (menu && (change.type === 'layout' || change.type === 'selection')) closeMenu();
+      } else if (menu && (change.type === 'layout' || change.type === 'selection' || change.type === 'rows'))
+        closeMenu();
       if (change.type !== 'selection') clearCopyFeedback();
-      if (change.type === 'cells') {
+      if (change.type === 'rows') {
+        clearLayoutMotion();
+        rendering.clearValueHistory();
+        clipboard.pendingCutText = undefined;
+        rendering.fullDraw = true;
+        accessibility.accessibleCells.clear();
+        render();
+      } else if (change.type === 'cells') {
         if (gridContext.engine.getMergedCells().length) rendering.fullDraw = true;
         if (gridContext.options.autoRowHeight) {
           change.cells.forEach((cell) => rendering.measuredRows.delete(cell.rowIndex));
@@ -2197,6 +2206,11 @@ export function createGrid(options: GridOptions): Grid {
     },
     takeObserverErrors: gridContext.engine.takeObserverErrors,
     captureRowIdentity: gridContext.engine.captureRowIdentity,
+    refreshRows: (startRow, endRow) => {
+      if (editors.editor || !searchBar.hidden)
+        throw new Error('Finish editing and close local search before refreshing rows.');
+      return gridContext.engine.refreshRows(startRow, endRow);
+    },
     refreshData: (ids?: readonly RowId[] | 'values') => {
       finishEdit(false);
       clearCopyFeedback();

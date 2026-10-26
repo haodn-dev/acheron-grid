@@ -1,5 +1,7 @@
 // Behavioral notes for the generated public API catalog.
 export const coreContracts = {
+  refreshRows:
+    'Source preview: refresh an inclusive source-row window without scanning other source IDs or clearing all history. Requires unchanged count, a flat default-height view and no row metadata/format history. Validate window IDs first; discard entire undo/redo batches whose in-window IDs changed, clear intersecting non-single-cell selections and stale active identity, cancel cut, then emit data:rows with the drop/selection result. Matching IDs retain normal value-conflict preflight. Host must report every changed/evicted window and keep query/revision/schema stable; this is not a query/total reset or remote loader.',
   setTree:
     'Headless source preview: validate a complete local parent-ID forest, retain filter matches and ancestors, and sort siblings. Reject invalid IDs, parents, cycles, depth above 4096 and incompatible grouping/row layout/history before installing. Null clears tree; no source writes.',
   tree: 'Frozen current parent-column criteria, or null. Tree projection is separate from LocalViewOptions and remote queries.',

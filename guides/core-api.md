@@ -626,6 +626,14 @@ Set or clear a validated visible lock target when lock changes are allowed. Valu
 
 ## Layout and browser controls
 
+### refreshRows
+
+```ts
+refreshRows: (startRow: number, endRow: number) => RowRefreshResult
+```
+
+Source preview: refresh an inclusive source-row window without scanning other source IDs or clearing all history. Requires unchanged count, a flat default-height view and no row metadata/format history. Validate window IDs first; discard entire undo/redo batches whose in-window IDs changed, clear intersecting non-single-cell selections and stale active identity, cancel cut, then emit data:rows with the drop/selection result. Matching IDs retain normal value-conflict preflight. Host must report every changed/evicted window and keep query/revision/schema stable; this is not a query/total reset or remote loader.
+
 ### frozenRows
 
 ```ts
@@ -902,6 +910,7 @@ The root and headless alias expose the same API. Source interfaces use their own
 | CellPermissionResolver | Type | permissions.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | GridEvent | Type | events.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | GridChangeSource | Type | events.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| RowRefreshResult | Type | events.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | ViewportOptions | Type | panes.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | ViewportLayout | Type | panes.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | ViewportRegion | Type | panes.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
@@ -1234,6 +1243,7 @@ export interface TreeState {
 
 ```ts
 export type GridInvalidation =
+  | { readonly type: 'rows'; readonly startRow: number; readonly endRow: number }
   | { readonly type: 'cells'; readonly cells: readonly { readonly rowIndex: number; readonly columnKey: string }[] }
   | { readonly type: 'selection'; readonly changed: boolean; readonly rangeChanged: boolean }
   | { readonly type: 'layout' }
@@ -1722,6 +1732,7 @@ export type CellPermissionResolver = (cell: Readonly<CellSelection>) => CellPerm
 
 ```ts
 export type GridEvent =
+  | ({ readonly type: 'data:rows' } & RowRefreshResult)
   | {
       readonly type: 'visibility:change';
       readonly axis: 'row' | 'column';
@@ -1790,6 +1801,18 @@ export type GridEvent =
 
 ```ts
 export type GridChangeSource = 'api' | 'edit' | 'paste' | 'undo' | 'redo';
+```
+
+### Type RowRefreshResult
+
+```ts
+export interface RowRefreshResult {
+  readonly startRow: number;
+  readonly endRow: number;
+  readonly droppedHistoryEntries: number;
+  readonly selectionCleared: boolean;
+  readonly cutCancelled: boolean;
+}
 ```
 
 ### Type ViewportOptions

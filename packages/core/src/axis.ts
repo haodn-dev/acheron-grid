@@ -22,6 +22,10 @@ export class GridAxis {
   size(index: number): number {
     return this.hidden.has(index) ? 0 : this.storedSize(index);
   }
+  /** Whether explicit sizes or hidden positions are stored. */
+  get hasOverrides(): boolean {
+    return this.overrides.size !== 0 || this.hidden.size !== 0;
+  }
   storedSize(index: number): number {
     return this.overrides.get(index) ?? this.defaultSize;
   }
