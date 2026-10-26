@@ -40,6 +40,7 @@ import type {
   GridState,
   GridEngine,
   GridRowMetadata,
+  LocalTreeRow,
   ClipboardBlock,
   RowId,
   PasteOptions,
@@ -154,6 +155,7 @@ export interface GridOptions extends Pick<
   | 'canChangeVisibility'
   | 'historyLimits'
   | 'grouping'
+  | 'tree'
 > {
   allowMerging?: boolean;
   allowRowGrouping?: boolean;
@@ -243,6 +245,12 @@ export interface GridOptions extends Pick<
 export interface Grid {
   setGrouping: GridEngine['setGrouping'];
   readonly grouping: GridEngine['grouping'];
+  readonly tree: GridEngine['tree'];
+  setTree: GridEngine['setTree'];
+  getTreeRowMetadata: (row: number) => LocalTreeRow | null;
+  setTreeExpanded: GridEngine['setTreeExpanded'];
+  exportTreeState: GridEngine['exportTreeState'];
+  restoreTreeState: GridEngine['restoreTreeState'];
   getRowMetadata: (row: number) => GridRowMetadata;
   focusGroup: GridEngine['focusGroup'];
   getFocusedGroup: GridEngine['getFocusedGroup'];
@@ -487,10 +495,11 @@ export function createGrid(options: GridOptions): Grid {
   const managesView =
     gridContext.options.viewMode === 'core' ||
     (gridContext.options.viewMode !== 'host' && !gridContext.options.onViewChange);
-  function requireGroupingView(): void {
-    if (!managesView) throw new Error('Grouping requires a core-managed local view.');
+  function requireLocalView(feature: 'Grouping' | 'Tree'): void {
+    if (!managesView) throw new Error(`${feature} requires a core-managed local view.`);
   }
-  if (gridContext.options.grouping) requireGroupingView();
+  if (gridContext.options.grouping) requireLocalView('Grouping');
+  if (gridContext.options.tree) requireLocalView('Tree');
   let currentView = gridContext.options.view;
   const activeBorderWidth = gridContext.options.selectionStyle?.activeBorderWidth ?? 1;
   const rangeBorderWidth = gridContext.options.selectionStyle?.rangeBorderWidth ?? 1;
@@ -811,6 +820,7 @@ export function createGrid(options: GridOptions): Grid {
     ),
     dataSource,
     ...(gridContext.options.grouping !== undefined ? { grouping: gridContext.options.grouping } : {}),
+    ...(gridContext.options.tree !== undefined ? { tree: gridContext.options.tree } : {}),
     ...(gridContext.options.historyLimits ? { historyLimits: gridContext.options.historyLimits } : {}),
     ...(gridContext.options.allowMerging === undefined ? {} : { allowMerging: gridContext.options.allowMerging }),
     ...(gridContext.options.allowRowGrouping === undefined
@@ -947,7 +957,7 @@ export function createGrid(options: GridOptions): Grid {
             String(gridContext.layout.rowCount + (viewportAccessibility ? gridContext.layout.headers.levels : 0)),
           );
           scroller.setAttribute('aria-colcount', String(gridContext.layout.columns.length));
-          scroller.setAttribute('role', gridContext.engine.grouping ? 'treegrid' : 'grid');
+          scroller.setAttribute('role', gridContext.engine.grouping || gridContext.engine.tree ? 'treegrid' : 'grid');
           if (!searchBar.hidden) refreshSearch();
           syncAccessibleCell();
           gridContext.options.onSelectionChange?.(gridContext.engine.getSelection());
@@ -1121,7 +1131,7 @@ export function createGrid(options: GridOptions): Grid {
   scroller.tabIndex = 0;
   scroller.setAttribute('aria-label', viewportLabel);
   scroller.setAttribute('aria-keyshortcuts', 'Shift+F8 Control+f Meta+f Control+a Meta+a Alt+Enter');
-  scroller.setAttribute('role', engine.grouping ? 'treegrid' : 'grid');
+  scroller.setAttribute('role', engine.grouping || engine.tree ? 'treegrid' : 'grid');
   scroller.setAttribute(
     'aria-rowcount',
     String(gridContext.layout.rowCount + (viewportAccessibility ? gridContext.layout.headers.levels : 0)),
@@ -2245,8 +2255,23 @@ export function createGrid(options: GridOptions): Grid {
         gridContext.layout.currentView = gridContext.engine.view;
       }, 'row'),
     setGrouping: (grouping) => {
-      if (grouping) requireGroupingView();
+      if (grouping) requireLocalView('Grouping');
       structureAction(() => gridContext.engine.setGrouping(grouping), 'row');
+    },
+    setTree: (tree) => {
+      if (tree) requireLocalView('Tree');
+      structureAction(() => gridContext.engine.setTree(tree), 'row');
+    },
+    get tree() {
+      return gridContext.engine.tree;
+    },
+    getTreeRowMetadata: gridContext.engine.getTreeRowMetadata,
+    setTreeExpanded: (rowId, expanded) =>
+      structureAction(() => gridContext.engine.setTreeExpanded(rowId, expanded), 'row'),
+    exportTreeState: gridContext.engine.exportTreeState,
+    restoreTreeState: (state) => {
+      requireLocalView('Tree');
+      structureAction(() => gridContext.engine.restoreTreeState(state), 'row');
     },
     get grouping() {
       return gridContext.engine.grouping;
@@ -2264,7 +2289,7 @@ export function createGrid(options: GridOptions): Grid {
       structureAction(() => gridContext.engine.setDataGroupExpanded(key, expanded), 'row'),
     exportGroupingState: gridContext.engine.exportGroupingState,
     restoreGroupingState: (state) => {
-      requireGroupingView();
+      requireLocalView('Grouping');
       structureAction(() => gridContext.engine.restoreGroupingState(state), 'row');
     },
     get view() {

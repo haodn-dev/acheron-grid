@@ -17,15 +17,19 @@ createServer(async (request, response) => {
   const file =
     path === '/'
       ? new URL('./index.html', import.meta.url)
-      : path === '/grouping' || path === '/grouping/'
-        ? new URL('../grouping/index.html', import.meta.url)
-        : path === '/grouping/app.js'
-          ? new URL('../grouping/app.js', import.meta.url)
-          : path === '/app.js'
-            ? new URL('./app.js', import.meta.url)
-            : module
-              ? new URL(`../../packages/${module[1]}/dist/${module[2]}`, import.meta.url)
-              : null;
+      : path === '/tree' || path === '/tree/'
+        ? new URL('../tree/index.html', import.meta.url)
+        : path === '/tree/app.js'
+          ? new URL('../tree/app.js', import.meta.url)
+          : path === '/grouping' || path === '/grouping/'
+            ? new URL('../grouping/index.html', import.meta.url)
+            : path === '/grouping/app.js'
+              ? new URL('../grouping/app.js', import.meta.url)
+              : path === '/app.js'
+                ? new URL('./app.js', import.meta.url)
+                : module
+                  ? new URL(`../../packages/${module[1]}/dist/${module[2]}`, import.meta.url)
+                  : null;
   if (!file) {
     response.writeHead(404).end();
     return;

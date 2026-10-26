@@ -7,6 +7,10 @@ export const canvasVietnameseMessages: Readonly<Record<string, string>> = Object
   'Group {0}, {1} records': 'Nhóm {0}, {1} bản ghi',
   'Missing value': 'Chưa có giá trị',
   Expanded: 'Đã mở',
+  'Level {0}': 'Cấp {0}',
+  'Sort orders siblings. Filters retain matching records and their ancestors.':
+    'Sắp xếp các hàng cùng cha. Lọc giữ bản ghi khớp và các hàng tổ tiên.',
+  'Row {0}': 'Hàng {0}',
   Collapsed: 'Đã thu gọn',
   start: 'đầu',
   end: 'cuối',
@@ -415,6 +419,10 @@ export const canvasEnglishMessages: Readonly<Record<string, string>> = Object.fr
   'Group {0}, {1} records': 'Group {0}, {1} records',
   'Missing value': 'Missing value',
   Expanded: 'Expanded',
+  'Level {0}': 'Level {0}',
+  'Sort orders siblings. Filters retain matching records and their ancestors.':
+    'Sort orders siblings. Filters retain matching records and their ancestors.',
+  'Row {0}': 'Row {0}',
   Collapsed: 'Collapsed',
   start: 'start',
   end: 'end',

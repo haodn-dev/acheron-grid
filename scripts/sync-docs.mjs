@@ -33,6 +33,12 @@ const groups = {
   'Layout and browser controls': /.*/,
 };
 const descriptions = {
+  setTree: coreContracts.setTree,
+  tree: coreContracts.tree,
+  getTreeRowMetadata: coreContracts.getTreeRowMetadata,
+  setTreeExpanded: coreContracts.setTreeExpanded,
+  exportTreeState: coreContracts.exportTreeState,
+  restoreTreeState: coreContracts.restoreTreeState,
   setGrouping: coreContracts.setGrouping,
   grouping: coreContracts.grouping,
   getRowMetadata: coreContracts.getRowMetadata,

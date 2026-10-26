@@ -12,7 +12,7 @@ import type { CellLink } from '../links.js';
 import type { RichText } from '../rich-text.js';
 import { layoutRichText } from '../rich-text.js';
 import { createEditors } from './editors.js';
-import { dataGroupLabelColumn } from './display.js';
+import { dataGroupLabelColumn, treeLabelColumn, treeIndent } from './display.js';
 import type { GridContext } from './grid-context.js';
 import { createOverlay } from './overlay.js';
 import { axisCellRect, reorderInsertionIndex } from './reorder-geometry.js';
@@ -126,16 +126,21 @@ export function createInteraction(context: InteractionContext) {
       ctx.font = context.theme.font;
       for (const row of visibleIndices('row')) {
         const value = context.engine.getValue(row, column.key);
+        const inset =
+          context.engine.tree && index === treeLabelColumn(context.engine)
+            ? treeIndent(context.engine.getTreeRowMetadata(row)!.level, 1000)
+            : 0;
         if (context.mediaColumn(column.key)) {
-          width = Math.max(width, context.mediaSize * 2 + 16);
+          width = Math.max(width, context.mediaSize * 2 + 16 + inset);
           continue;
-        } else if (context.columnEditors.get(column.key)?.type === 'checkbox') width = Math.max(width, 36);
+        } else if (context.columnEditors.get(column.key)?.type === 'checkbox') width = Math.max(width, 36 + inset);
         else {
           const rich = context.richText(value, column.key, context.engine.getFormat(row, index).contentFormat);
-          if (rich) width = Math.max(width, layoutRichText(ctx, rich, context.theme.font, Infinity, false).width + 20);
+          if (rich)
+            width = Math.max(width, layoutRichText(ctx, rich, context.theme.font, Infinity, false).width + 20 + inset);
           else
             for (const line of context.numberText(value, context.engine.getFormat(row, index).numberFormat).split('\n'))
-              width = Math.max(width, ctx.measureText(line).width + 20);
+              width = Math.max(width, ctx.measureText(line).width + 20 + inset);
           ctx.font = context.theme.font;
         }
       }
@@ -303,6 +308,7 @@ export function createInteraction(context: InteractionContext) {
   }
 
   function rowEdge(event: MouseEvent): number | null {
+    if (context.engine.grouping || context.engine.tree) return null;
     const bounds = context.scroller.getBoundingClientRect();
     const x = event.clientX - bounds.left;
     const y = event.clientY - bounds.top;
@@ -365,7 +371,9 @@ export function createInteraction(context: InteractionContext) {
   function onHeaderPointerDown(event: PointerEvent): void {
     if (
       event.target instanceof context.win.Element &&
-      event.target.closest('[data-grid-row-group], [data-grid-header-state]')
+      event.target.closest(
+        '[data-grid-row-group], [data-grid-data-group], [data-grid-tree-row], [data-grid-header-state]',
+      )
     )
       return;
     const moveTarget =
@@ -815,6 +823,25 @@ export function createInteraction(context: InteractionContext) {
     if (!cell) return;
     event.preventDefault();
     if (!context.finishEdit(true)) return;
+    if (
+      context.engine.tree &&
+      cell.col === treeLabelColumn(context.engine) &&
+      !event.shiftKey &&
+      !event.ctrlKey &&
+      !event.metaKey
+    ) {
+      const node = context.engine.getTreeRowMetadata(cell.row)!;
+      const rect = context.viewport().cellRect(cell.row, cell.col);
+      const indent = treeIndent(node.level, rect.width);
+      const offset = event.clientX - context.scroller.getBoundingClientRect().left - rect.x;
+      if (node.hasChildren && indent && offset >= indent - 24 && offset < indent) {
+        context.scroller.focus({ preventScroll: true });
+        select(cell.row, cell.col);
+        context.structureAction(() => context.engine.setTreeExpanded(node.rowId, !node.expanded), 'row');
+        context.announceSelection();
+        return;
+      }
+    }
     const metadata = context.engine.grouping ? context.engine.getRowMetadata(cell.row) : null;
     if (metadata?.kind === 'group') {
       context.scroller.focus({ preventScroll: true });
@@ -1066,6 +1093,56 @@ export function createInteraction(context: InteractionContext) {
       return;
     }
     if (event.isComposing || event.altKey) return;
+    if (
+      context.engine.tree &&
+      selection &&
+      !context.editors.editor &&
+      !event.shiftKey &&
+      !event.ctrlKey &&
+      !event.metaKey
+    ) {
+      if (event.key === 'PageUp' || event.key === 'PageDown') {
+        event.preventDefault();
+        const offset =
+          context.rowAxis.position(selection.rowIndex) +
+          (event.key === 'PageDown' ? 1 : -1) * context.viewport().height;
+        select(
+          Math.max(0, Math.min(context.rowCount - 1, context.rowAxis.indexAt(Math.max(0, offset)))),
+          selection.columnIndex,
+        );
+        return;
+      }
+      if (
+        selection.columnIndex === treeLabelColumn(context.engine) &&
+        (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
+      ) {
+        const node = context.engine.getTreeRowMetadata(selection.rowIndex)!;
+        if (
+          node.hasChildren &&
+          ((event.key === 'ArrowLeft' && node.expanded) || (event.key === 'ArrowRight' && !node.expanded))
+        ) {
+          event.preventDefault();
+          context.structureAction(() => context.engine.setTreeExpanded(node.rowId, !node.expanded), 'row');
+          context.announceSelection();
+          return;
+        }
+        if (event.key === 'ArrowRight' && node.hasChildren && node.expanded) {
+          event.preventDefault();
+          select(selection.rowIndex + 1, selection.columnIndex);
+          return;
+        }
+        if (event.key === 'ArrowLeft' && node.parentId !== null) {
+          event.preventDefault();
+          for (let row = selection.rowIndex - 1; row >= 0; row--) {
+            if (context.engine.getTreeRowMetadata(row)!.rowId === node.parentId) {
+              select(row, selection.columnIndex);
+              break;
+            }
+          }
+          return;
+        }
+      }
+    }
     const control = event.ctrlKey || event.metaKey;
     if (control && selection && ['b', 'i'].includes(event.key.toLowerCase())) {
       event.preventDefault();

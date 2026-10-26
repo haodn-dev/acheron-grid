@@ -6,6 +6,16 @@ The npm 0.1.0 archive has a separate frozen reference. See [documentation versio
 
 An experimental Canvas browser renderer for the headless @acheron-grid/core engine.
 
+## Local tree (source preview)
+
+This checkout adds local parent-ID tree rendering; npm 0.3.0 does not contain these APIs. Pass `tree: { parentColumnKey: 'parent' }` to `createGrid`, or call `grid.setTree(...)`. React/Vue inherit the construction option and expose the same methods through their grid handle. See the [standalone example](https://github.com/haodn-dev/acheron-grid/blob/main/examples/tree/README.md) and [core contract](core.md#local-tree-source-preview).
+
+Tree requires a core-managed local view. Explicit `viewMode: 'core'` may be combined with `onViewChange`; host-managed construction, setters and state restore reject before changing the view. `getTreeRowMetadata`, `setTreeExpanded`, `exportTreeState` and `restoreTreeState` delegate to core. Every visible row remains a real record, including parent rows.
+
+The first visible column reserves a bounded leading gutter for depth and an existing chevron; custom renderers receive the remaining content area. Click the chevron or row-index branch button to expand/collapse. In that column, Left closes an expanded branch or goes to the parent, and Right opens a closed branch or goes to its first child. A leaf's Right and all other columns retain cell navigation. Enter/F2 still edits. PageUp/Down moves through visible records using viewport geometry; Ctrl+Home/End retains first/last navigation.
+
+Active and viewport accessibility modes expose treegrid, row levels and expanded state on branches; viewport DOM remains bounded. Parent values are read-only through shared permissions. Value editing, undo/redo, filtering, sorting and visible exports retain the core contract. Expansion reduces selection to its active visible record or parent fallback, discarding hidden ranges. Tree uses fixed configured row height even with `autoRowHeight`; row resize/reorder handles and row-edge resizing are unavailable. Layout motion is immediate. Very narrow columns may omit the cell chevron; keyboard and optional row-index disclosure remain available. Tree validation/rebuilds require a complete bounded local dataset; this is not a lazy remote tree.
+
 ## Local grouping (source preview)
 
 This checkout adds grouped Canvas rendering; published npm 0.3.0 does not include it. Pass `grouping: { columnKey: 'team', sumColumns: ['amount'] }` to `createGrid`, or call `grid.setGrouping(...)`. React and Vue inherit the same construction option and expose the methods through their grid handle. See the [standalone example](https://github.com/haodn-dev/acheron-grid/blob/main/examples/grouping/README.md) and [core grouping contract](core.md#local-grouping-source-preview).

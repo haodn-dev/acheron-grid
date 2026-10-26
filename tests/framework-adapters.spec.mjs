@@ -1,5 +1,49 @@
 import { test, expect } from '@playwright/test';
 
+test('React and Vue inherit tree options and expose the same record-based tree handle', async ({ page }) => {
+  await page.goto('/');
+  await page.addScriptTag({ type: 'module', url: '/adapters.js' });
+  for (const framework of ['react', 'vue']) {
+    const host = page.locator('#' + framework);
+    await expect(host.getByRole('grid')).toHaveCount(1);
+    await page.evaluate(
+      (name) =>
+        window.adapters[name === 'react' ? 'updateReact' : 'updateVue']({
+          options: {
+            columns: [
+              { key: 'name', title: 'Name' },
+              { key: 'parent', title: 'Parent' },
+            ],
+            dataSource: {
+              getRowCount: () => 2,
+              getRowId: (index) => (index === 0 ? 0 : ''),
+              getValue: (index, key) => (key === 'parent' ? (index === 0 ? null : 0) : index === 0 ? 'Root' : 'Child'),
+            },
+            accessibility: 'viewport',
+            tree: { parentColumnKey: 'parent' },
+          },
+        }),
+      framework,
+    );
+    await expect(host.getByRole('treegrid')).toHaveCount(1);
+    expect(await page.evaluate((name) => window.adapters[name].getTreeRowMetadata(1).rowId, framework)).toBe('');
+    await page.evaluate((name) => {
+      const grid = window.adapters[name];
+      window.adapters[name + 'State'] = grid.exportTreeState();
+      grid.setTreeExpanded(0, false);
+    }, framework);
+    await expect.poll(() => page.evaluate((name) => window.adapters[name].rowCount, framework)).toBe(1);
+    await page.evaluate((name) => window.adapters[name].restoreTreeState(window.adapters[name + 'State']), framework);
+    await expect.poll(() => page.evaluate((name) => window.adapters[name].rowCount, framework)).toBe(2);
+    expect(await page.evaluate((name) => window.adapters[name].takeObserverErrors(), framework)).toEqual([]);
+  }
+  await page.evaluate(() => {
+    window.adapters.unmountReact();
+    window.adapters.unmountVue();
+  });
+  await expect(page.getByRole('treegrid')).toHaveCount(0);
+});
+
 test('React and Vue pass grouped construction options and expose the same grouping handle', async ({ page }) => {
   await page.goto('/');
   await page.addScriptTag({ type: 'module', url: '/adapters.js' });

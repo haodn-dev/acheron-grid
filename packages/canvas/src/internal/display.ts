@@ -4,6 +4,13 @@ import type { CanvasTranslator } from '../locale.js';
 import type { RichText } from '../rich-text.js';
 import { readHtml } from '../rich-text.js';
 
+export function treeLabelColumn(engine: GridEngine): number {
+  return engine.columns.findIndex((_, index) => !engine.isColumnHidden(index));
+}
+export function treeIndent(level: number, width: number): number {
+  return width < 44 ? 0 : Math.min(width - 24, 24 + Math.min(level - 1, 8) * 12);
+}
+
 export function dataGroupLabel(group: GroupDisplayRow, t: CanvasTranslator): string {
   return t('Group {0}, {1} records', group.key ?? t('Missing value'), group.count);
 }

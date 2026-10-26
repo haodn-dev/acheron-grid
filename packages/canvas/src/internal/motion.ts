@@ -130,7 +130,7 @@ export function createMotion(context: MotionContext) {
 
   function animateLayout<T>(run: () => T, axis: 'row' | 'column' | 'auto'): T {
     clearLayoutMotion();
-    if (context.engine.grouping) return run();
+    if (context.engine.grouping || context.engine.tree) return run();
     if (!motionEnabled() || !context.canvas.clientWidth || !context.canvas.clientHeight) return run();
     if (context.frame !== undefined) {
       context.win.cancelAnimationFrame(context.frame);
@@ -167,7 +167,7 @@ export function createMotion(context: MotionContext) {
     snapshot.height = context.canvas.height;
     snapshot.getContext('2d')!.drawImage(context.canvas, 0, 0);
     const result = run();
-    if (context.engine.grouping) return result;
+    if (context.engine.grouping || context.engine.tree) return result;
     if (context.frame !== undefined) {
       context.win.cancelAnimationFrame(context.frame);
       context.frame = undefined;

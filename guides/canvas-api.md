@@ -260,6 +260,54 @@ grouping: Readonly<LocalGroupingOptions> | null
 
 Frozen current local grouping criteria, or null. Grouping is separate from LocalViewOptions and server queries.
 
+### tree
+
+```ts
+tree: Readonly<LocalTreeOptions> | null
+```
+
+Frozen current parent-column criteria, or null. Tree projection is separate from LocalViewOptions and remote queries.
+
+### setTree
+
+```ts
+setTree: (next: LocalTreeOptions | null) => void
+```
+
+Headless source preview: validate a complete local parent-ID forest, retain filter matches and ancestors, and sort siblings. Reject invalid IDs, parents, cycles, depth above 4096 and incompatible grouping/row layout/history before installing. Null clears tree; no source writes.
+
+### getTreeRowMetadata
+
+```ts
+getTreeRowMetadata: (row: number) => LocalTreeRow | null
+```
+
+Frozen metadata for a visible real tree record: sourceIndex, rowId, parentId, 1-based level, retained hasChildren and expanded. Null outside tree mode. No synthetic row ID.
+
+### setTreeExpanded
+
+```ts
+setTreeExpanded: (rowId: RowId, expanded: boolean) => void
+```
+
+Expand/collapse a visible branch by its real typed row ID, outside data undo. Reduce selection to its active visible cell or affected parent if hidden; discard hidden ranges. Unknown branches reject; unchanged expansion is a no-op.
+
+### exportTreeState
+
+```ts
+exportTreeState: () => TreeState
+```
+
+Frozen version-1 parent-column criteria and typed collapsed IDs. Contains no dataset provenance, records, permissions or history; the host selects the matching complete dataset.
+
+### restoreTreeState
+
+```ts
+restoreTreeState: (state: unknown) => void
+```
+
+Validate unknown version-1 state, schema, layout and collapsed IDs against the current forest before replacing tree projection atomically. Clears selection; does not restore source data or authority.
+
 ### getRowMetadata
 
 ```ts
@@ -743,6 +791,7 @@ Call createGrid with GridOptions. Required fields are marked; options are read a
 | indexColumn | No | `boolean \| undefined` |
 | permissions | No | `Partial<CellPermission> \| undefined` |
 | canChangeStructure | No | `((request: Readonly<StructureRequest>) => boolean) \| undefined` |
+| tree | No | `LocalTreeOptions \| undefined` |
 | grouping | No | `LocalGroupingOptions \| undefined` |
 | frozenRows | No | `number \| undefined` |
 | frozenColumns | No | `number \| undefined` |

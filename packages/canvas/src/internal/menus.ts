@@ -336,7 +336,7 @@ export function createMenus(context: MenusContext) {
   function openMenu(row: number, col: number, x: number, y: number, header = false): void {
     context.closeMenu();
     const groupedHeader =
-      !!context.engine.grouping &&
+      !!(context.engine.grouping || context.engine.tree) &&
       (header ||
         (context.interaction.axisAnchor?.axis === 'column' &&
           context.getSelectionRanges().some((range) => col >= range.startColumn && col <= range.endColumn)));
@@ -1051,13 +1051,15 @@ export function createMenus(context: MenusContext) {
         ? context.t('Show all rows in source order')
         : `${sort ? context.t('Sort {0}', sort === 'asc' ? context.t('ascending') : context.t('descending')) : context.t('Filter')}: ${context.columns[col]!.title}`;
     const note = context.doc.createElement('p');
-    note.textContent = context.engine.grouping
-      ? context.t('Sort orders records within each group. Filters update group counts and sums.')
-      : context.managesView
-        ? context.t(
-            'Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Columns can be reordered; clear the view before changing rows or adding/removing columns.',
-          )
-        : context.t('The host applies this row view. State retention depends on its handler.');
+    note.textContent = context.engine.tree
+      ? context.t('Sort orders siblings. Filters retain matching records and their ancestors.')
+      : context.engine.grouping
+        ? context.t('Sort orders records within each group. Filters update group counts and sums.')
+        : context.managesView
+          ? context.t(
+              'Selection, undo history, colors, locks and sizes follow their records. Edits update this view automatically. Columns can be reordered; clear the view before changing rows or adding/removing columns.',
+            )
+          : context.t('The host applies this row view. State retention depends on its handler.');
     const input = context.doc.createElement('input');
     input.type = 'search';
     input.setAttribute('aria-label', context.t('Contains text'));
