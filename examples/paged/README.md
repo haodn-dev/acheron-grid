@@ -1,5 +1,19 @@
 # Paged remote editing
 
+## Remote viewport source preview
+
+The current checkout also serves [remote viewport](http://127.0.0.1:4180/paged/viewport) after `npm run playground`. This separate read-only mode uses one Canvas mount and one `createPagedRemoteDataSource` for a fixed query/count/revision. Choose 100,000 or 1,000,000 synthetic records; changing workload starts a new page session. These viewport APIs and the example are not included in npm 0.3.0.
+
+The host coordinator in `viewport-loader.js` reads public viewport regions, prioritizes visible pages, then adds at most one neighboring page per edge within the eight-page cache budget. It uses 100-row pages and one in-flight request; rapid scrolling changes the next requested window instead of building a request backlog. Oversized visible windows report a cache-budget error. Requests use the existing source's explicit `loadRange`; the synthetic endpoint generates only the requested page.
+
+The coordinator exclusively owns page loading and starts with a fresh source. On each ready notice it compares its bounded known-page set against `getPageState`, refreshing each newly loaded or evicted page separately. A distant eviction never creates a large continuous refresh window. Failed pages wait for explicit retry. Refresh rejection retains bounded pending windows and pauses further loading until retry succeeds; it does not cancel an editor or local Find. Dispose the coordinator before destroying grid/source; transport generation protection rejects late results. Do not reset or change query/count/revision behind this fixed-session coordinator.
+
+Local Find is disabled with `allowSearch: false`, host-managed sort/filter has no callback, and structural/layout changes are denied. Placeholder rows remain navigable but cannot be copied or edited. Ctrl+A/copy uses existing clipboard bounds and never loads the full source. This example does not expose export or save actions. Loaded-row draft/history retention across eviction is covered separately in the coordinator's headless integration tests; the viewport UI remains read-only.
+
+Native scrollbar limits still apply. Automated probes record actual `scrollHeight`, `clientHeight` and maximum scroll offset for these workloads in each working browser; a logical million-row source alone does not prove reachability, FPS, peak memory or network latency. Query/total/revision reset, stable-ID anchoring and writable remote viewport controls remain later work. The paged editing example below retains its explicit remount boundaries.
+
+Firefox Linux CI exposed collapse of a 32-million-pixel row spacer. Canvas now preserves a 16-million-pixel prefix when the browser collapses the requested extent. Rows beyond that working range remain unreachable by native scrolling. Use host pagination for complete access beyond that prefix; the separate 10,000-record paged editing example demonstrates the pattern. No scroll scaling or full-range support is claimed.
+
 Run `npm run playground` at the repository root and visit `http://127.0.0.1:4180/paged/`.
 Build matching core/Canvas packages from the checkout. Writable paging is included in npm 0.2.0; npm 0.1.0 does not include it.
 

@@ -1233,6 +1233,12 @@ export function createRendering(context: RenderingContext) {
       }
       context.context!.restore();
     }
+    for (const header of headerNodes) {
+      const label = context.doc.createElement('span');
+      label.textContent = header.getAttribute('aria-label');
+      label.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)';
+      header.append(label);
+    }
     const focusedHeader = context.headerSurface.contains(context.doc.activeElement)
       ? (context.doc.activeElement as HTMLElement).dataset.gridHeaderCell
       : undefined;

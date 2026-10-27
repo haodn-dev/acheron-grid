@@ -8,11 +8,15 @@ An experimental Canvas browser renderer for the headless @acheron-grid/core engi
 
 ## Viewport observation (source preview)
 
+The [remote viewport example](../../examples/paged/README.md#remote-viewport-source-preview) demonstrates a fixed-session host loader with bounded overscan, eviction refresh and explicit retry. Set `allowSearch: false` for remote hosts that do not support local scanning; it makes `openSearch()` a no-op and leaves Ctrl/Meta+F to the browser, without committing an editor or reading source values. The default remains enabled. This option does not implement server search or restrict host code that calls other scanning APIs.
+
 The current source adds `grid.getViewport()` and the `onViewportChange(snapshot)` construction option; npm 0.3.0 does not include them. React/Vue inherit the option and grid method. Canvas exports `GridViewport`. Both use the same core geometry as rendering and hit testing without reading source values or IDs. The frozen numeric snapshot contains dimensions, scroll offsets, frozen extents and up to four regions with `rows` and `columns` ranges. Range ends are **exclusive**; indices are **display coordinates**. Frozen and scrolling rows may form separate windows. Do not combine distant windows into one large load range.
 
 The callback runs in a microtask after construction and geometry changes, coalescing synchronous renders and suppressing identical snapshots. It receives the latest geometry, not every intermediate scroll event. Calling `render()` from the callback does not repeat notifications for unchanged geometry. Synchronous errors are isolated, reported through `onObserverError` and retained in `takeObserverErrors()` (up to ten viewport errors); async work must handle its own rejections. Destroy cancels queued notices; `getViewport()` rejects after destruction.
 
 Use each nonempty region's rows to schedule bounded loads in a flat, unprojected remote grid, with explicit overscan and cache budgets. The host owns loading, retries, cancellation and eviction reconciliation. Projected display indices require source mapping. Geometry reflects the actual browser scroll position and does not extend native scrollbar limits. Row refresh restrictions for editing and local Find still apply.
+
+If a browser collapses an oversized row spacer, this source preview falls back to a usable 16-million-pixel scroll prefix. This does not scale scroll coordinates or make rows beyond that prefix reachable. Browsers accepting the full requested extent keep their native range. Use bounded pagination when complete access exceeds the working native range; logical million-row tests are not an all-row reachability guarantee.
 
 ## Bounded row refresh (source preview)
 

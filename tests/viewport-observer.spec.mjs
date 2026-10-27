@@ -1,5 +1,39 @@
 import { test, expect } from '@playwright/test';
 
+test('a browser collapsing an oversized row spacer retains a usable bounded scroll prefix', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight');
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+      configurable: true,
+      get() {
+        return Number.parseFloat(this.style.height) === 32000000 ? 0 : descriptor.get.call(this);
+      },
+    });
+    window.restoreNativeOffsetHeight = () => Object.defineProperty(HTMLElement.prototype, 'offsetHeight', descriptor);
+    window.grid = createGrid({
+      container: document.querySelector('#grid'),
+      rowHeight: 32,
+      dataSource: { getRowCount: () => 1000000, getRowId: (row) => row, getValue: (row) => row },
+      columns: [{ key: 'value', title: 'Value' }],
+    });
+  });
+  const height = await page.locator('[data-grid-viewport]').evaluate((node) => {
+    node.scrollTop = 32000;
+    node.dispatchEvent(new Event('scroll'));
+    return node.firstElementChild.offsetHeight;
+  });
+  expect(height).toBe(16000000);
+  expect(await page.evaluate(() => window.grid.getViewport().regions.some((region) => region.rows.start >= 1000))).toBe(
+    true,
+  );
+  await page.evaluate(() => {
+    window.grid.destroy();
+    window.restoreNativeOffsetHeight();
+  });
+});
+
 async function mount(page, extra = {}) {
   await page.goto('/');
   await page.evaluate(async (extra) => {
@@ -126,4 +160,19 @@ test('destroy cancels queued viewport notices and rejects geometry reads', async
     return { calls, error };
   });
   expect(result).toEqual({ calls: 0, error: 'Grid is destroyed.' });
+});
+
+test('remote hosts can disable local Find without reading data or intercepting the browser shortcut', async ({
+  page,
+}) => {
+  await mount(page, { allowSearch: false });
+  const result = await page.evaluate(() => {
+    const reads = window.reads;
+    window.grid.openSearch();
+    const event = new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true, cancelable: true });
+    document.querySelector('[data-grid-viewport]').dispatchEvent(event);
+    return { reads: window.reads - reads, prevented: event.defaultPrevented };
+  });
+  expect(result).toEqual({ reads: 0, prevented: false });
+  await expect(page.locator('[data-grid-search]')).toBeHidden();
 });

@@ -162,6 +162,7 @@ export interface GridOptions extends Pick<
   | 'tree'
 > {
   allowMerging?: boolean;
+  allowSearch?: boolean;
   allowRowGrouping?: boolean;
   canChangeLayout?: GridEngineOptions['canChangeLayout'];
   locale?: string;
@@ -1011,8 +1012,7 @@ export function createGrid(options: GridOptions): Grid {
           gridContext.options.onSelectionRangesChange?.(gridContext.engine.getSelectionRanges());
           gridContext.options.onSelectionRangeChange?.(gridContext.engine.getSelectionRange());
         }
-        spacer.style.width = String(columnAxis.position(gridContext.layout.columns.length)) + 'px';
-        spacer.style.height = String(rowAxis.position(gridContext.layout.rowCount)) + 'px';
+        syncScrollExtent();
         render();
       } else render();
     },
@@ -1290,6 +1290,13 @@ export function createGrid(options: GridOptions): Grid {
   spacer.style.position = 'relative';
   spacer.style.height = `${rowAxis.position(gridContext.layout.rowCount)}px`;
   scroller.append(spacer, accessibleBody, activeRow);
+  function syncScrollExtent(): void {
+    const height = rowAxis.position(gridContext.layout.rowCount);
+    spacer.style.width = `${columnAxis.position(gridContext.layout.columns.length)}px`;
+    spacer.style.height = `${height}px`;
+    // Some browsers collapse oversized CSS boxes instead of clipping them to a usable scroll range.
+    if (root.isConnected && height > 16000000 && spacer.offsetHeight < 16000000) spacer.style.height = '16000000px';
+  }
   const canvas = gridContext.env.doc.createElement('canvas');
   canvas.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none';
   canvas.style.left = `${gridContext.layout.indexWidth}px`;
@@ -1412,6 +1419,7 @@ export function createGrid(options: GridOptions): Grid {
   } = clipboard;
 
   container.append(root);
+  syncScrollExtent();
 
   let destroyed = false;
   const stateIcons = Object.fromEntries(
@@ -2045,6 +2053,7 @@ export function createGrid(options: GridOptions): Grid {
   searchBar.append(searchInput, searchStatus, searchPrevious, searchNext, searchClose);
   root.append(searchBar);
   const { refreshSearch, openSearch, searchShortcut, highlightSearch, disposeSearch } = createSearch({
+    options: gridContext.options,
     win: gridContext.env.win,
     searchBar,
     searchInput,
@@ -2103,6 +2112,7 @@ export function createGrid(options: GridOptions): Grid {
     clearLayoutMotion();
     observedWidth = width;
     observedHeight = height;
+    syncScrollExtent();
     render();
   });
   observer.observe(root);

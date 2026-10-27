@@ -37,7 +37,7 @@ test('virtualized grouped headers omit empty ARIA rows while retaining logical i
     ).toBe(true);
     const report = await new AxeBuilder({ page })
       .include('[role="grid"]')
-      .withRules(['aria-required-children'])
+      .withRules(['aria-required-children', 'empty-table-header'])
       .analyze();
     expect(report.violations).toEqual([]);
     if (scrollLeft)

@@ -46,14 +46,45 @@ export function createPagedDemoHandler() {
     const url = new URL(request.url, 'http://127.0.0.1:4180');
     if (!url.pathname.startsWith('/paged/')) return false;
     try {
-      if (request.method === 'GET' && ['/paged/', '/paged/app.js'].includes(url.pathname)) {
-        const file = url.pathname.endsWith('.js') ? 'app.js' : 'index.html';
+      const files = new Map([
+        ['/paged/', 'index.html'],
+        ['/paged/app.js', 'app.js'],
+        ['/paged/viewport', 'viewport.html'],
+        ['/paged/viewport.js', 'viewport.js'],
+        ['/paged/viewport-loader.js', 'viewport-loader.js'],
+      ]);
+      if (request.method === 'GET' && files.has(url.pathname)) {
+        const file = files.get(url.pathname);
         response
           .writeHead(200, {
             'Content-Type': file.endsWith('.js') ? 'text/javascript' : 'text/html; charset=utf-8',
             'X-Content-Type-Options': 'nosniff',
           })
           .end(await readFile(new URL(file, import.meta.url)));
+        return true;
+      }
+      if (request.method === 'GET' && url.pathname === '/paged/api/viewport') {
+        const offset = Number(url.searchParams.get('offset')),
+          limit = Number(url.searchParams.get('limit')),
+          total = Number(url.searchParams.get('total'));
+        if (
+          ![100000, 1000000].includes(total) ||
+          !Number.isSafeInteger(offset) ||
+          offset < 0 ||
+          offset >= total ||
+          offset % 100 ||
+          limit !== 100
+        )
+          throw new Error('Invalid viewport page');
+        json(response, 200, {
+          datasetId: 'viewport-demo',
+          revision: '1',
+          total,
+          rows: Array.from({ length: Math.min(limit, total - offset) }, (_, i) => ({
+            id: offset + i,
+            values: { title: `Task ${offset + i}` },
+          })),
+        });
         return true;
       }
       if (request.method === 'GET' && url.pathname === '/paged/api/page') {

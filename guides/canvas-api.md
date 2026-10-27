@@ -753,6 +753,7 @@ Call createGrid with GridOptions. Required fields are marked; options are read a
 | Field | Required | Type |
 | --- | --- | --- |
 | allowMerging | No | `boolean \| undefined` |
+| allowSearch | No | `boolean \| undefined` |
 | allowRowGrouping | No | `boolean \| undefined` |
 | canChangeLayout | No | `((request: Readonly<LayoutRequest>) => boolean) \| undefined` |
 | locale | No | `string \| undefined` |

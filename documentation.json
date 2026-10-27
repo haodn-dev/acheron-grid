@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "1f420a6e1963c2046fe99e655beaa654861958f7",
+  "sourceRevision": "fa4bae329730d9d2fc389070ba328b9f6c6edb6c",
   "release": {
     "documentationRevision": "6e5d6a408ea3f6f089b013b2d2d0e0c698ccd9ee",
     "tag": "v0.3.0",
@@ -413,9 +413,9 @@
     {
       "id": "canvas-api",
       "path": "guides/canvas-api.md",
-      "revision": 13,
+      "revision": 14,
       "updated": "2026-10-27",
-      "sha256": "05abad0bfd3b371c89e45e2079919c76d60f2e438624a5cc81c6bc5b71765552",
+      "sha256": "50753c365543472333c9cc3203d7986b0230930ceb86c77f97b6b8d14a766909",
       "history": [
         {
           "revision": 1,
@@ -467,6 +467,10 @@
         },
         {
           "revision": 13,
+          "summary": "Generated source API signatures and construction options."
+        },
+        {
+          "revision": 14,
           "summary": "Generated source API signatures and construction options."
         }
       ]
@@ -580,9 +584,9 @@
     {
       "id": "canvas",
       "path": "packages/canvas/README.md",
-      "revision": 20,
+      "revision": 22,
       "updated": "2026-10-27",
-      "sha256": "b85ea52ac081def947bd19565416cbe6c9da4d1b9ef7a76c53cb60035c194fb0",
+      "sha256": "9b116257d08442536e5c55c0ca6a3502d919c0c9f7ff684fe5c955d624f2bbaf",
       "history": [
         {
           "revision": 1,
@@ -662,6 +666,14 @@
         },
         {
           "revision": 20,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 21,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 22,
           "summary": "Align publication status, installation and current source contracts."
         }
       ]
