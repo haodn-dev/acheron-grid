@@ -32,6 +32,7 @@ interface RenderingContext
     Pick<GridContext, 'engine' | 'options'>,
     Readonly<Pick<GridContext['appearance'], 'theme'>> {
   readonly motionSettings: Required<MotionOptions>;
+  readonly queueViewportChange: () => void;
   readonly fadeSelection: (
     rects: readonly {
       x: number;
@@ -1761,6 +1762,7 @@ export function createRendering(context: RenderingContext) {
 
   function render(): void {
     if (context.destroyed) return;
+    context.queueViewportChange();
     context.syncAccessibleCell();
     const view = viewport();
     context.freezeVertical.hidden = !context.engine.frozenColumns || view.frozenWidth >= view.width;

@@ -6,6 +6,14 @@ The npm 0.1.0 archive has a separate frozen reference. See [documentation versio
 
 An experimental Canvas browser renderer for the headless @acheron-grid/core engine.
 
+## Viewport observation (source preview)
+
+The current source adds `grid.getViewport()` and the `onViewportChange(snapshot)` construction option; npm 0.3.0 does not include them. React/Vue inherit the option and grid method. Canvas exports `GridViewport`. Both use the same core geometry as rendering and hit testing without reading source values or IDs. The frozen numeric snapshot contains dimensions, scroll offsets, frozen extents and up to four regions with `rows` and `columns` ranges. Range ends are **exclusive**; indices are **display coordinates**. Frozen and scrolling rows may form separate windows. Do not combine distant windows into one large load range.
+
+The callback runs in a microtask after construction and geometry changes, coalescing synchronous renders and suppressing identical snapshots. It receives the latest geometry, not every intermediate scroll event. Calling `render()` from the callback does not repeat notifications for unchanged geometry. Synchronous errors are isolated, reported through `onObserverError` and retained in `takeObserverErrors()` (up to ten viewport errors); async work must handle its own rejections. Destroy cancels queued notices; `getViewport()` rejects after destruction.
+
+Use each nonempty region's rows to schedule bounded loads in a flat, unprojected remote grid, with explicit overscan and cache budgets. The host owns loading, retries, cancellation and eviction reconciliation. Projected display indices require source mapping. Geometry reflects the actual browser scroll position and does not extend native scrollbar limits. Row refresh restrictions for editing and local Find still apply.
+
 ## Bounded row refresh (source preview)
 
 The current source adds `grid.refreshRows(startRow, endRow)` without remounting. npm 0.3.0 does not include it. It delegates to the [core window contract](../core/README.md#bounded-row-refresh-source-preview), repaints the visible grid, updates accessibility and clears cut/value-motion caches without constructing a row map for the full source. React/Vue expose the same method through their existing grid handle.
