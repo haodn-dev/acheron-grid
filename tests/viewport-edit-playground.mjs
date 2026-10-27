@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './browser-fixtures.mjs';
 import AxeBuilder from '@axe-core/playwright';
 
 const journalKey = 'acheron-viewport-edit-mutation-v1';
