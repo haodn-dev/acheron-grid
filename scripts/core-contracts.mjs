@@ -1,5 +1,7 @@
 // Behavioral notes for the generated public API catalog.
 export const coreContracts = {
+  resetData:
+    'Adopt the current row count as a new flat-data epoch without scanning IDs or creating a row map. Clear selection/cut, all undo/redo, row sizes/visibility/locks/merges/outlines and runtime formats. Preserve column schema/geometry/locks, table lock and application permissions. Reject local projections/tree/grouping or invalid dimensions before discarding state. Host owns source query/revision changes and must settle editing, bulk work and uncertain writes first.',
   refreshRows:
     'Source preview: refresh an inclusive source-row window without scanning other source IDs or clearing all history. Requires unchanged count, a flat default-height view and no row metadata/format history. Validate window IDs first; discard entire undo/redo batches whose in-window IDs changed, clear intersecting non-single-cell selections and stale active identity, cancel cut, then emit data:rows with the drop/selection result. Matching IDs retain normal value-conflict preflight. Host must report every changed/evicted window and keep query/revision/schema stable; this is not a query/total reset or remote loader.',
   setTree:

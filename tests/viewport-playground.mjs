@@ -94,3 +94,37 @@ test('remote viewport shows page failure without retry storms and recovers expli
   expect((await request.get('/paged/api/viewport?offset=1&limit=100&total=100000')).status()).toBe(400);
   expect((await request.get('/paged/api/viewport?offset=0&limit=1000000&total=1000000')).status()).toBe(400);
 });
+
+for (const width of [1100, 390]) {
+  test(`server order and record-count changes keep the viewport mounted and clear the old selection at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const errors = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.goto('/paged/viewport');
+    await expect(page.getByRole('gridcell', { name: 'Task 0', exact: true })).toBeAttached();
+    await page.evaluate(() => {
+      window.originalGrid = document.querySelector('[role=grid]');
+    });
+    const grid = page.getByRole('grid');
+    await grid.press('Control+Home');
+    await page.getByLabel('Task order').selectOption('desc');
+    await page.getByRole('button', { name: 'Apply data view' }).click();
+    await expect(page.getByRole('gridcell', { name: 'Task 99999', exact: true })).toBeAttached();
+    await expect(grid).not.toHaveAttribute('aria-activedescendant', /.+/);
+    await page.getByLabel('Record count').selectOption('1000000');
+    await page.getByRole('button', { name: 'Apply data view' }).click();
+    await expect(page.getByRole('gridcell', { name: 'Task 999999', exact: true })).toBeAttached();
+    await expect(grid).toHaveAttribute('aria-rowcount', '1000001');
+    await expect(page.locator('#status')).toContainText('highest ID first');
+    await page.getByLabel('Task order').selectOption('asc');
+    await page.getByRole('button', { name: 'Apply data view' }).click();
+    await expect(page.getByRole('gridcell', { name: 'Task 0', exact: true })).toBeAttached();
+    expect(await page.evaluate(() => window.originalGrid === document.querySelector('[role=grid]'))).toBe(true);
+    expect(await page.getByRole('row').count()).toBeLessThan(40);
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await page.screenshot({ path: `../.verification/r0d-${width}.png`, fullPage: true });
+    expect(errors).toEqual([]);
+  });
+}

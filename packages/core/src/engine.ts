@@ -37,7 +37,7 @@ import type {
   LayoutRequest,
 } from './types.js';
 import type { CellPermission, CellPermissionPolicy, CellPermissionResolver } from './permissions.js';
-import type { GridEvent, RowRefreshResult } from './events.js';
+import type { GridEvent, RowRefreshResult, DataResetResult } from './events.js';
 import { GridAxis } from './axis.js';
 import type { ViewportOptions } from './panes.js';
 import type { EngineContext, FormatEntry, HistoryCommand } from './internal/engine-context.js';
@@ -47,6 +47,7 @@ import type { BulkSteps, GridBulkOptions } from './internal/bulk.js';
 import type { GridHistoryLimits } from './internal/history-budget.js';
 
 export type GridInvalidation =
+  | { readonly type: 'reset' }
   | { readonly type: 'rows'; readonly startRow: number; readonly endRow: number }
   | { readonly type: 'cells'; readonly cells: readonly { readonly rowIndex: number; readonly columnKey: string }[] }
   | { readonly type: 'selection'; readonly changed: boolean; readonly rangeChanged: boolean }
@@ -667,6 +668,7 @@ export function createGridEngine(options: GridEngineOptions) {
     displaySelectionRanges,
     selectRange,
     clearSelection,
+    notifySelection,
   } = createSelection(context, {
     assertAlive,
     expandMergedRange,
@@ -697,25 +699,29 @@ export function createGridEngine(options: GridEngineOptions) {
       getCellPermission,
     });
 
-  const { refreshRows, refreshData, exportConfiguration, exportState, restoreState } = createPersistence(context, {
-    assertAlive,
-    buildProjection,
-    installProjection,
-    notify,
-    displayRow,
-    snapshotStructure,
-    mappedState,
-    restoreStructure,
-    getSelectionRanges,
-    clearSelection,
-    structureRequest,
-    structureAllowed,
-    createGridEngine,
-    layoutAllowed,
-    requirePermission,
-    requireFormatPermission,
-    requireVisibilityPolicy,
-  });
+  const { resetData, refreshRows, refreshData, exportConfiguration, exportState, restoreState } = createPersistence(
+    context,
+    {
+      assertAlive,
+      buildProjection,
+      installProjection,
+      notify,
+      displayRow,
+      snapshotStructure,
+      mappedState,
+      restoreStructure,
+      getSelectionRanges,
+      clearSelection,
+      notifySelection,
+      structureRequest,
+      structureAllowed,
+      createGridEngine,
+      layoutAllowed,
+      requirePermission,
+      requireFormatPermission,
+      requireVisibilityPolicy,
+    },
+  );
   if (options.view) {
     view = snapshotView(options.view);
     installProjection(buildProjection(view));
@@ -1019,6 +1025,7 @@ export function createGridEngine(options: GridEngineOptions) {
         assertAlive();
         return Object.freeze(Array.from({ length: rowCount }, (_, i) => dataSource.getRowId(i)));
       }),
+    resetData: (): DataResetResult => command(resetData),
     refreshRows: (startRow: number, endRow: number): RowRefreshResult => command(() => refreshRows(startRow, endRow)),
     refreshData: (previousRowIds?: readonly RowId[] | 'values') =>
       command(() => {

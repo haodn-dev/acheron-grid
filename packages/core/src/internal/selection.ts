@@ -345,7 +345,7 @@ export function createSelection(
       }),
     );
   }
-  function clearSelection(): void {
+  function clearSelection(emit = true): void {
     context.groupFocus = null;
     dependencies.assertAlive();
     if (!context.selection) return;
@@ -354,7 +354,7 @@ export function createSelection(
     context.displayAnchor = null;
     context.cachedRanges = null;
     context.retainedRanges.length = 0;
-    notifySelection(true, true);
+    if (emit) notifySelection(true, true);
   }
   return {
     selectDisplayRange,

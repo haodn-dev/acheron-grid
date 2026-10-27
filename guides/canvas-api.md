@@ -62,6 +62,22 @@ refreshData: (previousRowIds?: readonly RowId[] | "values") => void
 
 External writes are outside history. All refresh modes clear undo/redo; values mode requires unchanged row IDs/order/count.
 
+### refreshRows
+
+```ts
+refreshRows: (startRow: number, endRow: number) => RowRefreshResult
+```
+
+Refresh a bounded row window through core without remounting. Reject while an editor or local search is open; finish/cancel or close it before retrying. See the core contract for history, selection, identity and layout restrictions.
+
+### resetData
+
+```ts
+resetData: () => DataResetResult
+```
+
+Reset through the bounded core epoch contract without remounting. Reject open editors or local Find; host must settle them before changing its source. Clear renderer caches, update count/ARIA/index geometry and move vertical scroll to zero. No identity anchor or source loading is performed.
+
 ### rowCount
 
 ```ts
@@ -609,14 +625,6 @@ getViewport: () => GridViewport
 ```
 
 Read frozen shared core viewport geometry without scanning source values or IDs. Display ranges have exclusive ends and may be disjoint. onViewportChange coalesces geometry notifications in a microtask. The host owns bounded loading and eviction reconciliation.
-
-### refreshRows
-
-```ts
-refreshRows: (startRow: number, endRow: number) => RowRefreshResult
-```
-
-Refresh a bounded row window through core without remounting. Reject while an editor or local search is open; finish/cancel or close it before retrying. See the core contract for history, selection, identity and layout restrictions.
 
 ### setColumnEditor
 

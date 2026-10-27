@@ -21,7 +21,7 @@ const program = ts.createProgram(
 const checker = program.getTypeChecker();
 const groups = {
   'Data and lifecycle':
-    /^(getValue|getRowId|updateCells(?:Async)?|editCell|replaceText|refreshData|captureRowIdentity|subscribe|takeObserverErrors|destroy|render|rowCount|sourceRowCount|columns)$/,
+    /^(getValue|getRowId|updateCells(?:Async)?|editCell|replaceText|refreshData|refreshRows|resetData|captureRowIdentity|subscribe|takeObserverErrors|destroy|render|rowCount|sourceRowCount|columns)$/,
   'Selection and clipboard':
     /^(select|navigate|extend|clearSelection|getSelection|copySelection|paste|cutSelection|cancelCut)/,
   History: /^(undo|redo|undoAsync|redoAsync|canUndo|canRedo)$/,
@@ -33,6 +33,8 @@ const groups = {
   'Layout and browser controls': /.*/,
 };
 const descriptions = {
+  resetData:
+    'Reset through the bounded core epoch contract without remounting. Reject open editors or local Find; host must settle them before changing its source. Clear renderer caches, update count/ARIA/index geometry and move vertical scroll to zero. No identity anchor or source loading is performed.',
   getViewport:
     'Read frozen shared core viewport geometry without scanning source values or IDs. Display ranges have exclusive ends and may be disjoint. onViewportChange coalesces geometry notifications in a microtask. The host owns bounded loading and eviction reconciliation.',
   refreshRows:

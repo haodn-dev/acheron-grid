@@ -66,24 +66,26 @@ export function createPagedDemoHandler() {
       if (request.method === 'GET' && url.pathname === '/paged/api/viewport') {
         const offset = Number(url.searchParams.get('offset')),
           limit = Number(url.searchParams.get('limit')),
-          total = Number(url.searchParams.get('total'));
+          total = Number(url.searchParams.get('total')),
+          order = url.searchParams.get('order') ?? 'asc';
         if (
           ![100000, 1000000].includes(total) ||
           !Number.isSafeInteger(offset) ||
           offset < 0 ||
           offset >= total ||
           offset % 100 ||
-          limit !== 100
+          limit !== 100 ||
+          !['asc', 'desc'].includes(order)
         )
           throw new Error('Invalid viewport page');
         json(response, 200, {
           datasetId: 'viewport-demo',
           revision: '1',
           total,
-          rows: Array.from({ length: Math.min(limit, total - offset) }, (_, i) => ({
-            id: offset + i,
-            values: { title: `Task ${offset + i}` },
-          })),
+          rows: Array.from({ length: Math.min(limit, total - offset) }, (_, i) => {
+            const id = order === 'desc' ? total - offset - i - 1 : offset + i;
+            return { id, values: { title: `Task ${id}` } };
+          }),
         });
         return true;
       }

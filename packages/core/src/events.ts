@@ -4,6 +4,13 @@ import type { CellUpdate, RowId } from './data-source.js';
 import type { CellSelection, SelectionRange, CellLockTarget, CellFormatTarget, CellFormatPatch } from './types.js';
 
 export type GridChangeSource = 'api' | 'edit' | 'paste' | 'undo' | 'redo';
+export interface DataResetResult {
+  readonly previousRowCount: number;
+  readonly rowCount: number;
+  readonly droppedHistoryEntries: number;
+  readonly selectionCleared: boolean;
+  readonly cutCancelled: boolean;
+}
 export interface RowRefreshResult {
   readonly startRow: number;
   readonly endRow: number;
@@ -12,6 +19,7 @@ export interface RowRefreshResult {
   readonly cutCancelled: boolean;
 }
 export type GridEvent =
+  | ({ readonly type: 'data:reset' } & DataResetResult)
   | ({ readonly type: 'data:rows' } & RowRefreshResult)
   | {
       readonly type: 'visibility:change';

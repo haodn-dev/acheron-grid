@@ -1,5 +1,15 @@
 # @acheron-grid/core
 
+## Bounded data epoch reset (source preview)
+
+The current source adds `engine.resetData(): DataResetResult`; npm 0.3.0 does not include it. Use it after a host-controlled query, revision, ordering or total change in a **flat source with unchanged column schema**. It reads the current count, validates axis dimensions and adopts that count without reading row IDs/values, constructing a row map, loading pages or writing data. It rejects local projections, tree and data grouping before discarding grid state. Clear those views before changing the source; a schema change requires a separate lifecycle.
+
+Reset explicitly discards all undo/redo, selection, pending cut, row sizes/visibility, manual row sizing, row/cell locks, merges/outlines and **all runtime formats**, including table/column formats. It preserves column order/schema, widths/visibility, column locks, the table lock and application permission/resolver options. Frozen rows are clamped to the new count; frozen columns stay unchanged. Existing column definitions/renderers remain. Work follows retained metadata/history, not logical row count.
+
+The frozen result reports `previousRowCount`, `rowCount`, `droppedHistoryEntries`, `selectionCleared` and `cutCancelled`. Subscribers receive additive invalidation `{type:'reset'}` without a row map and a `data:reset` event carrying the result; a cleared selection also emits the normal selection notice after the reset. Do not retain positional history or infer an identity anchor across epochs. The fallback is an explicit clear, not a scan for stable IDs.
+
+The host owns source/query/revision validation, cancellation of old page loads, draft/uncertain-write resolution and bulk-operation cancellation/settlement **before changing the source**. Reset does not clear source drafts, retry writes or provide transport authority. Canvas rejects an open editor or local Find; settle them before changing its source, then call `grid.resetData()`. Within an unchanged epoch use `refreshRows` for bounded load/eviction windows. `refreshData` retains its separate full identity-reconciliation behavior.
+
 ## Bounded row refresh (source preview)
 
 The current source adds `engine.refreshRows(startRow, endRow)` for an **inclusive source-row window**. These APIs and the `RowRefreshResult` type are not in npm 0.3.0. The method reads each ID in that window once, creates no source-sized row mapping and never writes source data. It emits `GridInvalidation` type `rows` and a `data:rows` event containing `startRow`, `endRow`, `droppedHistoryEntries`, `selectionCleared` and `cutCancelled`; subscribers must handle these additive variants.
@@ -8,7 +18,7 @@ Use only with unchanged row count/schema/query/revision, a flat view and default
 
 An undo/redo value batch is discarded in full when an in-window ID differs from its captured ID. Matching-ID and unrelated batches remain; their existing value/permission conflict checks still run on replay. Intersecting ranges are cleared because interior identities have not been verified. A matching single-cell selection is retained; a changed active ID clears selection. Pending cut is canceled. The frozen result reports these effects so the host can notify its users.
 
-Work and allocation follow the requested window plus retained history changes, not logical row count. The default history command limit is 100; configure `historyLimits.maxValueCells` for bounded retained payloads. Observer callbacks remain host code. `refreshData` keeps its existing whole-dataset reconciliation and history-reset behavior; query/total/order changes require that separate contract. This API is a foundation for a remote viewport, not an automatic loader, viewport observer or seamless remote-editing claim.
+Work and allocation follow the requested window plus retained history changes, not logical row count. The default history command limit is 100; configure `historyLimits.maxValueCells` for bounded retained payloads. Observer callbacks remain host code. `refreshData` keeps its existing whole-dataset reconciliation and history-reset behavior; fixed-schema flat query/total/order changes can instead use the explicit `resetData` contract above. Canvas has a separate viewport observer and host-loader example; this method alone does not load data or guarantee seamless remote editing.
 
 ## Local tree (source preview)
 
