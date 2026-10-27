@@ -174,5 +174,6 @@ test('remote hosts can disable local Find without reading data or intercepting t
     return { reads: window.reads - reads, prevented: event.defaultPrevented };
   });
   expect(result).toEqual({ reads: 0, prevented: false });
+  await expect(page.getByRole('grid')).not.toHaveAttribute('aria-keyshortcuts', /Control\+f|Meta\+f/);
   await expect(page.locator('[data-grid-search]')).toBeHidden();
 });

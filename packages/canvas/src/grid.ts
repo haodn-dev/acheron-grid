@@ -933,11 +933,11 @@ export function createGrid(options: GridOptions): Grid {
         clipboard.pendingCutText = undefined;
         rendering.fullDraw = true;
         accessibility.accessibleCells.clear();
+        accessibleBody.replaceChildren();
         if (change.type === 'reset') {
           onPointerEnd();
           endResize();
           clearReorder();
-          accessibleBody.replaceChildren();
           interaction.axisAnchor = null;
           editors.hoveredChoice = null;
           rendering.measuredRows.clear();
@@ -1208,7 +1208,12 @@ export function createGrid(options: GridOptions): Grid {
   scroller.dataset.gridViewport = '';
   scroller.tabIndex = 0;
   scroller.setAttribute('aria-label', viewportLabel);
-  scroller.setAttribute('aria-keyshortcuts', 'Shift+F8 Control+f Meta+f Control+a Meta+a Alt+Enter');
+  scroller.setAttribute(
+    'aria-keyshortcuts',
+    gridContext.options.allowSearch === false
+      ? 'Shift+F8 Control+a Meta+a Alt+Enter'
+      : 'Shift+F8 Control+f Meta+f Control+a Meta+a Alt+Enter',
+  );
   scroller.setAttribute('role', engine.grouping || engine.tree ? 'treegrid' : 'grid');
   scroller.setAttribute(
     'aria-rowcount',

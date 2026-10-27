@@ -49,6 +49,9 @@ export function createPagedDemoHandler() {
       const files = new Map([
         ['/paged/', 'index.html'],
         ['/paged/app.js', 'app.js'],
+        ['/paged/transport.js', 'transport.js'],
+        ['/paged/viewport-edit', 'viewport-edit.html'],
+        ['/paged/viewport-edit.js', 'viewport-edit.js'],
         ['/paged/viewport', 'viewport.html'],
         ['/paged/viewport.js', 'viewport.js'],
         ['/paged/viewport-loader.js', 'viewport-loader.js'],
