@@ -787,7 +787,7 @@ export function createGridEngine(options: GridEngineOptions) {
   function focusGroup(row: number): boolean {
     const entry = displayEntry(row);
     if (typeof entry === 'number') return false;
-    clearSelection();
+    clearSelection(false);
     context.groupFocus = { key: entry.key };
     notify(
       { type: 'selection', changed: true, rangeChanged: true },
@@ -798,6 +798,7 @@ export function createGridEngine(options: GridEngineOptions) {
   function setDataGroupExpanded(key: GroupKey, expanded: boolean): void {
     assertAlive();
     if (!context.grouping || typeof expanded !== 'boolean') throw new Error('No active data grouping.');
+    key = key === 0 ? 0 : key;
     if (!projection?.some((row) => typeof row !== 'number' && Object.is(row.key, key)))
       throw new Error('Unknown data group.');
     const collapsed = new Set(context.collapsedGroupingKeys);
