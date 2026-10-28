@@ -15,6 +15,7 @@ const coreFiles = new Set([
   'internal/selection.js',
   'internal/projection.js',
   'internal/grouping.js',
+  'internal/tree.js',
   'internal/outline.js',
   'internal/layout.js',
   'internal/values.js',

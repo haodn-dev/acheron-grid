@@ -1,4 +1,5 @@
 export { createGridEngine } from './engine.js';
+export type { LocalTreeOptions, LocalTreeRow, TreeState } from './internal/tree.js';
 export type { GridEngine, GridEngineOptions, GridInvalidation } from './engine.js';
 export type {
   LocalGroupingOptions,

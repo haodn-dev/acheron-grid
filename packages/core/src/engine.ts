@@ -5,6 +5,7 @@ import type {
   GroupingState,
   GridRowMetadata,
 } from './internal/grouping.js';
+import type { LocalTreeOptions, LocalTreeRow, TreeState } from './internal/tree.js';
 import { createPersistence } from './internal/persistence.js';
 import { createClipboard } from './internal/clipboard.js';
 import { createSelection } from './internal/selection.js';
@@ -52,6 +53,7 @@ export type GridInvalidation =
   | { readonly type: 'structure'; readonly rowMap: readonly number[]; readonly columnMap: readonly number[] };
 
 export interface GridEngineOptions {
+  tree?: LocalTreeOptions;
   grouping?: LocalGroupingOptions;
   historyLimits?: GridHistoryLimits;
   onObserverError?: (error: unknown) => void;
@@ -184,6 +186,8 @@ export function createGridEngine(options: GridEngineOptions) {
     options,
     dataSource,
     grouping: null,
+    tree: null,
+    collapsedTreeIds: new Set(),
     collapsedGroupingKeys: new Set(),
     groupFocus: null,
     get columns() {
@@ -400,7 +404,7 @@ export function createGridEngine(options: GridEngineOptions) {
 
   let preparedGrouping: DisplayRow[] | undefined;
   function prepareValues(updates: readonly CellUpdate[]): (() => void) | undefined {
-    if (!context.grouping) return undefined;
+    if (!context.grouping && !context.tree) return undefined;
     const changed = new Map<number, Map<string, unknown>>();
     for (const update of updates) {
       const row = changed.get(update.rowIndex) ?? new Map<string, unknown>();
@@ -424,7 +428,7 @@ export function createGridEngine(options: GridEngineOptions) {
       const old = projection ?? [];
       installProjection(preparedGrouping ?? buildProjection(view));
       preparedGrouping = undefined;
-      if (old.length !== projection!.length || old.some((row, i) => row !== projection![i])) {
+      if (context.tree || old.length !== projection!.length || old.some((row, i) => row !== projection![i])) {
         displayAnchor = null;
         change = { type: 'structure', rowMap: old.map(displayRow), columnMap: columns.map((_, i) => i) };
       } else
@@ -628,6 +632,7 @@ export function createGridEngine(options: GridEngineOptions) {
 
   const {
     viewAxis,
+    getTreeRowMetadata,
     visibleFrozenRows,
     rebuildViewAxis,
     buildProjection,
@@ -730,6 +735,7 @@ export function createGridEngine(options: GridEngineOptions) {
     initial = false,
   ): void {
     assertAlive();
+    if (next && context.tree) throw new Error('Clear tree before grouping.');
     if (next !== null && (!next || typeof next !== 'object' || Array.isArray(next)))
       throw new TypeError('Invalid grouping.');
     if (next?.sumColumns !== undefined && !Array.isArray(next.sumColumns))
@@ -797,8 +803,125 @@ export function createGridEngine(options: GridEngineOptions) {
     const index = projection?.findIndex((row) => typeof row !== 'number' && Object.is(row.key, key)) ?? -1;
     if (index >= 0) focusGroup(index);
   }
+  function setTree(next: LocalTreeOptions | null, collapsedIds: readonly RowId[] = [], initial = false): void {
+    assertAlive();
+    if (
+      next !== null &&
+      (!next || typeof next !== 'object' || Array.isArray(next) || typeof next.parentColumnKey !== 'string')
+    )
+      throw new TypeError('Invalid tree criteria.');
+    if (
+      next &&
+      (context.grouping ||
+        frozenRows ||
+        merges.length ||
+        groups.length ||
+        rowAxis.hiddenIndices().length ||
+        manualRows.size ||
+        past.some((entry) => entry.kind !== 'values') ||
+        future.some((entry) => entry.kind !== 'values'))
+    )
+      throw new Error('Clear grouping, row layout and non-value history before tree.');
+    if (next === null && collapsedIds.length) throw new TypeError('No tree for collapsed IDs.');
+    const criteria = next === null ? null : Object.freeze({ parentColumnKey: next.parentColumnKey });
+    const nextProjection = drain(
+      buildProjectionSteps(
+        view,
+        rowCount,
+        merges,
+        groups,
+        frozenRows,
+        false,
+        dataSource,
+        context.grouping,
+        context.collapsedGroupingKeys,
+        criteria,
+        new Set(collapsedIds),
+      ),
+    );
+    context.tree = criteria;
+    context.collapsedTreeIds = new Set(collapsedIds);
+    if (initial) installProjection(nextProjection);
+    else groupingChanged(nextProjection);
+  }
+  function setTreeExpanded(rowId: RowId, expanded: boolean): void {
+    assertAlive();
+    if (!context.tree || typeof expanded !== 'boolean') throw new TypeError('No active tree or invalid expansion.');
+    const index = projection?.findIndex((row) => typeof row === 'number' && dataSource.getRowId(row) === rowId) ?? -1;
+    const node = index < 0 ? null : getTreeRowMetadata(index);
+    if (!node?.hasChildren) throw new Error('Unknown visible tree branch.');
+    if (node.expanded === expanded) return;
+    const collapsed = new Set(context.collapsedTreeIds);
+    if (expanded) collapsed.delete(rowId);
+    else collapsed.add(rowId);
+    const next = drain(
+      buildProjectionSteps(
+        view,
+        rowCount,
+        merges,
+        groups,
+        frozenRows,
+        false,
+        dataSource,
+        context.grouping,
+        context.collapsedGroupingKeys,
+        context.tree,
+        collapsed,
+      ),
+    );
+    const active = selection;
+    context.collapsedTreeIds = collapsed;
+    groupingChanged(next);
+    if (active) {
+      const target = displayRow(active.rowIndex);
+      const fallback = displayRow(node.sourceIndex);
+      if (target >= 0 || fallback >= 0) selectDisplay(target >= 0 ? target : fallback, active.columnIndex);
+    }
+  }
   if (options.grouping !== undefined) setGrouping(options.grouping, [], true);
+  if (options.tree !== undefined) setTree(options.tree, [], true);
   return Object.freeze({
+    setTree: (next: LocalTreeOptions | null) => command(() => setTree(next)),
+    get tree() {
+      return context.tree;
+    },
+    getTreeRowMetadata: (row: number): LocalTreeRow | null => getTreeRowMetadata(row),
+    setTreeExpanded: (rowId: RowId, expanded: boolean) => command(() => setTreeExpanded(rowId, expanded)),
+    exportTreeState: (): TreeState =>
+      query(() =>
+        Object.freeze({ version: 1, tree: context.tree, collapsedIds: Object.freeze([...context.collapsedTreeIds]) }),
+      ),
+    restoreTreeState: (state: unknown) =>
+      command(() => {
+        if (
+          !state ||
+          typeof state !== 'object' ||
+          !('version' in state) ||
+          state.version !== 1 ||
+          !('tree' in state) ||
+          !('collapsedIds' in state) ||
+          !Array.isArray(state.collapsedIds)
+        )
+          throw new TypeError('Invalid tree state.');
+        const ids: RowId[] = Array.from(state.collapsedIds, (id: unknown) => {
+          if (typeof id !== 'string' && !(typeof id === 'number' && Number.isFinite(id)))
+            throw new TypeError('Invalid collapsed tree ID.');
+          return id;
+        });
+        if (new Set(ids).size !== ids.length) throw new TypeError('Duplicate collapsed tree ID.');
+        const criteria = state.tree;
+        if (criteria === null) setTree(null, ids);
+        else {
+          if (
+            typeof criteria !== 'object' ||
+            !criteria ||
+            !('parentColumnKey' in criteria) ||
+            typeof criteria.parentColumnKey !== 'string'
+          )
+            throw new TypeError('Invalid tree state criteria.');
+          setTree({ parentColumnKey: criteria.parentColumnKey }, ids);
+        }
+      }),
     setGrouping: (next: LocalGroupingOptions | null) => command(() => setGrouping(next)),
     exportGroupingState: (): GroupingState =>
       query(() =>
@@ -896,17 +1019,19 @@ export function createGridEngine(options: GridEngineOptions) {
       }),
     refreshData: (previousRowIds?: readonly RowId[] | 'values') =>
       command(() => {
-        if (context.grouping) throw new Error('Clear grouping before external refresh.');
+        if (context.grouping || context.tree) throw new Error('Clear grouping/tree before external refresh.');
         refreshData(previousRowIds);
       }),
     exportState: (): GridState =>
       query(() => {
-        if (context.grouping) throw new Error('Clear grouping before exporting legacy grid state.');
+        if (context.grouping || context.tree)
+          throw new Error('Clear grouping/tree before exporting legacy grid state.');
         return exportState();
       }),
     restoreState: (state: unknown) =>
       command(() => {
-        if (context.grouping) throw new Error('Clear grouping before restoring legacy grid state.');
+        if (context.grouping || context.tree)
+          throw new Error('Clear grouping/tree before restoring legacy grid state.');
         restoreState(state);
       }),
     setView: (next: LocalViewOptions) => command(() => setView(next)),
@@ -917,7 +1042,8 @@ export function createGridEngine(options: GridEngineOptions) {
     },
     exportConfiguration: (): GridConfiguration =>
       query(() => {
-        if (context.grouping) throw new Error('Clear grouping before exporting legacy grid configuration.');
+        if (context.grouping || context.tree)
+          throw new Error('Clear grouping/tree before exporting legacy grid configuration.');
         return exportConfiguration();
       }),
     get sourceRowCount() {
@@ -985,7 +1111,7 @@ export function createGridEngine(options: GridEngineOptions) {
     isRowHeightManual: (index: number) => typeof displayEntry(index) === 'number' && manualRows.has(sourceRow(index)),
     measureRowHeight: (index: number, size: number) =>
       command(() => {
-        if (!context.grouping) resize(rowAxis, sourceRow(index), size, false);
+        if (!context.grouping && !context.tree) resize(rowAxis, sourceRow(index), size, false);
       }),
     getSelection: displaySelection,
     getSelectionRange: () => displaySelectionRanges().at(-1) ?? null,
@@ -1049,7 +1175,8 @@ export function createGridEngine(options: GridEngineOptions) {
     ) => command(() => replaceText(search, replacement, options)),
     cutSelectionBlocks: () =>
       command(() => {
-        if (context.grouping) throw new Error('Cut is unavailable while grouping; copy visible records instead.');
+        if (context.grouping || context.tree)
+          throw new Error('Cut is unavailable while grouping/tree; copy visible records instead.');
         return cutSelectionBlocks();
       }),
     cancelCut: () =>

@@ -1,5 +1,26 @@
 # @acheron-grid/core
 
+## Local tree (headless source preview)
+
+The current core source adds a complete local parent-ID tree. These APIs are not in npm 0.3.0. Canvas disclosure/keyboard/ARIA and framework construction options are not yet integrated.
+
+```ts
+engine.setTree({ parentColumnKey: 'parent' });
+const node = engine.getTreeRowMetadata(0); // real row ID, parent, level, hasChildren, expanded
+engine.setTreeExpanded(node!.rowId, false); // a visible branch
+const treeState = engine.exportTreeState();
+engine.restoreTreeState(treeState);
+engine.setTree(null);
+```
+
+Use a complete, bounded local dataset with unique string or finite-number IDs. Null/missing parents mark roots; zero and empty-string IDs are valid. Unknown parents, self-parenting, cycles (including disconnected components) and depth above 4096 reject atomically. Root and sibling order follows source order unless sorted. Sorts apply within each sibling list using existing local comparison rules. Filters retain matching records and their ancestors, without automatically retaining all descendants of a matching parent. Metadata reflects retained children. Collapse remains effective under filters.
+
+All visible rows remain source records: existing identity getters, selection, permissions and visible selection exports apply. The parent column is non-writable, including API, edit, paste and value history replay. Other values use the shared atomic mutation/history pipeline; tree projection is prepared before writes. Expansion is outside data undo. Changing expansion reduces selection to its active visible cell, or the affected parent if the active descendant becomes hidden; hidden ranges are discarded. A denied fallback selection clears focus. Repeating an unchanged expansion is a no-op.
+
+Tree state version 1 stores criteria and typed collapsed IDs, validates IDs against the current complete dataset and rejects malformed state before replacing the view. The host must choose the matching dataset; state does not authenticate dataset provenance. Clear tree before external refresh, legacy state/configuration persistence, grouping, merges/manual outlines, structural changes, row resizing/hiding or frozen rows. Non-value history must be cleared before enabling tree. Column width/hiding/freezing and formatting retain existing contracts. Existing parent-field history cannot replay until tree is cleared.
+
+This implementation rebuilds the complete local forest for view changes and value edits, with O(n) metadata and sibling sorting costs. Value preflight is synchronous; cooperative view preparation uses existing cancellation/revision guards. It is not a lazy remote tree or a million-row latency guarantee.
+
 ## Local grouping (source preview)
 
 The current source adds local grouping; npm 0.3.0 does not contain these APIs. Canvas exposes grouped rendering and interaction; React and Vue inherit its construction options and grid handle.

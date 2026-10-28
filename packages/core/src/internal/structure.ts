@@ -25,6 +25,7 @@ export function createStructure(
     | 'formats'
     | 'merges'
     | 'grouping'
+    | 'tree'
     | 'groups'
     | 'activeParts'
     | 'displayAnchor'
@@ -306,6 +307,7 @@ export function createStructure(
       return false;
     if (
       context.grouping ||
+      context.tree ||
       context.destroyed ||
       (context.projection && !(request.axis === 'column' && request.kind === 'move')) ||
       context.tableLocked ||

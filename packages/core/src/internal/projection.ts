@@ -1,4 +1,6 @@
 import { groupLocalRowsSteps } from './grouping.js';
+import { localTreeRowsSteps } from './tree.js';
+import type { LocalTreeRow } from './tree.js';
 import type { DisplayRow, GroupKey } from './grouping.js';
 import type { DataSource } from '../data-source.js';
 import { GridAxis } from '../axis.js';
@@ -15,6 +17,8 @@ export function createProjection(
   context: Pick<
     EngineContext,
     | 'grouping'
+    | 'tree'
+    | 'collapsedTreeIds'
     | 'collapsedGroupingKeys'
     | 'groupFocus'
     | 'projectedAxis'
@@ -42,6 +46,8 @@ export function createProjection(
   },
 ) {
   const groupPositions = new Map<GroupKey, number>();
+  // Candidate metadata follows its projection, so canceled preparation cannot replace installed metadata.
+  const treeRows = new WeakMap<DisplayRow[], ReadonlyMap<number, LocalTreeRow>>();
   function viewAxis(): GridAxis {
     return context.projectedAxis ?? context.rowAxis;
   }
@@ -84,6 +90,8 @@ export function createProjection(
     source: DataSource = context.dataSource,
     grouping = context.grouping,
     collapsedKeys = context.collapsedGroupingKeys,
+    tree = context.tree,
+    collapsedTreeIds = context.collapsedTreeIds,
   ): BulkSteps<DisplayRow[] | null> {
     for (const key of [
       next.sort?.columnKey,
@@ -91,6 +99,19 @@ export function createProjection(
       ...(next.filters ?? []).map((filter) => filter.columnKey),
     ]) {
       if (key !== undefined && !context.columnIndices.has(key)) throw new Error('Unknown view column: ' + key);
+    }
+    if (tree) {
+      const rows = yield* localTreeRowsSteps(
+        source,
+        context.columns.map((column) => column.key),
+        tree.parentColumnKey,
+        [...collapsedTreeIds],
+        next,
+        cooperative,
+      );
+      const result = rows.map((row) => row.sourceIndex);
+      treeRows.set(result, new Map(rows.map((row) => [row.sourceIndex, row])));
+      return result;
     }
     if (grouping) {
       const retained = yield* localViewSteps(
@@ -336,6 +357,11 @@ export function createProjection(
     return context.projection?.length ?? context.rowCount;
   }
   return {
+    getTreeRowMetadata: (row: number): LocalTreeRow | null => {
+      if (!context.tree) return null;
+      const index = sourceRow(row);
+      return context.projection ? (treeRows.get(context.projection)?.get(index) ?? null) : null;
+    },
     viewAxis,
     visibleFrozenRows,
     rebuildViewAxis,

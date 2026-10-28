@@ -23,6 +23,7 @@ export function createLayout(
     | 'frozenRows'
     | 'merges'
     | 'grouping'
+    | 'tree'
     | 'groups'
   >,
   dependencies: {
@@ -72,7 +73,8 @@ export function createLayout(
   }
   function resize(axis: GridAxis, index: number, size: number, history = true): void {
     dependencies.assertAlive();
-    if (context.grouping && axis === context.rowAxis) throw new Error('Row resizing is unavailable while grouping.');
+    if ((context.grouping || context.tree) && axis === context.rowAxis)
+      throw new Error('Row resizing is unavailable while grouping/tree.');
     if (!history && context.manualRows.has(index)) return;
     const previous = axis.storedSize(index),
       previousManual = axis === context.rowAxis && context.manualRows.has(index);
@@ -120,7 +122,8 @@ export function createLayout(
     )
       throw new RangeError('Invalid visibility request.');
     requireVisibilityPolicy(axis, indices, hidden);
-    if (context.grouping && axis === 'row') throw new Error('Row hiding is unavailable while grouping.');
+    if ((context.grouping || context.tree) && axis === 'row')
+      throw new Error('Row hiding is unavailable while grouping/tree.');
     const before = new Set(layout.hiddenIndices()),
       changed = indices.filter((index) => before.has(index) !== hidden);
     if (!changed.length) return;
@@ -152,7 +155,7 @@ export function createLayout(
       columnCount > context.columns.length
     )
       throw new RangeError('Invalid frozen row or column count.');
-    if (context.grouping && rows) throw new Error('Frozen rows are unavailable while grouping.');
+    if ((context.grouping || context.tree) && rows) throw new Error('Frozen rows are unavailable while grouping/tree.');
     if (rows === context.frozenRows && columnCount === context.frozenColumns) return;
     dependencies.validateMergeFreeze(context.merges, rows, columnCount);
     if (context.groups.some((group) => group.collapsed && group.startRow < rows && group.endRow >= rows))
