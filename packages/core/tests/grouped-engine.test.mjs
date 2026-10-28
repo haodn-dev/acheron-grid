@@ -23,6 +23,62 @@ function fixture(extra = {}) {
 }
 const metadata = (engine) => Array.from({ length: engine.rowCount }, (_, row) => engine.getRowMetadata(row));
 
+test('group focus changes and clears notify once while an empty clear stays silent', () => {
+  const events = [],
+    invalidations = [];
+  const { engine } = fixture({
+    onEvent: (event) => events.push(event),
+    onInvalidate: (change) => invalidations.push(change),
+  });
+  const reset = () => {
+    events.length = invalidations.length = 0;
+  };
+  engine.focusGroup(0);
+  reset();
+  engine.focusGroup(3);
+  assert.equal(events.length, 1);
+  assert.equal(invalidations.length, 1);
+  reset();
+  engine.clearSelection();
+  assert.equal(engine.getFocusedGroup(), -1);
+  assert.deepEqual(events, [{ type: 'selection:change', selection: null, range: null, ranges: [] }]);
+  assert.deepEqual(invalidations, [{ type: 'selection', changed: true, rangeChanged: true }]);
+  reset();
+  engine.clearSelection();
+  assert.deepEqual(events, []);
+  assert.deepEqual(invalidations, []);
+});
+
+test('zero group expansion accepts either sign and preserves typed keys through state restore', () => {
+  const source = new LocalDataSource(
+    [
+      { id: 'a', key: -0 },
+      { id: 'b', key: 0 },
+      { id: 'c', key: '0' },
+    ],
+    (row) => row.id,
+  );
+  const engine = createGridEngine({
+    dataSource: source,
+    columns: [{ key: 'key', title: 'Key' }],
+    grouping: { columnKey: 'key' },
+  });
+  engine.setDataGroupExpanded(-0, false);
+  assert.equal(engine.rowCount, 3);
+  assert.equal(engine.getFocusedGroup(), 0);
+  assert.deepEqual(engine.exportGroupingState().collapsedKeys, [0]);
+  const saved = JSON.parse(JSON.stringify(engine.exportGroupingState()));
+  engine.setDataGroupExpanded(0, true);
+  assert.equal(engine.rowCount, 5);
+  engine.restoreGroupingState(saved);
+  assert.equal(engine.getRowMetadata(0).expanded, false);
+  engine.setDataGroupExpanded(-0, true);
+  assert.equal(engine.getFocusedGroup(), 0);
+  engine.setDataGroupExpanded('0', false);
+  assert.equal(engine.getRowMetadata(0).expanded, true);
+  assert.deepEqual(engine.exportGroupingState().collapsedKeys, ['0']);
+});
+
 test('group rows have separate identity, frozen metadata and no record permissions', () => {
   const initialEvents = [];
   const { engine } = fixture({ onEvent: (event) => initialEvents.push(event) });

@@ -346,9 +346,9 @@ export function createSelection(
     );
   }
   function clearSelection(emit = true): void {
-    context.groupFocus = null;
     dependencies.assertAlive();
-    if (!context.selection) return;
+    if (!context.selection && !context.groupFocus) return;
+    context.groupFocus = null;
     context.selection = context.anchor = null;
     context.activeParts = 1;
     context.displayAnchor = null;
