@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.0 — Development preview — 2026-10-28
+
 - Add opt-in local grouping by one scalar column with count/sum snapshots, synthetic group metadata, expansion state, leaf-only commands, and Canvas disclosure, keyboard navigation and treegrid accessibility. React/Vue inherit the same options and handle APIs; HTML/MCP paths distinguish group headers from records.
 - Add local parent-ID tree views with duplicate/orphan/cycle/depth validation, sibling sorting, ancestor-preserving filtering, expansion state and Canvas navigation. Parent-ID editing and unsupported row-layout/structural combinations are rejected.
 - Add bounded `refreshRows` for flat, fixed-count sources. Verified matching identities retain value history; changed-identity entries are dropped atomically with a notice. The existing whole-source `refreshData` contract remains unchanged.

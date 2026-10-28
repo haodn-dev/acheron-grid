@@ -2,6 +2,10 @@
 
 Package versions and documentation revisions answer different questions. The package version identifies an installed artifact. A documentation revision identifies a change to a specific guide or reference; it does not announce a new package release.
 
+## 0.4.0 candidate
+
+The 0.4.0 development preview candidate adds local grouping/tree and bounded remote viewport APIs. Publication is pending; npm 0.3.0 remains the current published channel until registry verification completes. Build the matching checkout for the candidate. Earlier released documentation channels remain immutable.
+
 ## Reading channels
 
 The 0.3.0 development preview is published for all eight packages; see

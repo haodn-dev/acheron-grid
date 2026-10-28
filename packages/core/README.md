@@ -1,8 +1,8 @@
 # @acheron-grid/core
 
-## Bounded data epoch reset (source preview)
+## Bounded data epoch reset (0.4.0 preview)
 
-The current source adds `engine.resetData(): DataResetResult`; npm 0.3.0 does not include it. Use it after a host-controlled query, revision, ordering or total change in a **flat source with unchanged column schema**. It reads the current count, validates axis dimensions and adopts that count without reading row IDs/values, constructing a row map, loading pages or writing data. It rejects local projections, tree and data grouping before discarding grid state. Clear those views before changing the source; a schema change requires a separate lifecycle.
+Version 0.4.0 adds `engine.resetData(): DataResetResult`. Use it after a host-controlled query, revision, ordering or total change in a **flat source with unchanged column schema**. It reads the current count, validates axis dimensions and adopts that count without reading row IDs/values, constructing a row map, loading pages or writing data. It rejects local projections, tree and data grouping before discarding grid state. Clear those views before changing the source; a schema change requires a separate lifecycle.
 
 Reset explicitly discards all undo/redo, selection, pending cut, row sizes/visibility, manual row sizing, row/cell locks, merges/outlines and **all runtime formats**, including table/column formats. It preserves column order/schema, widths/visibility, column locks, the table lock and application permission/resolver options. Frozen rows are clamped to the new count; frozen columns stay unchanged. Existing column definitions/renderers remain. Work follows retained metadata/history, not logical row count.
 
@@ -10,9 +10,9 @@ The frozen result reports `previousRowCount`, `rowCount`, `droppedHistoryEntries
 
 The host owns source/query/revision validation, cancellation of old page loads, draft/uncertain-write resolution and bulk-operation cancellation/settlement **before changing the source**. Reset does not clear source drafts, retry writes or provide transport authority. Canvas rejects an open editor or local Find; settle them before changing its source, then call `grid.resetData()`. Within an unchanged epoch use `refreshRows` for bounded load/eviction windows. `refreshData` retains its separate full identity-reconciliation behavior.
 
-## Bounded row refresh (source preview)
+## Bounded row refresh (0.4.0 preview)
 
-The current source adds `engine.refreshRows(startRow, endRow)` for an **inclusive source-row window**. These APIs and the `RowRefreshResult` type are not in npm 0.3.0. The method reads each ID in that window once, creates no source-sized row mapping and never writes source data. It emits `GridInvalidation` type `rows` and a `data:rows` event containing `startRow`, `endRow`, `droppedHistoryEntries`, `selectionCleared` and `cutCancelled`; subscribers must handle these additive variants.
+Version 0.4.0 adds `engine.refreshRows(startRow, endRow)` for an **inclusive source-row window**. The `RowRefreshResult` type is included. The method reads each ID in that window once, creates no source-sized row mapping and never writes source data. It emits `GridInvalidation` type `rows` and a `data:rows` event containing `startRow`, `endRow`, `droppedHistoryEntries`, `selectionCleared` and `cutCancelled`; subscribers must handle these additive variants.
 
 Use only with unchanged row count/schema/query/revision, a flat view and default row sizes/visibility. Tree/grouping, merges/outlines, row/cell locks, formats and identity-dependent layout history reject before state changes. Table/column locks and column geometry remain independent of record identity. The source still guarantees globally unique stable IDs; validation checks uniqueness inside the supplied window, not across the complete dataset. Report every changed or evicted window, not just the page that loaded.
 
@@ -20,9 +20,9 @@ An undo/redo value batch is discarded in full when an in-window ID differs from 
 
 Work and allocation follow the requested window plus retained history changes, not logical row count. The default history command limit is 100; configure `historyLimits.maxValueCells` for bounded retained payloads. Observer callbacks remain host code. `refreshData` keeps its existing whole-dataset reconciliation and history-reset behavior; fixed-schema flat query/total/order changes can instead use the explicit `resetData` contract above. Canvas has a separate viewport observer and host-loader example; this method alone does not load data or guarantee seamless remote editing.
 
-## Local tree (source preview)
+## Local tree (0.4.0 preview)
 
-The current source adds a complete local parent-ID tree. These APIs are not in npm 0.3.0. Canvas adds disclosure, keyboard and ARIA support; React and Vue inherit its construction options and grid handle. See the [standalone example](../../examples/tree/README.md).
+Version 0.4.0 adds a complete local parent-ID tree. Canvas adds disclosure, keyboard and ARIA support; React and Vue inherit its construction options and grid handle. See the [standalone example](../../examples/tree/README.md).
 
 ```ts
 engine.setTree({ parentColumnKey: 'parent' });
@@ -41,9 +41,9 @@ Tree state version 1 stores criteria and typed collapsed IDs, validates IDs agai
 
 This implementation rebuilds the complete local forest for view changes and value edits, with O(n) metadata and sibling sorting costs. Value preflight is synchronous; cooperative view preparation uses existing cancellation/revision guards. It is not a lazy remote tree or a million-row latency guarantee.
 
-## Local grouping (source preview)
+## Local grouping (0.4.0 preview)
 
-The current source adds local grouping; npm 0.3.0 does not contain these APIs. Canvas exposes grouped rendering and interaction; React and Vue inherit its construction options and grid handle.
+Version 0.4.0 adds local grouping. Canvas exposes grouped rendering and interaction; React and Vue inherit its construction options and grid handle.
 
 ```ts
 engine.setGrouping({ columnKey: 'team', sumColumns: ['amount'] });
@@ -63,7 +63,7 @@ Visible row indices include headers. Check `getRowMetadata` before using record 
 
 Clear grouping before external refresh, legacy state/configuration export/restore, row resizing/hiding, frozen rows, merges, manual outlines or structural changes. Existing non-value history must also be cleared before enabling grouping. `exportGroupingState`/`restoreGroupingState` separately persist version-1 criteria and typed collapsed keys; the host must select the matching dataset. These view changes are outside data undo. The initial implementation rebuilds the complete local projection for grouped value edits; async commands remain cancellable before commit, but this preflight rebuild is synchronous. Use bounded working sets rather than a partially loaded remote cache.
 
-Version **0.3.0 development preview**. See [release notes and migration](../../RELEASE-0.3.0.md).
+Version **0.4.0 development preview**. See [release notes and migration](../../RELEASE-0.4.0.md).
 
 The npm 0.1.0 archive has a separate frozen reference. See [documentation versions](../../guides/versions.md).
 
@@ -88,10 +88,10 @@ Use core for a custom renderer or headless data workflow. For a ready-made inter
 ### Installation
 
 ```sh
-npm install @acheron-grid/core@0.3.0
+npm install @acheron-grid/core@0.4.0
 ```
 
-This guide targets matching 0.3.0 development preview artifacts. APIs may change before 1.0. This package exports ESM JavaScript and TypeScript declarations.
+This guide targets matching 0.4.0 development preview artifacts. APIs may change before 1.0. This package exports ESM JavaScript and TypeScript declarations.
 
 ### Building from source
 

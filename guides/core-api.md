@@ -44,7 +44,7 @@ Adopt the current row count as a new flat-data epoch without scanning IDs or cre
 refreshRows: (startRow: number, endRow: number) => RowRefreshResult
 ```
 
-Source preview: refresh an inclusive source-row window without scanning other source IDs or clearing all history. Requires unchanged count, a flat default-height view and no row metadata/format history. Validate window IDs first; discard entire undo/redo batches whose in-window IDs changed, clear intersecting non-single-cell selections and stale active identity, cancel cut, then emit data:rows with the drop/selection result. Matching IDs retain normal value-conflict preflight. Host must report every changed/evicted window and keep query/revision/schema stable; this is not a query/total reset or remote loader.
+Available in 0.4.0: refresh an inclusive source-row window without scanning other source IDs or clearing all history. Requires unchanged count, a flat default-height view and no row metadata/format history. Validate window IDs first; discard entire undo/redo batches whose in-window IDs changed, clear intersecting non-single-cell selections and stale active identity, cancel cut, then emit data:rows with the drop/selection result. Matching IDs retain normal value-conflict preflight. Host must report every changed/evicted window and keep query/revision/schema stable; this is not a query/total reset or remote loader.
 
 ### refreshData
 
@@ -306,7 +306,7 @@ Whether a live engine has a redo entry. Replay still checks current policies and
 setTree: (next: LocalTreeOptions | null) => void
 ```
 
-Headless source preview: validate a complete local parent-ID forest, retain filter matches and ancestors, and sort siblings. Reject invalid IDs, parents, cycles, depth above 4096 and incompatible grouping/row layout/history before installing. Null clears tree; no source writes.
+Available in 0.4.0: validate a complete local parent-ID forest, retain filter matches and ancestors, and sort siblings. Reject invalid IDs, parents, cycles, depth above 4096 and incompatible grouping/row layout/history before installing. Null clears tree; no source writes.
 
 ### tree
 
@@ -354,7 +354,7 @@ Validate unknown version-1 state, schema, layout and collapsed IDs against the c
 setGrouping: (next: LocalGroupingOptions | null) => void
 ```
 
-Source preview: filter complete local records, group by one scalar key and optionally sum finite numeric values; sort leaves within each group. Reject incompatible row layout/history before installing. Null clears grouping. No source writes.
+Available in 0.4.0: filter complete local records, group by one scalar key and optionally sum finite numeric values; sort leaves within each group. Reject incompatible row layout/history before installing. Null clears grouping. No source writes.
 
 ### exportGroupingState
 

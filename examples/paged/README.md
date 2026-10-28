@@ -1,8 +1,8 @@
 # Paged remote editing
 
-## Writable viewport source preview
+## Writable viewport (0.4.0 preview)
 
-Run `npm run playground` and open [editable viewport](http://127.0.0.1:4180/paged/viewport-edit). It reuses the existing 10,000-record paged backend and `createPagedRemoteDataSource` writer, receipt and checkpoint contracts. It keeps one source and one grid, with 20-row pages, eight cached pages and at most 100 dirty cells. Build core/Canvas from this checkout: viewport/reset APIs and this example are not included in npm 0.3.0. The large synthetic viewport below remains read-only.
+Run `npm run playground` and open [editable viewport](http://127.0.0.1:4180/paged/viewport-edit). It reuses the existing 10,000-record paged backend and `createPagedRemoteDataSource` writer, receipt and checkpoint contracts. It keeps one source and one grid, with 20-row pages, eight cached pages and at most 100 dirty cells. Build core/Canvas from this checkout: viewport/reset APIs are included in 0.4.0. The large synthetic viewport below remains read-only.
 
 Double-click or F2 edits a loaded task; Enter finishes and Escape cancels. Unloaded rows stay navigable but deny edit/paste/copy. The coordinator pauses during an editor and touches its ready page through `loadPage` to make it most recently used. With cache greater than one and a single incoming page, that active page survives the outstanding load. Ready/evicted windows wait until editor cleanup resumes loading. This is a single active-editor policy, not a general multi-page pinning API. Cleanup does not resume a newer editor or a busy operation.
 
@@ -16,9 +16,9 @@ Expand Server query and draft checkpoints for explicit `exportDrafts`/`restoreDr
 
 The backend and response simulation controls are shared with the paged example. Receipts are process-local and capped at 100; this is not production authorization, transactions or durable server deduplication. No concurrent edit/save, remote structural writes, lazy tree, workbook or full native-scroll-range support is added. The host owns source/storage lifetime, and unsubscribes the coordinator before source/grid disposal.
 
-## Remote viewport source preview
+## Remote viewport (0.4.0 preview)
 
-The current checkout also serves [remote viewport](http://127.0.0.1:4180/paged/viewport) after `npm run playground`. This separate read-only mode keeps one Canvas mount and one `createPagedRemoteDataSource`. Choose 100,000 or 1,000,000 synthetic records and lowest/highest ID first, then Apply data view. It disposes the old coordinator, changes the source query/count (canceling its old page generation), calls `grid.resetData()`, and explicitly starts a new coordinator from `grid.getViewport()`. Selection/history and row metadata are cleared; the source/grid are reused. These source APIs and the example are not included in npm 0.3.0.
+The current checkout also serves [remote viewport](http://127.0.0.1:4180/paged/viewport) after `npm run playground`. This separate read-only mode keeps one Canvas mount and one `createPagedRemoteDataSource`. Choose 100,000 or 1,000,000 synthetic records and lowest/highest ID first, then Apply data view. It disposes the old coordinator, changes the source query/count (canceling its old page generation), calls `grid.resetData()`, and explicitly starts a new coordinator from `grid.getViewport()`. Selection/history and row metadata are cleared; the source/grid are reused. These APIs are included in 0.4.0; build the matching checkout to run the example.
 
 The host coordinator in `viewport-loader.js` reads public viewport regions, prioritizes visible pages, then adds at most one neighboring page per edge within the eight-page cache budget. It uses 100-row pages and one in-flight request; rapid scrolling changes the next requested window instead of building a request backlog. Oversized visible windows report a cache-budget error. Requests use the existing source's explicit `loadRange`; the synthetic endpoint generates only the requested page.
 

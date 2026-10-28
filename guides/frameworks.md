@@ -1,14 +1,14 @@
 # Acheron Grid — React and Vue
 
-Lifecycle adapters are separate packages; core remains framework-independent. This guide targets the aligned 0.3.0 development preview. Install core, Canvas and the chosen framework adapter; local built checkouts remain supported for development.
+Lifecycle adapters are separate packages; core remains framework-independent. This guide targets the aligned 0.4.0 development preview. Install core, Canvas and the chosen framework adapter; local built checkouts remain supported for development.
 
 ## React
 
-React lifecycle adapter for the Acheron Grid Canvas renderer. Current source is Apache-2.0 licensed; published npm 0.1.0 retains MIT. This guide targets the experimental 0.3.0 development preview.
+React lifecycle adapter for the Acheron Grid Canvas renderer. Current source is Apache-2.0 licensed; published npm 0.1.0 retains MIT. This guide targets the experimental 0.4.0 development preview.
 
 ### Usage
 
-Install with `npm install @acheron-grid/core@0.3.0 @acheron-grid/canvas@0.3.0 @acheron-grid/react@0.3.0`. Supply React 18.3 or 19 as a peer dependency. This adapter does not bundle React.
+Install with `npm install @acheron-grid/core@0.4.0 @acheron-grid/canvas@0.4.0 @acheron-grid/react@0.4.0`. Supply React 18.3 or 19 as a peer dependency. This adapter does not bundle React.
 
 ```tsx
 import { useMemo, useRef } from 'react';
@@ -42,11 +42,11 @@ Tested with React/React DOM 19.1.0 and React 18-compatible type declarations; th
 
 ## Vue
 
-Vue 3 lifecycle adapter for the Acheron Grid Canvas renderer. Current source is Apache-2.0 licensed; published npm 0.1.0 retains MIT. This guide targets the experimental 0.3.0 development preview.
+Vue 3 lifecycle adapter for the Acheron Grid Canvas renderer. Current source is Apache-2.0 licensed; published npm 0.1.0 retains MIT. This guide targets the experimental 0.4.0 development preview.
 
 ### Usage
 
-Install with `npm install @acheron-grid/core@0.3.0 @acheron-grid/canvas@0.3.0 @acheron-grid/vue@0.3.0`. Supply Vue 3.5 as a peer dependency. This adapter does not bundle Vue.
+Install with `npm install @acheron-grid/core@0.4.0 @acheron-grid/canvas@0.4.0 @acheron-grid/vue@0.4.0`. Supply Vue 3.5 as a peer dependency. This adapter does not bundle Vue.
 
 ```vue
 <script setup lang="ts">

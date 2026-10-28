@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "2f34c5e5526f678d9dc5876c8b532ae5bdb0e32f",
+  "sourceRevision": "d00637ec2f2afbb1307bfe11b7f947f7012d2474",
   "release": {
     "documentationRevision": "6e5d6a408ea3f6f089b013b2d2d0e0c698ccd9ee",
     "tag": "v0.3.0",
@@ -111,9 +111,9 @@
     {
       "id": "getting-started",
       "path": "guides/getting-started.md",
-      "revision": 6,
-      "updated": "2026-10-25",
-      "sha256": "0c1441311dbde6dc4587fd1b1dac64c8787dd1fff974ed6ae11d199d2533b3a7",
+      "revision": 7,
+      "updated": "2026-10-28",
+      "sha256": "1ad329bbe9df25b2564c1ef082711e40187440faf47984a66b6c787c0d2c640b",
       "history": [
         {
           "revision": 1,
@@ -137,6 +137,10 @@
         },
         {
           "revision": 6,
+          "summary": "Complete pinned-install browser example and troubleshooting."
+        },
+        {
+          "revision": 7,
           "summary": "Complete pinned-install browser example and troubleshooting."
         }
       ]
@@ -185,9 +189,9 @@
     {
       "id": "frameworks",
       "path": "guides/frameworks.md",
-      "revision": 8,
-      "updated": "2026-10-25",
-      "sha256": "0a775f79a0e91f4a74f73132cc1b2ee9b03f6f9ef54d87aa00b08b8fac0885ed",
+      "revision": 9,
+      "updated": "2026-10-28",
+      "sha256": "5fb852a38432dad3ef02162bbcb978960011a7dfa316834ba186022a935767a9",
       "history": [
         {
           "revision": 1,
@@ -219,6 +223,10 @@
         },
         {
           "revision": 8,
+          "summary": "Canonical React/Vue lifecycle guide."
+        },
+        {
+          "revision": 9,
           "summary": "Canonical React/Vue lifecycle guide."
         }
       ]
@@ -267,9 +275,9 @@
     {
       "id": "versions",
       "path": "guides/versions.md",
-      "revision": 11,
-      "updated": "2026-10-25",
-      "sha256": "538dfbd4c756ec1f9f80346d0eb4a4a354655ee14ac60451a6de4b564abacfe4",
+      "revision": 12,
+      "updated": "2026-10-28",
+      "sha256": "df8422872258c2609a394cfee24af34f8ca13610f776e95bd0224e33d2882996",
       "history": [
         {
           "revision": 1,
@@ -314,15 +322,19 @@
         {
           "revision": 11,
           "summary": "Separate package releases, source previews and per-document revisions."
+        },
+        {
+          "revision": 12,
+          "summary": "Separate package releases, source previews and per-document revisions."
         }
       ]
     },
     {
       "id": "core-api",
       "path": "guides/core-api.md",
-      "revision": 22,
-      "updated": "2026-10-27",
-      "sha256": "d0f1ec2093a2271e62aad5282d5d61e32f517e06836dd1c32281d79499a010bf",
+      "revision": 23,
+      "updated": "2026-10-28",
+      "sha256": "8eafa2d45782437e8af8aed0e48274040542a134fdbb63fe9814a4de7141ed77",
       "history": [
         {
           "revision": 1,
@@ -411,15 +423,19 @@
         {
           "revision": 22,
           "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
+        },
+        {
+          "revision": 23,
+          "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
         }
       ]
     },
     {
       "id": "canvas-api",
       "path": "guides/canvas-api.md",
-      "revision": 15,
-      "updated": "2026-10-27",
-      "sha256": "7887a92854470658f354d10a37c59fe6da812cc5ba3c23bdf1dfdfc49558c578",
+      "revision": 16,
+      "updated": "2026-10-28",
+      "sha256": "dd68bc14653beba929da22edcb48675edf520ab7d3b59693c0d36aa6b791aa1b",
       "history": [
         {
           "revision": 1,
@@ -480,6 +496,10 @@
         {
           "revision": 15,
           "summary": "Generated source API signatures and construction options."
+        },
+        {
+          "revision": 16,
+          "summary": "Generated source API signatures and construction options."
         }
       ]
     },
@@ -499,9 +519,9 @@
     {
       "id": "core",
       "path": "packages/core/README.md",
-      "revision": 22,
-      "updated": "2026-10-27",
-      "sha256": "208fdbe53254c7f7337ca904d9689a2d89657e3853934e0f54cfba5b7434ec6d",
+      "revision": 23,
+      "updated": "2026-10-28",
+      "sha256": "2bf41bf6edb71b535e7f48d66a3cf149b03dcb146034c6fc7ab804d783d16ebb",
       "history": [
         {
           "revision": 1,
@@ -590,15 +610,19 @@
         {
           "revision": 22,
           "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
+        },
+        {
+          "revision": 23,
+          "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
         }
       ]
     },
     {
       "id": "canvas",
       "path": "packages/canvas/README.md",
-      "revision": 25,
-      "updated": "2026-10-27",
-      "sha256": "187c109d68444df567ca6b865ae340b4c15c46bd4862361c8a11e86fc99ca788",
+      "revision": 26,
+      "updated": "2026-10-28",
+      "sha256": "225ef44924ff77da6dc67dafe242032b57303262ce0ae97d7ef86ee9396d637c",
       "history": [
         {
           "revision": 1,
@@ -699,60 +723,19 @@
         {
           "revision": 25,
           "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 26,
+          "summary": "Align publication status, installation and current source contracts."
         }
       ]
     },
     {
       "id": "react",
       "path": "packages/react/README.md",
-      "revision": 9,
-      "updated": "2026-10-25",
-      "sha256": "8357ec8888a5aa6826c0258064699660e00165122e7c411b2950e3e74f4ec19e",
-      "history": [
-        {
-          "revision": 1,
-          "summary": "Previous public reference; see source revision 9cff1ab."
-        },
-        {
-          "revision": 2,
-          "summary": "Align publication status, installation and current source contracts."
-        },
-        {
-          "revision": 3,
-          "summary": "Align publication status, installation and current source contracts."
-        },
-        {
-          "revision": 4,
-          "summary": "Align publication status, installation and current source contracts."
-        },
-        {
-          "revision": 5,
-          "summary": "Align publication status, installation and current source contracts."
-        },
-        {
-          "revision": 6,
-          "summary": "Align publication status, installation and current source contracts."
-        },
-        {
-          "revision": 7,
-          "summary": "Align publication status, installation and current source contracts."
-        },
-        {
-          "revision": 8,
-          "summary": "Align publication status, installation and current source contracts."
-        },
-        {
-          "revision": 9,
-          "summary": "Align publication status, installation and current source contracts."
-        }
-      ]
-    },
-    {
-      "id": "vue",
-      "path": "packages/vue/README.md",
       "revision": 10,
-      "updated": "2026-10-25",
-      "sha256": "ab95cc34f90852b7a47a10d63537a8f5f65093336b5d5a97323db672a524962a",
+      "updated": "2026-10-28",
+      "sha256": "284cd4f039819d20844a11ed32a11b92f5c96ad03bcf2f8f574917f673c197c0",
       "history": [
         {
           "revision": 1,
@@ -797,11 +780,11 @@
       ]
     },
     {
-      "id": "markdown",
-      "path": "packages/markdown/README.md",
-      "revision": 9,
-      "updated": "2026-10-25",
-      "sha256": "3bdd3244c930828eb2f50184cf5a2579e6688c61709c264e2ab859bf69a5683e",
+      "id": "vue",
+      "path": "packages/vue/README.md",
+      "revision": 11,
+      "updated": "2026-10-28",
+      "sha256": "948983479cba7ea780f27d363ac925f18121eda7d4d561ce7c75c8a0ae376f6e",
       "history": [
         {
           "revision": 1,
@@ -838,15 +821,72 @@
         {
           "revision": 9,
           "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 10,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 11,
+          "summary": "Align publication status, installation and current source contracts."
+        }
+      ]
+    },
+    {
+      "id": "markdown",
+      "path": "packages/markdown/README.md",
+      "revision": 10,
+      "updated": "2026-10-28",
+      "sha256": "881521acad3e2f1a0b052085bf2738e9cc738e2dc332a6db366423a50e3257a0",
+      "history": [
+        {
+          "revision": 1,
+          "summary": "Previous public reference; see source revision 9cff1ab."
+        },
+        {
+          "revision": 2,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 3,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 4,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 5,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 6,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 7,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 8,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 9,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 10,
+          "summary": "Align publication status, installation and current source contracts."
         }
       ]
     },
     {
       "id": "mcp",
       "path": "packages/mcp/README.md",
-      "revision": 12,
-      "updated": "2026-10-25",
-      "sha256": "c1256b095fafa66178838bb0b62c4503a9cd01909242a9534e308866633579e3",
+      "revision": 14,
+      "updated": "2026-10-28",
+      "sha256": "a546b141125b3114b3b22d9fe2d371a579301fa0fcc54617099fad6cd336e140",
       "history": [
         {
           "revision": 1,
@@ -895,15 +935,23 @@
         {
           "revision": 12,
           "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 13,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 14,
+          "summary": "Align publication status, installation and current source contracts."
         }
       ]
     },
     {
       "id": "export",
       "path": "packages/export/README.md",
-      "revision": 8,
-      "updated": "2026-10-25",
-      "sha256": "9ea2faff958d0465861ee1509b611491916f5b76c6d1eb97ef169725d4edb36c",
+      "revision": 9,
+      "updated": "2026-10-28",
+      "sha256": "5c5c6c5f2144339981402b2ae2ed46135e9bb239e99c9cb7a6232f2999d1010a",
       "history": [
         {
           "revision": 1,
@@ -936,15 +984,19 @@
         {
           "revision": 8,
           "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 9,
+          "summary": "Align publication status, installation and current source contracts."
         }
       ]
     },
     {
       "id": "charts",
       "path": "packages/charts/README.md",
-      "revision": 11,
-      "updated": "2026-10-25",
-      "sha256": "ad1601f36c2d55e06e5ca229ccc6c23465152e9dad5dd67e0c2f9651e8baaccb",
+      "revision": 12,
+      "updated": "2026-10-28",
+      "sha256": "1ee863578549bff71b6ff2497c68630c173f24260d146cff5bff565516d96df1",
       "history": [
         {
           "revision": 1,
@@ -988,6 +1040,10 @@
         },
         {
           "revision": 11,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 12,
           "summary": "Align publication status, installation and current source contracts."
         }
       ]
