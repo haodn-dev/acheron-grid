@@ -1,3 +1,4 @@
+import type { DisplayRow } from './grouping.js';
 import type { LocalViewOptions } from '../data-source.js';
 import type { GridInvalidation } from '../engine.js';
 import type { GridEvent } from '../events.js';
@@ -21,6 +22,7 @@ export function createOutline(
     | 'dataSource'
     | 'view'
     | 'projection'
+    | 'grouping'
     | 'groups'
     | 'past'
     | 'future'
@@ -29,16 +31,16 @@ export function createOutline(
   dependencies: {
     assertAlive: () => void;
     getCellPermission: (rowIndex: number, columnIndex: number) => CellPermission;
-    installProjection: (next: number[] | null) => void;
+    installProjection: (next: DisplayRow[] | null) => void;
     buildProjection: (
       next: LocalViewOptions,
       count?: number,
       spans?: readonly Readonly<SelectionRange>[],
       outlines?: readonly Readonly<RowGroup>[],
       frozen?: number,
-    ) => number[] | null;
+    ) => DisplayRow[] | null;
     notify: (change: GridInvalidation, event: GridEvent) => void;
-    displayRow: (row: number) => number;
+    displayRow: (row: DisplayRow) => number;
     sourceRanges: (range: SelectionRange) => SelectionRange[];
     sourceRow: (index: number) => number;
   },
@@ -90,6 +92,7 @@ export function createOutline(
       throw new Error('A merged cell cannot cross a frozen boundary.');
   }
   function layoutAllowed(request: LayoutRequest): boolean {
+    if (context.grouping) return false;
     dependencies.assertAlive();
     if (!request || !['merge', 'unmerge', 'group', 'ungroup', 'collapse', 'expand'].includes(request.kind))
       return false;
@@ -141,7 +144,7 @@ export function createOutline(
     }
     return true;
   }
-  function notifyOutline(kind: 'merge' | 'group', old: readonly number[], source: 'api' | 'undo' | 'redo'): void {
+  function notifyOutline(kind: 'merge' | 'group', old: readonly DisplayRow[], source: 'api' | 'undo' | 'redo'): void {
     if (context.selection) {
       const span = mergeAt(context.selection.rowIndex, context.selection.columnIndex);
       if (span)

@@ -1,5 +1,27 @@
 # @acheron-grid/core
 
+## Local grouping (source preview)
+
+The current source adds headless grouping; npm 0.3.0 does not contain these APIs. Canvas, React and Vue do not expose grouped rendering yet.
+
+```ts
+engine.setGrouping({ columnKey: 'team', sumColumns: ['amount'] });
+const row = engine.getRowMetadata(0);
+if (row.kind === 'group') {
+  console.log(row.key, row.count, row.sums.amount);
+  engine.setDataGroupExpanded(row.key, false);
+}
+const groupingState = engine.exportGroupingState();
+engine.restoreGroupingState(groupingState);
+engine.setGrouping(null);
+```
+
+Use a complete, bounded local working set. Filtering runs before grouping; groups keep first-occurrence source order and sort criteria order leaves within each group. Keys are strings, finite numbers, booleans or null; undefined shares the null bucket. Counts include all retained leaves; sums use finite raw numbers and skip other values. Invalid keys, nonfinite numbers and overflow reject before writes. Collapsing keeps aggregates intact.
+
+Visible row indices include headers. Check `getRowMetadata` before using record identity: `getRowId` and `getRowSourceIndex` throw on group rows. Group values expose the key in the grouping column and sums in sum columns; the key takes precedence if the same column is summed. Group headers have no data permissions or writable targets. `focusGroup` clears data selection; `getFocusedGroup` returns its visible index or -1. Leaf edits, paste and undo/redo rebuild the projection through preflight validation. Copy uses visible selected leaves and retains disjoint block offsets; collapsed records are excluded. Cut is unavailable while grouping. HTML snapshots omit headers and collapsed leaves.
+
+Clear grouping before external refresh, legacy state/configuration export/restore, row resizing/hiding, frozen rows, merges, manual outlines or structural changes. Existing non-value history must also be cleared before enabling grouping. `exportGroupingState`/`restoreGroupingState` separately persist version-1 criteria and typed collapsed keys; the host must select the matching dataset. These view changes are outside data undo. The initial implementation rebuilds the complete local projection for grouped value edits; async commands remain cancellable before commit, but this preflight rebuild is synchronous. Use bounded working sets rather than a partially loaded remote cache.
+
 Version **0.3.0 development preview**. See [release notes and migration](https://github.com/haodn-dev/acheron-grid/blob/main/RELEASE-0.3.0.md).
 
 The npm 0.1.0 archive has a separate frozen reference. See [documentation versions](https://github.com/haodn-dev/acheron-grid/blob/main/guides/versions.md).

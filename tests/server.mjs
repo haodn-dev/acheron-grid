@@ -14,6 +14,7 @@ const coreFiles = new Set([
   'internal/clipboard.js',
   'internal/selection.js',
   'internal/projection.js',
+  'internal/grouping.js',
   'internal/outline.js',
   'internal/layout.js',
   'internal/values.js',

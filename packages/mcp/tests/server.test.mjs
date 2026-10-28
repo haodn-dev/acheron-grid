@@ -54,6 +54,59 @@ test('revision provider validates tokens and detects changes during reads before
     engine.destroy();
   }
 });
+test('MCP grouped discovery and stable-ID lookup skip synthetic rows within the scan budget', async () => {
+  for (const hostResolver of [false, true]) {
+    const engine = createGridEngine({
+      columns: [{ key: 'title', title: 'Title', editable: true }],
+      dataSource: new LocalDataSource(
+        [
+          { id: 'a', title: 'A' },
+          { id: 'b', title: 'B' },
+        ],
+        (row) => row.id,
+      ),
+      grouping: { columnKey: 'title' },
+    });
+    const server = createGridMcpServer({
+      engine,
+      authorize: () => true,
+      allowDiscovery: true,
+      allowWrites: true,
+      validateWrite: () => {},
+      ...(hostResolver ? { resolveRowIndex: (id) => (id === 'a' ? 1 : id === 'b' ? 3 : 0) } : {}),
+    });
+    const client = new Client({ name: 'grouped-test', version: '1' });
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(a), client.connect(b)]);
+    try {
+      const rows = await client.callTool({ name: 'grid_rows', arguments: {} });
+      assert.deepEqual(JSON.parse(rows.content[0].text), { rowIds: ['a', 'b'], nextCursor: null });
+      const read = await client.callTool({
+        name: 'grid_read',
+        arguments: { cells: [{ rowId: 'a', columnKey: 'title' }] },
+      });
+      assert.equal(JSON.parse(read.content[0].text).cells[0].value, 'A');
+      const missing = await client.callTool({
+        name: 'grid_read',
+        arguments: { cells: [{ rowId: 'missing', columnKey: 'title' }] },
+      });
+      assert.equal(missing.isError, true);
+      const write = await client.callTool({
+        name: 'grid_update',
+        arguments: { cells: [{ rowId: 'a', columnKey: 'title', expected: 'A', value: 'B' }] },
+      });
+      assert.notEqual(write.isError, true);
+      assert.equal(engine.getRowMetadata(0).count, 2);
+      engine.undo();
+      assert.equal(engine.getRowMetadata(0).key, 'A');
+    } finally {
+      await client.close();
+      await server.close();
+      engine.destroy();
+    }
+  }
+});
+
 test('MCP resources, approved reads, atomic conflict-safe writes and history', async () => {
   const engine = createGridEngine({
     columns: [{ key: 'title', title: 'Title', editable: true }],

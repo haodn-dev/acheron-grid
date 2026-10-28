@@ -1,3 +1,6 @@
+import { groupLocalRowsSteps } from './grouping.js';
+import type { DisplayRow, GroupKey } from './grouping.js';
+import type { DataSource } from '../data-source.js';
 import { GridAxis } from '../axis.js';
 import type { LocalViewOptions } from '../data-source.js';
 import { snapshotLocalView as snapshotView } from '../data-source.js';
@@ -11,6 +14,9 @@ import { localViewSteps } from './local-view-steps.js';
 export function createProjection(
   context: Pick<
     EngineContext,
+    | 'grouping'
+    | 'collapsedGroupingKeys'
+    | 'groupFocus'
     | 'projectedAxis'
     | 'rowAxis'
     | 'projection'
@@ -35,14 +41,15 @@ export function createProjection(
     notify: (change: GridInvalidation, event: GridEvent) => void;
   },
 ) {
+  const groupPositions = new Map<GroupKey, number>();
   function viewAxis(): GridAxis {
     return context.projectedAxis ?? context.rowAxis;
   }
   function visibleFrozenRows(): number {
     if (!context.projection || !context.groups.some((group) => group.collapsed))
       return Math.min(context.frozenRows, visibleRowCount());
-    return (context.cachedFrozenRows ??= context.projection.reduce(
-      (count, row) => count + (row < context.frozenRows ? 1 : 0),
+    return (context.cachedFrozenRows ??= context.projection.reduce<number>(
+      (count, row) => count + (typeof row === 'number' && row < context.frozenRows ? 1 : 0),
       0,
     ));
   }
@@ -74,7 +81,56 @@ export function createProjection(
     outlines: readonly Readonly<RowGroup>[] = context.groups,
     frozen = context.frozenRows,
     cooperative = false,
-  ): BulkSteps<number[] | null> {
+    source: DataSource = context.dataSource,
+    grouping = context.grouping,
+    collapsedKeys = context.collapsedGroupingKeys,
+  ): BulkSteps<DisplayRow[] | null> {
+    for (const key of [
+      next.sort?.columnKey,
+      ...(next.sorts ?? []).map((sort) => sort.columnKey),
+      ...(next.filters ?? []).map((filter) => filter.columnKey),
+    ]) {
+      if (key !== undefined && !context.columnIndices.has(key)) throw new Error('Unknown view column: ' + key);
+    }
+    if (grouping) {
+      const retained = yield* localViewSteps(
+        source,
+        { ...(next.filters ? { filters: next.filters } : {}) },
+        cooperative,
+      );
+      const grouped = yield* groupLocalRowsSteps(
+        source,
+        context.columns.map((c) => c.key),
+        retained,
+        grouping,
+      );
+      const result: DisplayRow[] = [];
+      let completed = 0;
+      for (const group of grouped) {
+        const expanded = !collapsedKeys.has(group.key);
+        result.push(Object.freeze({ ...group, kind: 'group', expanded }));
+        if (expanded) {
+          const order =
+            next.sort || next.sorts?.length
+              ? yield* localViewSteps(
+                  {
+                    getRowCount: () => group.count,
+                    getRowId: (i) => source.getRowId(group.sourceIndices[i]!),
+                    getValue: (i, key) => source.getValue(group.sourceIndices[i]!, key),
+                  },
+                  { ...(next.sort ? { sort: next.sort } : {}), ...(next.sorts ? { sorts: next.sorts } : {}) },
+                  cooperative,
+                )
+              : null;
+          for (let i = 0; i < group.count; i++) {
+            result.push(group.sourceIndices[order ? order[i]! : i]!);
+            if (cooperative && (i + 1) % 256 === 0) yield { phase: 'prepare', completed: i + 1, total: group.count };
+          }
+        }
+        if (cooperative && ++completed % 256 === 0) yield { phase: 'prepare', completed, total: grouped.length };
+      }
+      return result;
+    }
     if (!next.sort && !next.sorts?.length && !next.filters?.length) {
       const hidden = outlines.filter((group) => group.collapsed);
       if (cooperative && hidden.length) {
@@ -90,13 +146,6 @@ export function createProjection(
             (row) => !hidden.some((group) => row > group.startRow && row <= group.endRow),
           )
         : null;
-    }
-    for (const key of [
-      next.sort?.columnKey,
-      ...(next.sorts ?? []).map((sort) => sort.columnKey),
-      ...(next.filters ?? []).map((filter) => filter.columnKey),
-    ]) {
-      if (key !== undefined && !context.columnIndices.has(key)) throw new Error('Unknown view column: ' + key);
     }
     if (spans.length || outlines.length) {
       // Outline blocks move as units; filters retain the entire block if any member matches.
@@ -168,21 +217,29 @@ export function createProjection(
     spans: readonly Readonly<SelectionRange>[] = context.merges,
     outlines: readonly Readonly<RowGroup>[] = context.groups,
     frozen = context.frozenRows,
-  ): number[] | null {
+  ): DisplayRow[] | null {
     return drain(buildProjectionSteps(next, count, spans, outlines, frozen));
   }
-  function installProjection(next: number[] | null): void {
+  function installProjection(next: DisplayRow[] | null): void {
     context.projection = next;
-    context.reverseProjection = new Map(next?.map((row, index) => [row, index]) ?? []);
+    context.reverseProjection = new Map(
+      next?.flatMap((row, index) => (typeof row === 'number' ? [[row, index] as const] : [])) ?? [],
+    );
+    groupPositions.clear();
+    next?.forEach((row, index) => {
+      if (typeof row !== 'number') groupPositions.set(row.key, index);
+    });
+    if (context.groupFocus && !groupPositions.has(context.groupFocus.key)) context.groupFocus = null;
     context.cachedRanges = null;
     context.cachedFrozenRows = null;
     rebuildViewAxis();
   }
-  function displayRow(row: number): number {
+  function displayRow(row: DisplayRow): number {
+    if (typeof row !== 'number') return groupPositions.get(row.key) ?? -1;
     return context.projection ? (context.reverseProjection.get(row) ?? -1) : row;
   }
   function displaySelection(): CellSelection | null {
-    if (!context.selection) return null;
+    if (context.groupFocus || !context.selection) return null;
     const rowIndex = displayRow(context.selection.rowIndex);
     if (rowIndex >= 0) return { ...context.selection, rowIndex };
     const range = dependencies.displaySelectionRanges().at(-1);
@@ -240,9 +297,9 @@ export function createProjection(
     )
       throw new RangeError('Invalid selection range.');
     if (!context.projection) return [{ ...range }];
-    const rows = Array.from({ length: range.endRow - range.startRow + 1 }, (_, i) =>
-      sourceRow(range.startRow + i),
-    ).sort((a, b) => a - b);
+    const rows = Array.from({ length: range.endRow - range.startRow + 1 }, (_, i) => displayEntry(range.startRow + i))
+      .filter((row): row is number => typeof row === 'number')
+      .sort((a, b) => a - b);
     const result: SelectionRange[] = [];
     for (const row of rows) {
       const last = result.at(-1);
@@ -252,6 +309,11 @@ export function createProjection(
     return result;
   }
   function sourceFormats(targets: readonly CellFormatTarget[]): CellFormatTarget[] {
+    if (context.grouping)
+      for (const target of targets) {
+        if (target.scope === 'range')
+          for (let row = target.range.startRow; row <= target.range.endRow; row++) sourceRow(row);
+      }
     return targets.flatMap<CellFormatTarget>((target) =>
       target.scope === 'range'
         ? sourceRanges(target.range).map((range) => ({ scope: 'range' as const, range }))
@@ -259,6 +321,13 @@ export function createProjection(
     );
   }
   function sourceRow(index: number): number {
+    if (!Number.isSafeInteger(index) || index < 0 || index >= visibleRowCount())
+      throw new RangeError('Invalid row index in view.');
+    const row = displayEntry(index);
+    if (typeof row !== 'number') throw new Error('A group row has no source record.');
+    return row;
+  }
+  function displayEntry(index: number): DisplayRow {
     if (!Number.isSafeInteger(index) || index < 0 || index >= visibleRowCount())
       throw new RangeError('Invalid row index in view.');
     return context.projection ? context.projection[index]! : index;
@@ -280,6 +349,8 @@ export function createProjection(
     sourceRanges,
     sourceFormats,
     sourceRow,
+    displayEntry,
+    buildProjectionSteps,
     visibleRowCount,
   };
 }

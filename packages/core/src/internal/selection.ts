@@ -6,6 +6,7 @@ import type { EngineContext } from './engine-context.js';
 export function createSelection(
   context: Pick<
     EngineContext,
+    | 'groupFocus'
     | 'merges'
     | 'activeParts'
     | 'retainedRanges'
@@ -42,9 +43,17 @@ export function createSelection(
         })),
       );
     const parts = dependencies.sourceRanges(range);
+    if (!parts.length) return false;
+    let first = parts[0]!.startRow,
+      last = first;
+    for (const part of parts)
+      for (let row = part.startRow; row <= part.endRow; row++) {
+        if (dependencies.displayRow(row) < dependencies.displayRow(first)) first = row;
+        if (dependencies.displayRow(row) > dependencies.displayRow(last)) last = row;
+      }
     if (
-      !dependencies.getCellPermission(dependencies.sourceRow(range.startRow), range.startColumn).selectable ||
-      !dependencies.getCellPermission(dependencies.sourceRow(range.endRow), range.endColumn).selectable
+      !dependencies.getCellPermission(first, range.startColumn).selectable ||
+      !dependencies.getCellPermission(last, range.endColumn).selectable
     )
       return false;
     if (!['replace', 'add', 'extend'].includes(mode)) throw new TypeError('Invalid selection mode.');
@@ -53,7 +62,8 @@ export function createSelection(
     const old = getSelectionRanges();
     const keep =
       mode === 'replace' ? [] : mode === 'extend' ? old.slice(0, Math.max(0, old.length - context.activeParts)) : old;
-    const row = dependencies.sourceRow(range.startRow);
+    const row = first;
+    context.groupFocus = null;
     const changed = context.selection?.rowIndex !== row || context.selection?.columnIndex !== range.startColumn;
     const others = parts.flatMap((part) =>
       row < part.startRow || row > part.endRow
@@ -336,6 +346,7 @@ export function createSelection(
     );
   }
   function clearSelection(): void {
+    context.groupFocus = null;
     dependencies.assertAlive();
     if (!context.selection) return;
     context.selection = context.anchor = null;

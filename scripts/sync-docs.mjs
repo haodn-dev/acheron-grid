@@ -25,7 +25,8 @@ const groups = {
   'Selection and clipboard':
     /^(select|navigate|extend|clearSelection|getSelection|copySelection|paste|cutSelection|cancelCut)/,
   History: /^(undo|redo|undoAsync|redoAsync|canUndo|canRedo)$/,
-  'Views and persistence': /^(setView|view|export|restore)/,
+  'Views and persistence':
+    /^(setView|view|export|restore|setGrouping|grouping|getRowMetadata|focusGroup|getFocusedGroup|setDataGroupExpanded)/,
   'Structure and groups':
     /^(insert|delete|move|getMerge|getMerged|canMerge|mergeCells|unmergeCells|getRowGroups|groupRows|ungroupRows|setGroupCollapsed)/,
   'Permissions and formatting': /^(getCellPermission|isLocked|canManageLocks|setLocked|getFormat|canFormat|format)$/,

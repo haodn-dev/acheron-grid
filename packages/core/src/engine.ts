@@ -1,3 +1,4 @@
+import type { DisplayRow, GroupKey, LocalGroupingOptions, GroupingState } from './internal/grouping.js';
 import { createPersistence } from './internal/persistence.js';
 import { createClipboard } from './internal/clipboard.js';
 import { createSelection } from './internal/selection.js';
@@ -34,7 +35,7 @@ import { GridAxis } from './axis.js';
 import type { ViewportOptions } from './panes.js';
 import type { EngineContext, FormatEntry, HistoryCommand } from './internal/engine-context.js';
 import { createHistory } from './internal/history.js';
-import { runSteps } from './internal/bulk.js';
+import { drain, runSteps } from './internal/bulk.js';
 import type { BulkSteps, GridBulkOptions } from './internal/bulk.js';
 import type { GridHistoryLimits } from './internal/history-budget.js';
 
@@ -45,6 +46,7 @@ export type GridInvalidation =
   | { readonly type: 'structure'; readonly rowMap: readonly number[]; readonly columnMap: readonly number[] };
 
 export interface GridEngineOptions {
+  grouping?: LocalGroupingOptions;
   historyLimits?: GridHistoryLimits;
   onObserverError?: (error: unknown) => void;
   allowMerging?: boolean;
@@ -162,7 +164,7 @@ export function createGridEngine(options: GridEngineOptions) {
   let orderedFormats: FormatEntry[] = [];
   let formatOrder = 0;
   let view: Readonly<LocalViewOptions> = Object.freeze({});
-  let projection: number[] | null = null;
+  let projection: DisplayRow[] | null = null;
   let reverseProjection = new Map<number, number>();
   let projectedAxis: GridAxis | null = null;
   let cachedRanges: SelectionRange[] | null = null;
@@ -175,6 +177,9 @@ export function createGridEngine(options: GridEngineOptions) {
     ...(historyLimits ? { historyLimits } : {}),
     options,
     dataSource,
+    grouping: null,
+    collapsedGroupingKeys: new Set(),
+    groupFocus: null,
     get columns() {
       return columns;
     },
@@ -387,12 +392,32 @@ export function createGridEngine(options: GridEngineOptions) {
     }
   }
 
+  let preparedGrouping: DisplayRow[] | undefined;
+  function prepareValues(updates: readonly CellUpdate[]): (() => void) | undefined {
+    if (!context.grouping) return undefined;
+    const changed = new Map<number, Map<string, unknown>>();
+    for (const update of updates) {
+      const row = changed.get(update.rowIndex) ?? new Map<string, unknown>();
+      row.set(update.columnKey, update.value);
+      changed.set(update.rowIndex, row);
+    }
+    const overlay: DataSource = {
+      getRowCount: () => rowCount,
+      getRowId: (i) => dataSource.getRowId(i),
+      getValue: (i, key) => (changed.get(i)?.has(key) ? changed.get(i)!.get(key) : dataSource.getValue(i, key)),
+    };
+    const next = drain(buildProjectionSteps(view, rowCount, merges, groups, frozenRows, false, overlay));
+    return () => {
+      preparedGrouping = next ?? undefined;
+    };
+  }
   function notify(change: GridInvalidation, event: GridEvent): void {
     cachedRanges = null;
     cachedFrozenRows = null;
-    if (projection && change.type === 'cells') {
-      const old = projection;
-      installProjection(buildProjection(view));
+    if ((projection || context.grouping) && change.type === 'cells') {
+      const old = projection ?? [];
+      installProjection(preparedGrouping ?? buildProjection(view));
+      preparedGrouping = undefined;
       if (old.length !== projection!.length || old.some((row, i) => row !== projection![i])) {
         displayAnchor = null;
         change = { type: 'structure', rowMap: old.map(displayRow), columnMap: columns.map((_, i) => i) };
@@ -434,6 +459,7 @@ export function createGridEngine(options: GridEngineOptions) {
       return notifyStructure;
     },
     notify,
+    prepareValues,
     get requireFormatPermission() {
       return requireFormatPermission;
     },
@@ -507,7 +533,9 @@ export function createGridEngine(options: GridEngineOptions) {
     context,
     {
       notify,
+      prepareValues,
       assertAlive,
+      isDataRow: (row) => typeof displayEntry(row) === 'number',
       requirePermission,
       writeFormats,
       notifyFormats,
@@ -607,6 +635,8 @@ export function createGridEngine(options: GridEngineOptions) {
     sourceFormats,
     sourceRow,
     visibleRowCount,
+    displayEntry,
+    buildProjectionSteps,
   } = createProjection(context, {
     get displaySelectionRanges() {
       return displaySelectionRanges;
@@ -677,7 +707,165 @@ export function createGridEngine(options: GridEngineOptions) {
     view = snapshotView(options.view);
     installProjection(buildProjection(view));
   }
+  function groupingChanged(next: DisplayRow[] | null): void {
+    const old = projection ?? Array.from({ length: rowCount }, (_, i) => i);
+    installProjection(next);
+    context.groupFocus = null;
+    clearSelection();
+    pendingCut = undefined;
+    notify(
+      { type: 'structure', rowMap: old.map(displayRow), columnMap: columns.map((_, i) => i) },
+      Object.freeze({ type: 'view:change', view, rowCount: visibleRowCount(), sourceRowCount: rowCount }),
+    );
+  }
+  function setGrouping(next: LocalGroupingOptions | null, collapsedKeys: readonly GroupKey[] = []): void {
+    assertAlive();
+    if (next !== null && (!next || typeof next !== 'object' || Array.isArray(next)))
+      throw new TypeError('Invalid grouping.');
+    if (next?.sumColumns !== undefined && !Array.isArray(next.sumColumns))
+      throw new TypeError('Invalid grouping sum columns.');
+    if (
+      next &&
+      (frozenRows ||
+        merges.length ||
+        groups.length ||
+        rowAxis.hiddenIndices().length ||
+        manualRows.size ||
+        past.some((entry) => entry.kind !== 'values') ||
+        future.some((entry) => entry.kind !== 'values'))
+    )
+      throw new Error('Clear row layout and non-value history before grouping.');
+    const criteria =
+      next === null
+        ? null
+        : Object.freeze({
+            columnKey: next.columnKey,
+            ...(next.sumColumns !== undefined ? { sumColumns: Object.freeze(Array.from(next.sumColumns)) } : {}),
+          });
+    const nextProjection = drain(
+      buildProjectionSteps(
+        view,
+        rowCount,
+        merges,
+        groups,
+        frozenRows,
+        false,
+        dataSource,
+        criteria,
+        new Set(collapsedKeys),
+      ),
+    );
+    context.grouping = criteria;
+    context.collapsedGroupingKeys = new Set(collapsedKeys);
+    groupingChanged(nextProjection);
+  }
+  function focusGroup(row: number): boolean {
+    const entry = displayEntry(row);
+    if (typeof entry === 'number') return false;
+    clearSelection();
+    context.groupFocus = { key: entry.key };
+    notify(
+      { type: 'selection', changed: true, rangeChanged: true },
+      Object.freeze({ type: 'selection:change', selection: null, range: null, ranges: Object.freeze([]) }),
+    );
+    return true;
+  }
+  function setDataGroupExpanded(key: GroupKey, expanded: boolean): void {
+    assertAlive();
+    if (!context.grouping || typeof expanded !== 'boolean') throw new Error('No active data grouping.');
+    if (!projection?.some((row) => typeof row !== 'number' && Object.is(row.key, key)))
+      throw new Error('Unknown data group.');
+    const collapsed = new Set(context.collapsedGroupingKeys);
+    if (expanded) collapsed.delete(key);
+    else collapsed.add(key);
+    const next = drain(
+      buildProjectionSteps(view, rowCount, merges, groups, frozenRows, false, dataSource, context.grouping, collapsed),
+    );
+    context.collapsedGroupingKeys = collapsed;
+    groupingChanged(next);
+    const index = projection?.findIndex((row) => typeof row !== 'number' && Object.is(row.key, key)) ?? -1;
+    if (index >= 0) focusGroup(index);
+  }
+  if (options.grouping !== undefined) setGrouping(options.grouping);
   return Object.freeze({
+    setGrouping: (next: LocalGroupingOptions | null) => command(() => setGrouping(next)),
+    exportGroupingState: (): GroupingState =>
+      query(() =>
+        Object.freeze({
+          version: 1,
+          grouping: context.grouping,
+          collapsedKeys: Object.freeze([...context.collapsedGroupingKeys]),
+        }),
+      ),
+    restoreGroupingState: (state: unknown) =>
+      command(() => {
+        if (
+          !state ||
+          typeof state !== 'object' ||
+          !('version' in state) ||
+          state.version !== 1 ||
+          !('grouping' in state) ||
+          !('collapsedKeys' in state) ||
+          !Array.isArray(state.collapsedKeys)
+        )
+          throw new TypeError('Invalid grouping state.');
+        const keys: GroupKey[] = [];
+        const collapsedKeys: readonly unknown[] = state.collapsedKeys;
+        for (const key of collapsedKeys) {
+          if (
+            key !== null &&
+            typeof key !== 'string' &&
+            typeof key !== 'boolean' &&
+            !(typeof key === 'number' && Number.isFinite(key))
+          )
+            throw new TypeError('Invalid collapsed group key.');
+          keys.push(key);
+        }
+        if (new Set(keys).size !== keys.length || (state.grouping === null && keys.length))
+          throw new TypeError('Invalid collapsed group keys.');
+        const criteria = state.grouping;
+        if (criteria === null) {
+          setGrouping(null, keys);
+          return;
+        }
+        if (
+          typeof criteria !== 'object' ||
+          !criteria ||
+          !('columnKey' in criteria) ||
+          typeof criteria.columnKey !== 'string' ||
+          ('sumColumns' in criteria && !Array.isArray(criteria.sumColumns))
+        )
+          throw new TypeError('Invalid grouping state criteria.');
+        setGrouping(
+          {
+            columnKey: criteria.columnKey,
+            ...('sumColumns' in criteria
+              ? {
+                  sumColumns: Array.from(criteria.sumColumns as unknown[], (key) => {
+                    if (typeof key !== 'string') throw new TypeError('Invalid grouping sum column.');
+                    return key;
+                  }),
+                }
+              : {}),
+          },
+          keys,
+        );
+      }),
+    get grouping() {
+      return context.grouping;
+    },
+    getRowMetadata: (row: number) => {
+      const entry = displayEntry(row);
+      return typeof entry === 'number'
+        ? Object.freeze({ kind: 'leaf' as const, sourceIndex: entry, rowId: dataSource.getRowId(entry) })
+        : entry;
+    },
+    focusGroup: (row: number) => command(() => focusGroup(row)),
+    getFocusedGroup: () =>
+      context.groupFocus && projection
+        ? projection.findIndex((row) => typeof row !== 'number' && Object.is(row.key, context.groupFocus!.key))
+        : -1,
+    setDataGroupExpanded: (key: GroupKey, expanded: boolean) => command(() => setDataGroupExpanded(key, expanded)),
     subscribe: (subscriber: {
       readonly onEvent?: (event: GridEvent) => void;
       readonly onInvalidate?: (change: GridInvalidation) => void;
@@ -695,16 +883,32 @@ export function createGridEngine(options: GridEngineOptions) {
         assertAlive();
         return Object.freeze(Array.from({ length: rowCount }, (_, i) => dataSource.getRowId(i)));
       }),
-    refreshData: (previousRowIds?: readonly RowId[] | 'values') => command(() => refreshData(previousRowIds)),
-    exportState: (): GridState => query(exportState),
-    restoreState: (state: unknown) => command(() => restoreState(state)),
+    refreshData: (previousRowIds?: readonly RowId[] | 'values') =>
+      command(() => {
+        if (context.grouping) throw new Error('Clear grouping before external refresh.');
+        refreshData(previousRowIds);
+      }),
+    exportState: (): GridState =>
+      query(() => {
+        if (context.grouping) throw new Error('Clear grouping before exporting legacy grid state.');
+        return exportState();
+      }),
+    restoreState: (state: unknown) =>
+      command(() => {
+        if (context.grouping) throw new Error('Clear grouping before restoring legacy grid state.');
+        restoreState(state);
+      }),
     setView: (next: LocalViewOptions) => command(() => setView(next)),
     setViewAsync: (next: LocalViewOptions, options: GridBulkOptions) =>
       bulkCommand(() => setViewSteps(snapshotView(next), true), options),
     get view() {
       return view;
     },
-    exportConfiguration: (): GridConfiguration => query(exportConfiguration),
+    exportConfiguration: (): GridConfiguration =>
+      query(() => {
+        if (context.grouping) throw new Error('Clear grouping before exporting legacy grid configuration.');
+        return exportConfiguration();
+      }),
     get sourceRowCount() {
       return rowCount;
     },
@@ -727,7 +931,8 @@ export function createGridEngine(options: GridEngineOptions) {
     },
     getMergedCells: () => Object.freeze(merges.map((span) => Object.freeze({ ...span }))),
     getMerge: (row: number, col: number) => {
-      const span = mergeAt(sourceRow(row), col);
+      const entry = displayEntry(row);
+      const span = typeof entry === 'number' ? mergeAt(entry, col) : undefined;
       return span
         ? Object.freeze({ ...span, startRow: displayRow(span.startRow), endRow: displayRow(span.endRow) })
         : null;
@@ -748,7 +953,16 @@ export function createGridEngine(options: GridEngineOptions) {
       range: (offset: number, extent: number) => viewAxis().range(offset, extent),
     }),
     columnsLayout: axisView(columnAxis),
-    getValue: (row: number, key: string): unknown => dataSource.getValue(sourceRow(row), key),
+    getValue: (row: number, key: string): unknown => {
+      const entry = displayEntry(row);
+      return typeof entry === 'number'
+        ? dataSource.getValue(entry, key)
+        : key === context.grouping?.columnKey
+          ? entry.key
+          : Object.hasOwn(entry.sums, key)
+            ? entry.sums[key]
+            : undefined;
+    },
     insertColumns: (index: number, added: readonly Column[]) => command(() => insertColumns(index, added)),
     deleteColumns: (indices: readonly number[]) => command(() => deleteColumns(indices)),
     insertRows: (index: number, rows: readonly DataRow[]) => command(() => insertRows(index, rows)),
@@ -757,23 +971,47 @@ export function createGridEngine(options: GridEngineOptions) {
     moveColumns: (indices: readonly number[], beforeIndex: number) =>
       command(() => moveAxis('column', indices, beforeIndex)),
     canChangeStructure: (request: Readonly<StructureRequest>) => query(() => structureAllowed(request)),
-    isRowHeightManual: (index: number) => manualRows.has(sourceRow(index)),
-    measureRowHeight: (index: number, size: number) => command(() => resize(rowAxis, sourceRow(index), size, false)),
+    isRowHeightManual: (index: number) => typeof displayEntry(index) === 'number' && manualRows.has(sourceRow(index)),
+    measureRowHeight: (index: number, size: number) =>
+      command(() => {
+        if (!context.grouping) resize(rowAxis, sourceRow(index), size, false);
+      }),
     getSelection: displaySelection,
     getSelectionRange: () => displaySelectionRanges().at(-1) ?? null,
     getSelectionRanges: displaySelectionRanges,
-    getCellPermission: (row: number, col: number): CellPermission => getCellPermission(sourceRow(row), col),
+    getCellPermission: (row: number, col: number): CellPermission =>
+      typeof displayEntry(row) === 'number'
+        ? getCellPermission(sourceRow(row), col)
+        : Object.freeze({
+            editable: false,
+            writable: false,
+            pasteable: false,
+            copyable: false,
+            formatting: false,
+            selectable: false,
+          }),
     canEdit: (row: number, col: number) =>
-      !destroyed && row >= 0 && row < visibleRowCount() && canEdit(sourceRow(row), col),
+      !destroyed &&
+      row >= 0 &&
+      row < visibleRowCount() &&
+      typeof displayEntry(row) === 'number' &&
+      canEdit(sourceRow(row), col),
     canPaste: () => displaySelectionRanges().length > 0 && canPaste(),
-    select: (row: number, col: number, extend = false) => command(() => selectDisplay(row, col, extend)),
+    select: (row: number, col: number, extend = false) =>
+      command(() => {
+        if (context.grouping && typeof displayEntry(row) !== 'number') return focusGroup(row);
+        context.groupFocus = null;
+        return selectDisplay(row, col, extend);
+      }),
     selectRange: (range: SelectionRange, mode: 'replace' | 'add' | 'extend' = 'replace') =>
       command(() => {
         if (!projection && activeParts === 1) return selectRange(range, mode);
         return selectDisplayRange(range, mode);
       }),
-    addSelection: (row: number, col: number) => command(() => selectDisplay(row, col, false, true)),
-    toggleSelection: (row: number, col: number) => command(() => toggleSelection(row, col)),
+    addSelection: (row: number, col: number) =>
+      command(() => (typeof displayEntry(row) !== 'number' ? focusGroup(row) : selectDisplay(row, col, false, true))),
+    toggleSelection: (row: number, col: number) =>
+      command(() => (typeof displayEntry(row) !== 'number' ? focusGroup(row) : toggleSelection(row, col))),
     clearSelection: () => command(clearSelection),
     editCell: (row: number, col: number, text: string) => command(() => editCell(sourceRow(row), col, text)),
     updateCells: (updates: readonly CellUpdate[]) =>
@@ -798,7 +1036,11 @@ export function createGridEngine(options: GridEngineOptions) {
       replacement: string,
       options: { readonly scope?: 'view' | 'selection'; readonly caseSensitive?: boolean } = {},
     ) => command(() => replaceText(search, replacement, options)),
-    cutSelectionBlocks: () => command(cutSelectionBlocks),
+    cutSelectionBlocks: () =>
+      command(() => {
+        if (context.grouping) throw new Error('Cut is unavailable while grouping; copy visible records instead.');
+        return cutSelectionBlocks();
+      }),
     cancelCut: () =>
       command(() => {
         pendingCut = undefined;
@@ -833,11 +1075,15 @@ export function createGridEngine(options: GridEngineOptions) {
     redoAsync: (options: GridBulkOptions) => bulkCommand((guarded) => replaySteps(true, true, guarded), options),
     canUndo: () => !destroyed && past.length > 0,
     canRedo: () => !destroyed && future.length > 0,
-    getFormat: (row: number, col: number) => getFormat(sourceRow(row), col),
+    getFormat: (row: number, col: number) =>
+      typeof displayEntry(row) === 'number' ? getFormat(sourceRow(row), col) : emptyFormat,
     canFormat: (targets: readonly CellFormatTarget[]) => query(() => canFormat(sourceFormats(targets))),
     format: (targets: readonly CellFormatTarget[], patch: CellFormatPatch | null) =>
       command(() => format(sourceFormats(targets), patch)),
-    isLocked: (target: CellLockTarget) => isLocked(sourceTarget(target)),
+    isLocked: (target: CellLockTarget) =>
+      (target.scope === 'row' || target.scope === 'cell') && typeof displayEntry(target.rowIndex) !== 'number'
+        ? true
+        : isLocked(sourceTarget(target)),
     canManageLocks: () => !destroyed && allowLockChanges,
     setLocked: (target: CellLockTarget, locked: boolean) => command(() => setLocked(sourceTarget(target), locked)),
     setFrozen: (rows: number, columns: number) =>
@@ -862,7 +1108,7 @@ export function createGridEngine(options: GridEngineOptions) {
           .sort((a, b) => a - b),
       ),
     getHiddenColumns: () => Object.freeze(columnAxis.hiddenIndices()),
-    isRowHidden: (index: number) => rowAxis.isHidden(sourceRow(index)),
+    isRowHidden: (index: number) => typeof displayEntry(index) === 'number' && rowAxis.isHidden(sourceRow(index)),
     isColumnHidden: (index: number) => columnAxis.isHidden(index),
     setColumnWidth: (index: number, size: number) => command(() => resize(columnAxis, index, size)),
     setRowHeight: (index: number, size: number) => command(() => resize(rowAxis, sourceRow(index), size)),
