@@ -14,6 +14,8 @@ Finish/cancel editors, close Find and settle bulk work **before changing the sou
 
 ## Viewport observation (source preview)
 
+See the [editable viewport](https://github.com/haodn-dev/acheron-grid/blob/main/examples/paged/README.md#writable-viewport-source-preview) for loaded editing and explicit save/recovery.
+
 The [remote viewport example](https://github.com/haodn-dev/acheron-grid/blob/main/examples/paged/README.md#remote-viewport-source-preview) demonstrates a fixed-session host loader with bounded overscan, eviction refresh and explicit retry. Set `allowSearch: false` for remote hosts that do not support local scanning; it makes `openSearch()` a no-op and leaves Ctrl/Meta+F to the browser, without committing an editor or reading source values. The default remains enabled. This option does not implement server search or restrict host code that calls other scanning APIs.
 
 The current source adds `grid.getViewport()` and the `onViewportChange(snapshot)` construction option; npm 0.3.0 does not include them. React/Vue inherit the option and grid method. Canvas exports `GridViewport`. Both use the same core geometry as rendering and hit testing without reading source values or IDs. The frozen numeric snapshot contains dimensions, scroll offsets, frozen extents and up to four regions with `rows` and `columns` ranges. Range ends are **exclusive**; indices are **display coordinates**. Frozen and scrolling rows may form separate windows. Do not combine distant windows into one large load range.

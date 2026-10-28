@@ -1,17 +1,8 @@
 import { createPagedRemoteDataSource } from '/core/index.js';
 import { createGrid } from '/canvas/index.js';
+import { request } from './transport.js';
 const $ = (id) => document.getElementById(id);
 const journalKey = 'acheron-paged-mutation-v1';
-async function request(path, body, signal) {
-  const response = await fetch('/paged/api/' + path, {
-    signal,
-    ...(body === undefined
-      ? {}
-      : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
-  });
-  if (!response.ok) throw Error('HTTP ' + response.status);
-  return response.json();
-}
 const source = createPagedRemoteDataSource({
   datasetId: 'paged-demo',
   columnKeys: ['title'],

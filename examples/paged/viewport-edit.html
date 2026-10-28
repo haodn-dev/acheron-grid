@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <script type="importmap">
+      {"imports":{"@acheron-grid/core":"/core/index.js"}}
+    </script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Remote viewport editing · Acheron Grid</title>
+    <style>
+      body{font:16px system-ui;background:#f5f4ee;color:#252820;margin:0;padding:24px}main{max-width:1000px;margin:auto}p{max-width:72ch;line-height:1.6}.controls,form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px}label{display:flex;flex-direction:column;gap:6px}button,input,select{font:inherit;min-height:44px;box-sizing:border-box;padding:8px 12px;border:1px solid #77796f;border-radius:4px;background:#fff;color:inherit}button,summary{cursor:pointer}button:hover{background:#e9e9e0}button:disabled{opacity:.6;cursor:default}button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,summary:focus-visible{outline:2px solid #a42b08;outline-offset:3px}a{color:#87300d;text-underline-offset:3px}#grid{height:420px;border:1px solid #77796f;margin:20px 0;background:#fff}#status{font-variant-numeric:tabular-nums}details,section{margin:20px 0}details .controls,details form{margin:16px 0}summary{font-weight:600;line-height:1.5}pre{max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.6 ui-monospace,monospace}::selection{background:#e3d6ae}@media(max-width:480px){body{padding:16px}h1{font-size:1.65rem}#grid{height:360px}input[type=search]{max-width:100%}}
+    </style>
+  </head>
+  <body>
+    <main>
+      <a href="/paged/viewport">Read-only large-data viewport</a>
+      <h1>Remote viewport editing</h1>
+      <p>
+        10,000 server tasks, 20 rows per page, eight cached pages. Double-click a loaded task or press F2 to edit.
+        Changes stay staged until you choose Save / retry.
+      </p>
+      <div class="controls">
+        <button id="save" disabled>Save / retry</button><button id="reload" disabled>Reload server data</button
+        ><button id="retry" disabled>Retry visible pages</button>
+      </div>
+      <p id="status" role="status" aria-live="polite">Preparing grid…</p>
+      <section id="recovery" hidden>
+        <h2>Recovery needs attention</h2>
+        <p>
+          The stored request could not be restored. It remains in this browser. Correct the recovery record or storage
+          access, then retry; this page will not discard it or send it automatically.
+        </p>
+        <button id="recover">Retry recovery</button>
+      </section>
+      <section id="conflict" hidden>
+        <h2>Review conflict</h2>
+        <pre id="review"></pre>
+        <button id="accept">Accept server and discard draft</button>
+      </section>
+      <div id="grid"></div>
+      <p>
+        Enter finishes an edit; Escape cancels it. Page loads pause during editing. Save, query and recovery boundaries
+        clear local history and selection. Unloaded rows cannot be edited or copied.
+      </p>
+      <details id="drafts" hidden>
+        <summary>Review staged changes</summary>
+        <pre id="changes"></pre>
+      </details>
+      <details>
+        <summary>Server query and draft checkpoints</summary>
+        <form id="query-form">
+          <label>Search tasks <input id="search" type="search" maxlength="200" /></label
+          ><label
+            >Order
+            <select id="order">
+              <option value="asc">Ascending</option>
+              <option value="desc">Descending</option>
+            </select></label
+          ><button id="query" type="submit">Apply server query</button>
+        </form>
+        <div class="controls">
+          <button id="checkpoint">Save draft locally</button><button id="restore">Restore saved draft</button
+          ><button id="discard">Discard staged edits</button>
+        </div>
+        <p>
+          Draft checkpoints require a matching query and server revision. Query changes wait until staged edits and
+          uncertain writes are resolved. Saved checkpoints contain this example's task values.
+        </p>
+      </details>
+      <details>
+        <summary>Simulate server responses</summary>
+        <div class="controls">
+          <label
+            >Server response
+            <select id="mode">
+              <option value="normal">Accept</option>
+              <option value="reject">Reject</option>
+              <option value="drop">Lose receipt after write</option>
+            </select></label
+          ><button id="external">Simulate external edit</button>
+        </div>
+        <p>
+          These controls share the process-local server with the paged example. Its receipt cache is bounded and
+          disappears on restart; production authorization, transactions and durable receipts belong to the host.
+        </p>
+      </details>
+      <p>
+        Save journals the exact request before HTTP transport. Reload restores a pending request without automatically
+        loading its old revision or sending writes. Choose Save / retry to resolve it. Storage failure prevents sending;
+        rejected writes keep staged values. Titles require nonempty text up to 200 characters, with a 16 KiB request
+        budget.
+      </p>
+    </main>
+    <script type="module" src="/paged/viewport-edit.js"></script>
+  </body>
+</html>

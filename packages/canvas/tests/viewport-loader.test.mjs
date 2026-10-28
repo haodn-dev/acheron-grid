@@ -206,3 +206,84 @@ test('load errors wait for retry, cache budgets reject oversized windows and dis
   assert.equal(late.states.length, notices);
   assert.deepEqual(late.windows, []);
 });
+
+test('pause retains deferred eviction windows and touching the edited ready page protects it from one incoming page', async () => {
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const f = fixture({ maxPages: 2, load: (offset) => (offset === 20 ? gate : undefined) });
+  let loader,
+    editorOpen = false;
+  const windows = [];
+  try {
+    await f.source.loadPage(0);
+    f.loader.dispose();
+    loader = createViewportLoader({
+      source: f.source,
+      maxPages: 2,
+      grid: {
+        refreshRows(start, end) {
+          assert.equal(editorOpen, false);
+          windows.push([start, end]);
+          return f.engine.refreshRows(start, end);
+        },
+      },
+    });
+    loader.setViewport(view([0, 1]));
+    await idle(loader);
+    assert.equal(loader.getState().cachedPages, 2);
+    loader.setViewport(view([20, 21]));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(f.requests.at(-1), 20);
+    loader.setViewport(view([0, 1]));
+    editorOpen = true;
+    loader.pause();
+    await f.source.loadPage(0);
+    const before = windows.length;
+    release();
+    await idle(loader);
+    assert.equal(f.source.getPageState(0).status, 'ready');
+    assert.equal(f.source.getValue(0, 'title'), 'Task 0');
+    assert.equal(loader.getState().paused, true);
+    assert.equal(loader.getState().blocked, false);
+    assert.equal(loader.getState().queuedWindows, 2);
+    assert.equal(windows.length, before);
+    f.engine.updateCells([{ rowIndex: 0, columnKey: 'title', value: 'Committed editor' }]);
+    editorOpen = false;
+    loader.resume();
+    await idle(loader);
+    assert.equal(loader.getState().queuedWindows, 0);
+    assert.equal(f.engine.getValue(0, 'title'), 'Committed editor');
+    assert.equal(f.engine.undo(), true);
+    assert.equal(f.source.getValue(0, 'title'), 'Task 0');
+  } finally {
+    release();
+    loader?.dispose();
+    f.dispose();
+  }
+});
+
+test('resume does not automatically retry an already failed page', async () => {
+  let fail = true;
+  const f = fixture({
+    load: (offset) => {
+      if (offset === 0 && fail) throw Error('Offline');
+    },
+  });
+  try {
+    f.loader.setViewport(view([0, 1]));
+    await idle(f.loader);
+    f.loader.pause();
+    f.loader.resume();
+    await idle(f.loader);
+    assert.equal(f.requests.filter((offset) => offset === 0).length, 1);
+    assert.match(f.loader.getState().error, /Offline/);
+    fail = false;
+    f.loader.retry();
+    await idle(f.loader);
+    assert.equal(f.source.getPageState(0).status, 'ready');
+  } finally {
+    f.dispose();
+  }
+});

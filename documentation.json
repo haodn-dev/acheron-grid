@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "2ee382f11904334a24ac9d44ad5e1a6922fb6048",
+  "sourceRevision": "88c4f794194b187235b599e1e2dabc8461c7ac66",
   "release": {
     "documentationRevision": "6e5d6a408ea3f6f089b013b2d2d0e0c698ccd9ee",
     "tag": "v0.3.0",
@@ -596,9 +596,9 @@
     {
       "id": "canvas",
       "path": "packages/canvas/README.md",
-      "revision": 24,
+      "revision": 25,
       "updated": "2026-10-27",
-      "sha256": "c653b2f83c328ff7b8987e572e95271983e3148218e3e3ef22890daa89522713",
+      "sha256": "187c109d68444df567ca6b865ae340b4c15c46bd4862361c8a11e86fc99ca788",
       "history": [
         {
           "revision": 1,
@@ -694,6 +694,10 @@
         },
         {
           "revision": 24,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 25,
           "summary": "Align publication status, installation and current source contracts."
         }
       ]

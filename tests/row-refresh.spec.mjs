@@ -69,11 +69,17 @@ test('million-row paged window refresh keeps one Canvas mount and retains verifi
   await expect(grid.getByRole('gridcell', { name: 'Loaded 0', exact: true })).toBeAttached();
   expect(await page.evaluate(() => window.identityReads)).toBeLessThan(2000);
   await page.evaluate(() => window.grid.updateCells([{ rowIndex: 0, columnKey: 'value', value: 'Draft' }]));
+  await grid.press('Control+Home');
   const afterEviction = await page.evaluate(async () => {
     await window.source.loadPage(20);
-    return window.grid.refreshRows(0, 39);
+    const result = window.grid.refreshRows(0, 39);
+    const activeMatches = [...document.querySelectorAll('[role=gridcell]')].filter(
+      (node) => node.textContent === 'Draft' && !node.closest('[hidden]'),
+    ).length;
+    return { ...result, activeMatches };
   });
   expect(afterEviction.droppedHistoryEntries).toBe(0);
+  expect(afterEviction.activeMatches).toBe(1);
   await expect(grid.getByRole('gridcell', { name: 'Draft', exact: true })).toBeAttached();
   expect(await page.evaluate(() => window.source.pendingCellCount)).toBe(1);
   await page.evaluate(async () => {
