@@ -33,6 +33,8 @@ const groups = {
   'Layout and browser controls': /.*/,
 };
 const descriptions = {
+  selectCell:
+    'Source preview after 0.4.0: select and reveal one display cell through shared permissions and geometry, without fetching data or focusing the DOM. Invalid positions and destroyed grids throw; finish editors and close local Find first. Repeating the current cell reveals it again. No stable-ID lookup is performed.',
   resetData:
     'Reset through the bounded core epoch contract without remounting. Reject open editors or local Find; host must settle them before changing its source. Clear renderer caches, update count/ARIA/index geometry and move vertical scroll to zero. No identity anchor or source loading is performed.',
   getViewport:

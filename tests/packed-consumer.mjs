@@ -59,6 +59,7 @@ const canvasTreeState:TreeState=treeGrid.exportTreeState();
 treeGrid.restoreTreeState(canvasTreeState);treeGrid.setTreeExpanded('root',false);void canvasTreeRow;treeGrid.setTree(null);
 const canvasRows:RowRefreshResult=treeGrid.refreshRows(0,0);void canvasRows;
 const viewport:import('@acheron-grid/canvas').GridViewport=treeGrid.getViewport();void viewport;
+treeGrid.selectCell(0,0);
 const reset:import('@acheron-grid/core').DataResetResult=treeGrid.resetData();void reset;treeGrid.destroy();
 const decoder = createTsvWorker(() => new Worker(new URL('@acheron-grid/core/worker-entry', import.meta.url), {type:'module'}));
 const workerBulk = {yieldControl: async () => {}, tsvDecoder: decoder, signal: new AbortController().signal};
@@ -136,7 +137,7 @@ window.checkPackedRows=()=>{
 const ids=[0,1],values=['old','outside'];
 const source={getRowCount:()=>2,getRowId:index=>ids[index],getValue:index=>values[index],setValue:(index,key,value)=>{values[index]=value;}};
 const grid=createGrid({container:document.querySelector('#grid'),dataSource:source,columns:[{key:'value',title:'Value',editable:true}]});
-try{grid.updateCells([{rowIndex:0,columnKey:'value',value:'draft'}]);if(grid.refreshRows(0,1).droppedHistoryEntries)throw Error('Packed matching history was lost.');ids[0]='replacement';if(grid.refreshRows(0,0).droppedHistoryEntries!==1||grid.undo())throw Error('Packed stale history survived.');const reset=grid.resetData();if(reset.rowCount!==2||grid.undo()||grid.getSelection()!==null||values[0]!=='draft')throw Error('Packed data reset failed.');}finally{grid.destroy();}
+try{grid.updateCells([{rowIndex:0,columnKey:'value',value:'draft'}]);if(grid.refreshRows(0,1).droppedHistoryEntries)throw Error('Packed matching history was lost.');ids[0]='replacement';if(grid.refreshRows(0,0).droppedHistoryEntries!==1||grid.undo())throw Error('Packed stale history survived.');const reset=grid.resetData();if(reset.rowCount!==2||grid.undo()||grid.getSelection()!==null||values[0]!=='draft')throw Error('Packed data reset failed.');grid.selectCell(1,0);if(grid.getSelection()?.rowId!==1)throw Error('Packed cell navigation failed.');}finally{grid.destroy();}
 };
 window.checkPackedTree=()=>{
 const source=new LocalDataSource([{id:0,parent:null,name:'Root'},{id:'',parent:0,name:'Child'}],row=>row.id);

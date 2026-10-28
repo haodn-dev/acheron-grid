@@ -1,5 +1,11 @@
 # Paged remote editing
 
+## Stable-ID anchoring (source preview after 0.4.0)
+
+Build matching packages from this checkout and open `/paged/viewport`. Enable **Keep selected task** to retain a single loaded task across server order/count changes. The host captures its ID, asks `/paged/api/locate` for its position in the requested dataset/query/revision, loads that one page and verifies the returned record ID before calling `grid.selectCell`. This method is not in npm 0.4.0. The synthetic server computes numeric task positions directly; a real backend must provide its own authorized indexed lookup and consistent snapshot authority.
+
+The host aborts superseded lookups and checks their generation before applying results. Rapid query changes retain the pending identity, never an old pixel position. Missing tasks, invalid responses, revision/identity mismatches and unreachable native scroll targets clear selection and return to row zero with an explanation. Placeholders and multi-cell selections are not anchors; history is still cleared. The feature remains opt-in and read-only, with one grid/source and the existing eight-page cache. The writable example retains its pending/uncertain/conflict and unsent-draft query guards; it does not gain anchoring here. No full logical scroll range, remote grouping/tree or durable server snapshot protocol is claimed.
+
 ## Writable viewport (0.4.0 preview)
 
 Run `npm run playground` and open [editable viewport](http://127.0.0.1:4180/paged/viewport-edit). It reuses the existing 10,000-record paged backend and `createPagedRemoteDataSource` writer, receipt and checkpoint contracts. It keeps one source and one grid, with 20-row pages, eight cached pages and at most 100 dirty cells. Build core/Canvas from this checkout: viewport/reset APIs are included in 0.4.0. The large synthetic viewport below remains read-only.
@@ -26,7 +32,7 @@ Each coordinator exclusively owns loading within one fixed query/count/revision 
 
 Local Find is disabled with `allowSearch: false`, host-managed sort/filter has no callback, and structural/layout changes are denied. Placeholder rows remain navigable but cannot be copied or edited. Ctrl+A/copy uses existing clipboard bounds and never loads the full source. This example does not expose export or save actions. Loaded-row draft/history retention across eviction is covered separately in the coordinator's headless integration tests; the viewport UI remains read-only.
 
-Native scrollbar limits still apply. Automated probes record actual `scrollHeight`, `clientHeight` and maximum scroll offset for these workloads in each working browser; a logical million-row source alone does not prove reachability, FPS, peak memory or network latency. Reset uses an explicit selection clear and scroll-to-zero fallback; stable-ID anchoring remains later work. Writable viewport controls use the separate example above. The paged editing example below retains its explicit remount boundaries.
+Native scrollbar limits still apply. Automated probes record actual `scrollHeight`, `clientHeight` and maximum scroll offset for these workloads in each working browser; a logical million-row source alone does not prove reachability, FPS, peak memory or network latency. Default reset uses an explicit selection clear and scroll-to-zero fallback; the opt-in source anchor above retains only a verified, natively reachable task. Writable viewport controls use the separate example above. The paged editing example below retains its explicit remount boundaries.
 
 Firefox Linux CI exposed collapse of a 32-million-pixel row spacer. Canvas now preserves a 16-million-pixel prefix when the browser collapses the requested extent. Rows beyond that working range remain unreachable by native scrolling. Use host pagination for complete access beyond that prefix; the separate 10,000-record paged editing example demonstrates the pattern. No scroll scaling or full-range support is claimed.
 

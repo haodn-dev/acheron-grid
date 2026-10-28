@@ -4,15 +4,21 @@ import { createViewportLoader } from './viewport-loader.js';
 
 let total = new URLSearchParams(location.search).get('rows') === '1000000' ? 1000000 : 100000;
 const pageSize = 100,
-  maxPages = 8;
+  maxPages = 8,
+  datasetId = 'viewport-demo';
 let requests = 0,
-  loader;
+  loader,
+  migration,
+  pendingAnchor;
 const status = document.getElementById('status');
 const retry = document.getElementById('retry');
+const anchorStatus = document.getElementById('anchor-status');
+const keepTask = document.getElementById('keep-task');
+const container = document.getElementById('grid');
 document.getElementById('total').textContent = total.toLocaleString('en');
 document.getElementById('count').value = String(total);
 const source = createPagedRemoteDataSource({
-  datasetId: 'viewport-demo',
+  datasetId,
   columnKeys: ['title'],
   rowCount: total,
   pageSize,
@@ -34,7 +40,7 @@ const source = createPagedRemoteDataSource({
   },
 });
 const grid = createGrid({
-  container: document.getElementById('grid'),
+  container,
   dataSource: {
     getRowCount: source.getRowCount,
     getRowId: source.getRowId,
@@ -53,7 +59,7 @@ const grid = createGrid({
   canChangeLayout: () => false,
   canChangeVisibility: () => false,
   canChangeStructure: () => false,
-  onViewportChange: (view) => loader.setViewport(view),
+  onViewportChange: (view) => loader?.setViewport(view),
   getCellLabel: (_row, _key, value) => (value === undefined ? 'Not loaded' : String(value)),
   resolveCellPermission: ({ rowIndex }) => ({
     writable: false,
@@ -74,23 +80,101 @@ function createLoader() {
 }
 loader = createLoader();
 retry.onclick = () => loader.retry();
-document.getElementById('data-view').onsubmit = (event) => {
+document.getElementById('data-view').onsubmit = async (event) => {
   event.preventDefault();
   const nextTotal = Number(document.getElementById('count').value);
   const direction = document.getElementById('direction').value;
-  loader.dispose();
+  const selection = grid.getSelection(),
+    range = grid.getSelectionRange();
+  const loaded =
+    selection &&
+    range &&
+    range.startRow === range.endRow &&
+    range.startColumn === range.endColumn &&
+    grid.getSelectionRanges().length === 1 &&
+    source.getPageState(Math.floor(selection.rowIndex / pageSize) * pageSize)?.status === 'ready' &&
+    source.getRowId(selection.rowIndex) === selection.rowId;
+  const anchor = keepTask.checked
+    ? loaded
+      ? { rowId: selection.rowId, column: selection.columnIndex, revision: source.revision }
+      : pendingAnchor
+    : null;
+  migration?.abort();
+  const controller = new AbortController();
+  migration = controller;
+  pendingAnchor = anchor;
+  loader?.dispose();
+  loader = undefined;
+  container.inert = true;
+  retry.disabled = true;
+  anchorStatus.textContent = anchor ? 'Locating selected task…' : '';
   source.setQuery({ sort: { columnKey: 'title', direction } }, nextTotal);
   grid.resetData();
   total = nextTotal;
   document.getElementById('total').textContent = total.toLocaleString('en');
-  loader = createLoader();
-  loader.setViewport(grid.getViewport());
+  try {
+    if (anchor) {
+      const response = await fetch(
+        '/paged/api/locate?' +
+          new URLSearchParams({ rowId: anchor.rowId, revision: anchor.revision, total: nextTotal, order: direction }),
+        { signal: controller.signal },
+      );
+      if (controller.signal.aborted) return;
+      if (!response.ok) throw new Error('Task lookup failed (HTTP ' + response.status + ').');
+      const located = await response.json();
+      if (controller.signal.aborted) return;
+      if (
+        !located ||
+        located.datasetId !== datasetId ||
+        located.revision !== anchor.revision ||
+        located.rowId !== anchor.rowId ||
+        located.total !== nextTotal ||
+        located.order !== direction ||
+        (located.index !== null &&
+          (!Number.isSafeInteger(located.index) || located.index < 0 || located.index >= nextTotal))
+      )
+        throw new Error('Task lookup did not match the requested view.');
+      if (located.index === null)
+        anchorStatus.textContent = 'Selected task is not in this view. Returned to the first row.';
+      else {
+        const offset = Math.floor(located.index / pageSize) * pageSize;
+        await source.loadPage(offset);
+        if (controller.signal.aborted) return;
+        if (
+          source.revision !== anchor.revision ||
+          source.getPageState(offset)?.status !== 'ready' ||
+          source.getRowId(located.index) !== anchor.rowId
+        )
+          throw new Error('Loaded task did not match the located identity.');
+        grid.refreshRows(offset, Math.min(nextTotal - 1, offset + pageSize - 1));
+        grid.selectCell(located.index, anchor.column);
+        if (
+          grid.getSelection()?.rowId !== anchor.rowId ||
+          !grid.getViewport().regions.some(({ rows }) => rows.start <= located.index && located.index < rows.end)
+        )
+          throw new Error('Selected task is outside the browser scroll range.');
+        anchorStatus.textContent = `Kept Task ${anchor.rowId} in the new view.`;
+      }
+    }
+  } catch (failure) {
+    if (controller.signal.aborted) return;
+    grid.resetData();
+    anchorStatus.textContent = `${failure.message} Selection cleared; returned to the first row.`;
+  } finally {
+    if (!controller.signal.aborted) {
+      pendingAnchor = null;
+      container.inert = false;
+      loader = createLoader();
+      loader.setViewport(grid.getViewport());
+    }
+  }
 };
 // These operations stay paired: the coordinator unsubscribes before source abort/disposal.
 window.addEventListener(
   'pagehide',
   () => {
-    loader.dispose();
+    migration?.abort();
+    loader?.dispose();
     grid.destroy();
     source.destroy();
   },
