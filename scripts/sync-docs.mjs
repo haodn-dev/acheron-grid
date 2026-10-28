@@ -33,6 +33,8 @@ const groups = {
   'Layout and browser controls': /.*/,
 };
 const descriptions = {
+  refreshRows:
+    'Refresh a bounded row window through core without remounting. Reject while an editor or local search is open; finish/cancel or close it before retrying. See the core contract for history, selection, identity and layout restrictions.',
   setTree: coreContracts.setTree,
   tree: coreContracts.tree,
   getTreeRowMetadata: coreContracts.getTreeRowMetadata,

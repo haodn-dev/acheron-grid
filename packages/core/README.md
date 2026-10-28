@@ -1,5 +1,15 @@
 # @acheron-grid/core
 
+## Bounded row refresh (source preview)
+
+The current source adds `engine.refreshRows(startRow, endRow)` for an **inclusive source-row window**. These APIs and the `RowRefreshResult` type are not in npm 0.3.0. The method reads each ID in that window once, creates no source-sized row mapping and never writes source data. It emits `GridInvalidation` type `rows` and a `data:rows` event containing `startRow`, `endRow`, `droppedHistoryEntries`, `selectionCleared` and `cutCancelled`; subscribers must handle these additive variants.
+
+Use only with unchanged row count/schema/query/revision, a flat view and default row sizes/visibility. Tree/grouping, merges/outlines, row/cell locks, formats and identity-dependent layout history reject before state changes. Table/column locks and column geometry remain independent of record identity. The source still guarantees globally unique stable IDs; validation checks uniqueness inside the supplied window, not across the complete dataset. Report every changed or evicted window, not just the page that loaded.
+
+An undo/redo value batch is discarded in full when an in-window ID differs from its captured ID. Matching-ID and unrelated batches remain; their existing value/permission conflict checks still run on replay. Intersecting ranges are cleared because interior identities have not been verified. A matching single-cell selection is retained; a changed active ID clears selection. Pending cut is canceled. The frozen result reports these effects so the host can notify its users.
+
+Work and allocation follow the requested window plus retained history changes, not logical row count. The default history command limit is 100; configure `historyLimits.maxValueCells` for bounded retained payloads. Observer callbacks remain host code. `refreshData` keeps its existing whole-dataset reconciliation and history-reset behavior; query/total/order changes require that separate contract. This API is a foundation for a remote viewport, not an automatic loader, viewport observer or seamless remote-editing claim.
+
 ## Local tree (source preview)
 
 The current source adds a complete local parent-ID tree. These APIs are not in npm 0.3.0. Canvas adds disclosure, keyboard and ARIA support; React and Vue inherit its construction options and grid handle. See the [standalone example](../../examples/tree/README.md).

@@ -602,6 +602,14 @@ setMotion: (value: boolean | MotionOptions) => void
 
 
 
+### refreshRows
+
+```ts
+refreshRows: (startRow: number, endRow: number) => RowRefreshResult
+```
+
+Refresh a bounded row window through core without remounting. Reject while an editor or local search is open; finish/cancel or close it before retrying. See the core contract for history, selection, identity and layout restrictions.
+
 ### setColumnEditor
 
 ```ts

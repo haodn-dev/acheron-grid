@@ -4,13 +4,13 @@ import { restoreGridConfiguration } from '../configuration.js';
 import type { LocalViewOptions, RowId } from '../data-source.js';
 import { snapshotLocalView as snapshotView } from '../data-source.js';
 import type { createGridEngine, GridInvalidation } from '../engine.js';
-import type { GridEvent } from '../events.js';
+import type { GridEvent, RowRefreshResult } from '../events.js';
 import type { CellPermission } from '../permissions.js';
 import type { GridState } from '../state.js';
 import { readGridState } from '../state.js';
 import type { StructureRequest } from '../structure.js';
 import type { CellFormatPatch, CellFormatTarget, Column, LayoutRequest, RowGroup, SelectionRange } from '../types.js';
-import type { EngineContext, FormatEntry, StructureState } from './engine-context.js';
+import type { EngineContext, FormatEntry, StructureState, HistoryCommand } from './engine-context.js';
 export function createPersistence(
   context: Pick<
     EngineContext,
@@ -19,6 +19,8 @@ export function createPersistence(
     | 'rowCount'
     | 'selection'
     | 'projection'
+    | 'tree'
+    | 'grouping'
     | 'view'
     | 'past'
     | 'future'
@@ -70,6 +72,7 @@ export function createPersistence(
     ) => StructureState;
     restoreStructure: (state: StructureState) => void;
     getSelectionRanges: () => SelectionRange[];
+    clearSelection: () => void;
     structureRequest: (
       axis: 'row' | 'column',
       kind: StructureRequest['kind'],
@@ -85,6 +88,79 @@ export function createPersistence(
     requireVisibilityPolicy: (axis: 'row' | 'column', indices: readonly number[], hidden: boolean) => void;
   },
 ) {
+  function refreshRows(startRow: number, endRow: number): RowRefreshResult {
+    dependencies.assertAlive();
+    if (
+      !Number.isSafeInteger(startRow) ||
+      !Number.isSafeInteger(endRow) ||
+      startRow < 0 ||
+      endRow < startRow ||
+      endRow >= context.rowCount
+    )
+      throw new RangeError('Invalid row refresh window.');
+    const supportedHistory = (entry: HistoryCommand) =>
+      (entry.kind === 'values' && !entry.formats?.length) ||
+      (entry.kind === 'resize' && entry.axis === 'column') ||
+      (entry.kind === 'visibility' && entry.axis === 'column') ||
+      entry.kind === 'freeze';
+    if (
+      context.dataSource.getRowCount() !== context.rowCount ||
+      context.projection ||
+      context.tree ||
+      context.grouping ||
+      context.merges.length ||
+      context.groups.length ||
+      context.rowAxis.hasOverrides ||
+      context.manualRows.size ||
+      context.lockedRows.size ||
+      context.lockedCells.size ||
+      context.formats.size ||
+      context.past.some((entry) => !supportedHistory(entry)) ||
+      context.future.some((entry) => !supportedHistory(entry))
+    )
+      throw new Error(
+        'Row refresh requires unchanged count, a flat uniform view and no row metadata or identity-dependent layout history.',
+      );
+    const ids = new Map<number, RowId>(),
+      seen = new Set<RowId>();
+    for (let row = startRow; row <= endRow; row++) {
+      const id = context.dataSource.getRowId(row);
+      if ((typeof id !== 'string' && !(typeof id === 'number' && Number.isFinite(id))) || seen.has(id))
+        throw new TypeError('Invalid or duplicate refreshed row ID.');
+      ids.set(row, id);
+      seen.add(id);
+    }
+    const inWindow = (row: number) => row >= startRow && row <= endRow;
+    const keep = (entry: HistoryCommand) =>
+      entry.kind !== 'values' ||
+      entry.changes.every((change) => !inWindow(change.rowIndex) || ids.get(change.rowIndex) === change.rowId);
+    const past = context.past.filter(keep),
+      future = context.future.filter(keep);
+    const droppedHistoryEntries = context.past.length + context.future.length - past.length - future.length;
+    const selection = context.selection,
+      anchor = context.anchor;
+    const touchesSelection = dependencies
+      .getSelectionRanges()
+      .some((range) => range.startRow <= endRow && range.endRow >= startRow);
+    const single =
+      selection &&
+      anchor &&
+      context.retainedRanges.length === 0 &&
+      selection.rowIndex === anchor.rowIndex &&
+      selection.columnIndex === anchor.columnIndex;
+    const selectionCleared =
+      touchesSelection &&
+      !(single && (!inWindow(selection.rowIndex) || ids.get(selection.rowIndex) === selection.rowId));
+    const cutCancelled = context.pendingCut !== undefined;
+    const result = Object.freeze({ startRow, endRow, droppedHistoryEntries, selectionCleared, cutCancelled });
+    context.past.length = context.future.length = 0;
+    for (const entry of past) context.past.push(entry);
+    for (const entry of future) context.future.push(entry);
+    context.pendingCut = undefined;
+    if (selectionCleared) dependencies.clearSelection();
+    dependencies.notify({ type: 'rows', startRow, endRow }, Object.freeze({ type: 'data:rows', ...result }));
+    return result;
+  }
   function refreshData(previousRowIds?: readonly RowId[] | 'values'): void {
     dependencies.assertAlive();
     const count = context.dataSource.getRowCount();
@@ -498,5 +574,5 @@ export function createPersistence(
       staged.destroy();
     }
   }
-  return { refreshData, exportConfiguration, exportState, restoreState };
+  return { refreshRows, refreshData, exportConfiguration, exportState, restoreState };
 }

@@ -6,6 +6,12 @@ The npm 0.1.0 archive has a separate frozen reference. See [documentation versio
 
 An experimental Canvas browser renderer for the headless @acheron-grid/core engine.
 
+## Bounded row refresh (source preview)
+
+The current source adds `grid.refreshRows(startRow, endRow)` without remounting. npm 0.3.0 does not include it. It delegates to the [core window contract](core.md#bounded-row-refresh-source-preview), repaints the visible grid, updates accessibility and clears cut/value-motion caches without constructing a row map for the full source. React/Vue expose the same method through their existing grid handle.
+
+Finish or cancel an open editor and close local Find before calling it. Rejection preserves unsent input; page completion must not trigger a local Find scan over the entire logical dataset. The host must schedule loads, track cache eviction, keep query/revision stable and inspect the returned history/selection result. Configure `resolveCellPermission` to deny writing, pasting and copying unloaded placeholders; navigation may remain selectable. An automatic viewport loader and query/total identity reset remain separate work. Logical-million-row tests establish bounded window ID reads and one mount, not native scrollbar range or frame-rate guarantees.
+
 ## Local tree (source preview)
 
 This checkout adds local parent-ID tree rendering; npm 0.3.0 does not contain these APIs. Pass `tree: { parentColumnKey: 'parent' }` to `createGrid`, or call `grid.setTree(...)`. React/Vue inherit the construction option and expose the same methods through their grid handle. See the [standalone example](https://github.com/haodn-dev/acheron-grid/blob/main/examples/tree/README.md) and [core contract](core.md#local-tree-source-preview).

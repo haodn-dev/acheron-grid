@@ -46,7 +46,7 @@ export type {
   PasteOptions,
 } from './types.js';
 export type { CellPermission, CellPermissionPolicy, CellPermissionResolver } from './permissions.js';
-export type { GridEvent, GridChangeSource } from './events.js';
+export type { GridEvent, GridChangeSource, RowRefreshResult } from './events.js';
 export type { ViewportOptions, ViewportLayout, ViewportRegion, ViewportRect } from './panes.js';
 
 export { reorderedIndices } from './structure.js';

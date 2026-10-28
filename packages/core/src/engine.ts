@@ -37,7 +37,7 @@ import type {
   LayoutRequest,
 } from './types.js';
 import type { CellPermission, CellPermissionPolicy, CellPermissionResolver } from './permissions.js';
-import type { GridEvent } from './events.js';
+import type { GridEvent, RowRefreshResult } from './events.js';
 import { GridAxis } from './axis.js';
 import type { ViewportOptions } from './panes.js';
 import type { EngineContext, FormatEntry, HistoryCommand } from './internal/engine-context.js';
@@ -47,6 +47,7 @@ import type { BulkSteps, GridBulkOptions } from './internal/bulk.js';
 import type { GridHistoryLimits } from './internal/history-budget.js';
 
 export type GridInvalidation =
+  | { readonly type: 'rows'; readonly startRow: number; readonly endRow: number }
   | { readonly type: 'cells'; readonly cells: readonly { readonly rowIndex: number; readonly columnKey: string }[] }
   | { readonly type: 'selection'; readonly changed: boolean; readonly rangeChanged: boolean }
   | { readonly type: 'layout' }
@@ -696,7 +697,7 @@ export function createGridEngine(options: GridEngineOptions) {
       getCellPermission,
     });
 
-  const { refreshData, exportConfiguration, exportState, restoreState } = createPersistence(context, {
+  const { refreshRows, refreshData, exportConfiguration, exportState, restoreState } = createPersistence(context, {
     assertAlive,
     buildProjection,
     installProjection,
@@ -706,6 +707,7 @@ export function createGridEngine(options: GridEngineOptions) {
     mappedState,
     restoreStructure,
     getSelectionRanges,
+    clearSelection,
     structureRequest,
     structureAllowed,
     createGridEngine,
@@ -1017,6 +1019,7 @@ export function createGridEngine(options: GridEngineOptions) {
         assertAlive();
         return Object.freeze(Array.from({ length: rowCount }, (_, i) => dataSource.getRowId(i)));
       }),
+    refreshRows: (startRow: number, endRow: number): RowRefreshResult => command(() => refreshRows(startRow, endRow)),
     refreshData: (previousRowIds?: readonly RowId[] | 'values') =>
       command(() => {
         if (context.grouping || context.tree) throw new Error('Clear grouping/tree before external refresh.');

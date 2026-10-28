@@ -42,7 +42,7 @@ await writeFile(
   join(consumer, 'index.ts'),
   `
 import {createGridEngine,LocalDataSource,createAsyncDataSource} from '@acheron-grid/core';
-import type {LocalTreeOptions,LocalTreeRow,TreeState} from '@acheron-grid/core';
+import type {LocalTreeOptions,LocalTreeRow,TreeState,RowRefreshResult} from '@acheron-grid/core';
 const treeOptions: LocalTreeOptions = {parentColumnKey:'parent'};
 const treeEngine=createGridEngine({dataSource:new LocalDataSource([{id:'root',parent:null}],row=>row.id),columns:[{key:'parent',title:'Parent'}],tree:treeOptions});
 const treeRow: LocalTreeRow|null=treeEngine.getTreeRowMetadata(0);
@@ -50,10 +50,13 @@ const treeState: TreeState=treeEngine.exportTreeState();
 treeEngine.restoreTreeState(treeState);void treeRow;treeEngine.destroy();
 import {createTsvWorker} from '@acheron-grid/core/worker';
 if (false) {
-const treeGrid=createGrid({container:document.createElement('div'),dataSource:new LocalDataSource([{id:'root',parent:null}],row=>row.id),columns:[{key:'parent',title:'Parent'}],tree:treeOptions});
+const flat=createGridEngine({dataSource:new LocalDataSource([{value:'old'}],(_,i)=>i),columns:[{key:'value',title:'Value'}]});
+const rowResult:RowRefreshResult=flat.refreshRows(0,0);void rowResult;flat.destroy();
+const treeGrid=createGrid({container:document.createElement('div'),dataSource:new LocalDataSource([{id:'root',parent:null},{id:'child',parent:'root'}],row=>row.id),columns:[{key:'parent',title:'Parent'}],tree:treeOptions});
 const canvasTreeRow:LocalTreeRow|null=treeGrid.getTreeRowMetadata(0);
 const canvasTreeState:TreeState=treeGrid.exportTreeState();
-treeGrid.restoreTreeState(canvasTreeState);treeGrid.setTreeExpanded('root',false);void canvasTreeRow;treeGrid.destroy();
+treeGrid.restoreTreeState(canvasTreeState);treeGrid.setTreeExpanded('root',false);void canvasTreeRow;treeGrid.setTree(null);
+const canvasRows:RowRefreshResult=treeGrid.refreshRows(0,0);void canvasRows;treeGrid.destroy();
 const decoder = createTsvWorker(() => new Worker(new URL('@acheron-grid/core/worker-entry', import.meta.url), {type:'module'}));
 const workerBulk = {yieldControl: async () => {}, tsvDecoder: decoder, signal: new AbortController().signal};
 createGridEngine({dataSource:new LocalDataSource([{value:'old'}],(_,i)=>i),columns:[{key:'value',title:'Value',editable:true}]}).pasteAsync('new',workerBulk);
@@ -126,6 +129,12 @@ await writeFile(
 import {createGrid} from '@acheron-grid/canvas';import {LocalDataSource} from '@acheron-grid/core';
 import {createTsvWorker} from '@acheron-grid/core/worker';
 window.createTsvWorker=createTsvWorker;
+window.checkPackedRows=()=>{
+const ids=[0,1],values=['old','outside'];
+const source={getRowCount:()=>2,getRowId:index=>ids[index],getValue:index=>values[index],setValue:(index,key,value)=>{values[index]=value;}};
+const grid=createGrid({container:document.querySelector('#grid'),dataSource:source,columns:[{key:'value',title:'Value',editable:true}]});
+try{grid.updateCells([{rowIndex:0,columnKey:'value',value:'draft'}]);if(grid.refreshRows(0,1).droppedHistoryEntries)throw Error('Packed matching history was lost.');ids[0]='replacement';if(grid.refreshRows(0,0).droppedHistoryEntries!==1||grid.undo())throw Error('Packed stale history survived.');}finally{grid.destroy();}
+};
 window.checkPackedTree=()=>{
 const source=new LocalDataSource([{id:0,parent:null,name:'Root'},{id:'',parent:0,name:'Child'}],row=>row.id);
 const tree=createGrid({container:document.querySelector('#grid'),dataSource:source,columns:[{key:'name',title:'Name',editable:true},{key:'parent',title:'Parent'}],tree:{parentColumnKey:'parent'},accessibility:'viewport'});
@@ -188,6 +197,7 @@ try {
     }
     window.grid.destroy();
     window.checkPackedTree();
+    window.checkPackedRows();
   }, workerBundle.outputFiles[0].text);
   if (await page.getByRole('grid').count()) throw new Error('Packed grid cleanup failed.');
   if (await page.getByRole('treegrid').count()) throw new Error('Packed tree cleanup failed.');
