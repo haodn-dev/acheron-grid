@@ -290,7 +290,7 @@ Whether a live engine has a redo entry. Replay still checks current policies and
 setGrouping: (next: LocalGroupingOptions | null) => void
 ```
 
-Source preview, headless only: filter complete local records, group by one scalar key and optionally sum finite numeric values; sort leaves within each group. Reject incompatible row layout/history before installing. Null clears grouping. No source writes.
+Source preview: filter complete local records, group by one scalar key and optionally sum finite numeric values; sort leaves within each group. Reject incompatible row layout/history before installing. Null clears grouping. No source writes.
 
 ### exportGroupingState
 
@@ -319,7 +319,7 @@ Frozen current local grouping criteria, or null. Grouping is separate from Local
 ### getRowMetadata
 
 ```ts
-getRowMetadata: (row: number) => GroupDisplayRow | Readonly<{ kind: "leaf"; sourceIndex: number; rowId: RowId; }>
+getRowMetadata: (row: number) => GridRowMetadata
 ```
 
 Discriminated group/leaf metadata for a visible row. Only leaves have real sourceIndex and rowId; group metadata contains key, count, sums, retained source indices and expanded state. Legacy getRowId/getRowSourceIndex reject group rows.
@@ -804,6 +804,7 @@ The root and headless alias expose the same API. Source interfaces use their own
 | GroupKey | Type | grouping.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | GroupDisplayRow | Type | grouping.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | GroupingState | Type | grouping.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| GridRowMetadata | Type | grouping.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | GridBulkOptions | Type | bulk.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | GridBulkProgress | Type | bulk.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | GridHistoryLimits | Type | history-budget.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
@@ -1188,6 +1189,18 @@ export interface GroupingState {
   readonly grouping: Readonly<LocalGroupingOptions> | null;
   readonly collapsedKeys: readonly GroupKey[];
 }
+```
+
+### Type GridRowMetadata
+
+```ts
+export type GridRowMetadata =
+  | GroupDisplayRow
+  | Readonly<{
+      kind: 'leaf';
+      sourceIndex: number;
+      rowId: RowId;
+    }>;
 ```
 
 ### Type GridBulkOptions

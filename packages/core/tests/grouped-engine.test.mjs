@@ -24,7 +24,9 @@ function fixture(extra = {}) {
 const metadata = (engine) => Array.from({ length: engine.rowCount }, (_, row) => engine.getRowMetadata(row));
 
 test('group rows have separate identity, frozen metadata and no record permissions', () => {
-  const { engine } = fixture();
+  const initialEvents = [];
+  const { engine } = fixture({ onEvent: (event) => initialEvents.push(event) });
+  assert.deepEqual(initialEvents, []);
   assert.equal(engine.rowCount, 7);
   assert.deepEqual(
     metadata(engine).map((row) => (row.kind === 'group' ? row.key : row.rowId)),

@@ -17,6 +17,7 @@ import { createEditors } from './editors.js';
 import type { GridContext } from './grid-context.js';
 import { createInteraction } from './interaction.js';
 import { createMediaController } from './media-controller.js';
+import { dataGroupLabel, dataGroupCellText, dataGroupLabelColumn } from './display.js';
 
 interface RenderingContext
   extends
@@ -100,11 +101,13 @@ interface RenderingContext
   readonly stateLabels: (row: number | null, col: number) => string[];
   readonly structureAction: <T>(run: () => T, axis?: 'row' | 'column') => T;
   readonly syncAccessibleCell: () => void;
+  readonly announceSelection: () => void;
   readonly viewportAccessibility: boolean;
   readonly visibleIndices: (axis: 'row' | 'column') => Set<number>;
 }
 
 export function createRendering(context: RenderingContext) {
+  let focusedGroupRow = -1;
   const headerStates = new Map<string, string>();
   const measuredRows = new Set<number>();
   let frame: number | undefined;
@@ -205,6 +208,7 @@ export function createRendering(context: RenderingContext) {
   >();
   const animatedCells = new Map<string, { rowIndex: number; columnKey: string }>();
   function cellChange(value: unknown, rowIndex: number, columnIndex: number) {
+    if (context.engine.grouping && context.engine.getRowMetadata(rowIndex).kind === 'group') return undefined;
     const settings = context.motionSettings;
     if (!(settings.valueIndicators || settings.chartUpdates)) {
       valueHistory.clear();
@@ -307,6 +311,7 @@ export function createRendering(context: RenderingContext) {
     const inset = change?.direction && width >= 40 ? 16 : 0;
     // Reserve a leading gutter so custom numeric renderers cannot overlap the indicator.
     paintCell(value, x, y, width, height, header, rowIndex, columnIndex, change, inset);
+    if (!header && context.engine.grouping && context.engine.getRowMetadata(rowIndex).kind === 'group') return;
     if (inset) {
       const ctx = context.context!;
       ctx.save();
@@ -418,6 +423,46 @@ export function createRendering(context: RenderingContext) {
     const selection = context.engine.getSelection();
     const ctx = context.context!;
     ctx.clearRect(x, y, width, height);
+    const metadata = header || !context.engine.grouping ? null : context.engine.getRowMetadata(rowIndex);
+    if (metadata?.kind === 'group') {
+      ctx.save();
+      ctx.fillStyle = context.theme.headerBackground;
+      ctx.fillRect(x, y, width, height);
+      if (focusedGroupRow === rowIndex) {
+        ctx.globalAlpha = 0.12;
+        ctx.fillStyle = context.theme.selectionColor;
+        ctx.fillRect(x, y, width, height);
+        ctx.globalAlpha = 1;
+      }
+      ctx.beginPath();
+      ctx.rect(x, y, width, height);
+      ctx.clip();
+      ctx.font = context.theme.headerFont;
+      ctx.fillStyle = context.theme.headerTextColor;
+      ctx.textBaseline = 'middle';
+      const labelCell = columnIndex === dataGroupLabelColumn(context.engine);
+      if (labelCell) {
+        ctx.save();
+        ctx.translate(x + 16, y + height / 2);
+        if (!metadata.expanded) ctx.rotate(-Math.PI / 2);
+        stateIcon('chevron-down', -8, -8);
+        ctx.restore();
+      }
+      ctx.fillText(
+        dataGroupCellText(context.engine, metadata, columnIndex, context.t),
+        x + (labelCell ? 30 : 10),
+        y + height / 2,
+      );
+      ctx.strokeStyle = context.theme.gridLineColor;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + width - 0.5, y);
+      ctx.lineTo(x + width - 0.5, y + height - 0.5);
+      ctx.lineTo(x, y + height - 0.5);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
     const format = header ? null : context.engine.getFormat(rowIndex, columnIndex);
     const cellFont =
       format?.fontStyle || format?.fontWeight
@@ -859,12 +904,18 @@ export function createRendering(context: RenderingContext) {
   }
 
   function draw(): void {
+    focusedGroupRow = context.engine.getFocusedGroup();
     rowLockCache.clear();
     frame = undefined;
     if (context.destroyed) return;
     for (const change of animatedCells.values()) dirty.set(JSON.stringify([change.rowIndex, change.columnKey]), change);
     animatedCells.clear();
-    if (context.options.autoRowHeight && !context.editors.editor && !context.interaction.resizing)
+    if (
+      context.options.autoRowHeight &&
+      !context.engine.grouping &&
+      !context.editors.editor &&
+      !context.interaction.resizing
+    )
       for (const row of context.visibleIndices('row')) {
         if (context.engine.isRowHeightManual(row) || measuredRows.has(row)) continue;
         const height = context.measureRowHeight(row, true);
@@ -1209,6 +1260,12 @@ export function createRendering(context: RenderingContext) {
         rowNode = context.doc.createElement('div');
         rowNode.setAttribute('role', 'row');
         rowNode.setAttribute('aria-rowindex', String(row + context.headers.levels + 1));
+        const metadata = context.engine.grouping ? context.engine.getRowMetadata(row) : null;
+        if (metadata) rowNode.setAttribute('aria-level', metadata.kind === 'group' ? '1' : '2');
+        if (metadata?.kind === 'group') {
+          rowNode.setAttribute('aria-expanded', String(metadata.expanded));
+          rowNode.setAttribute('aria-label', dataGroupLabel(metadata, context.t));
+        }
         accessibleRows.set(row, rowNode);
       }
       seenCells.add(`${row}:${col}`);
@@ -1231,6 +1288,7 @@ export function createRendering(context: RenderingContext) {
         context.scroller.setAttribute('aria-activedescendant', context.activeCell.id);
       }
     }
+    if (focusedGroupRow >= 0) context.syncAccessibleCell();
     drawIndex();
     context.releaseUnusedImages();
     if (animatedCells.size) schedule();
@@ -1302,7 +1360,42 @@ export function createRendering(context: RenderingContext) {
         const button = context.doc.createElement('button');
         button.type = 'button';
         button.tabIndex = -1;
-        const sourceIndex = context.engine.getRowSourceIndex(row);
+        const metadata = context.engine.grouping ? context.engine.getRowMetadata(row) : null;
+        if (metadata?.kind === 'group') {
+          button.dataset.gridDataGroup = String(row);
+          const label = `${context.t(metadata.expanded ? 'Collapse' : 'Expand')}: ${dataGroupLabel(metadata, context.t)}`;
+          button.setAttribute('aria-label', label);
+          button.title = label;
+          button.setAttribute('aria-expanded', String(metadata.expanded));
+          const glyph = svgIcon('chevron-down');
+          if (!metadata.expanded) glyph.setAttribute('style', 'transform:rotate(-90deg)');
+          glyph.setAttribute('width', '16');
+          glyph.setAttribute('height', '16');
+          button.append(glyph);
+          button.style.cssText = `position:absolute;left:0;top:${context.rowAxis.position(row) + band.offset - band.y}px;width:100%;height:${context.rowAxis.size(row)}px;border:0;border-right:1px solid var(--acheron-grid-line-color);border-bottom:1px solid var(--acheron-grid-line-color);background:var(--acheron-header-background);color:inherit;display:flex;align-items:center;justify-content:center;cursor:pointer`;
+          if (focusedGroupRow === row) {
+            button.style.outline = '2px solid var(--acheron-selection-color)';
+            button.style.outlineOffset = '-2px';
+          }
+          button.addEventListener('pointerdown', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          });
+          button.addEventListener('click', (event) => {
+            event.stopPropagation();
+            if (context.finishEdit(true)) {
+              context.structureAction(
+                () => context.engine.setDataGroupExpanded(metadata.key, !metadata.expanded),
+                'row',
+              );
+              context.scroller.focus({ preventScroll: true });
+              context.announceSelection();
+            }
+          });
+          pane.append(button);
+          continue;
+        }
+        const sourceIndex = metadata?.sourceIndex ?? context.engine.getRowSourceIndex(row);
         button.textContent = String(sourceIndex + 1);
         button.setAttribute('aria-label', context.t('Select row {0}', sourceIndex + 1));
         const labels = context.rowLabels(row);
@@ -1347,8 +1440,10 @@ export function createRendering(context: RenderingContext) {
         resizeHandle.setAttribute('aria-hidden', 'true');
         resizeHandle.title = context.t('Drag to resize row; double-click to fit');
         resizeHandle.style.cssText = 'position:absolute;bottom:0;left:0;width:100%;height:5px;cursor:row-resize';
-        button.append(resizeHandle);
-        context.reorderHandle(button, 'row', row);
+        if (!context.engine.grouping) {
+          button.append(resizeHandle);
+          context.reorderHandle(button, 'row', row);
+        }
         pane.append(button);
         if (outline.length) button.style.paddingLeft = `${levels * 24}px`;
         for (const group of outline.filter(

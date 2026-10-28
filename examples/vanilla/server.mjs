@@ -17,11 +17,15 @@ createServer(async (request, response) => {
   const file =
     path === '/'
       ? new URL('./index.html', import.meta.url)
-      : path === '/app.js'
-        ? new URL('./app.js', import.meta.url)
-        : module
-          ? new URL(`../../packages/${module[1]}/dist/${module[2]}`, import.meta.url)
-          : null;
+      : path === '/grouping' || path === '/grouping/'
+        ? new URL('../grouping/index.html', import.meta.url)
+        : path === '/grouping/app.js'
+          ? new URL('../grouping/app.js', import.meta.url)
+          : path === '/app.js'
+            ? new URL('./app.js', import.meta.url)
+            : module
+              ? new URL(`../../packages/${module[1]}/dist/${module[2]}`, import.meta.url)
+              : null;
   if (!file) {
     response.writeHead(404).end();
     return;
@@ -30,7 +34,7 @@ createServer(async (request, response) => {
     const body = await readFile(file);
     response
       .writeHead(200, {
-        'Content-Type': path === '/' ? 'text/html; charset=utf-8' : 'text/javascript; charset=utf-8',
+        'Content-Type': file.pathname.endsWith('.html') ? 'text/html; charset=utf-8' : 'text/javascript; charset=utf-8',
         'X-Content-Type-Options': 'nosniff',
       })
       .end(body);

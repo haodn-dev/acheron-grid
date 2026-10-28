@@ -33,6 +33,14 @@ const groups = {
   'Layout and browser controls': /.*/,
 };
 const descriptions = {
+  setGrouping: coreContracts.setGrouping,
+  grouping: coreContracts.grouping,
+  getRowMetadata: coreContracts.getRowMetadata,
+  focusGroup: coreContracts.focusGroup,
+  getFocusedGroup: coreContracts.getFocusedGroup,
+  setDataGroupExpanded: coreContracts.setDataGroupExpanded,
+  exportGroupingState: coreContracts.exportGroupingState,
+  restoreGroupingState: coreContracts.restoreGroupingState,
   updateCells:
     'Typed values; no parsing. Column validation and writable permissions run before one atomic write. Uses visible indices.',
   editCell: 'Editor-style text command: applies parsers, editable/writable permissions and validation.',

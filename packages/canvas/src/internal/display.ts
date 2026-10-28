@@ -1,8 +1,34 @@
-import type { CellFormat, NumberFormat } from '@acheron-grid/core';
+import type { CellFormat, NumberFormat, GridEngine, GroupDisplayRow } from '@acheron-grid/core';
 import type { GridOptions } from '../grid.js';
 import type { CanvasTranslator } from '../locale.js';
 import type { RichText } from '../rich-text.js';
 import { readHtml } from '../rich-text.js';
+
+export function dataGroupLabel(group: GroupDisplayRow, t: CanvasTranslator): string {
+  return t('Group {0}, {1} records', group.key ?? t('Missing value'), group.count);
+}
+export function dataGroupLabelColumn(engine: GridEngine): number {
+  const column = engine.columns.findIndex((item) => item.key === engine.grouping?.columnKey);
+  return engine.isColumnHidden(column) ? engine.columns.findIndex((_, index) => !engine.isColumnHidden(index)) : column;
+}
+
+export function dataGroupCellText(
+  engine: GridEngine,
+  group: GroupDisplayRow,
+  column: number,
+  t: CanvasTranslator,
+): string {
+  const groupColumn = engine.columns.findIndex((item) => item.key === engine.grouping?.columnKey);
+  const labelColumn = dataGroupLabelColumn(engine);
+  const key = engine.columns[column]!.key,
+    sum = group.sums[key];
+  if (column === labelColumn)
+    return (
+      `${group.key ?? t('Missing value')} (${group.count})` +
+      (labelColumn !== groupColumn && sum !== undefined ? ` · ${sum}` : '')
+    );
+  return key === engine.grouping?.columnKey ? '' : sum === undefined ? '' : String(sum);
+}
 
 export function createNumberDisplay(options: Pick<GridOptions, 'locale' | 'currency'>) {
   const numberFormats = new Map<NumberFormat, Intl.NumberFormat>(
