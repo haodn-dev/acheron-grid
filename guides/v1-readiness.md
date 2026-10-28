@@ -1,7 +1,7 @@
 # Version 1.0 contracts and acceptance
 
 This is the selected acceptance policy for a future 1.0, not a stable release announcement.
-Current packages remain 0.x/source previews. Stable 1.0 publication remains postponed; npm 0.3.0 development previews are available. All features and optional
+Current packages remain 0.x/source previews. Stable 1.0 publication remains postponed; npm 0.4.0 development previews are available. All features and optional
 modules remain free and open source; stability is evaluated separately for each package.
 
 ## Scope and compatibility

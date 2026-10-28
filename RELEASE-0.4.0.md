@@ -1,6 +1,6 @@
 # Acheron Grid 0.4.0 — development preview
 
-This candidate adds local grouping/tree views and bounded remote viewport integration across eight aligned packages. Publication and exact-registry consumer verification are pending. Earlier releases remain immutable. All features and optional modules remain open source and free.
+This release adds local grouping/tree views and bounded remote viewport integration across eight aligned packages. All eight packages are published on npm at 0.4.0 with trusted-publishing provenance and verified exact registry consumers. Earlier releases remain immutable. All features and optional modules remain open source and free.
 
 ## Changes since 0.3.0
 
@@ -17,7 +17,7 @@ See the [comparison with 0.3.0](https://github.com/haodn-dev/acheron-grid/compar
 
 ## Installation and migration
 
-After publication, install matching versions of the packages your application uses:
+Install matching versions of the packages your application uses:
 
 ```sh
 npm install @acheron-grid/core@0.4.0 @acheron-grid/canvas@0.4.0
@@ -33,7 +33,11 @@ Keep existing `refreshData()` integrations unless deliberately adopting the stri
 
 ## Validation
 
-The candidate must pass Node 22/24 CI, Chromium and portable Firefox/WebKit, independent packed consumers, documentation/API checks and the release workflow. Publication is complete only after all eight exact npm versions pass the registry consumer. Final revision, workflow and registry evidence will be recorded after those gates finish; source or dry-run checks alone are not publication evidence.
+Tag `v0.4.0` identifies commit `78fd20658d63ca2fda357b06f15e1dbf69ab6996`. The [release workflow](https://github.com/haodn-dev/acheron-grid/actions/runs/40656005979) passed Node 22/24, Chromium, portable Firefox/WebKit, benchmark correctness, standalone playground, independent packed consumers and exact npm-version consumers. All eight published packages and their latest tags were verified against registry tarball integrity, license/NOTICE and provenance metadata.
+
+Local candidate checks passed typecheck,315 Node tests,205 Chromium integration tests,201 WebKit tests with four existing skips,33 playground tests per working browser,eight packed packages,MCP19,release-tooling2,24 document hashes/ten TypeScript examples and formatting. Firefox Windows could not launch; Linux CI supplies its evidence. One initial local module fetch failed with Windows `net::ERR_NO_BUFFER_SPACE` before assertions; its trace was inspected and five unchanged focused repetitions plus the full unchanged suite passed. Eight export maps and all168 external dependency versions/integrities remain unchanged.
+
+The first post-publish registry check returned `ETARGET` before all versions were installable. npm [publish-time scanning](https://github.blog/changelog/2026-07-28-npm-publish-time-malware-scanning-and-dual-use-metadata/) delayed availability after acceptance. Rerunning the same job verified matching existing integrities and passed the exact registry consumer; no tag or package contents were replaced.
 
 ## Known limits
 

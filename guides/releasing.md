@@ -46,6 +46,8 @@ Approve `npm-production` when requested. Do not tag an older version to replace 
 
 The release workflow runs full existing CI, then tests the prepared tarballs in an independent strict TypeScript/headless/SSR/browser consumer before publishing. After publishing, that same consumer installs the exact versions from npm and runs again. A green release requires both checks.
 
+npm can accept a publish before the version is installable because of [publish-time scanning](https://github.blog/changelog/2026-07-28-npm-publish-time-malware-scanning-and-dual-use-metadata/). The workflow runs `npm run release -- wait VERSION` before the registry consumer. It compares all eight registry integrities with prepared tarballs, retrying only missing-version responses with bounded backoff. Integrity mismatches and other errors fail immediately. Prolonged scanning/review still fails visibly after the retry budget; do not replace a tag or overwrite a version to work around it.
+
 Publishing several packages is not atomic. The script preflights all eight tarballs and checks registry integrity before its first write. Re-running the **same GitHub run** reuses the same develop version, skips existing versions only when integrity matches, and publishes missing packages. Do not change source for a rerun. A registry version with different contents fails instead of being overwritten. Develop retries require the commit to remain the current `develop` tip; if it has advanced, use the newer run.
 
 If the workflow failed after publication, inspect its logs before announcing a release: packages may already exist even though the registry consumer failed. No automatic unpublish or rollback is performed.
