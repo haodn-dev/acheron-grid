@@ -6,6 +6,12 @@ The npm 0.1.0 archive has a separate frozen reference. See [documentation versio
 
 An experimental Canvas browser renderer for the headless @acheron-grid/core engine.
 
+## Bounded data reset (source preview)
+
+`grid.resetData()` delegates to the [core epoch-reset contract](core.md#bounded-data-epoch-reset-source-preview); React/Vue inherit it. npm 0.3.0 does not include it. Canvas keeps the mount, clears caches and gestures, updates count/ARIA/index geometry and native extent, and resets vertical scroll. Column geometry stays; no identity anchor is searched.
+
+Finish/cancel editors, close Find and settle bulk work **before changing the source**; reset rejects open editors/Find without losing input. Resolve source drafts/uncertain writes first. Dispose the old coordinator, change/cancel the source epoch, reset, then create a fresh coordinator and call `setViewport(grid.getViewport())`: unchanged geometry may not emit another notice. The [read-only example](https://github.com/haodn-dev/acheron-grid/blob/main/examples/paged/README.md#remote-viewport-source-preview) changes count/order with the same source and grid.
+
 ## Viewport observation (source preview)
 
 The [remote viewport example](https://github.com/haodn-dev/acheron-grid/blob/main/examples/paged/README.md#remote-viewport-source-preview) demonstrates a fixed-session host loader with bounded overscan, eviction refresh and explicit retry. Set `allowSearch: false` for remote hosts that do not support local scanning; it makes `openSearch()` a no-op and leaves Ctrl/Meta+F to the browser, without committing an editor or reading source values. The default remains enabled. This option does not implement server search or restrict host code that calls other scanning APIs.
@@ -22,7 +28,7 @@ If a browser collapses an oversized row spacer, this source preview falls back t
 
 The current source adds `grid.refreshRows(startRow, endRow)` without remounting. npm 0.3.0 does not include it. It delegates to the [core window contract](core.md#bounded-row-refresh-source-preview), repaints the visible grid, updates accessibility and clears cut/value-motion caches without constructing a row map for the full source. React/Vue expose the same method through their existing grid handle.
 
-Finish or cancel an open editor and close local Find before calling it. Rejection preserves unsent input; page completion must not trigger a local Find scan over the entire logical dataset. The host must schedule loads, track cache eviction, keep query/revision stable and inspect the returned history/selection result. Configure `resolveCellPermission` to deny writing, pasting and copying unloaded placeholders; navigation may remain selectable. An automatic viewport loader and query/total identity reset remain separate work. Logical-million-row tests establish bounded window ID reads and one mount, not native scrollbar range or frame-rate guarantees.
+Finish or cancel an open editor and close local Find before calling it. Rejection preserves unsent input; page completion must not trigger a local Find scan over the entire logical dataset. The host must schedule loads, track eviction, keep query/revision stable and inspect the history/selection result. Deny writing, pasting and copying unloaded placeholders through `resolveCellPermission`; navigation may stay selectable. Use the viewport example for bounded loading and `resetData` for epoch changes. Million-row tests establish bounded reads and one mount, not native range or frame-rate guarantees.
 
 ## Local tree (source preview)
 

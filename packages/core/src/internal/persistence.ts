@@ -4,7 +4,7 @@ import { restoreGridConfiguration } from '../configuration.js';
 import type { LocalViewOptions, RowId } from '../data-source.js';
 import { snapshotLocalView as snapshotView } from '../data-source.js';
 import type { createGridEngine, GridInvalidation } from '../engine.js';
-import type { GridEvent, RowRefreshResult } from '../events.js';
+import type { GridEvent, RowRefreshResult, DataResetResult } from '../events.js';
 import type { CellPermission } from '../permissions.js';
 import type { GridState } from '../state.js';
 import { readGridState } from '../state.js';
@@ -72,7 +72,8 @@ export function createPersistence(
     ) => StructureState;
     restoreStructure: (state: StructureState) => void;
     getSelectionRanges: () => SelectionRange[];
-    clearSelection: () => void;
+    clearSelection: (emit?: boolean) => void;
+    notifySelection: (changed: boolean, rangeChanged: boolean) => void;
     structureRequest: (
       axis: 'row' | 'column',
       kind: StructureRequest['kind'],
@@ -88,6 +89,38 @@ export function createPersistence(
     requireVisibilityPolicy: (axis: 'row' | 'column', indices: readonly number[], hidden: boolean) => void;
   },
 ) {
+  function resetData(): DataResetResult {
+    dependencies.assertAlive();
+    if (context.projection || context.tree || context.grouping)
+      throw new Error('Clear the local view, tree and grouping before resetting data.');
+    const count = context.dataSource.getRowCount();
+    if (!Number.isSafeInteger(count) || count < 0) throw new RangeError('Invalid source row count.');
+    const result = Object.freeze({
+      previousRowCount: context.rowCount,
+      rowCount: count,
+      droppedHistoryEntries: context.past.length + context.future.length,
+      selectionCleared: context.selection !== null,
+      cutCancelled: context.pendingCut !== undefined,
+    });
+    // Axis replacement validates dimensions before any old state is discarded.
+    context.rowAxis.replace(count, []);
+    context.rowCount = count;
+    context.frozenRows = Math.min(context.frozenRows, count);
+    context.past.length = context.future.length = 0;
+    context.pendingCut = undefined;
+    context.merges.length = context.groups.length = 0;
+    context.groupId = 0;
+    context.manualRows.clear();
+    context.lockedRows.clear();
+    context.lockedCells.clear();
+    context.formats.clear();
+    context.orderedFormats = [];
+    context.formatOrder = 0;
+    dependencies.clearSelection(false);
+    dependencies.notify({ type: 'reset' }, Object.freeze({ type: 'data:reset', ...result }));
+    if (result.selectionCleared) dependencies.notifySelection(true, true);
+    return result;
+  }
   function refreshRows(startRow: number, endRow: number): RowRefreshResult {
     dependencies.assertAlive();
     if (
@@ -574,5 +607,5 @@ export function createPersistence(
       staged.destroy();
     }
   }
-  return { refreshRows, refreshData, exportConfiguration, exportState, restoreState };
+  return { resetData, refreshRows, refreshData, exportConfiguration, exportState, restoreState };
 }

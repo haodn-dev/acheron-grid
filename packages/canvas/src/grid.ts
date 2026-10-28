@@ -282,6 +282,7 @@ export interface Grid {
   captureRowIdentity(): readonly RowId[];
   refreshData(previousRowIds?: readonly RowId[] | 'values'): void;
   refreshRows: GridEngine['refreshRows'];
+  resetData: GridEngine['resetData'];
   exportState(): GridState;
   restoreState(state: unknown): void;
   setColumnEditor(key: string, editor: ColumnEditor | null): void;
@@ -920,15 +921,45 @@ export function createGrid(options: GridOptions): Grid {
           (menu.dataset.gridMenuHeader !== 'true' && change.rowMap[row] !== row)
         )
           closeMenu();
-      } else if (menu && (change.type === 'layout' || change.type === 'selection' || change.type === 'rows'))
+      } else if (
+        menu &&
+        (change.type === 'layout' || change.type === 'selection' || change.type === 'rows' || change.type === 'reset')
+      )
         closeMenu();
       if (change.type !== 'selection') clearCopyFeedback();
-      if (change.type === 'rows') {
+      if (change.type === 'rows' || change.type === 'reset') {
         clearLayoutMotion();
         rendering.clearValueHistory();
         clipboard.pendingCutText = undefined;
         rendering.fullDraw = true;
         accessibility.accessibleCells.clear();
+        if (change.type === 'reset') {
+          onPointerEnd();
+          endResize();
+          clearReorder();
+          accessibleBody.replaceChildren();
+          interaction.axisAnchor = null;
+          editors.hoveredChoice = null;
+          rendering.measuredRows.clear();
+          clearDisplayCache();
+          gridContext.layout.rowCount = gridContext.engine.rowCount;
+          scroller.setAttribute(
+            'aria-rowcount',
+            String(gridContext.layout.rowCount + (viewportAccessibility ? headers.levels : 0)),
+          );
+          gridContext.layout.indexWidth =
+            gridContext.options.indexColumn === false
+              ? 0
+              : Math.max(48, String(gridContext.engine.sourceRowCount).length * 8 + 16);
+          scroller.style.left =
+            headerSurface.style.left =
+            canvas.style.left =
+            indexGutter.style.width =
+              `${gridContext.layout.indexWidth}px`;
+          indexGutter.replaceChildren();
+          syncScrollExtent();
+          scroller.scrollTop = 0;
+        }
         render();
       } else if (change.type === 'cells') {
         if (gridContext.engine.getMergedCells().length) rendering.fullDraw = true;
@@ -2253,6 +2284,11 @@ export function createGrid(options: GridOptions): Grid {
       return gridContext.engine.replaceText(search, replacement, options);
     },
     getViewport,
+    resetData: () => {
+      if (editors.editor || !searchBar.hidden)
+        throw new Error('Finish editing and close local search before resetting data.');
+      return gridContext.engine.resetData();
+    },
     takeObserverErrors: () => [...gridContext.engine.takeObserverErrors(), ...viewportErrors.splice(0)],
     captureRowIdentity: gridContext.engine.captureRowIdentity,
     refreshRows: (startRow, endRow) => {
