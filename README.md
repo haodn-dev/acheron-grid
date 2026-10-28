@@ -20,6 +20,8 @@ The candidate adds unsent draft checkpoints and exact remote mutation recovery w
 
 The [v0.3.0 release workflow](https://github.com/haodn-dev/acheron-grid/actions/runs/40192814508) passed Node 22/24, Chromium, portable Firefox/WebKit, independent package consumers and exact npm-version consumers. All eight npm artifacts have trusted-publishing provenance. Manual screen-reader, physical-device and production-host acceptance remain open.
 
+Current `main` also includes local grouping and tree views, bounded row refresh/epoch reset, viewport observation and loaded-row remote editing. These additions are **not included in npm 0.3.0**. Build matching packages from this checkout to use them; see the [unreleased changelog](CHANGELOG.md#unreleased), [grouping example](examples/grouping/README.md), [tree example](examples/tree/README.md) and [remote viewport examples](examples/paged/README.md). The next package release is being prepared.
+
 ## Start here
 
 Use **core** for Node.js, a custom renderer or a headless data workflow. Add **Canvas** for an interactive browser grid. React and Vue wrap the same Canvas renderer and data contracts.

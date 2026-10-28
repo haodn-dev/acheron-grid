@@ -2,7 +2,14 @@
 
 ## Unreleased
 
-- Add an internal headless grouping foundation for ordered retained rows, scalar keys and count/sum snapshots, with cooperative preparation through the existing bulk runner. This is not a public grouping API or a grouped Canvas view.
+- Add opt-in local grouping by one scalar column with count/sum snapshots, synthetic group metadata, expansion state, leaf-only commands, and Canvas disclosure, keyboard navigation and treegrid accessibility. React/Vue inherit the same options and handle APIs; HTML/MCP paths distinguish group headers from records.
+- Add local parent-ID tree views with duplicate/orphan/cycle/depth validation, sibling sorting, ancestor-preserving filtering, expansion state and Canvas navigation. Parent-ID editing and unsupported row-layout/structural combinations are rejected.
+- Add bounded `refreshRows` for flat, fixed-count sources. Verified matching identities retain value history; changed-identity entries are dropped atomically with a notice. The existing whole-source `refreshData` contract remains unchanged.
+- Add explicit `resetData` for flat source epoch/count changes without reading every row ID. Reset clears selection/history and row metadata while preserving documented column geometry and host policies.
+- Add Canvas `getViewport` / `onViewportChange` using shared core geometry and coalesced notifications. Hosts own loading/cache/query policies. `allowSearch: false` disables local Find without scanning remote records.
+- Add read-only 100k/1M remote viewport examples and a separate writable 10k paged example with one grid/source, bounded cache eviction, editor protection, explicit save, exact-request recovery, conflict adoption and draft checkpoints.
+- Fix stale accessible cells during bounded refresh, disabled Find shortcut advertising, group-focus clear notifications and expansion with numeric `-0` keys.
+- Preserve a usable native scroll prefix when an oversized browser spacer collapses. This is not full-range scroll scaling; documented native-scroll and process-local demo receipt limits remain.
 
 ## 0.3.0 — Development preview — 2026-10-25
 
