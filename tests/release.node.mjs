@@ -62,18 +62,20 @@ test('publisher checks every package before writing and resumes matching release
       calls = join(root, 'calls.txt');
     await writeFile(
       mock,
-      `import {appendFileSync} from 'node:fs';
+      `import {appendFileSync,existsSync,writeFileSync} from 'node:fs';
 const args=process.argv.slice(2);appendFileSync(process.env.CALLS,JSON.stringify(args)+'\\n');
 if(args[0]==='pack')console.log(JSON.stringify([{filename:'package.tgz',integrity:'sha512-matching'}]));
 else if(args[0]==='view'){
+ if(process.env.MODE==='pending'&&!existsSync('ready')){writeFileSync('ready','');console.error('E404');process.exit(1);}
+ if(process.env.MODE==='denied'){console.error('E403');process.exit(1);}
  if(process.env.MODE==='new'){console.error('E404');process.exit(1);}
  console.log(JSON.stringify(process.env.MODE==='mismatch'?'sha512-other':'sha512-matching'));
 }else if(args[0]==='publish')console.log('published');else process.exit(2);
 `,
     );
     const script = fileURLToPath(new URL('../scripts/release.mjs', import.meta.url));
-    function run(mode) {
-      return spawnSync(process.execPath, [script, 'publish', '0.1.1-dev.2', 'develop'], {
+    function run(mode, command = 'publish') {
+      return spawnSync(process.execPath, [script, command, '0.1.1-dev.2', 'develop'], {
         cwd: root,
         encoding: 'utf8',
         env: { ...process.env, npm_execpath: mock, CALLS: calls, MODE: mode },
@@ -96,6 +98,22 @@ else if(args[0]==='view'){
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /different contents/);
     assert.ok(!(await readFile(calls, 'utf8')).includes('publish'));
+    await writeFile(calls, '');
+    result = run('pending', 'wait');
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Waiting/);
+    log = (await readFile(calls, 'utf8')).trim().split('\n').map(JSON.parse);
+    assert.equal(log.filter((args) => args[0] === 'view').length, 16);
+    assert.ok(!log.some((args) => args[0] === 'publish'));
+    for (const mode of ['mismatch', 'denied']) {
+      await writeFile(calls, '');
+      result = run(mode, 'wait');
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, mode === 'mismatch' ? /different contents/ : /E403/);
+      log = (await readFile(calls, 'utf8')).trim().split('\n').map(JSON.parse);
+      assert.equal(log.filter((args) => args[0] === 'view').length, 1);
+      assert.ok(!log.some((args) => args[0] === 'publish'));
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -8,8 +8,6 @@ This guide targets version 0.4.0 development preview for all eight packages: cor
 
 This guide targets npm 0.4.0. The archived npm 0.1.0 channel retains its original API scope; see [documentation versions](versions.md).
 
-Version 0.4.0 is a prepared candidate; registry publication is pending. Until verified, use the source-build instructions below.
-
 ## Install
 
 Use an ESM application with a bundler. Node.js 22 or later is required for repository builds and checks; browser mounting requires Canvas 2D and ResizeObserver.

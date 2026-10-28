@@ -1,6 +1,6 @@
 # Support and release evidence
 
-All eight packages, including export/charts, are published on npm at 0.3.0 as development previews. The [v0.3.0 release workflow](https://github.com/haodn-dev/acheron-grid/actions/runs/40192814508) passed Node 22/24, Firefox/WebKit, packed consumers and exact registry consumers. No stable 1.0 support promise is implied.
+All eight packages, including export/charts, are published on npm at 0.4.0 as development previews. The [v0.4.0 release workflow](https://github.com/haodn-dev/acheron-grid/actions/runs/40656005979) passed Node 22/24, Firefox/WebKit, packed consumers and exact registry consumers. No stable 1.0 support promise is implied.
 
 Post-release source `ab487d819aa8fa7f29567b0a51563f3ef6413fc3` passed [Node 22/24 and Firefox/WebKit CI](https://github.com/haodn-dev/acheron-grid/actions/runs/39736587618), including the virtualized-header accessibility regression. That Canvas fix is included in 0.2.1 and is newer than the immutable npm 0.2.0 artifact. The source results below are dated historical baselines; none replaces manual screen-reader or physical-device acceptance.
 

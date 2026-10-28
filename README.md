@@ -14,13 +14,13 @@ All features and optional modules are open source and free to use. There are no 
 
 ## Status
 
-**0.4.0 development preview is prepared for all eight packages.** Publication and exact-registry verification are pending. Published 0.3.0 and earlier artifacts remain available and immutable. Install matching Acheron package versions. APIs remain experimental; this is not a stable 1.0 release.
+**0.4.0 development preview is published on npm for all eight packages.** Exact registry consumers and trusted-publishing provenance are verified. Published 0.3.0 and earlier artifacts remain available and immutable. Install matching Acheron package versions. APIs remain experimental; this is not a stable 1.0 release.
 
-The candidate adds local grouping/tree views, bounded row refresh/epoch reset and remote viewport observation/editing, building on the existing mutation recovery. Existing APIs/export paths remain; the new APIs are additive. See [changes and migration](RELEASE-0.4.0.md), the [changelog](CHANGELOG.md) and the [1.0 acceptance policy](guides/v1-readiness.md).
+This release adds local grouping/tree views, bounded row refresh/epoch reset and remote viewport observation/editing, building on the existing mutation recovery. Existing APIs/export paths remain; the new APIs are additive. See [changes and migration](RELEASE-0.4.0.md), the [changelog](CHANGELOG.md) and the [1.0 acceptance policy](guides/v1-readiness.md).
 
-The [v0.3.0 release workflow](https://github.com/haodn-dev/acheron-grid/actions/runs/40192814508) passed Node 22/24, Chromium, portable Firefox/WebKit, independent package consumers and exact npm-version consumers. All eight 0.3.0 npm artifacts have trusted-publishing provenance. Manual screen-reader, physical-device and production-host acceptance remain open.
+The [v0.4.0 release workflow](https://github.com/haodn-dev/acheron-grid/actions/runs/40656005979) passed Node 22/24, Chromium, portable Firefox/WebKit, independent packed and exact npm-version consumers. All eight 0.4.0 artifacts have trusted-publishing provenance. Manual screen-reader, physical-device and production-host acceptance remain open.
 
-The 0.4.0 additions are **not included in npm 0.3.0**. Until publication is verified, build matching packages from this checkout; see the [0.4.0 changelog](CHANGELOG.md), [grouping example](examples/grouping/README.md), [tree example](examples/tree/README.md) and [remote viewport examples](examples/paged/README.md). See the candidate release notes for migration and limits.
+The 0.4.0 additions are **not included in npm 0.3.0**. Install matching 0.4.0 packages; see the [0.4.0 changelog](CHANGELOG.md), [grouping example](examples/grouping/README.md), [tree example](examples/tree/README.md) and [remote viewport examples](examples/paged/README.md). See the release notes for migration and limits.
 
 ## Start here
 
@@ -30,7 +30,7 @@ The [package references](#packages) describe each module. The [practical guide](
 
 ## Quick start
 
-After 0.4.0 publication, install core and Canvas in an ESM application with a bundler:
+Install core and Canvas in an ESM application with a bundler:
 
 ```sh
 npm install @acheron-grid/core@0.4.0 @acheron-grid/canvas@0.4.0

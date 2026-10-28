@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { setTimeout as delay } from 'node:timers/promises';
 
 export const packageOrder = ['core', 'canvas', 'markdown', 'react', 'vue', 'export', 'charts', 'mcp'];
 const stable = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -102,6 +103,46 @@ async function publish(root, version, tag) {
     );
   console.log(`Verified/published ${packages.length} packages at ${version}; tag ${tag}.`);
 }
+async function waitForRegistry(root, version) {
+  const packages = await check(root, version);
+  const destination = await mkdtemp(join(tmpdir(), 'acheron-registry-wait-'));
+  const expected = packages.map((pkg) => {
+    const [pack] = JSON.parse(
+      success(npm(['pack', '--workspace', pkg.name, '--json', '--pack-destination', destination], root)),
+    );
+    return { name: pkg.name, integrity: pack.integrity };
+  });
+  for (let attempt = 0; attempt < 31; attempt++) {
+    const pending = [];
+    for (const { name, integrity } of expected) {
+      const result = npm(
+        [
+          'view',
+          `${name}@${version}`,
+          'dist.integrity',
+          '--json',
+          '--prefer-online',
+          '--fetch-retries=0',
+          '--fetch-timeout=15000',
+          '--registry=https://registry.npmjs.org',
+        ],
+        root,
+      );
+      if (result.status === 0) {
+        if (JSON.parse(result.stdout) !== integrity)
+          throw new Error(`${name}@${version} already exists with different contents.`);
+      } else if (/\b(?:E404|ETARGET)\b/.test(result.stderr + '\n' + result.stdout)) pending.push(name);
+      else throw new Error(result.stderr + '\n' + result.stdout);
+    }
+    if (!pending.length) {
+      console.log(`Verified registry availability and integrity for ${expected.length} packages at ${version}.`);
+      return;
+    }
+    if (attempt === 30) throw new Error(`Registry versions remain unavailable: ${pending.join(', ')}.`);
+    console.log(`Waiting for npm availability: ${pending.join(', ')}.`);
+    await delay(Math.min(30000, 1000 * 2 ** attempt));
+  }
+}
 async function main() {
   const [command, value, tag] = process.argv.slice(2),
     root = resolve('.');
@@ -113,9 +154,10 @@ async function main() {
     console.log(version);
   } else if (command === 'check') await check(root, value);
   else if (command === 'publish') await publish(root, value, tag);
+  else if (command === 'wait') await waitForRegistry(root, value);
   else
     throw new Error(
-      'Usage: npm run release -- prepare VERSION | develop RUN_NUMBER | check VERSION | publish VERSION develop|latest',
+      'Usage: npm run release -- prepare VERSION | develop RUN_NUMBER | check VERSION | publish VERSION develop|latest | wait VERSION',
     );
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) await main();
