@@ -1,4 +1,8 @@
 import type { GridContext } from './internal/grid-context.js';
+import type { ViewportLayout } from '@acheron-grid/core';
+
+/** Display coordinates with exclusive range ends, using the core viewport geometry. */
+export type GridViewport = Readonly<Omit<ViewportLayout, 'hitTest' | 'cellRect'>>;
 import { createRendering } from './internal/rendering.js';
 import { createMenus } from './internal/menus.js';
 import { createAccessibility } from './internal/accessibility.js';
@@ -158,6 +162,7 @@ export interface GridOptions extends Pick<
   | 'tree'
 > {
   allowMerging?: boolean;
+  allowSearch?: boolean;
   allowRowGrouping?: boolean;
   canChangeLayout?: GridEngineOptions['canChangeLayout'];
   locale?: string;
@@ -166,6 +171,7 @@ export interface GridOptions extends Pick<
   view?: LocalViewOptions;
   viewMode?: 'core' | 'host';
   onViewChange?: (view: LocalViewOptions) => void;
+  onViewportChange?: (viewport: GridViewport) => void;
   theme?: Partial<GridTheme>;
   imageColumns?: readonly string[];
   avatarColumns?: readonly string[];
@@ -271,6 +277,7 @@ export interface Grid {
     options?: Parameters<GridEngine['replaceText']>[2],
   ): ReturnType<GridEngine['replaceText']>;
   subscribe: GridEngine['subscribe'];
+  getViewport(): GridViewport;
   takeObserverErrors: GridEngine['takeObserverErrors'];
   captureRowIdentity(): readonly RowId[];
   refreshData(previousRowIds?: readonly RowId[] | 'values'): void;
@@ -563,7 +570,39 @@ export function createGrid(options: GridOptions): Grid {
     }
   }
   validateTheme(gridContext.appearance.theme);
+  const viewportErrors: unknown[] = [];
+  let viewportQueued = false;
+  let viewportSignature = '';
+  function getViewport(): GridViewport {
+    if (gridContext.runtime.destroyed) throw new Error('Grid is destroyed.');
+    const { hitTest: _hitTest, cellRect: _cellRect, ...snapshot } = viewport();
+    return Object.freeze(snapshot);
+  }
+  function queueViewportChange(): void {
+    if (!gridContext.options.onViewportChange || viewportQueued) return;
+    viewportQueued = true;
+    queueMicrotask(() => {
+      viewportQueued = false;
+      if (gridContext.runtime.destroyed) return;
+      const snapshot = getViewport();
+      const signature = JSON.stringify(snapshot);
+      if (signature === viewportSignature) return;
+      viewportSignature = signature;
+      try {
+        gridContext.options.onViewportChange?.(snapshot);
+      } catch (error) {
+        viewportErrors.push(error);
+        try {
+          gridContext.options.onObserverError?.(error);
+        } catch (reportError) {
+          viewportErrors.push(reportError);
+        }
+        if (viewportErrors.length > 10) viewportErrors.splice(0, viewportErrors.length - 10);
+      }
+    });
+  }
   const rendering = createRendering({
+    queueViewportChange,
     get motionSettings() {
       return motionSettings;
     },
@@ -973,8 +1012,7 @@ export function createGrid(options: GridOptions): Grid {
           gridContext.options.onSelectionRangesChange?.(gridContext.engine.getSelectionRanges());
           gridContext.options.onSelectionRangeChange?.(gridContext.engine.getSelectionRange());
         }
-        spacer.style.width = String(columnAxis.position(gridContext.layout.columns.length)) + 'px';
-        spacer.style.height = String(rowAxis.position(gridContext.layout.rowCount)) + 'px';
+        syncScrollExtent();
         render();
       } else render();
     },
@@ -1252,6 +1290,13 @@ export function createGrid(options: GridOptions): Grid {
   spacer.style.position = 'relative';
   spacer.style.height = `${rowAxis.position(gridContext.layout.rowCount)}px`;
   scroller.append(spacer, accessibleBody, activeRow);
+  function syncScrollExtent(): void {
+    const height = rowAxis.position(gridContext.layout.rowCount);
+    spacer.style.width = `${columnAxis.position(gridContext.layout.columns.length)}px`;
+    spacer.style.height = `${height}px`;
+    // Some browsers collapse oversized CSS boxes instead of clipping them to a usable scroll range.
+    if (root.isConnected && height > 16000000 && spacer.offsetHeight < 16000000) spacer.style.height = '16000000px';
+  }
   const canvas = gridContext.env.doc.createElement('canvas');
   canvas.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none';
   canvas.style.left = `${gridContext.layout.indexWidth}px`;
@@ -1374,6 +1419,7 @@ export function createGrid(options: GridOptions): Grid {
   } = clipboard;
 
   container.append(root);
+  syncScrollExtent();
 
   let destroyed = false;
   const stateIcons = Object.fromEntries(
@@ -2007,6 +2053,7 @@ export function createGrid(options: GridOptions): Grid {
   searchBar.append(searchInput, searchStatus, searchPrevious, searchNext, searchClose);
   root.append(searchBar);
   const { refreshSearch, openSearch, searchShortcut, highlightSearch, disposeSearch } = createSearch({
+    options: gridContext.options,
     win: gridContext.env.win,
     searchBar,
     searchInput,
@@ -2065,6 +2112,7 @@ export function createGrid(options: GridOptions): Grid {
     clearLayoutMotion();
     observedWidth = width;
     observedHeight = height;
+    syncScrollExtent();
     render();
   });
   observer.observe(root);
@@ -2204,7 +2252,8 @@ export function createGrid(options: GridOptions): Grid {
       clearCopyFeedback();
       return gridContext.engine.replaceText(search, replacement, options);
     },
-    takeObserverErrors: gridContext.engine.takeObserverErrors,
+    getViewport,
+    takeObserverErrors: () => [...gridContext.engine.takeObserverErrors(), ...viewportErrors.splice(0)],
     captureRowIdentity: gridContext.engine.captureRowIdentity,
     refreshRows: (startRow, endRow) => {
       if (editors.editor || !searchBar.hidden)

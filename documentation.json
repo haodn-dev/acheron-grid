@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "35f3014bac380b2b3937cad5411ef869778cf579",
+  "sourceRevision": "91fb764dcdc5cbf65403f9848ef5a670884dbe73",
   "release": {
     "documentationRevision": "6e5d6a408ea3f6f089b013b2d2d0e0c698ccd9ee",
     "tag": "v0.3.0",
@@ -413,9 +413,9 @@
     {
       "id": "canvas-api",
       "path": "guides/canvas-api.md",
-      "revision": 12,
-      "updated": "2026-10-26",
-      "sha256": "ce4f3e18a02a8986c6360f901ff1cf76d2c82800efa4796080c1e3568a35f835",
+      "revision": 14,
+      "updated": "2026-10-27",
+      "sha256": "50753c365543472333c9cc3203d7986b0230930ceb86c77f97b6b8d14a766909",
       "history": [
         {
           "revision": 1,
@@ -463,6 +463,14 @@
         },
         {
           "revision": 12,
+          "summary": "Generated source API signatures and construction options."
+        },
+        {
+          "revision": 13,
+          "summary": "Generated source API signatures and construction options."
+        },
+        {
+          "revision": 14,
           "summary": "Generated source API signatures and construction options."
         }
       ]
@@ -576,9 +584,9 @@
     {
       "id": "canvas",
       "path": "packages/canvas/README.md",
-      "revision": 19,
-      "updated": "2026-10-26",
-      "sha256": "c718381edc1f51e2613c94fd9eb3c1b346cea8b2e391fe50030fb1c35ddd65ef",
+      "revision": 22,
+      "updated": "2026-10-27",
+      "sha256": "9b116257d08442536e5c55c0ca6a3502d919c0c9f7ff684fe5c955d624f2bbaf",
       "history": [
         {
           "revision": 1,
@@ -654,6 +662,18 @@
         },
         {
           "revision": 19,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 20,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 21,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 22,
           "summary": "Align publication status, installation and current source contracts."
         }
       ]

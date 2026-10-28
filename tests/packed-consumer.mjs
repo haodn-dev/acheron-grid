@@ -56,7 +56,8 @@ const treeGrid=createGrid({container:document.createElement('div'),dataSource:ne
 const canvasTreeRow:LocalTreeRow|null=treeGrid.getTreeRowMetadata(0);
 const canvasTreeState:TreeState=treeGrid.exportTreeState();
 treeGrid.restoreTreeState(canvasTreeState);treeGrid.setTreeExpanded('root',false);void canvasTreeRow;treeGrid.setTree(null);
-const canvasRows:RowRefreshResult=treeGrid.refreshRows(0,0);void canvasRows;treeGrid.destroy();
+const canvasRows:RowRefreshResult=treeGrid.refreshRows(0,0);void canvasRows;
+const viewport:import('@acheron-grid/canvas').GridViewport=treeGrid.getViewport();void viewport;treeGrid.destroy();
 const decoder = createTsvWorker(() => new Worker(new URL('@acheron-grid/core/worker-entry', import.meta.url), {type:'module'}));
 const workerBulk = {yieldControl: async () => {}, tsvDecoder: decoder, signal: new AbortController().signal};
 createGridEngine({dataSource:new LocalDataSource([{value:'old'}],(_,i)=>i),columns:[{key:'value',title:'Value',editable:true}]}).pasteAsync('new',workerBulk);

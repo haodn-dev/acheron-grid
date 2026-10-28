@@ -32,6 +32,7 @@ interface RenderingContext
     Pick<GridContext, 'engine' | 'options'>,
     Readonly<Pick<GridContext['appearance'], 'theme'>> {
   readonly motionSettings: Required<MotionOptions>;
+  readonly queueViewportChange: () => void;
   readonly fadeSelection: (
     rects: readonly {
       x: number;
@@ -1232,6 +1233,12 @@ export function createRendering(context: RenderingContext) {
       }
       context.context!.restore();
     }
+    for (const header of headerNodes) {
+      const label = context.doc.createElement('span');
+      label.textContent = header.getAttribute('aria-label');
+      label.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)';
+      header.append(label);
+    }
     const focusedHeader = context.headerSurface.contains(context.doc.activeElement)
       ? (context.doc.activeElement as HTMLElement).dataset.gridHeaderCell
       : undefined;
@@ -1761,6 +1768,7 @@ export function createRendering(context: RenderingContext) {
 
   function render(): void {
     if (context.destroyed) return;
+    context.queueViewportChange();
     context.syncAccessibleCell();
     const view = viewport();
     context.freezeVertical.hidden = !context.engine.frozenColumns || view.frozenWidth >= view.width;

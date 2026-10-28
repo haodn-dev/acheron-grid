@@ -33,6 +33,8 @@ const groups = {
   'Layout and browser controls': /.*/,
 };
 const descriptions = {
+  getViewport:
+    'Read frozen shared core viewport geometry without scanning source values or IDs. Display ranges have exclusive ends and may be disjoint. onViewportChange coalesces geometry notifications in a microtask. The host owns bounded loading and eviction reconciliation.',
   refreshRows:
     'Refresh a bounded row window through core without remounting. Reject while an editor or local search is open; finish/cancel or close it before retrying. See the core contract for history, selection, identity and layout restrictions.',
   setTree: coreContracts.setTree,

@@ -602,6 +602,14 @@ setMotion: (value: boolean | MotionOptions) => void
 
 
 
+### getViewport
+
+```ts
+getViewport: () => GridViewport
+```
+
+Read frozen shared core viewport geometry without scanning source values or IDs. Display ranges have exclusive ends and may be disjoint. onViewportChange coalesces geometry notifications in a microtask. The host owns bounded loading and eviction reconciliation.
+
 ### refreshRows
 
 ```ts
@@ -745,6 +753,7 @@ Call createGrid with GridOptions. Required fields are marked; options are read a
 | Field | Required | Type |
 | --- | --- | --- |
 | allowMerging | No | `boolean \| undefined` |
+| allowSearch | No | `boolean \| undefined` |
 | allowRowGrouping | No | `boolean \| undefined` |
 | canChangeLayout | No | `((request: Readonly<LayoutRequest>) => boolean) \| undefined` |
 | locale | No | `string \| undefined` |
@@ -753,6 +762,7 @@ Call createGrid with GridOptions. Required fields are marked; options are read a
 | view | No | `LocalViewOptions \| undefined` |
 | viewMode | No | `"core" \| "host" \| undefined` |
 | onViewChange | No | `((view: LocalViewOptions) => void) \| undefined` |
+| onViewportChange | No | `((viewport: GridViewport) => void) \| undefined` |
 | theme | No | `Partial<GridTheme> \| undefined` |
 | imageColumns | No | `readonly string[] \| undefined` |
 | avatarColumns | No | `readonly string[] \| undefined` |

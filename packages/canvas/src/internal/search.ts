@@ -6,7 +6,7 @@ interface SearchContext
   extends
     Pick<GridContext['env'], 'win' | 't'>,
     Readonly<Pick<GridContext['runtime'], 'destroyed'>>,
-    Pick<GridContext, 'engine'>,
+    Pick<GridContext, 'engine' | 'options'>,
     Readonly<Pick<GridContext['layout'], 'rowCount' | 'columns'>>,
     Readonly<Pick<GridContext['appearance'], 'theme'>> {
   readonly overlay: ReturnType<typeof createOverlay>;
@@ -111,6 +111,7 @@ export function createSearch(grid: SearchContext) {
   }
 
   function openSearch(): void {
+    if (grid.options.allowSearch === false) return;
     if (grid.destroyed || grid.overlay.activeDialog?.open || !grid.finishEdit(true)) return;
     grid.closeMenu();
     grid.endResize();
@@ -131,6 +132,7 @@ export function createSearch(grid: SearchContext) {
   }
 
   function searchShortcut(event: KeyboardEvent): void {
+    if (grid.options.allowSearch === false) return;
     if (!event.isComposing && (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'f') {
       event.preventDefault();
       event.stopPropagation();
