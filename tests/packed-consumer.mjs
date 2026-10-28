@@ -50,6 +50,10 @@ const treeState: TreeState=treeEngine.exportTreeState();
 treeEngine.restoreTreeState(treeState);void treeRow;treeEngine.destroy();
 import {createTsvWorker} from '@acheron-grid/core/worker';
 if (false) {
+const treeGrid=createGrid({container:document.createElement('div'),dataSource:new LocalDataSource([{id:'root',parent:null}],row=>row.id),columns:[{key:'parent',title:'Parent'}],tree:treeOptions});
+const canvasTreeRow:LocalTreeRow|null=treeGrid.getTreeRowMetadata(0);
+const canvasTreeState:TreeState=treeGrid.exportTreeState();
+treeGrid.restoreTreeState(canvasTreeState);treeGrid.setTreeExpanded('root',false);void canvasTreeRow;treeGrid.destroy();
 const decoder = createTsvWorker(() => new Worker(new URL('@acheron-grid/core/worker-entry', import.meta.url), {type:'module'}));
 const workerBulk = {yieldControl: async () => {}, tsvDecoder: decoder, signal: new AbortController().signal};
 createGridEngine({dataSource:new LocalDataSource([{value:'old'}],(_,i)=>i),columns:[{key:'value',title:'Value',editable:true}]}).pasteAsync('new',workerBulk);
@@ -122,6 +126,16 @@ await writeFile(
 import {createGrid} from '@acheron-grid/canvas';import {LocalDataSource} from '@acheron-grid/core';
 import {createTsvWorker} from '@acheron-grid/core/worker';
 window.createTsvWorker=createTsvWorker;
+window.checkPackedTree=()=>{
+const source=new LocalDataSource([{id:0,parent:null,name:'Root'},{id:'',parent:0,name:'Child'}],row=>row.id);
+const tree=createGrid({container:document.querySelector('#grid'),dataSource:source,columns:[{key:'name',title:'Name',editable:true},{key:'parent',title:'Parent'}],tree:{parentColumnKey:'parent'},accessibility:'viewport'});
+try {
+if(!document.querySelector('[role=treegrid]')||tree.getTreeRowMetadata(1).rowId!=='')throw new Error('Packed tree mount failed.');
+const state=tree.exportTreeState();tree.setTreeExpanded(0,false);if(tree.rowCount!==1)throw new Error('Packed tree collapse failed.');
+tree.restoreTreeState(state);tree.updateCells([{rowIndex:1,columnKey:'name',value:'Updated'}]);if(source.getValue(1,'name')!=='Updated')throw new Error('Packed tree identity failed.');
+if(tree.getCellPermission(1,1).writable||tree.takeObserverErrors().length)throw new Error('Packed tree permissions/lifecycle failed.');
+}finally{tree.destroy();}
+};
 import {exportSelectionCsv,exportSelectionXlsx} from '@acheron-grid/export';
 import {createChartRenderer} from '@acheron-grid/charts';
 const renderer=createChartRenderer({trend:'line'});window.chartDraws=0;
@@ -173,8 +187,10 @@ try {
       URL.revokeObjectURL(url);
     }
     window.grid.destroy();
+    window.checkPackedTree();
   }, workerBundle.outputFiles[0].text);
   if (await page.getByRole('grid').count()) throw new Error('Packed grid cleanup failed.');
+  if (await page.getByRole('treegrid').count()) throw new Error('Packed tree cleanup failed.');
 } finally {
   await browser.close();
 }

@@ -53,7 +53,11 @@ export function createAccessibility(context: AccessibilityContext) {
       }
     }
     const selection = context.engine.getSelection();
-    context.selectionStatus.textContent = `${selection ? context.t('Row {0}, {1}. {2} selected range(s).', selection.rowIndex + 1, context.columns[selection.columnIndex]!.title, context.getSelectionRanges().length) : context.t('Selection cleared.')}${context.interaction.addNextSelection ? context.t(' Next click or navigation adds a range.') : ''}`;
+    const tree = selection && context.engine.tree ? context.engine.getTreeRowMetadata(selection.rowIndex) : null;
+    const treeState = tree
+      ? ` ${context.t('Level {0}', tree.level)}.${tree.hasChildren ? ' ' + context.t(tree.expanded ? 'Expanded' : 'Collapsed') + '.' : ''}`
+      : '';
+    context.selectionStatus.textContent = `${selection ? context.t('Row {0}, {1}. {2} selected range(s).', selection.rowIndex + 1, context.columns[selection.columnIndex]!.title, context.getSelectionRanges().length) : context.t('Selection cleared.')}${treeState}${context.interaction.addNextSelection ? context.t(' Next click or navigation adds a range.') : ''}`;
   }
 
   function stateLabels(row: number | null, col: number): string[] {
@@ -212,6 +216,11 @@ export function createAccessibility(context: AccessibilityContext) {
     if (context.engine.grouping) context.activeRow.setAttribute('aria-level', '2');
     else context.activeRow.removeAttribute('aria-level');
     const selection = context.engine.getSelection();
+    const tree = selection && context.engine.tree ? context.engine.getTreeRowMetadata(selection.rowIndex) : null;
+    if (tree) {
+      context.activeRow.setAttribute('aria-level', String(tree.level));
+      if (tree.hasChildren) context.activeRow.setAttribute('aria-expanded', String(tree.expanded));
+    }
     context.activeRow.hidden = !selection;
     if (!selection) {
       context.activeCell.textContent = '';

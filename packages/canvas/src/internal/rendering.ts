@@ -17,7 +17,7 @@ import { createEditors } from './editors.js';
 import type { GridContext } from './grid-context.js';
 import { createInteraction } from './interaction.js';
 import { createMediaController } from './media-controller.js';
-import { dataGroupLabel, dataGroupCellText, dataGroupLabelColumn } from './display.js';
+import { dataGroupLabel, dataGroupCellText, dataGroupLabelColumn, treeLabelColumn, treeIndent } from './display.js';
 
 interface RenderingContext
   extends
@@ -309,8 +309,24 @@ export function createRendering(context: RenderingContext) {
   ): void {
     const change = header ? undefined : cellChange(value, rowIndex, columnIndex);
     const inset = change?.direction && width >= 40 ? 16 : 0;
+    const tree =
+      !header && context.engine.tree && columnIndex === treeLabelColumn(context.engine)
+        ? context.engine.getTreeRowMetadata(rowIndex)
+        : null;
+    const treeGutter = tree ? treeIndent(tree.level, width) : 0;
     // Reserve a leading gutter so custom numeric renderers cannot overlap the indicator.
-    paintCell(value, x, y, width, height, header, rowIndex, columnIndex, change, inset);
+    paintCell(value, x, y, width, height, header, rowIndex, columnIndex, change, inset + treeGutter);
+    if (tree?.hasChildren && treeGutter) {
+      const ctx = context.context!;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, y, width, height);
+      ctx.clip();
+      ctx.translate(x + treeGutter - 12, y + height / 2);
+      if (!tree.expanded) ctx.rotate(-Math.PI / 2);
+      stateIcon('chevron-down', -8, -8);
+      ctx.restore();
+    }
     if (!header && context.engine.grouping && context.engine.getRowMetadata(rowIndex).kind === 'group') return;
     if (inset) {
       const ctx = context.context!;
@@ -318,9 +334,9 @@ export function createRendering(context: RenderingContext) {
       ctx.fillStyle = change!.direction > 0 ? context.theme.increaseColor : context.theme.decreaseColor;
       const center = y + height / 2;
       ctx.beginPath();
-      ctx.moveTo(x + 8, center + (change!.direction > 0 ? -4 : 4));
-      ctx.lineTo(x + 4, center + (change!.direction > 0 ? 3 : -3));
-      ctx.lineTo(x + 12, center + (change!.direction > 0 ? 3 : -3));
+      ctx.moveTo(x + treeGutter + 8, center + (change!.direction > 0 ? -4 : 4));
+      ctx.lineTo(x + treeGutter + 4, center + (change!.direction > 0 ? 3 : -3));
+      ctx.lineTo(x + treeGutter + 12, center + (change!.direction > 0 ? 3 : -3));
       ctx.closePath();
       ctx.fill();
       ctx.restore();
@@ -913,6 +929,7 @@ export function createRendering(context: RenderingContext) {
     if (
       context.options.autoRowHeight &&
       !context.engine.grouping &&
+      !context.engine.tree &&
       !context.editors.editor &&
       !context.interaction.resizing
     )
@@ -1266,6 +1283,11 @@ export function createRendering(context: RenderingContext) {
           rowNode.setAttribute('aria-expanded', String(metadata.expanded));
           rowNode.setAttribute('aria-label', dataGroupLabel(metadata, context.t));
         }
+        const tree = context.engine.tree ? context.engine.getTreeRowMetadata(row) : null;
+        if (tree) {
+          rowNode.setAttribute('aria-level', String(tree.level));
+          if (tree.hasChildren) rowNode.setAttribute('aria-expanded', String(tree.expanded));
+        }
         accessibleRows.set(row, rowNode);
       }
       seenCells.add(`${row}:${col}`);
@@ -1361,14 +1383,17 @@ export function createRendering(context: RenderingContext) {
         button.type = 'button';
         button.tabIndex = -1;
         const metadata = context.engine.grouping ? context.engine.getRowMetadata(row) : null;
-        if (metadata?.kind === 'group') {
-          button.dataset.gridDataGroup = String(row);
-          const label = `${context.t(metadata.expanded ? 'Collapse' : 'Expand')}: ${dataGroupLabel(metadata, context.t)}`;
+        const tree = context.engine.tree ? context.engine.getTreeRowMetadata(row) : null;
+        if (metadata?.kind === 'group' || tree?.hasChildren) {
+          const expanded = metadata?.kind === 'group' ? metadata.expanded : tree!.expanded;
+          if (tree) button.dataset.gridTreeRow = String(row);
+          else button.dataset.gridDataGroup = String(row);
+          const label = `${context.t(expanded ? 'Collapse' : 'Expand')}: ${metadata?.kind === 'group' ? dataGroupLabel(metadata, context.t) : context.t('Row {0}', row + 1)}`;
           button.setAttribute('aria-label', label);
           button.title = label;
-          button.setAttribute('aria-expanded', String(metadata.expanded));
+          button.setAttribute('aria-expanded', String(expanded));
           const glyph = svgIcon('chevron-down');
-          if (!metadata.expanded) glyph.setAttribute('style', 'transform:rotate(-90deg)');
+          if (!expanded) glyph.setAttribute('style', 'transform:rotate(-90deg)');
           glyph.setAttribute('width', '16');
           glyph.setAttribute('height', '16');
           button.append(glyph);
@@ -1384,10 +1409,12 @@ export function createRendering(context: RenderingContext) {
           button.addEventListener('click', (event) => {
             event.stopPropagation();
             if (context.finishEdit(true)) {
-              context.structureAction(
-                () => context.engine.setDataGroupExpanded(metadata.key, !metadata.expanded),
-                'row',
-              );
+              const column = tree ? treeLabelColumn(context.engine) : -1;
+              if (column >= 0) context.interaction.select(row, column);
+              context.structureAction(() => {
+                if (tree) context.engine.setTreeExpanded(tree.rowId, !expanded);
+                else if (metadata?.kind === 'group') context.engine.setDataGroupExpanded(metadata.key, !expanded);
+              }, 'row');
               context.scroller.focus({ preventScroll: true });
               context.announceSelection();
             }
@@ -1440,7 +1467,7 @@ export function createRendering(context: RenderingContext) {
         resizeHandle.setAttribute('aria-hidden', 'true');
         resizeHandle.title = context.t('Drag to resize row; double-click to fit');
         resizeHandle.style.cssText = 'position:absolute;bottom:0;left:0;width:100%;height:5px;cursor:row-resize';
-        if (!context.engine.grouping) {
+        if (!context.engine.grouping && !context.engine.tree) {
           button.append(resizeHandle);
           context.reorderHandle(button, 'row', row);
         }

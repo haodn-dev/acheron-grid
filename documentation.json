@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "a5fb12f8fc1cf78c07ad2b814517a77d32f822c5",
+  "sourceRevision": "589c22bd739c13b6ecb4803e62853733c86e0387",
   "release": {
     "documentationRevision": "6e5d6a408ea3f6f089b013b2d2d0e0c698ccd9ee",
     "tag": "v0.3.0",
@@ -409,9 +409,9 @@
     {
       "id": "canvas-api",
       "path": "guides/canvas-api.md",
-      "revision": 10,
-      "updated": "2026-10-25",
-      "sha256": "a923a4f4d6886944b4f9b72a4cbce7f992087409814d41ebc34b5ac91841ad86",
+      "revision": 11,
+      "updated": "2026-10-26",
+      "sha256": "9a40e1c008f6990b9c5eb8d4e8b0476611f80cefee0235c80d1dfd9543794dad",
       "history": [
         {
           "revision": 1,
@@ -452,6 +452,10 @@
         {
           "revision": 10,
           "summary": "Generated source API signatures and construction options."
+        },
+        {
+          "revision": 11,
+          "summary": "Generated source API signatures and construction options."
         }
       ]
     },
@@ -471,9 +475,9 @@
     {
       "id": "core",
       "path": "packages/core/README.md",
-      "revision": 19,
+      "revision": 20,
       "updated": "2026-10-26",
-      "sha256": "fe0c785560b92fbeeca698ead6d97484a5156db6309dde9f4f9b1941f21d3f94",
+      "sha256": "ea52b96de6ee85594f92bceb111ca65d955214570636f27d213e94dc1fdd79c9",
       "history": [
         {
           "revision": 1,
@@ -550,15 +554,19 @@
         {
           "revision": 19,
           "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
+        },
+        {
+          "revision": 20,
+          "summary": "Audit all core components; correct lifecycle example, formatting, refresh, selection and async contracts."
         }
       ]
     },
     {
       "id": "canvas",
       "path": "packages/canvas/README.md",
-      "revision": 16,
-      "updated": "2026-10-25",
-      "sha256": "f3b44b6812ba8f9b8292e2febe8e67a78a52215882172f502ab201d91aa79878",
+      "revision": 17,
+      "updated": "2026-10-26",
+      "sha256": "1abbf35866d225d37313f55b643882737ede127b2e7fb894f2c945624e21b1bf",
       "history": [
         {
           "revision": 1,
@@ -622,6 +630,10 @@
         },
         {
           "revision": 16,
+          "summary": "Align publication status, installation and current source contracts."
+        },
+        {
+          "revision": 17,
           "summary": "Align publication status, installation and current source contracts."
         }
       ]

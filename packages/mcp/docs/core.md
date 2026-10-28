@@ -1,8 +1,8 @@
 # @acheron-grid/core
 
-## Local tree (headless source preview)
+## Local tree (source preview)
 
-The current core source adds a complete local parent-ID tree. These APIs are not in npm 0.3.0. Canvas disclosure/keyboard/ARIA and framework construction options are not yet integrated.
+The current source adds a complete local parent-ID tree. These APIs are not in npm 0.3.0. Canvas adds disclosure, keyboard and ARIA support; React and Vue inherit its construction options and grid handle. See the [standalone example](https://github.com/haodn-dev/acheron-grid/blob/main/examples/tree/README.md).
 
 ```ts
 engine.setTree({ parentColumnKey: 'parent' });

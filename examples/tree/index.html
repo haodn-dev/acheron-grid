@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Local tree — Acheron Grid</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #f4f7fa; color: #0f172a; font: 14px system-ui, sans-serif; }
+      main { max-width: 1000px; margin: auto; padding: 28px 20px; }
+      h1 { font-size: 28px; margin: 0 0 12px; }
+      p { line-height: 1.6; color: #475569; max-width: 70ch; }
+      .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 24px 0 16px; }
+      label { display: flex; align-items: center; gap: 8px; }
+      button, input { font: inherit; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; background: white; color: inherit; }
+      input { min-width: 0; width: 160px; }
+      button { cursor: pointer; }
+      button:focus-visible, input:focus-visible { outline: 2px solid #0f766e; outline-offset: 3px; }
+      #grid { width: 100%; height: 420px; background: white; border: 1px solid #dbe3eb; }
+      #error { color: #991b1b; }
+      #status { font-size: 13px; }
+    </style>
+    <script type="importmap">
+      {"imports":{"@acheron-grid/core":"/core/index.js","@acheron-grid/canvas":"/canvas/index.js"}}
+    </script>
+    <script type="module" src="/tree/app.js"></script>
+  </head>
+  <body>
+    <main>
+      <h1>Local tree</h1>
+      <p>
+        Explore project work by parent and child. Open a branch, edit an estimate or filter a task to keep its path
+        visible. Source preview from this checkout.
+      </p>
+      <div class="controls" aria-label="Tree controls">
+        <label>Task filter <input id="filter" type="search" placeholder="e.g. Review" /></label>
+        <button id="expand" type="button">Expand all</button>
+        <button id="collapse" type="button">Collapse roots</button>
+        <button id="undo" type="button">Undo</button>
+        <button id="redo" type="button">Redo</button>
+      </div>
+      <p id="error" role="alert" hidden></p>
+      <div id="grid" aria-label="Local project tree"></div>
+      <p id="status" role="status"></p>
+      <p>
+        In the Task column, use Left/Right to close, open or move between parent and child. Enter or F2 edits the
+        selected value. Parent IDs are read-only; estimates are illustrative sample values.
+      </p>
+    </main>
+  </body>
+</html>
