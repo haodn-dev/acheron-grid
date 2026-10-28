@@ -3,9 +3,9 @@ export const coreContracts = {
   resetData:
     'Adopt the current row count as a new flat-data epoch without scanning IDs or creating a row map. Clear selection/cut, all undo/redo, row sizes/visibility/locks/merges/outlines and runtime formats. Preserve column schema/geometry/locks, table lock and application permissions. Reject local projections/tree/grouping or invalid dimensions before discarding state. Host owns source query/revision changes and must settle editing, bulk work and uncertain writes first.',
   refreshRows:
-    'Source preview: refresh an inclusive source-row window without scanning other source IDs or clearing all history. Requires unchanged count, a flat default-height view and no row metadata/format history. Validate window IDs first; discard entire undo/redo batches whose in-window IDs changed, clear intersecting non-single-cell selections and stale active identity, cancel cut, then emit data:rows with the drop/selection result. Matching IDs retain normal value-conflict preflight. Host must report every changed/evicted window and keep query/revision/schema stable; this is not a query/total reset or remote loader.',
+    'Available in 0.4.0: refresh an inclusive source-row window without scanning other source IDs or clearing all history. Requires unchanged count, a flat default-height view and no row metadata/format history. Validate window IDs first; discard entire undo/redo batches whose in-window IDs changed, clear intersecting non-single-cell selections and stale active identity, cancel cut, then emit data:rows with the drop/selection result. Matching IDs retain normal value-conflict preflight. Host must report every changed/evicted window and keep query/revision/schema stable; this is not a query/total reset or remote loader.',
   setTree:
-    'Headless source preview: validate a complete local parent-ID forest, retain filter matches and ancestors, and sort siblings. Reject invalid IDs, parents, cycles, depth above 4096 and incompatible grouping/row layout/history before installing. Null clears tree; no source writes.',
+    'Available in 0.4.0: validate a complete local parent-ID forest, retain filter matches and ancestors, and sort siblings. Reject invalid IDs, parents, cycles, depth above 4096 and incompatible grouping/row layout/history before installing. Null clears tree; no source writes.',
   tree: 'Frozen current parent-column criteria, or null. Tree projection is separate from LocalViewOptions and remote queries.',
   getTreeRowMetadata:
     'Frozen metadata for a visible real tree record: sourceIndex, rowId, parentId, 1-based level, retained hasChildren and expanded. Null outside tree mode. No synthetic row ID.',
@@ -16,7 +16,7 @@ export const coreContracts = {
   restoreTreeState:
     'Validate unknown version-1 state, schema, layout and collapsed IDs against the current forest before replacing tree projection atomically. Clears selection; does not restore source data or authority.',
   setGrouping:
-    'Source preview: filter complete local records, group by one scalar key and optionally sum finite numeric values; sort leaves within each group. Reject incompatible row layout/history before installing. Null clears grouping. No source writes.',
+    'Available in 0.4.0: filter complete local records, group by one scalar key and optionally sum finite numeric values; sort leaves within each group. Reject incompatible row layout/history before installing. Null clears grouping. No source writes.',
   grouping:
     'Frozen current local grouping criteria, or null. Grouping is separate from LocalViewOptions and server queries.',
   getRowMetadata:

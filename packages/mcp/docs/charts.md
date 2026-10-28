@@ -1,12 +1,12 @@
 # @acheron-grid/charts
 
-Version **0.3.0 development preview**. See [release notes and migration](https://github.com/haodn-dev/acheron-grid/blob/main/RELEASE-0.3.0.md).
+Version **0.4.0 development preview**. See [release notes and migration](https://github.com/haodn-dev/acheron-grid/blob/main/RELEASE-0.4.0.md).
 
 Optional free/Apache 2.0 inline line, area, column and horizontal bar renderer. Introduced in the 0.2.1 development preview. It depends on Canvas; core does not depend on charts. It allocates no listeners or persistent cache.
 
 ## Installation and complete example
 
-Install matching released packages: `npm install @acheron-grid/core@0.3.0 @acheron-grid/canvas@0.3.0 @acheron-grid/charts@0.3.0`. For modified source, see [source installation](https://github.com/haodn-dev/acheron-grid/blob/main/guides/getting-started.md#build-a-source-preview).
+Install matching released packages: `npm install @acheron-grid/core@0.4.0 @acheron-grid/canvas@0.4.0 @acheron-grid/charts@0.4.0`. For modified source, see [source installation](https://github.com/haodn-dev/acheron-grid/blob/main/guides/getting-started.md#build-a-source-preview).
 
 Use a browser container with explicit dimensions, as in Getting started:
 

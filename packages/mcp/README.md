@@ -1,6 +1,6 @@
 # @acheron-grid/mcp
 
-Version **0.3.0 development preview**. See [release notes and migration](../../RELEASE-0.3.0.md).
+Version **0.4.0 development preview**. See [release notes and migration](../../RELEASE-0.4.0.md).
 
 The npm 0.1.0 archive has a separate frozen reference. See [documentation versions](../../guides/versions.md).
 
@@ -9,12 +9,12 @@ Optional Model Context Protocol adapter. Core and Canvas do not depend on the MC
 ## Installation
 
 ```sh
-npm install @acheron-grid/mcp@0.3.0
+npm install @acheron-grid/mcp@0.4.0
 ```
 
 Install core/Canvas at the same version when used. For newer APIs, use a built source checkout and install matching packed artifacts; see [Getting started](../../guides/getting-started.md).
 
-The server currently advertises the legacy `serverInfo.version` value `0.1.0` during the MCP handshake, including when this package is installed at `0.3.0`. Use the installed package manifest or lockfile to identify the package version; the handshake field does not identify its npm artifact.
+The server currently advertises the legacy `serverInfo.version` value `0.1.0` during the MCP handshake, including when this package is installed at `0.4.0`. Use the installed package manifest or lockfile to identify the package version; the handshake field does not identify its npm artifact.
 
 ## Documentation server
 
@@ -25,7 +25,7 @@ npm run build
 node packages/mcp/src/cli.mjs
 ```
 
-Configure your MCP client to launch that command over stdio, using an absolute path. The npm 0.3.0 CLI exposes seven bundled package README snapshots as `acheron://docs/core`, `canvas`, `react`, `vue`, `markdown`, `export` and `charts`. The npm 0.1.0 archive exposes the original five resources; npm 0.2.1 includes export/charts resources. It exposes no grid data or write tools. stdout belongs to the protocol; no HTTP listener or authentication service is started.
+Configure your MCP client to launch that command over stdio, using an absolute path. The 0.4.0 CLI exposes seven bundled package README snapshots as `acheron://docs/core`, `canvas`, `react`, `vue`, `markdown`, `export` and `charts`. The npm 0.1.0 archive exposes the original five resources; npm 0.2.1 includes export/charts resources. It exposes no grid data or write tools. stdout belongs to the protocol; no HTTP listener or authentication service is started.
 
 ## Connect a host-owned grid
 

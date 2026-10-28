@@ -1,12 +1,12 @@
 # @acheron-grid/export
 
-Version **0.3.0 development preview**. See [release notes and migration](../../RELEASE-0.3.0.md).
+Version **0.4.0 development preview**. See [release notes and migration](../../RELEASE-0.4.0.md).
 
 Optional, free Apache-2.0-licensed CSV and XLSX selection export. Introduced in the 0.2.1 development preview. It uses public core APIs and requires no browser globals. The host owns saving/downloading the returned text or bytes.
 
 ## Installation and complete example
 
-Install matching released packages: `npm install @acheron-grid/core@0.3.0 @acheron-grid/export@0.3.0`. For modified source, see [source installation](../../guides/getting-started.md#build-a-source-preview).
+Install matching released packages: `npm install @acheron-grid/core@0.4.0 @acheron-grid/export@0.4.0`. For modified source, see [source installation](../../guides/getting-started.md#build-a-source-preview).
 
 ```ts
 import { createGridEngine, LocalDataSource } from '@acheron-grid/core';

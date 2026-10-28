@@ -266,7 +266,7 @@ Reapply a previously undone command under current identity/value/permission chec
 setGrouping: (next: LocalGroupingOptions | null) => void
 ```
 
-Source preview: filter complete local records, group by one scalar key and optionally sum finite numeric values; sort leaves within each group. Reject incompatible row layout/history before installing. Null clears grouping. No source writes.
+Available in 0.4.0: filter complete local records, group by one scalar key and optionally sum finite numeric values; sort leaves within each group. Reject incompatible row layout/history before installing. Null clears grouping. No source writes.
 
 ### grouping
 
@@ -290,7 +290,7 @@ Frozen current parent-column criteria, or null. Tree projection is separate from
 setTree: (next: LocalTreeOptions | null) => void
 ```
 
-Headless source preview: validate a complete local parent-ID forest, retain filter matches and ancestors, and sort siblings. Reject invalid IDs, parents, cycles, depth above 4096 and incompatible grouping/row layout/history before installing. Null clears tree; no source writes.
+Available in 0.4.0: validate a complete local parent-ID forest, retain filter matches and ancestors, and sort siblings. Reject invalid IDs, parents, cycles, depth above 4096 and incompatible grouping/row layout/history before installing. Null clears tree; no source writes.
 
 ### getTreeRowMetadata
 
