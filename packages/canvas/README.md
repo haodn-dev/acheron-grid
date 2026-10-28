@@ -6,6 +6,10 @@ The npm 0.1.0 archive has a separate frozen reference. See [documentation versio
 
 An experimental Canvas browser renderer for the headless @acheron-grid/core engine.
 
+## Cell navigation (source preview)
+
+After 0.4.0, `grid.selectCell(row, column)` selects and reveals a display cell using existing permissions and geometry. Finish editors and close local Find first. It does not fetch data or resolve IDs; see the [host anchor example](../../examples/paged/README.md).
+
 ## Bounded data reset (0.4.0 preview)
 
 `grid.resetData()` delegates to the [core epoch-reset contract](../core/README.md#bounded-data-epoch-reset-040-preview); React/Vue inherit it. Canvas keeps the mount, clears caches and gestures, updates count/ARIA/index geometry and native extent, and resets vertical scroll. Column geometry stays; no identity anchor is searched.

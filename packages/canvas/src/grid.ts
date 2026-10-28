@@ -311,6 +311,7 @@ export interface Grid {
   openSearch(): void;
   selectColumn(index: number): void;
   selectRow(index: number): void;
+  selectCell(rowIndex: number, columnIndex: number): void;
   selectAll(): void;
   autoFitColumn(index: number): void;
   autoFitRow(index: number): void;
@@ -2445,6 +2446,21 @@ export function createGrid(options: GridOptions): Grid {
     openSearch,
     selectColumn,
     selectRow,
+    selectCell: (rowIndex, columnIndex) => {
+      if (gridContext.runtime.destroyed) throw new Error('Grid is destroyed.');
+      if (editors.editor || !searchBar.hidden)
+        throw new Error('Finish editing and close local search before selecting a cell.');
+      if (
+        !Number.isSafeInteger(rowIndex) ||
+        rowIndex < 0 ||
+        rowIndex >= gridContext.layout.rowCount ||
+        !Number.isSafeInteger(columnIndex) ||
+        columnIndex < 0 ||
+        columnIndex >= gridContext.layout.columns.length
+      )
+        throw new RangeError('Invalid cell position.');
+      select(rowIndex, columnIndex);
+    },
     selectAll,
     autoFitColumn,
     autoFitRow,

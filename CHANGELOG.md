@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add Canvas `selectCell(rowIndex, columnIndex)` through shared selection permissions and reveal geometry, with editor/Find guards and repeat-selection reveal.
+- Add opt-in stable-ID anchoring to the read-only remote viewport example. The host validates query/revision-bound lookup and loaded identity; missing, stale, invalid or natively unreachable targets retain an explicit safe fallback. Writable anchoring and full logical scrolling remain separate work.
+
 ## 0.4.0 — Development preview — 2026-10-28
 
 - Add opt-in local grouping by one scalar column with count/sum snapshots, synthetic group metadata, expansion state, leaf-only commands, and Canvas disclosure, keyboard navigation and treegrid accessibility. React/Vue inherit the same options and handle APIs; HTML/MCP paths distinguish group headers from records.
