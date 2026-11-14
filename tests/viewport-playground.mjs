@@ -2,6 +2,39 @@ import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { writeFile } from 'node:fs/promises';
 
+test('two workbook clients preserve the accepted revision and recalculate formulas', async ({ page, context }) => {
+  const peer = await context.newPage();
+  await page.goto('/paged/workbook');
+  await peer.goto('/paged/workbook');
+  for (const client of [page, peer]) await expect(client.locator('#status')).toContainText('Revision 0');
+  await page.getByLabel('Value or formula').fill('4');
+  await page.getByRole('button', { name: 'Save cell' }).click();
+  await expect(page.locator('#status')).toContainText('revision 1');
+  await peer.getByLabel('Value or formula').fill('99');
+  await peer.getByRole('button', { name: 'Save cell' }).click();
+  await expect(peer.locator('#status')).toContainText('Another client saved first');
+  await expect(peer.locator('#cells')).toContainText('4');
+  await page.getByLabel('Cell', { exact: true }).fill('B1');
+  await page.getByLabel('Value or formula').fill('=A1*3');
+  await page.getByRole('button', { name: 'Save cell' }).click();
+  await expect(page.getByRole('cell', { name: '12', exact: true })).toBeVisible();
+  await expect(page.locator('#pivot')).toContainText('Formula');
+});
+
+test('remote hierarchy pages within a server-owned parent and group', async ({ page, request }) => {
+  await page.goto('/paged/hierarchy');
+  await expect(page.getByRole('gridcell', { name: 'Name: Project 2', exact: true })).toBeAttached();
+  await page.getByLabel('Parent').selectOption('2');
+  await expect(page.getByRole('gridcell', { name: 'Name: Task 2000', exact: true })).toBeAttached();
+  await expect(page.locator('#status')).toContainText('1000 records');
+  await page.getByRole('button', { name: 'Next page' }).click();
+  await expect(page.getByRole('gridcell', { name: 'Name: Task 2020', exact: true })).toBeAttached();
+  await page.getByRole('combobox', { name: 'View' }).selectOption('groups');
+  await expect(page.getByRole('gridcell', { name: 'Name: Group 2', exact: true })).toBeAttached();
+  const stale = await request.get('/paged/api/hierarchy?view=tree&parent=2&revision=stale');
+  expect(stale.status()).toBe(409);
+});
+
 for (const width of [1100, 390])
   test(`stable-ID lookup restores a selected task with one mount and bounded page loading at ${width}px`, async ({
     page,

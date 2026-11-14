@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shared workbook · Acheron Grid</title>
+  </head>
+  <body>
+    <main>
+      <h1>Shared workbook</h1>
+      <form id="edit">
+        <label
+          >Sheet
+          <select id="sheet">
+            <option>Plan</option>
+            <option>Actual</option>
+          </select></label
+        >
+        <label>Cell <input id="cell" value="A1" required pattern="[A-Za-z]{1,4}[1-9][0-9]{0,6}" /></label>
+        <label>Value or formula <input id="value" maxlength="4096" placeholder="=A1*2" /></label>
+        <button>Save cell</button>
+      </form>
+      <button id="refresh">Refresh workbook</button>
+      <p id="status" role="status"></p>
+      <table>
+        <caption>
+          Sheet values
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Cell</th>
+            <th scope="col">Input</th>
+            <th scope="col">Result</th>
+          </tr>
+        </thead>
+        <tbody id="cells"></tbody>
+      </table>
+      <table>
+        <caption>
+          Pivot counts by sheet and input type
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Sheet</th>
+            <th scope="col">Type</th>
+            <th scope="col">Count</th>
+          </tr>
+        </thead>
+        <tbody id="pivot"></tbody>
+      </table>
+    </main>
+    <script type="module">
+      import {evaluateFormula, pivotRows} from '/core/index.js';
+      const byId = id => document.getElementById(id);
+      const form = byId('edit'), sheet = byId('sheet'), status = byId('status');
+      const refresh = byId('refresh');
+      const url = '/paged/api/workbook';
+      let snapshot, busy = false;
+      function row(values) {
+        const element = document.createElement('tr');
+        for (const value of values) element.insertCell().textContent = String(value);
+        return element;
+      }
+      function render() {
+        const cells = snapshot.sheets.find(entry => entry.name === sheet.value).cells;
+        byId('cells').replaceChildren(...Object.entries(cells).map(([address, input]) => row([address, input,
+          typeof input === 'string' && input.startsWith('=') ? evaluateFormula(input, ref => cells[ref]) : input])));
+        const facts = snapshot.sheets.flatMap(({name, cells}) => Object.values(cells).map(input => ({sheet: name,
+          type: typeof input === 'string' && input.startsWith('=') ? 'Formula' : typeof input === 'number' ? 'Number' : 'Text'})));
+        byId('pivot').replaceChildren(...Array.from(pivotRows(facts, 'sheet', 'type')).flatMap(([name, counts]) =>
+          Array.from(counts, ([type, count]) => row([name, type, count]))));
+      }
+      async function load() {
+        const response = await fetch(url);
+        if (!response.ok) throw Error('Could not load the workbook.');
+        snapshot = await response.json();
+        render();
+      }
+      async function run(operation) {
+        if (busy) return;
+        busy = true;
+        refresh.disabled = form.querySelector('button').disabled = true;
+        try { status.textContent = await operation(); }
+        catch (error) { status.textContent = error.message; }
+        finally { busy = false; refresh.disabled = false; form.querySelector('button').disabled = !snapshot; }
+      }
+      sheet.onchange = () => { if(snapshot) render(); };
+      refresh.onclick = () => void run(async () => { await load(); return `Revision ${snapshot.revision}`; });
+      form.onsubmit = event => {
+        event.preventDefault();
+        void run(async () => {
+          const input = byId('value').value;
+          const number = Number(input);
+          const value = input === '' ? null : input.trim() && Number.isFinite(number) ? number : input;
+          const response = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+            revision:snapshot.revision, edits:[{sheet:sheet.value,address:byId('cell').value,value}]
+          })});
+          if (response.status === 409) { await load(); return 'Another client saved first. Review the latest values before saving again.'; }
+          if (!response.ok) throw Error('Could not save the cell.');
+          await load();
+          return `Saved · revision ${snapshot.revision}`;
+        });
+      };
+      refresh.click();
+    </script>
+  </body>
+</html>

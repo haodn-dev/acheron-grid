@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Remote hierarchy · Acheron Grid</title>
+    <script type="importmap">
+      {"imports":{"@acheron-grid/core":"/core/index.js"}}
+    </script>
+  </head>
+  <body>
+    <main>
+      <h1>Remote hierarchy</h1>
+      <label
+        >View
+        <select id="view">
+          <option value="tree">Projects</option>
+          <option value="groups">Groups</option>
+        </select></label
+      >
+      <label
+        >Parent
+        <select id="parent">
+          <option value="">All parents</option>
+        </select></label
+      >
+      <button id="previous">Previous page</button>
+      <button id="next">Next page</button>
+      <button id="reload">Reload hierarchy</button>
+      <p id="status" role="status"></p>
+      <div id="grid" style="height:420px"></div>
+    </main>
+    <script type="module">
+      import {createGrid} from '/canvas/index.js';
+      import {LocalDataSource} from '/core/index.js';
+      const byId = (id) => document.getElementById(id);
+      const view = byId('view'), parent = byId('parent'), status = byId('status');
+      const previous = byId('previous'), next = byId('next');
+      let grid, revision, controller, offset = 0;
+      async function load(position = 0, reset = false) {
+        controller?.abort();
+        const request = new AbortController();
+        controller = request;
+        if (reset) {
+          revision = undefined;
+          parent.replaceChildren(new Option('All parents', ''));
+        }
+        const query = new URLSearchParams({view: view.value, offset: position});
+        if (parent.value) query.set('parent', parent.value);
+        if (revision) query.set('revision', revision);
+        previous.disabled = next.disabled = true;
+        status.textContent = 'Loading hierarchy…';
+        try {
+          const response = await fetch('/paged/api/hierarchy?' + query, {signal: request.signal});
+          if (!response.ok) throw Error(response.status === 409 ? 'Reload the hierarchy to use the latest revision.' : 'Could not load the hierarchy.');
+          const page = await response.json();
+          if (request.signal.aborted) return;
+          revision = page.revision;
+          offset = position;
+          if (!parent.value) parent.replaceChildren(new Option('All parents', ''), ...page.rows.map(row => new Option(row.title, row.id)));
+          grid?.destroy();
+          grid = createGrid({container: byId('grid'), dataSource: new LocalDataSource(page.rows, row => row.id), accessibility:'viewport',
+            columns:[{key:'title',title:'Name'}, {key:'count',title:'Tasks'}], permissions:{writable:false, editable:false, pasteable:false}});
+          previous.disabled = offset === 0;
+          next.disabled = offset + page.rows.length >= page.total;
+          status.textContent = `${page.total} records · revision ${revision}`;
+        } catch (error) {
+          if (!request.signal.aborted) status.textContent = error.message;
+        }
+      }
+      view.onchange = byId('reload').onclick = () => void load(0, true);
+      parent.onchange = () => void load();
+      previous.onclick = () => void load(offset - 20);
+      next.onclick = () => void load(offset + 20);
+      window.addEventListener('pagehide', event => {
+        if (!event.persisted) {controller?.abort();grid?.destroy();}
+      });
+      void load();
+    </script>
+  </body>
+</html>

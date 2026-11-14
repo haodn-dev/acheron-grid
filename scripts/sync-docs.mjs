@@ -130,7 +130,7 @@ for (const [name, file, typeName, optionsName] of [
       const runtime = !!(target.flags & ts.SymbolFlags.Value);
       if (runtime && !coreExportContracts[symbol.name])
         throw new Error('Missing exported core contract: ' + symbol.name);
-      markdown += `| ${symbol.name} | ${runtime ? 'Runtime' : 'Type'} | ${declaration?.getSourceFile().fileName.split(/[\\/]/).at(-1) ?? 'inferred'} | ${runtime ? coreExportContracts[symbol.name] : 'Compile-time contract; see the exported type definitions below or engine construction/member signatures.'} |\n`;
+      markdown += `| ${symbol.name} | ${runtime ? 'Runtime' : 'Type'} | ${declaration?.getSourceFile().fileName.split(/[\\/]/).at(-1) ?? 'inferred'} | ${coreExportContracts[symbol.name] ?? 'Compile-time contract; see the exported type definitions below or engine construction/member signatures.'} |\n`;
     }
     for (const symbol of symbols.filter((symbol) =>
       [
