@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "79188c39da3a53547eb5b9755fd189aa633f16d7",
+  "sourceRevision": "5ffbaa59f5003ca80d6f0bb46d45c5fc920b3475",
   "release": {
     "version": "0.4.0",
     "tag": "v0.4.0",
@@ -352,9 +352,9 @@
     {
       "id": "core-api",
       "path": "guides/core-api.md",
-      "revision": 23,
-      "updated": "2026-10-28",
-      "sha256": "8eafa2d45782437e8af8aed0e48274040542a134fdbb63fe9814a4de7141ed77",
+      "revision": 25,
+      "updated": "2026-11-14",
+      "sha256": "797f9f199a25b87ee3821e70e49fd783158dda8528cecb7542aa6920e89d82dc",
       "history": [
         {
           "revision": 1,
@@ -446,6 +446,14 @@
         },
         {
           "revision": 23,
+          "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
+        },
+        {
+          "revision": 24,
+          "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
+        },
+        {
+          "revision": 25,
           "summary": "Complete behavioral contracts for every engine member, all public exports and source interface signatures."
         }
       ]

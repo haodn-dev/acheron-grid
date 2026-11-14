@@ -1,5 +1,9 @@
 # Paged remote editing
 
+The `/paged/hierarchy` source preview browses server-paged children of projects or groups. The server supplies child counts and revision checks. Navigation uses a parent selector and page controls.
+
+The `/paged/workbook` source preview shares a two-sheet workbook between browser clients through an in-memory demo server. Refresh reads the latest snapshot. Saving against an older revision opens the latest snapshot and keeps the input available for review and retry. The example evaluates arithmetic formulas on read and uses pivot counts to summarize inputs by sheet and type. Restarting the server clears the workbook.
+
 Open `/paged/viewport?rows=1000000&scroll=logical` to try the source preview of full-range vertical scrolling. `logicalScrolling: true` maps native scrollbar positions onto the full row range when the browser limits the spacer. Wheel and keyboard navigation use exact logical positions. Dragging the scrollbar thumb remains limited by the browser's physical pixel resolution.
 
 ## Stable-ID anchoring (source preview after 0.4.0)

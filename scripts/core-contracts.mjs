@@ -194,6 +194,17 @@ export const coreContracts = {
 };
 
 export const coreExportContracts = {
+  pivotRows:
+    'Source preview. Compute sparse count or numeric sum cells from at most 100,000 records and two scalar dimensions.',
+  PivotScalar: 'Supported pivot keys preserve their scalar type, including null.',
+  evaluateFormula:
+    'Source preview. Evaluate bounded arithmetic and A1 references with cycle, reference, value, division and budget errors.',
+  FormulaError: 'Stable error codes returned by the arithmetic evaluator.',
+  FormulaResult: 'A finite computed number or a formula error code.',
+  createWorkbook:
+    'Source preview. Create an in-memory multi-sheet workbook with atomic revision-checked edits, computed reads and JSON snapshots.',
+  WorkbookCell: 'Stored numeric or text input. Text starting with an equals sign is evaluated on read.',
+  WorkbookEdit: 'An edit targets a sheet and A1 address. Null deletes the cell.',
   createPagedRemoteDataSource:
     'Create a bounded writable page cache with stable-ID drafts, server-owned query/revision, dirty-cohort receipts, exact uncertain retry and whole-cache invalidation after accepted writes. Load only required pages; reconcile engine identity/history after cache changes.',
   createGridEngine:

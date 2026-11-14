@@ -1,7 +1,9 @@
 import { readFile } from 'node:fs/promises';
+import { createWorkbook } from '../../packages/core/dist/index.js';
 
 // Process-local demonstration; production hosts must persist writes and idempotency records together.
 export function createPagedDemoHandler() {
+  const workbook = createWorkbook(['Plan', 'Actual']);
   const rows = Array.from({ length: 10000 }, (_, id) => ({ id, values: { title: `Task ${id}` } }));
   const receipts = new Map();
   let revision = 1,
@@ -55,6 +57,8 @@ export function createPagedDemoHandler() {
         ['/paged/viewport', 'viewport.html'],
         ['/paged/viewport.js', 'viewport.js'],
         ['/paged/viewport-loader.js', 'viewport-loader.js'],
+        ['/paged/hierarchy', 'hierarchy.html'],
+        ['/paged/workbook', 'workbook.html'],
       ]);
       if (request.method === 'GET' && files.has(url.pathname)) {
         const file = files.get(url.pathname);
@@ -64,6 +68,37 @@ export function createPagedDemoHandler() {
             'X-Content-Type-Options': 'nosniff',
           })
           .end(await readFile(new URL(file, import.meta.url)));
+        return true;
+      }
+      if (request.method === 'GET' && url.pathname === '/paged/api/workbook') {
+        json(response, 200, workbook.snapshot());
+        return true;
+      }
+      if (request.method === 'GET' && url.pathname === '/paged/api/hierarchy') {
+        const view = url.searchParams.get('view');
+        const parent = url.searchParams.get('parent');
+        const offset = Number(url.searchParams.get('offset'));
+        const expected = url.searchParams.get('revision');
+        if (
+          !['tree', 'groups'].includes(view) ||
+          !Number.isSafeInteger(offset) ||
+          offset < 0 ||
+          (parent !== null && !Array.from({ length: 10 }, (_, index) => String(index)).includes(parent))
+        )
+          throw Error('Invalid hierarchy query');
+        if (expected && expected !== String(revision)) {
+          json(response, 409, { error: 'Reload the hierarchy to use the latest revision.' });
+          return true;
+        }
+        const total = parent === null ? 10 : 1000;
+        const page = Array.from({ length: Math.max(0, Math.min(20, total - offset)) }, (_, index) => {
+          const position = offset + index;
+          if (parent === null)
+            return { id: String(position), title: `${view === 'tree' ? 'Project' : 'Group'} ${position}`, count: 1000 };
+          const row = rows[Number(parent) * 1000 + position];
+          return { id: row.id, title: row.values.title, count: null };
+        });
+        json(response, 200, { revision: String(revision), total, rows: page });
         return true;
       }
       if (request.method === 'GET' && ['/paged/api/viewport', '/paged/api/locate'].includes(url.pathname)) {
@@ -144,7 +179,10 @@ export function createPagedDemoHandler() {
         });
         return true;
       }
-      if (request.method !== 'POST' || !['/paged/api/write', '/paged/api/control'].includes(url.pathname)) {
+      if (
+        request.method !== 'POST' ||
+        !['/paged/api/write', '/paged/api/control', '/paged/api/workbook'].includes(url.pathname)
+      ) {
         json(response, 404, { error: 'Not found' });
         return true;
       }
@@ -163,6 +201,11 @@ export function createPagedDemoHandler() {
         chunks.push(chunk);
       }
       const input = JSON.parse(Buffer.concat(chunks).toString());
+      if (url.pathname.endsWith('/workbook')) {
+        const result = workbook.apply(input.revision, input.edits);
+        json(response, result.status === 'conflict' ? 409 : 200, result);
+        return true;
+      }
       if (url.pathname.endsWith('/control')) {
         if (!input || !['normal', 'reject', 'drop', 'external'].includes(input.mode)) throw Error('Invalid mode');
         if (input.mode === 'external') {

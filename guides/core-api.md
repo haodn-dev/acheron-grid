@@ -936,6 +936,14 @@ The root and headless alias expose the same API. Source interfaces use their own
 | restoreGridConfiguration | Runtime | configuration.ts | Validate unknown versioned configuration against application column definitions and row count; return construction options. Saved input cannot supply executable callbacks/policies. |
 | GridConfiguration | Type | configuration.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
 | GridState | Type | state.ts | Compile-time contract; see the exported type definitions below or engine construction/member signatures. |
+| pivotRows | Runtime | pivot.ts | Source preview. Compute sparse count or numeric sum cells from at most 100,000 records and two scalar dimensions. |
+| PivotScalar | Type | pivot.ts | Supported pivot keys preserve their scalar type, including null. |
+| evaluateFormula | Runtime | formula.ts | Source preview. Evaluate bounded arithmetic and A1 references with cycle, reference, value, division and budget errors. |
+| FormulaError | Type | formula.ts | Stable error codes returned by the arithmetic evaluator. |
+| FormulaResult | Type | formula.ts | A finite computed number or a formula error code. |
+| createWorkbook | Runtime | workbook.ts | Source preview. Create an in-memory multi-sheet workbook with atomic revision-checked edits, computed reads and JSON snapshots. |
+| WorkbookCell | Type | workbook.ts | Stored numeric or text input. Text starting with an equals sign is evaluated on read. |
+| WorkbookEdit | Type | workbook.ts | An edit targets a sheet and A1 address. Null deletes the cell. |
 
 ### LocalDataSource source members
 
@@ -1954,5 +1962,39 @@ export interface GridState {
   readonly groups: readonly RowGroup[];
   readonly locks: readonly CellLockTarget[];
   readonly formats: readonly { readonly target: CellFormatTarget; readonly patch: CellFormatPatch }[];
+}
+```
+
+### Type PivotScalar
+
+```ts
+export type PivotScalar = string | number | boolean | null;
+```
+
+### Type FormulaError
+
+```ts
+export type FormulaError = '#VALUE!' | '#REF!' | '#DIV/0!' | '#CYCLE!' | '#LIMIT!';
+```
+
+### Type FormulaResult
+
+```ts
+export type FormulaResult = number | FormulaError;
+```
+
+### Type WorkbookCell
+
+```ts
+export type WorkbookCell = number | string;
+```
+
+### Type WorkbookEdit
+
+```ts
+export interface WorkbookEdit {
+  readonly sheet: string;
+  readonly address: string;
+  readonly value: WorkbookCell | null;
 }
 ```
