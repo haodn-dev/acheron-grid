@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "a3f7b567a105f9ddee9a9a86b2ffc99ab3f31c66",
+  "sourceRevision": "c9efe36d6e56fddf80f78b13319824b1dbcafd61",
   "release": {
     "version": "0.4.0",
     "tag": "v0.4.0",
@@ -453,9 +453,9 @@
     {
       "id": "canvas-api",
       "path": "guides/canvas-api.md",
-      "revision": 17,
-      "updated": "2026-10-28",
-      "sha256": "e7e10f250e74ebbfe28840ad531ad6d5aaad2096e52c528b773c96bc6ae1a57f",
+      "revision": 18,
+      "updated": "2026-11-14",
+      "sha256": "03b407ef659f6c23ec07ba13fefd4677218f11f1f7b5a73e9aec25805aa327f5",
       "history": [
         {
           "revision": 1,
@@ -523,6 +523,10 @@
         },
         {
           "revision": 17,
+          "summary": "Generated source API signatures and construction options."
+        },
+        {
+          "revision": 18,
           "summary": "Generated source API signatures and construction options."
         }
       ]

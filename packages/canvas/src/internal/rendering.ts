@@ -92,6 +92,7 @@ interface RenderingContext
   readonly rowLabels: (row: number) => string[];
   readonly rowLockSvg: HTMLElement;
   readonly scroller: HTMLDivElement;
+  readonly getScrollTop: () => number;
   readonly selectAll: () => void;
   readonly selectHeaderGroup: (first: number, last: number, event: PointerEvent | KeyboardEvent) => void;
   readonly selectRow: (index: number) => void;
@@ -909,7 +910,7 @@ export function createRendering(context: RenderingContext) {
       width: context.scroller.clientWidth,
       height: context.scroller.clientHeight,
       scrollLeft: context.scroller.scrollLeft,
-      scrollTop: context.scroller.scrollTop,
+      scrollTop: context.getScrollTop(),
     });
   }
 
@@ -1562,7 +1563,7 @@ export function createRendering(context: RenderingContext) {
   function drawSelection(regions: readonly ViewportRegion[]): void {
     const selection = context.engine.getSelection();
     const original = context.getSelectionRanges();
-    const scroll = context.scroller.scrollLeft + ':' + context.scroller.scrollTop;
+    const scroll = context.scroller.scrollLeft + ':' + context.getScrollTop();
     const current = original.slice(0, 64).map((range) => ({
       key: JSON.stringify(range),
       multiple: range.startRow !== range.endRow || range.startColumn !== range.endColumn,
