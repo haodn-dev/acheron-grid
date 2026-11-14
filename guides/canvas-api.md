@@ -771,6 +771,7 @@ Call createGrid with GridOptions. Required fields are marked; options are read a
 | allowMerging | No | `boolean \| undefined` |
 | allowSearch | No | `boolean \| undefined` |
 | allowRowGrouping | No | `boolean \| undefined` |
+| logicalScrolling | No | `boolean \| undefined` |
 | canChangeLayout | No | `((request: Readonly<LayoutRequest>) => boolean) \| undefined` |
 | locale | No | `string \| undefined` |
 | messages | No | `Readonly<Record<string, string>> \| undefined` |

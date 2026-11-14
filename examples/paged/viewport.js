@@ -40,6 +40,7 @@ const source = createPagedRemoteDataSource({
   },
 });
 const grid = createGrid({
+  logicalScrolling: new URLSearchParams(location.search).get('scroll') === 'logical',
   container,
   dataSource: {
     getRowCount: source.getRowCount,

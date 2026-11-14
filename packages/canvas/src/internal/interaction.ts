@@ -63,6 +63,8 @@ interface InteractionContext
   readonly rowAxis: GridEngine['rows'];
   readonly rowValueLocked: (row: number) => boolean;
   readonly scroller: HTMLDivElement;
+  readonly getScrollTop: () => number;
+  readonly setScrollTop: (top: number) => void;
   readonly stateLabels: (row: number | null, col: number) => string[];
   readonly validationMessage: (value: unknown, columnIndex: number) => string | undefined;
   readonly viewport: () => ReturnType<GridEngine['getViewport']>;
@@ -662,9 +664,9 @@ export function createInteraction(context: InteractionContext) {
           top < view.scrollTop + view.frozenHeight ||
           context.rowAxis.size(rowIndex) > view.height - view.frozenHeight
         )
-          context.scroller.scrollTop = top - view.frozenHeight;
+          context.setScrollTop(top - view.frozenHeight);
         else if (top + context.rowAxis.size(rowIndex) > view.scrollTop + view.height)
-          context.scroller.scrollTop = top + context.rowAxis.size(rowIndex) - view.height;
+          context.setScrollTop(top + context.rowAxis.size(rowIndex) - view.height);
       }
     }
     if (changed) context.options.onSelectionChange?.(context.getSelection());
@@ -987,10 +989,10 @@ export function createInteraction(context: InteractionContext) {
         ? 0
         : step(dragPosition.clientY, bounds.top + view.frozenHeight, view.height - view.frozenHeight);
     const previousLeft = context.scroller.scrollLeft;
-    const previousTop = context.scroller.scrollTop;
+    const previousTop = context.getScrollTop();
     context.scroller.scrollLeft += dx;
-    context.scroller.scrollTop += dy;
-    if (context.scroller.scrollLeft !== previousLeft || context.scroller.scrollTop !== previousTop) {
+    if (dy) context.setScrollTop(previousTop + dy);
+    if (context.scroller.scrollLeft !== previousLeft || context.getScrollTop() !== previousTop) {
       extendDrag();
       dragFrame = context.win.requestAnimationFrame(dragScroll);
     }

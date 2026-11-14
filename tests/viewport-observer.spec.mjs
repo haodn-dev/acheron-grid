@@ -151,6 +151,53 @@ test('a browser collapsing an oversized row spacer retains a usable bounded scro
   });
 });
 
+test('logical scrolling reaches the tail and keeps exact local steps above native limits', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    const host = document.querySelector('#grid');
+    host.style.zoom = '1.25';
+    const count = 10_000_000;
+    const grid = createGrid({
+      container: host,
+      logicalScrolling: true,
+      rowHeight: 32,
+      frozenRows: 1,
+      dataSource: { getRowCount: () => count, getRowId: (row) => row, getValue: (row) => row },
+      columns: [{ key: 'value', title: 'Value' }],
+    });
+    try {
+      const scroller = host.querySelector('[data-grid-viewport]');
+      scroller.scrollTop = count * 32;
+      const max = scroller.scrollTop;
+      scroller.scrollTop = max / 2;
+      const middle = grid.getViewport().regions.at(-1).rows.start;
+      scroller.scrollTop = max;
+      const end = grid.getViewport().regions.at(-1).rows.end;
+      grid.selectCell(7_000_000, 0);
+      const selected = grid.getSelection().rowId;
+      const before = grid.getViewport().scrollTop;
+      scroller.dispatchEvent(new WheelEvent('wheel', { deltaY: 1, cancelable: true }));
+      const step = grid.getViewport().scrollTop - before;
+      grid.selectCell(0, 0);
+      scroller.scrollTop = 0;
+      window.grid = grid;
+      return { middle, end, selected, step, start: grid.getViewport().scrollTop };
+    } catch (error) {
+      grid.destroy();
+      throw error;
+    }
+  });
+  expect(result.middle).toBeGreaterThan(4_999_900);
+  expect(result.middle).toBeLessThan(5_000_100);
+  expect(result).toMatchObject({ end: 10_000_000, selected: 7_000_000, step: 1, start: 0 });
+  await page.getByRole('grid').press('Control+End');
+  expect(await page.evaluate(() => window.grid.getSelection()?.rowId)).toBe(9_999_999);
+  await page.getByRole('grid').press('ArrowUp');
+  expect(await page.evaluate(() => window.grid.getSelection()?.rowId)).toBe(9_999_998);
+  await page.evaluate(() => window.grid.destroy());
+});
+
 async function mount(page, extra = {}) {
   await page.goto('/');
   await page.evaluate(async (extra) => {

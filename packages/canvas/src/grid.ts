@@ -164,6 +164,8 @@ export interface GridOptions extends Pick<
   allowMerging?: boolean;
   allowSearch?: boolean;
   allowRowGrouping?: boolean;
+  /** Enable full-range vertical scrolling when the browser clamps the native spacer. */
+  logicalScrolling?: boolean;
   canChangeLayout?: GridEngineOptions['canChangeLayout'];
   locale?: string;
   messages?: Readonly<Record<string, string>>;
@@ -605,6 +607,7 @@ export function createGrid(options: GridOptions): Grid {
   }
   const rendering = createRendering({
     queueViewportChange,
+    getScrollTop: () => getScrollTop(),
     get motionSettings() {
       return motionSettings;
     },
@@ -959,7 +962,7 @@ export function createGrid(options: GridOptions): Grid {
               `${gridContext.layout.indexWidth}px`;
           indexGutter.replaceChildren();
           syncScrollExtent();
-          scroller.scrollTop = 0;
+          setScrollTop(0);
         }
         render();
       } else if (change.type === 'cells') {
@@ -1327,12 +1330,62 @@ export function createGrid(options: GridOptions): Grid {
   spacer.style.position = 'relative';
   spacer.style.height = `${rowAxis.position(gridContext.layout.rowCount)}px`;
   scroller.append(spacer, accessibleBody, activeRow);
+  let logicalMax = 0;
+  let nativeMax = 0;
+  let lastNativeTop = -1;
+  let preciseTop = 0;
+  function getScrollTop(): number {
+    const top = scroller.scrollTop;
+    if (!gridContext.options.logicalScrolling || nativeMax >= logicalMax || nativeMax === 0) return Math.max(0, top);
+    if (top !== lastNativeTop) {
+      lastNativeTop = top;
+      preciseTop = Math.max(0, Math.min(logicalMax, (top / nativeMax) * logicalMax));
+    }
+    return preciseTop;
+  }
+  function setScrollTop(top: number): void {
+    if (!gridContext.options.logicalScrolling || nativeMax >= logicalMax || nativeMax === 0) {
+      scroller.scrollTop = top;
+      return;
+    }
+    preciseTop = Math.max(0, Math.min(logicalMax, top));
+    scroller.scrollTop = (preciseTop / logicalMax) * nativeMax;
+    lastNativeTop = scroller.scrollTop;
+  }
+  function scrollWheel(event: WheelEvent): void {
+    if (nativeMax >= logicalMax || nativeMax === 0 || event.ctrlKey || event.shiftKey || !event.deltaY) return;
+    const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? scroller.clientHeight : 1;
+    const current = getScrollTop();
+    const next = Math.max(0, Math.min(logicalMax, current + event.deltaY * unit));
+    if (next === current) return;
+    event.preventDefault();
+    scroller.scrollLeft += event.deltaX * unit;
+    setScrollTop(next);
+    render();
+  }
   function syncScrollExtent(): void {
+    const previous = getScrollTop();
     const height = rowAxis.position(gridContext.layout.rowCount);
     spacer.style.width = `${columnAxis.position(gridContext.layout.columns.length)}px`;
     spacer.style.height = `${height}px`;
     // Some browsers collapse oversized CSS boxes instead of clipping them to a usable scroll range.
     if (root.isConnected && height > 16000000 && spacer.offsetHeight < 16000000) spacer.style.height = '16000000px';
+    if (gridContext.options.logicalScrolling) {
+      for (
+        let extent = Math.min(height, 16000000);
+        extent > scroller.clientHeight && spacer.offsetHeight <= scroller.clientHeight;
+        extent /= 2
+      )
+        spacer.style.height = `${extent}px`;
+      logicalMax = Math.max(0, height - scroller.clientHeight);
+      const physicalTop = scroller.scrollTop;
+      if (spacer.offsetHeight < height || scroller.scrollHeight < height) {
+        scroller.scrollTop = height;
+        nativeMax = scroller.scrollTop;
+        scroller.scrollTop = physicalTop;
+      } else nativeMax = logicalMax;
+      setScrollTop(previous);
+    }
   }
   const canvas = gridContext.env.doc.createElement('canvas');
   canvas.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none';
@@ -1575,6 +1628,11 @@ export function createGrid(options: GridOptions): Grid {
     editors;
 
   const interaction = createInteraction({
+    getScrollTop,
+    setScrollTop: (top) => {
+      setScrollTop(top);
+      if (gridContext.options.logicalScrolling) render();
+    },
     structureAction: (run, axis) => structureAction(run, axis),
     get actionError() {
       return actionError;
@@ -2153,6 +2211,7 @@ export function createGrid(options: GridOptions): Grid {
     render();
   });
   observer.observe(root);
+  if (gridContext.options.logicalScrolling) scroller.addEventListener('wheel', scrollWheel, { passive: false });
   scroller.addEventListener('scroll', renderCopyFeedback, { passive: true });
   scroller.addEventListener('scroll', clearLayoutMotion, { passive: true });
   scroller.addEventListener('scroll', closeMenuOnScroll, { passive: true });
@@ -2573,6 +2632,7 @@ export function createGrid(options: GridOptions): Grid {
       scroller.removeEventListener('scroll', clearLayoutMotion);
       scroller.removeEventListener('scroll', closeMenuOnScroll);
       scroller.removeEventListener('scroll', render);
+      scroller.removeEventListener('wheel', scrollWheel);
       scroller.removeEventListener('scroll', clearChoiceHover);
       root.removeEventListener('pointerleave', clearChoiceHover);
       gridContext.env.win.removeEventListener('blur', onPointerEnd);

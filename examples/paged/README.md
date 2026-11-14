@@ -1,5 +1,7 @@
 # Paged remote editing
 
+Open `/paged/viewport?rows=1000000&scroll=logical` to try the source preview of full-range vertical scrolling. `logicalScrolling: true` maps native scrollbar positions onto the full row range when the browser limits the spacer. Wheel and keyboard navigation use exact logical positions. Dragging the scrollbar thumb remains limited by the browser's physical pixel resolution.
+
 ## Stable-ID anchoring (source preview after 0.4.0)
 
 Build matching packages from this checkout and open `/paged/viewport`. Enable **Keep selected task** to retain a single loaded task across server order/count changes. The host captures its ID, asks `/paged/api/locate` for its position in the requested dataset/query/revision, loads that one page and verifies the returned record ID before calling `grid.selectCell`. This method is not in npm 0.4.0. The synthetic server computes numeric task positions directly; a real backend must provide its own authorized indexed lookup and consistent snapshot authority.
