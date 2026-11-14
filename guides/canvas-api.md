@@ -144,6 +144,14 @@ selectRow: (index: number) => void
 
 
 
+### selectCell
+
+```ts
+selectCell: (rowIndex: number, columnIndex: number) => void
+```
+
+Source preview after 0.4.0: select and reveal one display cell through shared permissions and geometry, without fetching data or focusing the DOM. Invalid positions and destroyed grids throw; finish editors and close local Find first. Repeating the current cell reveals it again. No stable-ID lookup is performed.
+
 ### selectAll
 
 ```ts

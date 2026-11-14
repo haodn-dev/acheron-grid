@@ -139,7 +139,8 @@ function update() {
   ])
     $(id).disabled = busy || editing || recoveryBlocked;
   $('save').disabled ||= !pending || source.status === 'conflict';
-  for (const id of ['reload', 'query', 'search', 'order']) $(id).disabled ||= !ready || !!pending;
+  $('keep-task').disabled = $('query').disabled;
+  for (const id of ['reload', 'query', 'search', 'order', 'keep-task']) $(id).disabled ||= !ready || !!pending;
   $('retry').disabled ||= !ready || !state?.error;
   $('checkpoint').disabled ||= !ready || source.revision === null;
   $('restore').disabled ||= !ready || !!pending;
@@ -174,10 +175,57 @@ async function run(operation) {
     update();
   }
 }
-async function loadQuery(query) {
+async function loadQuery(query, keepTask = false) {
+  const selection = keepTask ? grid.getSelection() : null;
+  const revision = source.revision;
+  const ranges = grid.getSelectionRanges();
+  const anchor =
+    selection &&
+    revision &&
+    ranges.length === 1 &&
+    ranges[0].startRow === ranges[0].endRow &&
+    ranges[0].startColumn === ranges[0].endColumn &&
+    source.getPageState(Math.floor(selection.rowIndex / source.pageSize) * source.pageSize)?.status === 'ready' &&
+    source.getRowId(selection.rowIndex) === selection.rowId
+      ? selection
+      : null;
   stopLoader();
   source.setQuery(query);
   grid.resetData();
+  if (anchor) {
+    try {
+      const position = await request(
+        'task-position?' + new URLSearchParams({ query: JSON.stringify(query), rowId: anchor.rowId, revision }),
+      );
+      if (disposed) return;
+      if (
+        position?.rowId !== anchor.rowId ||
+        position.revision !== revision ||
+        !Number.isSafeInteger(position.index) ||
+        position.index < 0 ||
+        position.index >= 10000
+      )
+        throw Error('Selected task is unavailable in this view.');
+      await source.loadPage(Math.floor(position.index / source.pageSize) * source.pageSize);
+      if (disposed) return;
+      if (
+        source.revision !== revision ||
+        position.index >= source.getRowCount() ||
+        source.getRowId(position.index) !== anchor.rowId
+      )
+        throw Error('Selected task identity changed.');
+      grid.resetData();
+      grid.selectCell(position.index, anchor.columnIndex);
+      if (grid.getSelection()?.rowId !== anchor.rowId) throw Error('Selected task cannot be selected.');
+      startLoader();
+      return;
+    } catch {
+      if (disposed) return;
+      message = 'Could not keep the selected task. Returned to the first row.';
+      source.setQuery(query);
+      grid.resetData();
+    }
+  }
   await source.loadPage(0);
   if (disposed) return;
   grid.resetData();
@@ -205,16 +253,19 @@ async function initialize() {
   }
 }
 $('recover').onclick = () => void run(initialize);
-$('reload').onclick = () => void run(() => loadQuery(source.query));
+$('reload').onclick = () => void run(() => loadQuery(source.query, $('keep-task').checked));
 $('retry').onclick = () => loader?.retry();
 $('query-form').onsubmit = (event) => {
   event.preventDefault();
   if ($('query').disabled) return;
   void run(() =>
-    loadQuery({
-      sort: { columnKey: 'title', direction: $('order').value },
-      filters: [{ columnKey: 'title', operator: 'contains', query: $('search').value }],
-    }),
+    loadQuery(
+      {
+        sort: { columnKey: 'title', direction: $('order').value },
+        filters: [{ columnKey: 'title', operator: 'contains', query: $('search').value }],
+      },
+      $('keep-task').checked,
+    ),
   );
 };
 $('save').onclick = () =>

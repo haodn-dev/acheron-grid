@@ -628,10 +628,17 @@ export function createInteraction(context: InteractionContext) {
     const changed = previous?.rowIndex !== rowIndex || previous?.columnIndex !== columnIndex;
     const previousRange = JSON.stringify(context.getSelectionRange());
     const previousRanges = JSON.stringify(context.getSelectionRanges());
+    const selected = add
+      ? context.engine.toggleSelection(rowIndex, columnIndex)
+      : context.engine.select(rowIndex, columnIndex, extend);
     if (
-      !(add
-        ? context.engine.toggleSelection(rowIndex, columnIndex)
-        : context.engine.select(rowIndex, columnIndex, extend))
+      !selected &&
+      (add ||
+        extend ||
+        !reveal ||
+        previous?.rowIndex !== rowIndex ||
+        previous.columnIndex !== columnIndex ||
+        !context.engine.getCellPermission(rowIndex, columnIndex).selectable)
     )
       return;
     if (add) addNextSelection = false;

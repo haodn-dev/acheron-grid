@@ -66,21 +66,38 @@ export function createPagedDemoHandler() {
           .end(await readFile(new URL(file, import.meta.url)));
         return true;
       }
-      if (request.method === 'GET' && url.pathname === '/paged/api/viewport') {
+      if (request.method === 'GET' && ['/paged/api/viewport', '/paged/api/locate'].includes(url.pathname)) {
+        const locating = url.pathname.endsWith('/locate');
         const offset = Number(url.searchParams.get('offset')),
           limit = Number(url.searchParams.get('limit')),
           total = Number(url.searchParams.get('total')),
           order = url.searchParams.get('order') ?? 'asc';
         if (
           ![100000, 1000000].includes(total) ||
-          !Number.isSafeInteger(offset) ||
-          offset < 0 ||
-          offset >= total ||
-          offset % 100 ||
-          limit !== 100 ||
+          (!locating &&
+            (!Number.isSafeInteger(offset) || offset < 0 || offset >= total || offset % 100 || limit !== 100)) ||
           !['asc', 'desc'].includes(order)
         )
           throw new Error('Invalid viewport page');
+        if (locating) {
+          const rawId = url.searchParams.get('rowId'),
+            rowId = Number(rawId);
+          if (rawId === null || rawId.trim() === '' || !Number.isSafeInteger(rowId) || rowId < 0 || rowId >= 1000000)
+            throw new Error('Invalid task identity');
+          if (url.searchParams.get('revision') !== '1') {
+            json(response, 409, { error: 'Resync required' });
+            return true;
+          }
+          json(response, 200, {
+            datasetId: 'viewport-demo',
+            revision: '1',
+            rowId,
+            total,
+            order,
+            index: rowId >= total ? null : order === 'desc' ? total - rowId - 1 : rowId,
+          });
+          return true;
+        }
         json(response, 200, {
           datasetId: 'viewport-demo',
           revision: '1',
@@ -92,10 +109,13 @@ export function createPagedDemoHandler() {
         });
         return true;
       }
-      if (request.method === 'GET' && url.pathname === '/paged/api/page') {
+      if (request.method === 'GET' && ['/paged/api/page', '/paged/api/task-position'].includes(url.pathname)) {
         const offset = Number(url.searchParams.get('offset')),
           limit = Number(url.searchParams.get('limit'));
-        if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+        if (
+          url.pathname.endsWith('/page') &&
+          (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+        )
           throw Error('Invalid page');
         const expected = url.searchParams.get('revision');
         if (expected && expected !== String(revision)) {
@@ -103,6 +123,19 @@ export function createPagedDemoHandler() {
           return true;
         }
         const filtered = queryRows(JSON.parse(url.searchParams.get('query') || '{}'));
+        if (url.pathname.endsWith('/task-position')) {
+          const rawId = url.searchParams.get('rowId');
+          const rowId = Number(rawId);
+          if (!rawId?.trim() || !Number.isSafeInteger(rowId) || rowId < 0 || rowId >= rows.length)
+            throw Error('Invalid task identity');
+          if (!expected) throw Error('Expected revision required');
+          json(response, 200, {
+            rowId,
+            revision: String(revision),
+            index: filtered.findIndex((row) => row.id === rowId),
+          });
+          return true;
+        }
         json(response, 200, {
           datasetId: 'paged-demo',
           revision: String(revision),

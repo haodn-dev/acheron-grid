@@ -2,6 +2,22 @@ import { test, expect } from './browser-fixtures.mjs';
 import AxeBuilder from '@axe-core/playwright';
 
 const journalKey = 'acheron-viewport-edit-mutation-v1';
+test('editable viewport keeps the selected task across sort and clears it when filtered out', async ({ page }) => {
+  await open(page);
+  const grid = page.getByRole('grid');
+  await expect(grid.getByRole('gridcell', { name: 'Task 1', exact: true })).toBeAttached();
+  await grid.press('Control+Home');
+  await grid.press('ArrowDown');
+  await page.getByText('Server query and draft checkpoints', { exact: true }).click();
+  await page.getByLabel('Keep selected task').check();
+  await page.locator('#order').selectOption('desc');
+  await page.locator('#query').click();
+  await expect(grid.getByRole('gridcell', { name: 'Task 1', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await page.getByLabel('Search tasks').fill('Task 91');
+  await page.locator('#query').click();
+  await expect(page.locator('#status')).toContainText('Could not keep the selected task');
+  await expect(grid).not.toHaveAttribute('aria-activedescendant', /.+/);
+});
 async function simulation(page, mode) {
   const details = page.getByText('Simulate server responses', { exact: true });
   if (!(await page.locator('#mode').isVisible())) await details.click();

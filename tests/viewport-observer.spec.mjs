@@ -1,5 +1,122 @@
 import { test, expect } from '@playwright/test';
 
+test('selectCell uses shared frozen geometry and permissions and reveals an unchanged selection', async ({ page }) => {
+  await mount(page, { frozenRows: 2, frozenColumns: 1 });
+  const result = await page.evaluate(() => {
+    const grid = window.grid,
+      scroller = document.querySelector('[data-grid-viewport]');
+    const before = window.idReads;
+    grid.selectCell(50000, 8);
+    const selected = grid.getSelection();
+    const revealed = grid
+      .getViewport()
+      .regions.some(
+        ({ rows, columns }) => rows.start <= 50000 && rows.end > 50000 && columns.start <= 8 && columns.end > 8,
+      );
+    scroller.scrollTop = scroller.scrollLeft = 0;
+    grid.selectCell(50000, 8);
+    const repeated = scroller.scrollTop > 0 && scroller.scrollLeft > 0;
+    const invalid = [
+      () => grid.selectCell(NaN, 0),
+      () => grid.selectCell(1000000, 0),
+      () => grid.selectCell(0, -1),
+    ].map((run) => {
+      try {
+        run();
+        return false;
+      } catch (error) {
+        return error instanceof RangeError;
+      }
+    });
+    grid.destroy();
+    let destroyed;
+    try {
+      grid.selectCell(0, 0);
+    } catch (error) {
+      destroyed = error.message;
+    }
+    return {
+      selected,
+      revealed,
+      repeated,
+      invalid,
+      destroyed,
+      idReads: window.idReads - before,
+      selectionEvents: window.selectionEvents.length,
+    };
+  });
+  expect(result.idReads).toBeLessThan(20);
+  expect(result).toMatchObject({
+    selected: { rowIndex: 50000, rowId: 50000, columnIndex: 8, columnKey: '8' },
+    revealed: true,
+    repeated: true,
+    invalid: [true, true, true],
+    destroyed: 'Grid is destroyed.',
+    selectionEvents: 1,
+  });
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    window.grid = createGrid({
+      container: document.querySelector('#grid'),
+      dataSource: { getRowCount: () => 1000000, getRowId: (row) => row, getValue: () => '' },
+      columns: [{ key: 'a', title: 'A' }],
+      permissions: { selectable: false },
+    });
+    window.grid.selectCell(50000, 0);
+  });
+  expect(
+    await page.evaluate(() => ({
+      selection: window.grid.getSelection(),
+      top: document.querySelector('[data-grid-viewport]').scrollTop,
+    })),
+  ).toEqual({ selection: null, top: 0 });
+});
+
+test('selectCell rejects open editors and local Find without losing input', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const { createGrid } = await import('/canvas/index.js');
+    window.grid = createGrid({
+      container: document.querySelector('#grid'),
+      dataSource: {
+        getRowCount: () => 2,
+        getRowId: (row) => row,
+        getValue: () => 'Original',
+        setValue: () => {
+          throw Error('Unexpected write');
+        },
+      },
+      columns: [{ key: 'a', title: 'A', editable: true }],
+    });
+    window.grid.selectCell(0, 0);
+  });
+  await page.getByRole('grid').press('F2');
+  const editor = page.getByRole('textbox');
+  await editor.fill('Unsent input');
+  expect(
+    await page.evaluate(() => {
+      try {
+        window.grid.selectCell(1, 0);
+      } catch (error) {
+        return error.message;
+      }
+    }),
+  ).toContain('Finish editing');
+  await expect(editor).toHaveValue('Unsent input');
+  await editor.press('Escape');
+  await page.evaluate(() => window.grid.openSearch());
+  expect(
+    await page.evaluate(() => {
+      try {
+        window.grid.selectCell(1, 0);
+      } catch (error) {
+        return error.message;
+      }
+    }),
+  ).toContain('close local search');
+  expect(await page.evaluate(() => window.grid.getSelection().rowId)).toBe(0);
+});
+
 test('a browser collapsing an oversized row spacer retains a usable bounded scroll prefix', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(async () => {
@@ -40,11 +157,16 @@ async function mount(page, extra = {}) {
     const { createGrid } = await import('/canvas/index.js');
     window.notices = [];
     window.reads = 0;
+    window.idReads = 0;
+    window.selectionEvents = [];
     window.grid = createGrid({
       container: document.querySelector('#grid'),
       dataSource: {
         getRowCount: () => 1000000,
-        getRowId: (row) => row,
+        getRowId: (row) => {
+          window.idReads++;
+          return row;
+        },
         getValue: (row) => {
           window.reads++;
           return row;
@@ -52,6 +174,7 @@ async function mount(page, extra = {}) {
       },
       columns: Array.from({ length: 12 }, (_, i) => ({ key: String(i), title: String(i), width: 120 })),
       ...extra,
+      onSelectionChange: (selection) => window.selectionEvents.push(selection),
       onViewportChange: (snapshot) => {
         window.notices.push(snapshot);
         // Repainting from a subscriber must not create a notification loop.

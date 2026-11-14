@@ -38,8 +38,13 @@
           </select></label
         >
         <button type="submit">Apply data view</button>
+        <label><input type="checkbox" id="keep-task" />Keep selected task</label>
       </form>
-      <p>Applying a data view clears selection and local history. The grid stays mounted.</p>
+      <p>
+        Applying a data view clears local history. Selection clears unless Keep selected task is enabled and the server
+        can locate that loaded task in the new view. The grid stays mounted.
+      </p>
+      <p id="anchor-status" role="status" aria-live="polite"></p>
       <button id="retry" disabled>Retry visible pages</button>
       <p id="status" role="status" aria-live="polite">Preparing grid…</p>
       <div id="grid"></div>
